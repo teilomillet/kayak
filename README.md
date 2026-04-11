@@ -67,8 +67,12 @@ The repo now has profiling-oriented microbenchmarks that separate:
 - full `search_exact`
 
 These benches sweep explicit shapes so vector count stays first-class in the output.
-The current CPU path uses a SIMD `dot_product` kernel and vector-balanced
-document partitioning for larger exact-search workloads.
+The current CPU path uses a SIMD `dot_product` kernel, a narrow `128`-dim
+fast path for ColBERT-shaped embeddings, and vector-balanced document
+partitioning for larger exact-search workloads.
+Both CPU optimizations are now explicitly configurable through
+`ExactScoringConfig`, so you can disable the `128`-dim fast path or
+document-level parallel scoring when profiling or comparing kernels.
 
 ## Robustness Layer
 
@@ -131,6 +135,7 @@ Run the exact CPU benchmark:
 ```bash
 pixi run bench_exact
 pixi run bench_profile_exact
+pixi run bench_profile_cpu_configs
 ```
 
 Run the workload matrix and the proxy evaluation matrix:

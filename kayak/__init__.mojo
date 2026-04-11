@@ -16,6 +16,7 @@ from .numeric import (
     VectorScalar,
 )
 from .runtime import ExactCpuBackend
+from .scoring import ExactScoringConfig
 from .search import SearchHit, search_exact
 from .storage import (
     FiqaRealSubsetCache,

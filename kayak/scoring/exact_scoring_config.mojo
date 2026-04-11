@@ -1,0 +1,7 @@
+struct ExactScoringConfig(Copyable):
+    var enable_parallel_scoring: Bool
+    var enable_dim128_fast_path: Bool
+
+    def __init__(out self):
+        self.enable_parallel_scoring = True
+        self.enable_dim128_fast_path = True

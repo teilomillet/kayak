@@ -1,1 +1,2 @@
-from .maxsim import exact_scores_for_index
+from .exact_scoring_config import ExactScoringConfig
+from .maxsim import exact_scores_for_index, exact_scores_for_index_with_config
