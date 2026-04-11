@@ -139,6 +139,8 @@ Run the exact CPU benchmark:
 pixi run bench_exact
 pixi run bench_profile_exact
 pixi run bench_profile_cpu_micro
+pixi run bench_profile_cpu_structural
+pixi run bench_profile_cpu_structural_real_subset
 pixi run bench_profile_cpu_configs
 pixi run bench_profile_cpu_usl
 pixi run fit_usl
@@ -149,6 +151,10 @@ For lower-noise comparisons on a busy machine, use the quiet benchmark wrapper:
 ```bash
 bash scripts/run_bench_quiet.sh --repeats 3 --max-other-cpu 40 -- pixi run bench_scifact
 ```
+
+The default `pixi run bench_*` tasks for performance-sensitive benchmarks now
+use this quiet wrapper automatically. Use the corresponding `*_raw` tasks only
+for quick smoke checks when you explicitly do not want quiet-run gating.
 
 Run the workload matrix and the proxy evaluation matrix:
 

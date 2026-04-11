@@ -146,10 +146,6 @@ wait_for_quiet() {
   done
 }
 
-extract_mean() {
-  awk '/^Mean: / { print $2; exit }' "$1"
-}
-
 summarize_means() {
   printf '%s\n' "$@" | sort -g | awk '
     {
@@ -187,6 +183,7 @@ echo "quiet bench log dir: ${run_dir}"
 echo "benchmark command: ${cmd[*]}"
 
 means=()
+single_metric_runs=1
 
 for run_index in $(seq 1 "${repeats}"); do
   wait_for_quiet "${run_index}"
@@ -200,17 +197,33 @@ for run_index in $(seq 1 "${repeats}"); do
   "${cmd[@]}" | tee "${output_file}"
   snapshot_top > "${after_file}"
 
-  mean_value="$(extract_mean "${output_file}")"
-  if [[ -z "${mean_value}" ]]; then
+  run_means=()
+  while IFS= read -r parsed_mean; do
+    run_means+=("${parsed_mean}")
+  done < <(awk '/^Mean: / { print $2 }' "${output_file}")
+  if [[ "${#run_means[@]}" -eq 0 ]]; then
     echo "Could not parse benchmark Mean: from ${output_file}" >&2
     exit 1
   fi
 
-  means+=("${mean_value}")
-  echo "parsed_mean=${mean_value}"
+  printf '%s\n' "${run_means[@]}" > "${run_dir}/run_${run_index}_means.txt"
+
+  if [[ "${#run_means[@]}" -eq 1 ]]; then
+    means+=("${run_means[0]}")
+    echo "parsed_mean=${run_means[0]}"
+  else
+    single_metric_runs=0
+    echo "parsed_mean_count=${#run_means[@]}"
+  fi
 done
 
-printf '%s\n' "${means[@]}" > "${run_dir}/means.txt"
-summary="$(summarize_means "${means[@]}")"
-echo "${summary}"
-echo "${summary}" > "${run_dir}/summary.txt"
+if [[ "${single_metric_runs}" -eq 1 ]]; then
+  printf '%s\n' "${means[@]}" > "${run_dir}/means.txt"
+  summary="$(summarize_means "${means[@]}")"
+  echo "${summary}"
+  echo "${summary}" > "${run_dir}/summary.txt"
+else
+  summary="summary runs=${repeats} multi_section=1 scalar_summary=skipped log_dir=${run_dir}"
+  echo "${summary}"
+  echo "${summary}" > "${run_dir}/summary.txt"
+fi

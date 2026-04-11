@@ -79,6 +79,9 @@ Performance work must be measurable and reproducible.
 - Make data movement, allocation, and conversion boundaries explicit.
 - Prefer deterministic benchmark inputs where practical.
 - Record enough context to make a timing meaningful: input sizes, dtypes, device, batch sizes.
+- For performance comparisons, use the quiet benchmark wrapper by default so
+  repeated runs happen under comparable host load. Treat raw single-run timings
+  as exploratory only, not as decision-quality evidence.
 - Avoid hidden caches, implicit global state, or silent fallbacks in performance-critical code.
 - If caching is needed, make it explicit and measurable.
 
