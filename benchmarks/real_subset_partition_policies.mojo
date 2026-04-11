@@ -1,5 +1,7 @@
 import std.benchmark as benchmark
 
+from std.runtime.asyncrt import parallelism_level
+
 from kayak import (
     ExactCpuBackend,
     ExactScoringConfig,
@@ -27,6 +29,18 @@ def default_backend() -> ExactCpuBackend:
 def conservative_parallel_backend() -> ExactCpuBackend:
     var config = ExactScoringConfig()
     config.enable_parallel_work_item_oversubscription = False
+    return ExactCpuBackend(config^)
+
+
+def serial_backend() -> ExactCpuBackend:
+    var config = ExactScoringConfig()
+    config.enable_parallel_scoring = False
+    return ExactCpuBackend(config^)
+
+
+def fixed_work_item_backend(work_items: Int) -> ExactCpuBackend:
+    var config = ExactScoringConfig()
+    config.parallel_work_item_count_override = work_items
     return ExactCpuBackend(config^)
 
 
@@ -66,6 +80,7 @@ def benchmark_task(
 
 def benchmark_scifact_real_subset() raises:
     print("loading real BEIR/SciFact subset with storage...")
+    print("parallelism_level: ", parallelism_level())
     var cache = ensure_scifact_real_subset_cache()
     var task = cache.stored_task.task.copy()
     var index = cache.stored_index.index.copy()
@@ -93,13 +108,44 @@ def benchmark_scifact_real_subset() raises:
         index_source,
         task,
         index,
+        "serial",
+        serial_backend(),
+    )
+    benchmark_task(
+        "SciFact",
+        task.slice_name.copy(),
+        task_source,
+        index_source,
+        task,
+        index,
         "parallel_oversubscription_disabled",
         conservative_parallel_backend(),
+    )
+    benchmark_task(
+        "SciFact",
+        task.slice_name.copy(),
+        task_source,
+        index_source,
+        task,
+        index,
+        "work_items=" + String(parallelism_level()),
+        fixed_work_item_backend(parallelism_level()),
+    )
+    benchmark_task(
+        "SciFact",
+        task.slice_name.copy(),
+        task_source,
+        index_source,
+        task,
+        index,
+        "work_items=" + String(parallelism_level() * 4),
+        fixed_work_item_backend(parallelism_level() * 4),
     )
 
 
 def benchmark_fiqa_real_subset() raises:
     print("loading real BEIR/FIQA subset with storage...")
+    print("parallelism_level: ", parallelism_level())
     var cache = ensure_fiqa_real_subset_cache()
     var task = cache.stored_task.task.copy()
     var index = cache.stored_index.index.copy()
@@ -127,8 +173,38 @@ def benchmark_fiqa_real_subset() raises:
         index_source,
         task,
         index,
+        "serial",
+        serial_backend(),
+    )
+    benchmark_task(
+        "FIQA",
+        task.slice_name.copy(),
+        task_source,
+        index_source,
+        task,
+        index,
         "parallel_oversubscription_disabled",
         conservative_parallel_backend(),
+    )
+    benchmark_task(
+        "FIQA",
+        task.slice_name.copy(),
+        task_source,
+        index_source,
+        task,
+        index,
+        "work_items=" + String(parallelism_level()),
+        fixed_work_item_backend(parallelism_level()),
+    )
+    benchmark_task(
+        "FIQA",
+        task.slice_name.copy(),
+        task_source,
+        index_source,
+        task,
+        index,
+        "work_items=" + String(parallelism_level() * 4),
+        fixed_work_item_backend(parallelism_level() * 4),
     )
 
 
