@@ -1,7 +1,5 @@
-from std.collections import List
 from std.pathlib import Path
 
-from kayak.contracts import EncodedDocument
 from kayak.index import pack_documents
 from kayak.interop import load_scifact_real_subset
 from kayak.numeric import VECTOR_SCALAR_NAME
@@ -37,14 +35,6 @@ struct ScifactRealSubsetCache(Copyable):
         self.loaded_task_from_storage = loaded_task_from_storage
         self.loaded_index_from_storage = loaded_index_from_storage
 
-
-def copy_documents(documents: List[EncodedDocument]) -> List[EncodedDocument]:
-    var copied = List[EncodedDocument]()
-    for document in documents:
-        copied.append(document.copy())
-    return copied^
-
-
 def build_scifact_stored_task(
     query_limit: Int,
     negative_doc_limit: Int,
@@ -65,7 +55,7 @@ def build_stored_index_from_task(
         stored_task.dataset_id.copy(),
         stored_task.model_name.copy(),
         stored_task.vector_scalar_name.copy(),
-        pack_documents(copy_documents(stored_task.task.documents)),
+        pack_documents(stored_task.task.documents),
     )
 
 

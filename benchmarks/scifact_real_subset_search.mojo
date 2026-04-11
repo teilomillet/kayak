@@ -37,9 +37,7 @@ def main() raises:
     print("vector_dim: ", task.vector_dim)
 
     def score_once() capturing raises:
-        _ = search_exact(
-            backend, task.queries[query_index].query.copy(), index.copy(), task.k
-        )
+        _ = search_exact(backend, task.queries[query_index].query, index, task.k)
         query_index += 1
         if query_index == len(task.queries):
             query_index = 0

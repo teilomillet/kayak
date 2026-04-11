@@ -73,6 +73,9 @@ partitioning for larger exact-search workloads.
 Both CPU optimizations are now explicitly configurable through
 `ExactScoringConfig`, so you can disable the `128`-dim fast path or
 document-level parallel scoring when profiling or comparing kernels.
+Parallel work-item oversubscription can also be disabled explicitly when you
+want a strict `worker_count` partitioning policy, and the work-item count can
+be overridden directly for scalability sweeps and USL fitting.
 
 ## Robustness Layer
 
@@ -136,6 +139,8 @@ Run the exact CPU benchmark:
 pixi run bench_exact
 pixi run bench_profile_exact
 pixi run bench_profile_cpu_configs
+pixi run bench_profile_cpu_usl
+pixi run fit_usl
 ```
 
 Run the workload matrix and the proxy evaluation matrix:
@@ -145,6 +150,8 @@ pixi run bench_matrix
 pixi run eval_matrix
 pixi run bench_scifact
 pixi run bench_fiqa
+pixi run bench_real_subset_policies
+pixi run bench_real_subset_breakdown
 ```
 
 Run the curated mutation-smoke check:

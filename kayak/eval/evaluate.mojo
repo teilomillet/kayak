@@ -1,6 +1,3 @@
-from std.collections import List
-
-from kayak.contracts import EncodedDocument
 from kayak.index import pack_documents
 from kayak.numeric import MetricScalar, zero_metric_scalar
 from kayak.runtime import ExactCpuBackend
@@ -46,14 +43,6 @@ struct TaskEvaluation(Copyable):
         self.mean_recall_at_k = mean_recall_at_k
         self.success_rate_at_k = success_rate_at_k
 
-
-def copy_documents(documents: List[EncodedDocument]) -> List[EncodedDocument]:
-    var copied = List[EncodedDocument]()
-    for document in documents:
-        copied.append(document.copy())
-    return copied^
-
-
 def choose_primary_value(
     primary_metric: String,
     mean_reciprocal_rank: MetricScalar,
@@ -73,20 +62,18 @@ def choose_primary_value(
 
 
 def evaluate_task(
-    backend: ExactCpuBackend, task: JudgedTask
+    read backend: ExactCpuBackend, read task: JudgedTask
 ) raises -> TaskEvaluation:
     if len(task.queries) == 0:
         raise Error("cannot evaluate a task with zero queries")
 
-    var index = pack_documents(copy_documents(task.documents))
+    var index = pack_documents(task.documents)
     var reciprocal_rank_total = zero_metric_scalar()
     var recall_total = zero_metric_scalar()
     var success_total = zero_metric_scalar()
 
     for judged_query in task.queries:
-        var hits = search_exact(
-            backend, judged_query.query.copy(), index.copy(), task.k
-        )
+        var hits = search_exact(backend, judged_query.query, index, task.k)
 
         reciprocal_rank_total += reciprocal_rank_at_k(
             hits, judged_query.relevant_doc_ids, task.k

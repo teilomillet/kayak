@@ -120,5 +120,28 @@ def test_stored_index_rejects_artifact_kind_mismatch() raises:
     assert_equal(raised, True)
 
 
+def test_stored_index_rejects_wrong_vector_width_payload() raises:
+    var root = Path("/tmp/kayak-storage-index-width-mismatch")
+    var task = make_storage_roundtrip_task()
+    var stored_index = StoredPackedIndex(
+        "mock://storage-index-width-mismatch",
+        "mock-model",
+        VECTOR_SCALAR_NAME,
+        pack_documents(task.documents),
+    )
+    save_stored_packed_index(root, stored_index)
+
+    var token_vectors_path = root / "token_vectors.tsv"
+    token_vectors_path.write_text("1.0,0.0,0.0\n0.0,1.0\n1.0,0.0\n0.5,0.5\n")
+
+    var raised = False
+    try:
+        _ = load_stored_packed_index(root)
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

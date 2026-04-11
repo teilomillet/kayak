@@ -17,8 +17,8 @@ def main() raises:
     var task = cache.stored_task.task.copy()
     var index = cache.stored_index.index.copy()
     var backend = ExactCpuBackend()
-    var evaluation = evaluate_task(backend, task.copy())
-    var hits = search_exact(backend, task.queries[0].query.copy(), index, task.k)
+    var evaluation = evaluate_task(backend, task)
+    var hits = search_exact(backend, task.queries[0].query, index, task.k)
 
     print("family: ", task.family)
     print("slice: ", task.slice_name)

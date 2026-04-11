@@ -139,5 +139,77 @@ def test_exact_search_toggle_keeps_parallel_scores_identical() raises:
         assert_equal(default_hits[index].score, serial_hits[index].score)
 
 
+def test_exact_search_override_one_keeps_parallel_scores_identical() raises:
+    var vector_dim = 2
+    var query_vectors = List[List[Float32]]()
+    for hot_index in range(32):
+        query_vectors.append(basis_vector(vector_dim, hot_index % vector_dim))
+
+    var documents = List[EncodedDocument]()
+    for document_index in range(8):
+        var token_vectors = List[List[Float32]]()
+        for token_index in range(256):
+            token_vectors.append(
+                basis_vector(vector_dim, (document_index + token_index) % vector_dim)
+            )
+        documents.append(
+            EncodedDocument("doc-" + String(document_index), token_vectors^)
+        )
+
+    var query = EncodedQuery(query_vectors^)
+    var index = pack_documents(documents^)
+
+    var serial_config = ExactScoringConfig()
+    serial_config.enable_parallel_scoring = False
+    var serial_hits = search_exact(
+        ExactCpuBackend(serial_config^), query.copy(), index.copy(), 3
+    )
+
+    var override_config = ExactScoringConfig()
+    override_config.parallel_work_item_count_override = 1
+    var override_hits = search_exact(
+        ExactCpuBackend(override_config^), query, index, 3
+    )
+
+    assert_equal(len(serial_hits), len(override_hits))
+    for index in range(len(serial_hits)):
+        assert_equal(serial_hits[index].doc_id, override_hits[index].doc_id)
+        assert_equal(serial_hits[index].score, override_hits[index].score)
+
+
+def test_exact_search_toggle_keeps_oversubscribed_parallel_scores_identical() raises:
+    var vector_dim = 2
+    var query_vectors = List[List[Float32]]()
+    for hot_index in range(32):
+        query_vectors.append(basis_vector(vector_dim, hot_index % vector_dim))
+
+    var documents = List[EncodedDocument]()
+    for document_index in range(128):
+        var token_vectors = List[List[Float32]]()
+        for token_index in range(16):
+            token_vectors.append(
+                basis_vector(vector_dim, (document_index + token_index) % vector_dim)
+            )
+        documents.append(
+            EncodedDocument("doc-" + String(document_index), token_vectors^)
+        )
+
+    var query = EncodedQuery(query_vectors^)
+    var index = pack_documents(documents^)
+
+    var default_hits = search_exact(ExactCpuBackend(), query.copy(), index.copy(), 10)
+
+    var conservative_config = ExactScoringConfig()
+    conservative_config.enable_parallel_work_item_oversubscription = False
+    var conservative_hits = search_exact(
+        ExactCpuBackend(conservative_config^), query, index, 10
+    )
+
+    assert_equal(len(default_hits), len(conservative_hits))
+    for index in range(len(default_hits)):
+        assert_equal(default_hits[index].doc_id, conservative_hits[index].doc_id)
+        assert_equal(default_hits[index].score, conservative_hits[index].score)
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

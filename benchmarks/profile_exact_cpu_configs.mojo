@@ -25,6 +25,12 @@ def backend_without_parallel_scoring() -> ExactCpuBackend:
     return ExactCpuBackend(config^)
 
 
+def backend_without_parallel_oversubscription() -> ExactCpuBackend:
+    var config = ExactScoringConfig()
+    config.enable_parallel_work_item_oversubscription = False
+    return ExactCpuBackend(config^)
+
+
 def benchmark_backend_score_all(name: String, backend: ExactCpuBackend) raises:
     print("== ExactCpuBackend.score_all:", name, "==")
 
@@ -87,10 +93,18 @@ def main() raises:
     benchmark_backend_score_all(
         "parallel_scoring_disabled", backend_without_parallel_scoring()
     )
+    benchmark_backend_score_all(
+        "parallel_oversubscription_disabled",
+        backend_without_parallel_oversubscription(),
+    )
     benchmark_backend_search_exact("default", default_backend())
     benchmark_backend_search_exact(
         "dim128_fast_path_disabled", backend_without_dim128_fast_path()
     )
     benchmark_backend_search_exact(
         "parallel_scoring_disabled", backend_without_parallel_scoring()
+    )
+    benchmark_backend_search_exact(
+        "parallel_oversubscription_disabled",
+        backend_without_parallel_oversubscription(),
     )

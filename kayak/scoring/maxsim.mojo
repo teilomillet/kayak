@@ -14,7 +14,7 @@ from .exact_scoring_config import ExactScoringConfig
 from .dot import dot_product
 from .dot128 import COLBERT_VECTOR_DIM, dot_product_dim128
 
-comptime MIN_PARALLEL_SIMILARITY_PAIRS = 65536
+comptime MIN_PARALLEL_SIMILARITY_PAIRS = 4096
 comptime TARGET_CHUNKS_PER_WORKER = 4
 
 
@@ -23,12 +23,18 @@ def ceil_div(numerator: Int, denominator: Int) -> Int:
 
 
 def choose_parallel_work_item_count(
-    query: EncodedQuery,
-    index: PackedIndex,
-    config: ExactScoringConfig,
+    read query: EncodedQuery,
+    read index: PackedIndex,
+    read config: ExactScoringConfig,
 ) -> Int:
     if not config.enable_parallel_scoring:
         return 1
+
+    if config.parallel_work_item_count_override > 0:
+        var overridden_work_item_count = config.parallel_work_item_count_override
+        if overridden_work_item_count > index.document_count:
+            return index.document_count
+        return overridden_work_item_count
 
     var worker_count = parallelism_level()
     if worker_count <= 1:
@@ -37,6 +43,11 @@ def choose_parallel_work_item_count(
     var total_similarity_pairs = query.vector_count * index.total_vector_count
     if total_similarity_pairs < MIN_PARALLEL_SIMILARITY_PAIRS:
         return 1
+
+    if not config.enable_parallel_work_item_oversubscription:
+        if worker_count > index.document_count:
+            return index.document_count
+        return worker_count
 
     var max_work_items = worker_count * TARGET_CHUNKS_PER_WORKER
     if max_work_items > index.document_count:
@@ -47,6 +58,8 @@ def choose_parallel_work_item_count(
     )
     if work_item_count < 1:
         return 1
+    if work_item_count < worker_count:
+        work_item_count = worker_count
     if work_item_count > max_work_items:
         return max_work_items
 
@@ -54,7 +67,7 @@ def choose_parallel_work_item_count(
 
 
 def build_vector_balanced_boundaries(
-    index: PackedIndex, work_item_count: Int
+    read index: PackedIndex, work_item_count: Int
 ) -> List[Int]:
     var boundaries = List[Int]()
     var document_count = index.document_count
@@ -92,10 +105,10 @@ def build_vector_balanced_boundaries(
 
 
 def exact_scores_for_index_serial(
-    query: EncodedQuery,
-    index: PackedIndex,
+    read query: EncodedQuery,
+    read index: PackedIndex,
     document_count: Int,
-    config: ExactScoringConfig,
+    read config: ExactScoringConfig,
 ) -> List[ScoreScalar]:
     var scores = List[ScoreScalar]()
 
@@ -109,8 +122,8 @@ def exact_scores_for_index_serial(
     return scores^
 
 def exact_score_for_document_generic(
-    query: EncodedQuery,
-    index: PackedIndex,
+    read query: EncodedQuery,
+    read index: PackedIndex,
     document_index: Int,
 ) -> ScoreScalar:
     var start = index.doc_offsets[document_index]
@@ -133,8 +146,8 @@ def exact_score_for_document_generic(
 
 
 def exact_score_for_document_dim128(
-    query: EncodedQuery,
-    index: PackedIndex,
+    read query: EncodedQuery,
+    read index: PackedIndex,
     document_index: Int,
 ) -> ScoreScalar:
     var start = index.doc_offsets[document_index]
@@ -157,10 +170,10 @@ def exact_score_for_document_dim128(
 
 
 def exact_score_for_document_with_config(
-    query: EncodedQuery,
-    index: PackedIndex,
+    read query: EncodedQuery,
+    read index: PackedIndex,
     document_index: Int,
-    config: ExactScoringConfig,
+    read config: ExactScoringConfig,
 ) -> ScoreScalar:
     if (
         config.enable_dim128_fast_path
@@ -173,8 +186,8 @@ def exact_score_for_document_with_config(
 
 
 def exact_score_for_document(
-    query: EncodedQuery,
-    index: PackedIndex,
+    read query: EncodedQuery,
+    read index: PackedIndex,
     document_index: Int,
 ) -> ScoreScalar:
     return exact_score_for_document_with_config(
@@ -183,7 +196,7 @@ def exact_score_for_document(
 
 
 def exact_scores_for_index(
-    query: EncodedQuery, index: PackedIndex
+    read query: EncodedQuery, read index: PackedIndex
 ) raises -> List[ScoreScalar]:
     return exact_scores_for_index_with_config(
         query, index, ExactScoringConfig()
@@ -191,9 +204,9 @@ def exact_scores_for_index(
 
 
 def exact_scores_for_index_with_config(
-    query: EncodedQuery,
-    index: PackedIndex,
-    config: ExactScoringConfig,
+    read query: EncodedQuery,
+    read index: PackedIndex,
+    read config: ExactScoringConfig,
 ) raises -> List[ScoreScalar]:
     if query.vector_dim != index.vector_dim:
         raise Error("query and index must share the same vector dimension")

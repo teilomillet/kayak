@@ -18,16 +18,14 @@ def require_valid_packed_index(
     if doc_offsets[0] != 0:
         raise Error("packed index offsets must start at zero")
 
-    if doc_offsets[len(doc_offsets) - 1] != len(token_vectors):
-        raise Error("packed index offsets must end at total vector count")
-
     if vector_dim <= 0:
         raise Error("packed index vector_dim must be positive")
 
-    for offset_index in range(1, len(doc_offsets)):
-        if doc_offsets[offset_index] < doc_offsets[offset_index - 1]:
-            raise Error("packed index offsets must be monotonic")
-
+    if doc_offsets[len(doc_offsets) - 1] != len(token_vectors):
+        raise Error("packed index offsets must end at total vector count")
     for vector in token_vectors:
         if len(vector) != vector_dim:
             raise Error("packed index token vector has the wrong dimension")
+    for offset_index in range(1, len(doc_offsets)):
+        if doc_offsets[offset_index] < doc_offsets[offset_index - 1]:
+            raise Error("packed index offsets must be monotonic")

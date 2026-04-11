@@ -16,7 +16,7 @@ struct ExactCpuBackend(Copyable):
         self.scoring_config = scoring_config^
 
     def score_all(
-        self, query: EncodedQuery, index: PackedIndex
+        self, read query: EncodedQuery, read index: PackedIndex
     ) raises -> List[ScoreScalar]:
         return exact_scores_for_index_with_config(
             query, index, self.scoring_config

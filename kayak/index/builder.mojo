@@ -6,7 +6,7 @@ from kayak.numeric import VectorScalar
 from .packed_index import PackedIndex
 
 
-def pack_documents(documents: List[EncodedDocument]) raises -> PackedIndex:
+def pack_documents(read documents: List[EncodedDocument]) raises -> PackedIndex:
     if len(documents) == 0:
         raise Error("cannot build an index from zero documents")
 

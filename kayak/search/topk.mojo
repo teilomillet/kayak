@@ -30,7 +30,7 @@ def insert_descending(mut hits: List[SearchHit], var hit: SearchHit, k: Int):
 
 
 def top_k_hits(
-    doc_ids: List[String], scores: List[ScoreScalar], k: Int
+    read doc_ids: List[String], read scores: List[ScoreScalar], k: Int
 ) raises -> List[SearchHit]:
     if len(doc_ids) != len(scores):
         raise Error("top-k input lengths must match")

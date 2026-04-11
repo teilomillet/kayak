@@ -28,13 +28,6 @@ struct Lcg(Copyable):
         return self.state % limit
 
 
-def copy_documents(documents: List[EncodedDocument]) -> List[EncodedDocument]:
-    var copied = List[EncodedDocument]()
-    for document in documents:
-        copied.append(document.copy())
-    return copied^
-
-
 def make_random_vector(mut rng: Lcg, vector_dim: Int) -> List[VectorScalar]:
     var vector = List[VectorScalar]()
     for _ in range(vector_dim):
@@ -193,16 +186,16 @@ def test_randomized_exact_search_matches_reference_scores() raises:
         var vector_dim = 1 + rng.next_int(4)
         var query = make_random_query(rng, vector_dim, 1 + rng.next_int(4))
         var documents = make_random_documents(rng, vector_dim, 2 + rng.next_int(5))
-        var index = pack_documents(copy_documents(documents))
+        var index = pack_documents(documents)
 
-        var actual_scores = backend.score_all(query.copy(), index.copy())
-        var expected_scores = reference_scores(query.copy(), documents)
+        var actual_scores = backend.score_all(query, index)
+        var expected_scores = reference_scores(query, documents)
 
         assert_equal(len(actual_scores), len(expected_scores))
         for index in range(len(actual_scores)):
             assert_equal(actual_scores[index], expected_scores[index])
 
-        var actual_hits = search_exact(backend, query.copy(), index.copy(), 3)
+        var actual_hits = search_exact(backend, query, index, 3)
         var expected_doc_ids = reference_top_k(documents, expected_scores, 3)
 
         assert_equal(len(actual_hits), len(expected_doc_ids))
@@ -225,10 +218,10 @@ def test_document_order_changes_positions_but_not_scores() raises:
     ]
 
     var original_scores = backend.score_all(
-        query.copy(), pack_documents(copy_documents(documents))
+        query, pack_documents(documents)
     )
     var permuted_scores = backend.score_all(
-        query.copy(), pack_documents(copy_documents(permuted))
+        query, pack_documents(permuted)
     )
 
     for document in documents:
@@ -248,10 +241,10 @@ def test_appending_zero_document_vectors_preserves_nonnegative_scores() raises:
     var updated = append_zero_vector_to_documents(documents)
 
     var base_scores = backend.score_all(
-        query.copy(), pack_documents(copy_documents(documents))
+        query, pack_documents(documents)
     )
     var updated_scores = backend.score_all(
-        query.copy(), pack_documents(copy_documents(updated))
+        query, pack_documents(updated)
     )
 
     assert_equal(base_scores, updated_scores)
@@ -267,10 +260,10 @@ def test_positive_query_scaling_scales_scores_linearly() raises:
     ]
 
     var base_scores = backend.score_all(
-        query.copy(), pack_documents(copy_documents(documents))
+        query, pack_documents(documents)
     )
     var scaled_scores = backend.score_all(
-        scaled_query, pack_documents(copy_documents(documents))
+        scaled_query, pack_documents(documents)
     )
 
     for index in range(len(base_scores)):

@@ -1,4 +1,3 @@
-from std.collections import List
 from std.pathlib import Path
 from std.testing import TestSuite, assert_equal
 
@@ -16,14 +15,6 @@ from kayak import (
 from kayak import evaluate_task, load_stored_judged_task, load_stored_packed_index
 from kayak import pack_documents, save_stored_judged_task, save_stored_packed_index
 from kayak import search_exact
-
-
-def copy_documents(documents: List[EncodedDocument]) -> List[EncodedDocument]:
-    var copied = List[EncodedDocument]()
-    for document in documents:
-        copied.append(document.copy())
-    return copied^
-
 
 def make_storage_roundtrip_task() raises -> JudgedTask:
     return JudgedTask(
@@ -65,7 +56,7 @@ def test_storage_roundtrip_preserves_task_and_index() raises:
     save_stored_judged_task(task_root, stored_task)
 
     var loaded_task = load_stored_judged_task(task_root)
-    var evaluation = evaluate_task(ExactCpuBackend(), loaded_task.task.copy())
+    var evaluation = evaluate_task(ExactCpuBackend(), loaded_task.task)
 
     assert_equal(loaded_task.dataset_id, "mock://storage-roundtrip")
     assert_equal(loaded_task.model_name, "mock-model")
@@ -78,15 +69,15 @@ def test_storage_roundtrip_preserves_task_and_index() raises:
         loaded_task.dataset_id.copy(),
         loaded_task.model_name.copy(),
         loaded_task.vector_scalar_name.copy(),
-        pack_documents(copy_documents(loaded_task.task.documents)),
+        pack_documents(loaded_task.task.documents),
     )
     save_stored_packed_index(index_root, stored_index)
 
     var loaded_index = load_stored_packed_index(index_root)
     var hits = search_exact(
         ExactCpuBackend(),
-        loaded_task.task.queries[0].query.copy(),
-        loaded_index.index.copy(),
+        loaded_task.task.queries[0].query,
+        loaded_index.index,
         loaded_task.task.k,
     )
 

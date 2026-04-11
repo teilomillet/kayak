@@ -9,9 +9,9 @@ from .topk import top_k_hits
 
 
 def search_exact(
-    backend: ExactCpuBackend,
-    query: EncodedQuery,
-    index: PackedIndex,
+    read backend: ExactCpuBackend,
+    read query: EncodedQuery,
+    read index: PackedIndex,
     k: Int,
 ) raises -> List[SearchHit]:
     var scores = backend.score_all(query, index)
