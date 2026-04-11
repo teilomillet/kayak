@@ -144,6 +144,12 @@ pixi run bench_profile_cpu_usl
 pixi run fit_usl
 ```
 
+For lower-noise comparisons on a busy machine, use the quiet benchmark wrapper:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 3 --max-other-cpu 40 -- pixi run bench_scifact
+```
+
 Run the workload matrix and the proxy evaluation matrix:
 
 ```bash
