@@ -5,6 +5,10 @@ from std.pathlib import Path
 from kayak.index import PackedIndex
 from kayak.numeric import STORAGE_FORMAT_VERSION, VECTOR_SCALAR_NAME, VectorScalar
 
+from .binary_vector_codec import (
+    read_binary_vector_payload,
+    write_binary_vector_payload,
+)
 from .manifest import (
     ManifestEntry,
     read_manifest,
@@ -16,7 +20,6 @@ from .metadata import StoredPackedIndex
 from .text_codec import (
     append_line,
     decode_vector_line,
-    encode_vector_line,
     parse_int,
     read_non_empty_lines,
 )
@@ -41,6 +44,7 @@ def save_stored_packed_index(root: Path, stored: StoredPackedIndex) raises:
             ManifestEntry("vector_scalar_name", stored.vector_scalar_name),
             ManifestEntry("dataset_id", stored.dataset_id),
             ManifestEntry("model_name", stored.model_name),
+            ManifestEntry("vector_payload_encoding", "binary_le"),
             ManifestEntry("vector_dim", String(stored.index.vector_dim)),
             ManifestEntry("document_count", String(stored.index.document_count)),
             ManifestEntry(
@@ -61,34 +65,41 @@ def save_stored_packed_index(root: Path, stored: StoredPackedIndex) raises:
     var doc_offsets_path = root / "doc_offsets.tsv"
     doc_offsets_path.write_text(doc_offset_lines)
 
-    var token_vector_lines = String()
-    for token_vector in stored.index.token_vectors:
-        append_line(token_vector_lines, encode_vector_line(token_vector))
-    var token_vectors_path = root / "token_vectors.tsv"
-    token_vectors_path.write_text(token_vector_lines)
+    write_binary_vector_payload(root / "token_vectors.bin", stored.index.token_vectors)
 
 
 def load_stored_packed_index(root: Path) raises -> StoredPackedIndex:
     var manifest = read_manifest(packed_index_manifest_path(root))
-    require_supported_storage_format(manifest)
+    var format_version = require_supported_storage_format(manifest)
 
     if require_manifest_value(manifest, "artifact_kind") != "packed_index":
         raise Error("storage artifact is not a packed index")
 
+    var vector_dim = parse_int(
+        require_manifest_value(manifest, "vector_dim"), "vector_dim"
+    )
     var doc_ids = read_non_empty_lines(root / "doc_ids.tsv")
     var doc_offsets = List[Int]()
     for line in read_non_empty_lines(root / "doc_offsets.tsv"):
         doc_offsets.append(parse_int(line, "doc offset"))
 
     var token_vectors = List[List[VectorScalar]]()
-    for line in read_non_empty_lines(root / "token_vectors.tsv"):
-        token_vectors.append(decode_vector_line(line))
+    if format_version >= 2:
+        if require_manifest_value(manifest, "vector_payload_encoding") != "binary_le":
+            raise Error("unsupported packed index vector payload encoding")
+
+        token_vectors = read_binary_vector_payload(
+            root / "token_vectors.bin", vector_dim
+        )
+    else:
+        for line in read_non_empty_lines(root / "token_vectors.tsv"):
+            token_vectors.append(decode_vector_line(line))
 
     var index = PackedIndex(
         doc_ids^,
         doc_offsets^,
         token_vectors^,
-        parse_int(require_manifest_value(manifest, "vector_dim"), "vector_dim"),
+        vector_dim,
     )
 
     if index.document_count != parse_int(

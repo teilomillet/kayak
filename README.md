@@ -109,6 +109,13 @@ The persisted artifacts live under `.cache/kayak/scifact_real_subset/` and `.cac
 - judged task payload
 - packed index payload
 
+Storage format `v2` keeps manifests and lightweight metadata in text, but stores
+the hot vector payloads in binary little-endian form.
+That is a deliberate compromise:
+- metadata stays easy to inspect by eye
+- vector payloads stop paying TSV parse and size overhead on every reload
+- legacy `v1` text payloads still load for compatibility
+
 ## Verifier Stage
 
 The repo now includes a narrow third-stage verifier interface:
@@ -138,6 +145,7 @@ pixi run test_eval
 pixi run test_proxies
 pixi run test_python_bridge
 pixi run test_storage
+pixi run test_storage_compat
 pixi run test_storage_invariants
 pixi run test_score_partitions
 pixi run test_hybrid_flat_dim128
@@ -156,6 +164,7 @@ pixi run bench_profile_cpu_structural
 pixi run bench_profile_cpu_structural_real_subset
 pixi run bench_profile_cpu_hybrid_real_subset
 pixi run bench_profile_cpu_verifier_real_subset
+pixi run bench_profile_storage_real_subset
 pixi run bench_profile_cpu_configs
 pixi run bench_profile_cpu_usl
 pixi run fit_usl

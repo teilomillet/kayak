@@ -1,5 +1,6 @@
 from std.pathlib import Path
 from std.testing import TestSuite, assert_equal
+from std.memory import Span
 
 from kayak import (
     EncodedDocument,
@@ -81,8 +82,9 @@ def test_stored_task_rejects_truncated_vector_payload() raises:
     )
     save_stored_judged_task(root, stored_task)
 
-    var document_vectors_path = root / "document_vectors.tsv"
-    document_vectors_path.write_text("1.0,0.0\n")
+    var document_vectors_path = root / "document_vectors.bin"
+    var truncated = "bad"
+    document_vectors_path.write_bytes(truncated.as_bytes())
 
     var raised = False
     try:
@@ -120,7 +122,7 @@ def test_stored_index_rejects_artifact_kind_mismatch() raises:
     assert_equal(raised, True)
 
 
-def test_stored_index_rejects_wrong_vector_width_payload() raises:
+def test_stored_index_rejects_invalid_binary_vector_payload() raises:
     var root = Path("/tmp/kayak-storage-index-width-mismatch")
     var task = make_storage_roundtrip_task()
     var stored_index = StoredPackedIndex(
@@ -131,8 +133,9 @@ def test_stored_index_rejects_wrong_vector_width_payload() raises:
     )
     save_stored_packed_index(root, stored_index)
 
-    var token_vectors_path = root / "token_vectors.tsv"
-    token_vectors_path.write_text("1.0,0.0,0.0\n0.0,1.0\n1.0,0.0\n0.5,0.5\n")
+    var token_vectors_path = root / "token_vectors.bin"
+    var invalid = "broken"
+    token_vectors_path.write_bytes(invalid.as_bytes())
 
     var raised = False
     try:

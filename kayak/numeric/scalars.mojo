@@ -1,4 +1,4 @@
-comptime STORAGE_FORMAT_VERSION = 1
+comptime STORAGE_FORMAT_VERSION = 2
 
 comptime VECTOR_SCALAR_NAME = "Float32"
 comptime SCORE_SCALAR_NAME = "Float32"

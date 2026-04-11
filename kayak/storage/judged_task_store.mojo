@@ -6,6 +6,10 @@ from kayak.contracts import EncodedDocument, EncodedQuery
 from kayak.eval import JudgedQuery, JudgedTask
 from kayak.numeric import STORAGE_FORMAT_VERSION, VECTOR_SCALAR_NAME, VectorScalar
 
+from .binary_vector_codec import (
+    read_binary_vector_payload,
+    write_binary_vector_payload,
+)
 from .manifest import (
     ManifestEntry,
     read_manifest,
@@ -17,7 +21,6 @@ from .metadata import StoredJudgedTask
 from .text_codec import (
     append_line,
     decode_vector_line,
-    encode_vector_line,
     normalize_inline_text,
     parse_int,
     read_non_empty_lines,
@@ -68,6 +71,7 @@ def save_stored_judged_task(root: Path, stored: StoredJudgedTask) raises:
             ManifestEntry("family", stored.task.family),
             ManifestEntry("slice_name", stored.task.slice_name),
             ManifestEntry("why", normalize_inline_text(stored.task.why)),
+            ManifestEntry("vector_payload_encoding", "binary_le"),
             ManifestEntry("primary_metric", stored.task.primary_metric),
             ManifestEntry("k", String(stored.task.k)),
             ManifestEntry(
@@ -85,24 +89,20 @@ def save_stored_judged_task(root: Path, stored: StoredJudgedTask) raises:
     )
 
     var document_lines = String()
-    var document_vector_lines = String()
     for document in stored.task.documents:
         append_line(
             document_lines,
             document.doc_id + "\t" + String(document.vector_count),
         )
 
-        for token_vector in document.token_vectors:
-            append_line(document_vector_lines, encode_vector_line(token_vector))
-
     var documents_path = root / "documents.tsv"
     documents_path.write_text(document_lines)
-    var document_vectors_path = root / "document_vectors.tsv"
-    document_vectors_path.write_text(document_vector_lines)
+    write_binary_vector_payload(
+        root / "document_vectors.bin", flatten_document_vectors(stored.task.documents)
+    )
 
     var query_lines = String()
     var qrel_lines = String()
-    var query_vector_lines = String()
 
     for query in stored.task.queries:
         append_line(
@@ -117,25 +117,37 @@ def save_stored_judged_task(root: Path, stored: StoredJudgedTask) raises:
         for doc_id in query.relevant_doc_ids:
             append_line(qrel_lines, query.query_id + "\t" + doc_id)
 
-        for token_vector in query.query.token_vectors:
-            append_line(query_vector_lines, encode_vector_line(token_vector))
-
     var queries_path = root / "queries.tsv"
     queries_path.write_text(query_lines)
     var qrels_path = root / "qrels.tsv"
     qrels_path.write_text(qrel_lines)
-    var query_vectors_path = root / "query_vectors.tsv"
-    query_vectors_path.write_text(query_vector_lines)
+    write_binary_vector_payload(
+        root / "query_vectors.bin", flatten_query_vectors(stored.task.queries)
+    )
 
 
 def load_stored_judged_task(root: Path) raises -> StoredJudgedTask:
     var manifest = read_manifest(task_manifest_path(root))
-    require_supported_storage_format(manifest)
+    var format_version = require_supported_storage_format(manifest)
 
     if require_manifest_value(manifest, "artifact_kind") != "judged_task":
         raise Error("storage artifact is not a judged task")
 
-    var document_vector_lines = read_non_empty_lines(root / "document_vectors.tsv")
+    var vector_dim = parse_int(
+        require_manifest_value(manifest, "vector_dim"), "task vector_dim"
+    )
+    var document_vectors = List[List[VectorScalar]]()
+    if format_version >= 2:
+        if require_manifest_value(manifest, "vector_payload_encoding") != "binary_le":
+            raise Error("unsupported judged task vector payload encoding")
+
+        document_vectors = read_binary_vector_payload(
+            root / "document_vectors.bin", vector_dim
+        )
+    else:
+        for line in read_non_empty_lines(root / "document_vectors.tsv"):
+            document_vectors.append(decode_vector_line(line))
+
     var document_vector_cursor = 0
     var documents = List[EncodedDocument]()
 
@@ -145,17 +157,15 @@ def load_stored_judged_task(root: Path) raises -> StoredJudgedTask:
         var token_vectors = List[List[VectorScalar]]()
 
         for _ in range(vector_count):
-            if document_vector_cursor >= len(document_vector_lines):
+            if document_vector_cursor >= len(document_vectors):
                 raise Error("document vector payload ended early")
 
-            token_vectors.append(
-                decode_vector_line(document_vector_lines[document_vector_cursor])
-            )
+            token_vectors.append(document_vectors[document_vector_cursor].copy())
             document_vector_cursor += 1
 
         documents.append(EncodedDocument(fields[0], token_vectors^))
 
-    if document_vector_cursor != len(document_vector_lines):
+    if document_vector_cursor != len(document_vectors):
         raise Error("document vector payload contains extra rows")
 
     var qrels = List[QrelEntry]()
@@ -163,7 +173,13 @@ def load_stored_judged_task(root: Path) raises -> StoredJudgedTask:
         var fields = split_tab_fields(line, 2, "qrel row")
         qrels.append(QrelEntry(fields[0], fields[1]))
 
-    var query_vector_lines = read_non_empty_lines(root / "query_vectors.tsv")
+    var query_vectors = List[List[VectorScalar]]()
+    if format_version >= 2:
+        query_vectors = read_binary_vector_payload(root / "query_vectors.bin", vector_dim)
+    else:
+        for line in read_non_empty_lines(root / "query_vectors.tsv"):
+            query_vectors.append(decode_vector_line(line))
+
     var query_vector_cursor = 0
     var queries = List[JudgedQuery]()
 
@@ -173,12 +189,10 @@ def load_stored_judged_task(root: Path) raises -> StoredJudgedTask:
         var token_vectors = List[List[VectorScalar]]()
 
         for _ in range(vector_count):
-            if query_vector_cursor >= len(query_vector_lines):
+            if query_vector_cursor >= len(query_vectors):
                 raise Error("query vector payload ended early")
 
-            token_vectors.append(
-                decode_vector_line(query_vector_lines[query_vector_cursor])
-            )
+            token_vectors.append(query_vectors[query_vector_cursor].copy())
             query_vector_cursor += 1
 
         queries.append(
@@ -190,7 +204,7 @@ def load_stored_judged_task(root: Path) raises -> StoredJudgedTask:
             )
         )
 
-    if query_vector_cursor != len(query_vector_lines):
+    if query_vector_cursor != len(query_vectors):
         raise Error("query vector payload contains extra rows")
 
     var task = JudgedTask(
@@ -207,7 +221,7 @@ def load_stored_judged_task(root: Path) raises -> StoredJudgedTask:
             require_manifest_value(manifest, "nominal_document_vector_count"),
             "nominal document vector count",
         ),
-        parse_int(require_manifest_value(manifest, "vector_dim"), "task vector_dim"),
+        vector_dim,
         documents^,
         queries^,
     )
@@ -228,3 +242,27 @@ def load_stored_judged_task(root: Path) raises -> StoredJudgedTask:
         VECTOR_SCALAR_NAME,
         task^,
     )
+
+
+def flatten_document_vectors(
+    read documents: List[EncodedDocument]
+) -> List[List[VectorScalar]]:
+    var token_vectors = List[List[VectorScalar]]()
+
+    for document in documents:
+        for token_vector in document.token_vectors:
+            token_vectors.append(token_vector.copy())
+
+    return token_vectors^
+
+
+def flatten_query_vectors(
+    read queries: List[JudgedQuery]
+) -> List[List[VectorScalar]]:
+    var token_vectors = List[List[VectorScalar]]()
+
+    for query in queries:
+        for token_vector in query.query.token_vectors:
+            token_vectors.append(token_vector.copy())
+
+    return token_vectors^

@@ -3,7 +3,7 @@ from std.pathlib import Path
 
 from kayak.numeric import STORAGE_FORMAT_VERSION, VECTOR_SCALAR_NAME
 
-from .text_codec import append_line, read_non_empty_lines, split_tab_fields
+from .text_codec import append_line, parse_int, read_non_empty_lines, split_tab_fields
 
 
 struct ManifestEntry(Copyable):
@@ -44,10 +44,13 @@ def require_manifest_value(
     raise Error("missing manifest key: " + key)
 
 
-def require_supported_storage_format(entries: List[ManifestEntry]) raises:
-    if require_manifest_value(entries, "format_version") != String(
-        STORAGE_FORMAT_VERSION
-    ):
+def require_supported_storage_format(entries: List[ManifestEntry]) raises -> Int:
+    var format_version = parse_int(
+        require_manifest_value(entries, "format_version"),
+        "storage format_version",
+    )
+
+    if format_version != 1 and format_version != STORAGE_FORMAT_VERSION:
         raise Error("unsupported storage format version")
 
     var stored_vector_scalar_name = require_manifest_value(
@@ -60,3 +63,5 @@ def require_supported_storage_format(entries: List[ManifestEntry]) raises:
             + " vs "
             + VECTOR_SCALAR_NAME
         )
+
+    return format_version
