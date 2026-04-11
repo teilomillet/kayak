@@ -1,1 +1,139 @@
 # kayak
+
+`kayak` is a Mojo-first late-interaction retrieval engine.
+
+The current scaffold is intentionally narrow:
+- encoder output is treated as an external boundary
+- indexing and exact MaxSim scoring live in Mojo
+- CPU exact search is the first verified path
+- benchmarks and tests are first-class, not an afterthought
+
+## Current Layout
+
+- `kayak/contracts/`: validated query/document contracts
+- `kayak/numeric/`: centralized scalar aliases and storage-format constants
+- `kayak/index/`: packed index layout and builders
+- `kayak/scoring/`: exact MaxSim scoring kernels
+- `kayak/runtime/`: backend boundary, CPU backend first
+- `kayak/search/`: top-k search orchestration
+- `kayak/benchmarks/`: deterministic workload profiles and proxy benchmark tasks
+- `kayak/eval/`: judged tasks and lightweight retrieval metrics
+- `kayak/interop/`: Python bridge for external encoders and real public subsets
+- `kayak/storage/`: persisted judged tasks and packed indexes
+- `benchmarks/`: runnable benchmark entrypoints
+- `python/`: small Python bridge modules for ColBERT and dataset loading
+- `tests/`: runnable unit-test entrypoints using `std.testing.TestSuite`
+
+## Why This Shape
+
+This layout is justified by the current project goal:
+- keep the encoder boundary swappable for MAX or another transformer stack
+- keep the retrieval core in Mojo
+- keep scalar choices centralized so vector/score dtypes can evolve without a rewrite
+- keep hot paths isolated so they are easy to profile and later replace with GPU kernels
+
+The code keeps vector counts explicit because search quality and systems cost both depend on:
+- query vector count
+- document vector count
+- related sparse-attention or pruning budgets
+
+## Benchmark Coverage
+
+The benchmark layer now has two complementary pieces:
+- workload profiles for system timings across benchmark families
+- tiny judged proxy tasks for fast retrieval-quality checks
+
+The included slices are inspired by public benchmark families that are relevant to late interaction:
+- `LoTTE`: domain-specific forum retrieval in the ColBERT ecosystem
+- `BEIR`: heterogeneous factual retrieval across domains
+- `MS MARCO`: short passage retrieval
+- `BRIGHT`: reasoning-heavy retrieval
+- `MIRACL`: multilingual retrieval
+
+Important epistemic boundary:
+- these shipped tasks are proxies, not official benchmark reproductions
+- they are intended to keep the code runnable, fast, and easy to scale later
+- official full-benchmark claims still require running the public datasets and their evaluation protocols
+
+The source rationale for those families is recorded in [docs/benchmark_rationale.md](/Users/teilomillet/Code/kayak/docs/benchmark_rationale.md).
+
+## Robustness Layer
+
+The repo now includes a small robustness layer inspired by property-first testing and mutation-quality checks:
+
+- `tests/test_battle.mojo`: randomized differential and metamorphic checks for the late-interaction core
+- `tests/test_storage_invariants.mojo`: corruption and compatibility checks for persisted artifacts
+- `tests/test_eval_battle.mojo`: metric reference and evaluation invariants
+- `python/scripts/mutation_smoke.py`: curated mutation-smoke harness for core kernels, metrics, and storage guards
+
+This is documented in [docs/robustness_testing.md](/Users/teilomillet/Code/kayak/docs/robustness_testing.md).
+
+## Real Subset Bridge
+
+The first real public end-to-end path uses:
+- `colbert-ai` for ColBERTv2 token embeddings on CPU
+- Mojo for packing, exact search, and evaluation
+- a small `BEIR/SciFact` subset as the first real benchmark slice
+- repo-local storage so repeated runs can reload encoded tasks and packed indexes
+
+This is a deliberate first real subset, not a claim of full benchmark reproduction.
+`LoTTE` remains a target, but the straightforward official loader path currently pulls a 3.58 GB archive, which is too heavy for the fast smoke workflow this repo wants.
+
+The persisted artifacts live under `.cache/kayak/scifact_real_subset/`. The manifest records:
+- storage format version
+- vector scalar type
+- dataset id
+- model name
+- judged task payload
+- packed index payload
+
+## Commands
+
+Run the demo:
+
+```bash
+pixi run demo
+pixi run demo_scifact
+```
+
+Run tests:
+
+```bash
+pixi run test_index
+pixi run test_maxsim
+pixi run test_eval
+pixi run test_proxies
+pixi run test_python_bridge
+pixi run test_storage
+pixi run test_storage_invariants
+pixi run test_battle
+pixi run test_eval_battle
+```
+
+Run the exact CPU benchmark:
+
+```bash
+pixi run bench_exact
+```
+
+Run the workload matrix and the proxy evaluation matrix:
+
+```bash
+pixi run bench_matrix
+pixi run eval_matrix
+pixi run bench_scifact
+```
+
+Run the curated mutation-smoke check:
+
+```bash
+pixi run mutate_smoke
+```
+
+Compile the package:
+
+```bash
+pixi run package_mojo
+```
+
+The compiled Mojo package is written to `dist/kayak.mojopkg`.
