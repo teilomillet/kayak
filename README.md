@@ -138,6 +138,7 @@ Run the exact CPU benchmark:
 ```bash
 pixi run bench_exact
 pixi run bench_profile_exact
+pixi run bench_profile_cpu_micro
 pixi run bench_profile_cpu_configs
 pixi run bench_profile_cpu_usl
 pixi run fit_usl
