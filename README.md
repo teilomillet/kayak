@@ -16,6 +16,7 @@ The current scaffold is intentionally narrow:
 - `kayak/scoring/`: exact MaxSim scoring kernels
 - `kayak/runtime/`: backend boundary, CPU backend first
 - `kayak/search/`: top-k search orchestration
+- `kayak/verifier/`: optional candidate-window reranking and verifier pipeline
 - `kayak/benchmarks/`: deterministic workload profiles and proxy benchmark tasks
 - `kayak/eval/`: judged tasks and lightweight retrieval metrics
 - `kayak/interop/`: Python bridge for external encoders and real public subsets
@@ -108,6 +109,16 @@ The persisted artifacts live under `.cache/kayak/scifact_real_subset/` and `.cac
 - judged task payload
 - packed index payload
 
+## Verifier Stage
+
+The repo now includes a narrow third-stage verifier interface:
+- `no_verifier`: preserves the current exact-search path
+- `exact_late_interaction_verifier(candidate_k)`: reranks a candidate window in Mojo with exact MaxSim
+
+This stage is intentionally vector-only in `v0.1`.
+That is an epistemic boundary, not a missing buzzword: the current stored artifacts contain token embeddings and ids, but not the raw text needed for an honest cross-encoder reranker.
+If we want a text-level verifier later, the storage layer must first persist the necessary text payload explicitly.
+
 ## Commands
 
 Run the demo:
@@ -129,6 +140,8 @@ pixi run test_python_bridge
 pixi run test_storage
 pixi run test_storage_invariants
 pixi run test_score_partitions
+pixi run test_hybrid_flat_dim128
+pixi run test_verifier
 pixi run test_battle
 pixi run test_eval_battle
 ```
@@ -141,6 +154,8 @@ pixi run bench_profile_exact
 pixi run bench_profile_cpu_micro
 pixi run bench_profile_cpu_structural
 pixi run bench_profile_cpu_structural_real_subset
+pixi run bench_profile_cpu_hybrid_real_subset
+pixi run bench_profile_cpu_verifier_real_subset
 pixi run bench_profile_cpu_configs
 pixi run bench_profile_cpu_usl
 pixi run fit_usl

@@ -1,5 +1,11 @@
 from .contracts import EncodedDocument, EncodedQuery
-from .eval import JudgedQuery, JudgedTask, TaskEvaluation, evaluate_task
+from .eval import (
+    JudgedQuery,
+    JudgedTask,
+    TaskEvaluation,
+    evaluate_task,
+    evaluate_task_with_verifier,
+)
 from .index import PackedIndex, pack_documents
 from .interop import (
     load_fiqa_real_subset,
@@ -29,4 +35,12 @@ from .storage import (
     load_stored_packed_index,
     save_stored_judged_task,
     save_stored_packed_index,
+)
+from .verifier import (
+    VerifierReranker,
+    effective_candidate_k,
+    exact_late_interaction_verifier,
+    no_verifier,
+    rerank_hits_with_verifier,
+    search_exact_with_verifier,
 )

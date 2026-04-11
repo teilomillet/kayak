@@ -2,6 +2,7 @@ from kayak.index import pack_documents
 from kayak.numeric import MetricScalar, zero_metric_scalar
 from kayak.runtime import ExactCpuBackend
 from kayak.search import search_exact
+from kayak.verifier import VerifierReranker, search_exact_with_verifier
 
 from .judged_task import JudgedTask
 from .metrics import recall_at_k, reciprocal_rank_at_k, success_at_k
@@ -74,6 +75,56 @@ def evaluate_task(
 
     for judged_query in task.queries:
         var hits = search_exact(backend, judged_query.query, index, task.k)
+
+        reciprocal_rank_total += reciprocal_rank_at_k(
+            hits, judged_query.relevant_doc_ids, task.k
+        )
+        recall_total += recall_at_k(hits, judged_query.relevant_doc_ids, task.k)
+        success_total += success_at_k(
+            hits, judged_query.relevant_doc_ids, task.k
+        )
+
+    var query_count = len(task.queries)
+    var mean_reciprocal_rank = reciprocal_rank_total / MetricScalar(query_count)
+    var mean_recall_at_k = recall_total / MetricScalar(query_count)
+    var success_rate_at_k = success_total / MetricScalar(query_count)
+
+    return TaskEvaluation(
+        task.family.copy(),
+        task.slice_name.copy(),
+        task.primary_metric.copy(),
+        choose_primary_value(
+            task.primary_metric,
+            mean_reciprocal_rank,
+            mean_recall_at_k,
+            success_rate_at_k,
+        ),
+        task.k,
+        query_count,
+        len(task.documents),
+        mean_reciprocal_rank,
+        mean_recall_at_k,
+        success_rate_at_k,
+    )
+
+
+def evaluate_task_with_verifier(
+    read backend: ExactCpuBackend,
+    read task: JudgedTask,
+    read verifier: VerifierReranker,
+) raises -> TaskEvaluation:
+    if len(task.queries) == 0:
+        raise Error("cannot evaluate a task with zero queries")
+
+    var index = pack_documents(task.documents)
+    var reciprocal_rank_total = zero_metric_scalar()
+    var recall_total = zero_metric_scalar()
+    var success_total = zero_metric_scalar()
+
+    for judged_query in task.queries:
+        var hits = search_exact_with_verifier(
+            backend, judged_query.query, index, task.k, verifier
+        )
 
         reciprocal_rank_total += reciprocal_rank_at_k(
             hits, judged_query.relevant_doc_ids, task.k
