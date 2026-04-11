@@ -57,12 +57,26 @@ Important epistemic boundary:
 
 The source rationale for those families is recorded in [docs/benchmark_rationale.md](/Users/teilomillet/Code/kayak/docs/benchmark_rationale.md).
 
+## Profiling Benchmarks
+
+The repo now has profiling-oriented microbenchmarks that separate:
+
+- raw `dot_product`
+- per-document exact MaxSim
+- backend `score_all`
+- full `search_exact`
+
+These benches sweep explicit shapes so vector count stays first-class in the output.
+The current CPU path uses a SIMD `dot_product` kernel and vector-balanced
+document partitioning for larger exact-search workloads.
+
 ## Robustness Layer
 
 The repo now includes a small robustness layer inspired by property-first testing and mutation-quality checks:
 
 - `tests/test_battle.mojo`: randomized differential and metamorphic checks for the late-interaction core
 - `tests/test_storage_invariants.mojo`: corruption and compatibility checks for persisted artifacts
+- `tests/test_score_partitions.mojo`: vector-balanced partitioning checks for parallel exact scoring
 - `tests/test_eval_battle.mojo`: metric reference and evaluation invariants
 - `python/scripts/mutation_smoke.py`: curated mutation-smoke harness for core kernels, metrics, and storage guards
 
@@ -73,13 +87,13 @@ This is documented in [docs/robustness_testing.md](/Users/teilomillet/Code/kayak
 The first real public end-to-end path uses:
 - `colbert-ai` for ColBERTv2 token embeddings on CPU
 - Mojo for packing, exact search, and evaluation
-- a small `BEIR/SciFact` subset as the first real benchmark slice
+- small `BEIR/SciFact` and `BEIR/FIQA` subsets as real benchmark slices
 - repo-local storage so repeated runs can reload encoded tasks and packed indexes
 
 This is a deliberate first real subset, not a claim of full benchmark reproduction.
 `LoTTE` remains a target, but the straightforward official loader path currently pulls a 3.58 GB archive, which is too heavy for the fast smoke workflow this repo wants.
 
-The persisted artifacts live under `.cache/kayak/scifact_real_subset/`. The manifest records:
+The persisted artifacts live under `.cache/kayak/scifact_real_subset/` and `.cache/kayak/fiqa_real_subset/`. The manifest records:
 - storage format version
 - vector scalar type
 - dataset id
@@ -94,6 +108,7 @@ Run the demo:
 ```bash
 pixi run demo
 pixi run demo_scifact
+pixi run demo_fiqa
 ```
 
 Run tests:
@@ -106,6 +121,7 @@ pixi run test_proxies
 pixi run test_python_bridge
 pixi run test_storage
 pixi run test_storage_invariants
+pixi run test_score_partitions
 pixi run test_battle
 pixi run test_eval_battle
 ```
@@ -114,6 +130,7 @@ Run the exact CPU benchmark:
 
 ```bash
 pixi run bench_exact
+pixi run bench_profile_exact
 ```
 
 Run the workload matrix and the proxy evaluation matrix:
@@ -122,6 +139,7 @@ Run the workload matrix and the proxy evaluation matrix:
 pixi run bench_matrix
 pixi run eval_matrix
 pixi run bench_scifact
+pixi run bench_fiqa
 ```
 
 Run the curated mutation-smoke check:

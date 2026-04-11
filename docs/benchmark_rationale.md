@@ -40,10 +40,11 @@ These are intentionally lightweight and fast. They are not official benchmark re
   - how does exact late interaction latency move as query/document vector budgets change?
   - can we scale one family later without redesigning the code?
 
-## First Real Slice
+## First Real Slices
 
-- The first real public end-to-end slice in the repo is `BEIR/SciFact`.
-- This was chosen after checking the practical loader costs on April 11, 2026:
+- The current real public end-to-end slices in the repo are `BEIR/SciFact` and `BEIR/FIQA`.
+- These were chosen after checking the practical loader costs on April 11, 2026:
   - `beir/scifact/test` loaded through `ir_datasets` with `5,183` docs, `300` queries, and `339` qrels, and downloaded a `2.82 MB` archive in our environment.
+  - `beir/fiqa/test` loaded through `ir_datasets` with `57,638` docs, `648` queries, and `1,706` qrels, and downloaded a `17.9 MB` archive in our environment.
   - the straightforward `LoTTE` loader path through `ir_datasets` immediately requested the full `3.58 GB` `lotte.tar.gz` archive.
-- That makes `SciFact` the sound first real smoke path for CPU ColBERT-to-Mojo integration, while `LoTTE` remains the preferred later late-interaction benchmark once we add a lighter data-access path or accept the heavier download.
+- That makes `SciFact` the sound first real smoke path for CPU ColBERT-to-Mojo integration and `FIQA` the next good slice for broader domain/scale coverage, while `LoTTE` remains the preferred later late-interaction benchmark once we add a lighter data-access path or accept the heavier download.

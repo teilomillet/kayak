@@ -1,11 +1,93 @@
+from std.algorithm.backend.cpu.parallelize import sync_parallelize
 from std.collections import List
+from std.runtime.asyncrt import parallelism_level
 
 from kayak.contracts import EncodedQuery
 from kayak.index import PackedIndex
 from kayak.numeric import ScoreScalar, min_score_scalar, zero_score_scalar
-
 from .dot import dot_product
 
+comptime MIN_PARALLEL_SIMILARITY_PAIRS = 65536
+comptime TARGET_CHUNKS_PER_WORKER = 4
+
+
+def ceil_div(numerator: Int, denominator: Int) -> Int:
+    return (numerator + denominator - 1) // denominator
+
+
+def choose_parallel_work_item_count(
+    query: EncodedQuery, index: PackedIndex
+) -> Int:
+    var worker_count = parallelism_level()
+    if worker_count <= 1:
+        return 1
+
+    var total_similarity_pairs = query.vector_count * index.total_vector_count
+    if total_similarity_pairs < MIN_PARALLEL_SIMILARITY_PAIRS:
+        return 1
+
+    var max_work_items = worker_count * TARGET_CHUNKS_PER_WORKER
+    if max_work_items > index.document_count:
+        max_work_items = index.document_count
+
+    var work_item_count = ceil_div(
+        total_similarity_pairs, MIN_PARALLEL_SIMILARITY_PAIRS
+    )
+    if work_item_count < 1:
+        return 1
+    if work_item_count > max_work_items:
+        return max_work_items
+
+    return work_item_count
+
+
+def build_vector_balanced_boundaries(
+    index: PackedIndex, work_item_count: Int
+) -> List[Int]:
+    var boundaries = List[Int]()
+    var document_count = index.document_count
+    boundaries.append(0)
+
+    if work_item_count <= 1:
+        boundaries.append(document_count)
+        return boundaries^
+
+    var start_doc = 0
+    var total_vector_count = index.total_vector_count
+
+    for work_item in range(work_item_count - 1):
+        var remaining_work_items = work_item_count - work_item
+        var remaining_vectors = (
+            total_vector_count - index.doc_offsets[start_doc]
+        )
+        var target_vectors = ceil_div(remaining_vectors, remaining_work_items)
+        var max_stop_doc = document_count - (remaining_work_items - 1)
+        var stop_doc = start_doc + 1
+
+        while (
+            stop_doc < max_stop_doc
+            and (
+                index.doc_offsets[stop_doc] - index.doc_offsets[start_doc]
+            ) < target_vectors
+        ):
+            stop_doc += 1
+
+        boundaries.append(stop_doc)
+        start_doc = stop_doc
+
+    boundaries.append(document_count)
+    return boundaries^
+
+
+def exact_scores_for_index_serial(
+    query: EncodedQuery, index: PackedIndex, document_count: Int
+) -> List[ScoreScalar]:
+    var scores = List[ScoreScalar]()
+
+    for document_index in range(document_count):
+        scores.append(exact_score_for_document(query, index, document_index))
+
+    return scores^
 
 def exact_score_for_document(
     query: EncodedQuery,
@@ -18,11 +100,11 @@ def exact_score_for_document(
 
     for query_token in query.token_vectors:
         var best_similarity = min_score_scalar()
-
         for token_index in range(start, stop):
             var similarity = dot_product(
                 query_token, index.token_vectors[token_index]
             )
+
             if similarity > best_similarity:
                 best_similarity = similarity
 
@@ -37,9 +119,27 @@ def exact_scores_for_index(
     if query.vector_dim != index.vector_dim:
         raise Error("query and index must share the same vector dimension")
 
+    var document_count = index.document_count
+    var work_item_count = choose_parallel_work_item_count(query, index)
+    if work_item_count <= 1:
+        return exact_scores_for_index_serial(query, index, document_count)
+
     var scores = List[ScoreScalar]()
+    for _ in range(document_count):
+        scores.append(zero_score_scalar())
 
-    for document_index in range(index.document_count):
-        scores.append(exact_score_for_document(query, index, document_index))
+    var boundaries = build_vector_balanced_boundaries(index, work_item_count)
+    var scores_ptr = scores.unsafe_ptr()
 
+    @parameter
+    def score_partition(work_item: Int):
+        var start_doc = boundaries[work_item]
+        var stop_doc = boundaries[work_item + 1]
+
+        for document_index in range(start_doc, stop_doc):
+            scores_ptr[document_index] = exact_score_for_document(
+                query, index, document_index
+            )
+
+    sync_parallelize[score_partition](work_item_count)
     return scores^

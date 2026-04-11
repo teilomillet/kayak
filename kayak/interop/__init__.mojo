@@ -1,2 +1,3 @@
 from .python_task_decoder import decode_judged_task
+from .fiqa_subset import load_fiqa_real_subset
 from .scifact_subset import load_mock_python_task, load_scifact_real_subset

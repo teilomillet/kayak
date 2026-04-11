@@ -1,3 +1,4 @@
+from .fiqa_cache import FiqaRealSubsetCache, ensure_fiqa_real_subset_cache
 from .judged_task_store import (
     judged_task_exists,
     load_stored_judged_task,
