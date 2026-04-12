@@ -32,6 +32,8 @@ The current scaffold is intentionally narrow:
 
 The Phase A storage boundary for hosted collections is documented in
 [docs/architecture/segment_storage.md](docs/architecture/segment_storage.md).
+That boundary now includes persisted collection, segment, snapshot, and
+document-text-corpus manifest codecs under `kayak/collections/`.
 
 ## Why This Shape
 

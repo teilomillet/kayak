@@ -149,7 +149,9 @@ The important contract is the object model, not the exact directory spelling.
 <collection-root>/
   collection.manifest.tsv
   snapshots/
-    <snapshot-id>.tsv
+    <snapshot-id>/
+      manifest.tsv
+      segment_ids.tsv
   segments/
     <segment-id>/
       manifest.tsv
@@ -160,14 +162,17 @@ The important contract is the object model, not the exact directory spelling.
         token_vectors.bin
       text_corpus/           # optional
         manifest.tsv
-        doc_ids.tsv
-        texts.tsv
+        entries.tsv
+        texts/
+          0.txt
+          1.txt
 ```
 
 Why this layout is plausible:
 - it extends the repo's existing manifest-plus-binary-payload pattern
 - it keeps search-hot vectors in their own artifact root
 - it makes the text sidecar explicitly optional
+- it preserves exact UTF-8 text in the baseline codec instead of normalizing it into one-line TSV payloads
 
 ## Required Invariants
 
