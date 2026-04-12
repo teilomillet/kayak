@@ -502,11 +502,15 @@ Current status:
   compression, `sqrt(m)` vector-count laws, stronger ceiling comparisons
 
 Parallel TODOs:
-- [ ] Add one single-core scaling benchmark over increasing corpus sizes
+- [x] Add one single-core scaling benchmark over increasing corpus sizes
+  - Evidence:
+    [docs/traces/2026-04-12_single_core_scale.md](docs/traces/2026-04-12_single_core_scale.md)
 - [ ] Add one compressed-token benchmark that reports bytes/vector explicitly
 - [ ] Add one vectors/document sweep that tests aggressive document-vector
   reduction
-- [ ] Add one asymptotic scaling benchmark for native candidate engines
+- [x] Add one asymptotic scaling benchmark for native candidate engines
+  - Evidence:
+    [docs/traces/2026-04-12_single_core_scale.md](docs/traces/2026-04-12_single_core_scale.md)
 - [ ] Add one benchmark-selection note for a harder-recall family beyond the
   current default public slices
 - [ ] Add one stronger-ceiling comparison only after that path exists locally

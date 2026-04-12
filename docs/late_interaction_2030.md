@@ -74,6 +74,15 @@ Verified since the first version of this note:
 
 Those are substrate wins, not proof of the stronger efficiency thesis.
 
+Verified after the first version of this note:
+- there is now one synthetic single-core scaling benchmark over increasing
+  corpus sizes
+- that benchmark already shows a measurable latency-recall tradeoff between
+  exact full scan, `document_proxy`, and capped native candidate engines
+
+Evidence:
+- [docs/traces/2026-04-12_single_core_scale.md](traces/2026-04-12_single_core_scale.md)
+
 ## What Kayak Should Change
 
 The talk does not change Kayak's north star.
@@ -121,7 +130,8 @@ Not yet locally verified:
 - token storage close to `6 bytes/vector`
 - vectors/document pruning laws anywhere near `sqrt(m)` in the regimes we care
   about
-- asymptotic native-engine scaling substantially beyond naive late interaction
+- asymptotic native-engine scaling on harder or larger benchmark families well
+  beyond the current synthetic sweep
 - a benchmark family clearly harder than today's small public slices
 - a stronger expensive ceiling that is implemented and compared locally
 

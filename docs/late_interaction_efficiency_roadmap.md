@@ -107,7 +107,7 @@ This is the new primary research track.
 ### Phase I1: Single-Core Scale Benchmark
 
 Status:
-- `Unverified claim`
+- `Implemented and locally measured on a synthetic scale slice`
 
 Claim:
 - late interaction can search much larger corpora on one CPU core than common
@@ -126,6 +126,12 @@ Deliverables:
 Exit criteria:
 - Kayak can state a verified single-core scaling curve instead of a qualitative
   claim
+
+Current evidence:
+- [docs/traces/2026-04-12_single_core_scale.md](traces/2026-04-12_single_core_scale.md)
+- verified locally for a synthetic fixed-shape slice over `64 -> 4096`
+  documents
+- not yet evidence for multi-billion-token or clean idle-host claims
 
 ### Phase I2: Bytes-Per-Vector Compression
 
@@ -179,7 +185,7 @@ Exit criteria:
 ### Phase I4: Native Candidate Engine Asymptotics
 
 Status:
-- `Instrumented but unproven`
+- `Instrumented and partially measured on the synthetic scale slice`
 
 Claim:
 - native stage-1 late-interaction engines can scale asymptotically better than
@@ -201,6 +207,18 @@ Deliverables:
 Exit criteria:
 - Kayak can show where each candidate engine wins or loses on the
   latency-recall-quality frontier
+
+Current evidence:
+- the synthetic single-core scale benchmark already compares:
+  - exact full scan
+  - `document_proxy`
+  - `centroid_postings`
+  - `centroid_heads`
+  - `centroid_postings_head_auto`
+- it already exposed a real tradeoff:
+  - capped native engines stayed fast
+  - capped native engines also lost candidate recall as corpus size increased
+- broader public-benchmark confirmation is still pending
 
 ### Phase I5: Harder-Recall Benchmark Selection
 
@@ -252,11 +270,11 @@ Exit criteria:
 These are the next moves that should happen while ongoing engine work
 continues.
 
-- [ ] add one single-core scaling benchmark over increasing corpus sizes
+- [x] add one single-core scaling benchmark over increasing corpus sizes
 - [ ] add one compressed-token benchmark that reports bytes/vector explicitly
 - [ ] add one vectors/document sweep that tests aggressive document-vector
   reduction
-- [ ] add one asymptotic scaling benchmark for native candidate engines
+- [x] add one asymptotic scaling benchmark for native candidate engines
 - [ ] add one benchmark-selection note for a harder-recall family beyond the
   current default public slices
 - [ ] add one stronger-ceiling comparison only after that path exists locally

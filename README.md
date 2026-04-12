@@ -174,6 +174,12 @@ The benchmark layer now has two complementary pieces:
 - workload profiles for system timings across benchmark families
 - tiny judged proxy tasks for fast retrieval-quality checks
 
+There is now also a synthetic single-core scale sweep that keeps query shape,
+document shape, and candidate budget fixed while increasing corpus size
+through the real collection/search-plan stack. The goal is narrower than a
+headline performance claim: it gives the repo one verified local scaling curve
+before any stronger efficiency rhetoric.
+
 The included slices are inspired by public benchmark families that are relevant to late interaction:
 - `LoTTE`: domain-specific forum retrieval in the ColBERT ecosystem
 - `BEIR`: heterogeneous factual retrieval across domains
@@ -257,6 +263,7 @@ Machine-readable benchmark artifacts now also land under `.cache/kayak/`:
 - `public_vector_budget_sweep.json`
 - `public_partition_policy_benchmarks.json`
 - `public_search_breakdown.json`
+- `single_core_scale.json`
 - `proxy_eval_matrix.json`
 - `workload_matrix.json`
 
@@ -388,6 +395,8 @@ pixi run test_hybrid_flat_dim128
 pixi run test_verifier
 pixi run test_battle
 pixi run test_eval_battle
+pixi run test_stage_aware_benchmark_json
+pixi run test_single_core_scale_fixture
 ```
 
 Install the Python package from a source checkout:
@@ -437,6 +446,7 @@ pixi run bench_browsecomp_plus_ranks
 pixi run bench_browsecomp_plus_clause
 pixi run bench_real_subset_policies
 pixi run bench_real_subset_breakdown
+pixi run bench_single_core_scale
 ```
 
 Materialize the BrowseComp-Plus task json explicitly if you want to separate the

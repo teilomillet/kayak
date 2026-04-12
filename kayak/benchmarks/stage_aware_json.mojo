@@ -36,12 +36,26 @@ struct StageAwareSearchSummary(Copyable):
     var final_k: Int
     var candidate_k: Int
     var query_count: Int
+    var nominal_query_vector_count: Int
+    var nominal_document_vector_count: Int
     var document_count: Int
     var token_count: Int
     var vector_count: Int
     var byte_size: Int
     var bytes_per_document: Float64
     var bytes_per_vector: Float64
+    var candidate_stage_document_count: Int
+    var candidate_stage_token_count: Int
+    var candidate_stage_vector_count: Int
+    var candidate_stage_byte_size: Int
+    var candidate_stage_bytes_per_document: Float64
+    var candidate_stage_bytes_per_vector: Float64
+    var exact_stage_document_count: Int
+    var exact_stage_token_count: Int
+    var exact_stage_vector_count: Int
+    var exact_stage_byte_size: Int
+    var exact_stage_bytes_per_document: Float64
+    var exact_stage_bytes_per_vector: Float64
     var vector_dim: Int
 
     def __init__(
@@ -65,12 +79,26 @@ struct StageAwareSearchSummary(Copyable):
         final_k: Int,
         candidate_k: Int,
         query_count: Int,
+        nominal_query_vector_count: Int,
+        nominal_document_vector_count: Int,
         document_count: Int,
         token_count: Int,
         vector_count: Int,
         byte_size: Int,
         bytes_per_document: Float64,
         bytes_per_vector: Float64,
+        candidate_stage_document_count: Int,
+        candidate_stage_token_count: Int,
+        candidate_stage_vector_count: Int,
+        candidate_stage_byte_size: Int,
+        candidate_stage_bytes_per_document: Float64,
+        candidate_stage_bytes_per_vector: Float64,
+        exact_stage_document_count: Int,
+        exact_stage_token_count: Int,
+        exact_stage_vector_count: Int,
+        exact_stage_byte_size: Int,
+        exact_stage_bytes_per_document: Float64,
+        exact_stage_bytes_per_vector: Float64,
         vector_dim: Int,
     ):
         self.dataset_id = dataset_id^
@@ -92,12 +120,28 @@ struct StageAwareSearchSummary(Copyable):
         self.final_k = final_k
         self.candidate_k = candidate_k
         self.query_count = query_count
+        self.nominal_query_vector_count = nominal_query_vector_count
+        self.nominal_document_vector_count = nominal_document_vector_count
         self.document_count = document_count
         self.token_count = token_count
         self.vector_count = vector_count
         self.byte_size = byte_size
         self.bytes_per_document = bytes_per_document
         self.bytes_per_vector = bytes_per_vector
+        self.candidate_stage_document_count = candidate_stage_document_count
+        self.candidate_stage_token_count = candidate_stage_token_count
+        self.candidate_stage_vector_count = candidate_stage_vector_count
+        self.candidate_stage_byte_size = candidate_stage_byte_size
+        self.candidate_stage_bytes_per_document = (
+            candidate_stage_bytes_per_document
+        )
+        self.candidate_stage_bytes_per_vector = candidate_stage_bytes_per_vector
+        self.exact_stage_document_count = exact_stage_document_count
+        self.exact_stage_token_count = exact_stage_token_count
+        self.exact_stage_vector_count = exact_stage_vector_count
+        self.exact_stage_byte_size = exact_stage_byte_size
+        self.exact_stage_bytes_per_document = exact_stage_bytes_per_document
+        self.exact_stage_bytes_per_vector = exact_stage_bytes_per_vector
         self.vector_dim = vector_dim
 
 
@@ -119,6 +163,14 @@ def build_stage_aware_search_summary_from_measurement(
     read stored_task: StoredJudgedTask,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
+    candidate_stage_document_count: Int,
+    candidate_stage_token_count: Int,
+    candidate_stage_vector_count: Int,
+    candidate_stage_byte_size: Int,
+    exact_stage_document_count: Int,
+    exact_stage_token_count: Int,
+    exact_stage_vector_count: Int,
+    exact_stage_byte_size: Int,
     primary_value: Float64,
     mean_ndcg_at_k: Float64,
     mean_reciprocal_rank: Float64,
@@ -150,12 +202,32 @@ def build_stage_aware_search_summary_from_measurement(
         plan.candidate_budget.final_k,
         plan.candidate_budget.candidate_k,
         len(task.queries),
+        task.nominal_query_vector_count,
+        task.nominal_document_vector_count,
         stats.document_count,
         stats.token_count,
         stats.total_vector_count,
         stats.byte_size,
         density_bytes_per_document(stats.byte_size, stats.document_count),
         density_bytes_per_vector(stats.byte_size, stats.total_vector_count),
+        candidate_stage_document_count,
+        candidate_stage_token_count,
+        candidate_stage_vector_count,
+        candidate_stage_byte_size,
+        density_bytes_per_document(
+            candidate_stage_byte_size, candidate_stage_document_count
+        ),
+        density_bytes_per_vector(
+            candidate_stage_byte_size, candidate_stage_vector_count
+        ),
+        exact_stage_document_count,
+        exact_stage_token_count,
+        exact_stage_vector_count,
+        exact_stage_byte_size,
+        density_bytes_per_document(
+            exact_stage_byte_size, exact_stage_document_count
+        ),
+        density_bytes_per_vector(exact_stage_byte_size, exact_stage_vector_count),
         snapshot.collection.vector_dim,
     )
 
@@ -167,14 +239,42 @@ def build_stage_aware_search_summary(
     read plan: SearchPlan,
 ) raises -> StageAwareSearchSummary:
     var task = stored_task.task.copy()
-    var primary_total = 0.0
-    var ndcg_total = 0.0
-    var reciprocal_rank_total = 0.0
-    var recall_total = 0.0
-    var success_total = 0.0
-    var candidate_recall_total = 0.0
+    if len(task.queries) == 0:
+        raise Error("stage-aware benchmark requires at least one judged query")
 
-    for judged_query in task.queries:
+    var first_query = task.queries[0].copy()
+    var first_final_hits = search_collection_for_plan(
+        backend,
+        first_query.query,
+        snapshot,
+        plan,
+    )
+    var first_query_evaluation = evaluate_query_hits(
+        first_query,
+        final_hits_to_search_hits(first_final_hits),
+        task.k,
+        task.primary_metric,
+    )
+    var representative_explain = explain_collection_search(
+        backend,
+        first_query.query,
+        snapshot,
+        plan,
+    )
+
+    var primary_total = Float64(first_query_evaluation.primary_value)
+    var ndcg_total = Float64(first_query_evaluation.ndcg_at_k)
+    var reciprocal_rank_total = Float64(
+        first_query_evaluation.reciprocal_rank_at_k
+    )
+    var recall_total = Float64(first_query_evaluation.recall_at_k)
+    var success_total = Float64(first_query_evaluation.success_at_k)
+    var candidate_recall_total = Float64(
+        representative_explain.candidate_recall_at_final_k
+    )
+
+    for query_index in range(1, len(task.queries)):
+        var judged_query = task.queries[query_index].copy()
         var final_hits = search_collection_for_plan(
             backend,
             judged_query.query,
@@ -229,6 +329,14 @@ def build_stage_aware_search_summary(
         stored_task,
         snapshot,
         plan,
+        representative_explain.candidate_stage.document_count,
+        representative_explain.candidate_stage.token_count,
+        representative_explain.candidate_stage.vector_count,
+        representative_explain.candidate_stage.byte_size,
+        representative_explain.exact_stage.document_count,
+        representative_explain.exact_stage.token_count,
+        representative_explain.exact_stage.vector_count,
+        representative_explain.exact_stage.byte_size,
         primary_total / Float64(query_count),
         ndcg_total / Float64(query_count),
         reciprocal_rank_total / Float64(query_count),
@@ -266,6 +374,10 @@ def append_stage_aware_search_summary_json(
     buffer += "\"final_k\":" + String(summary.final_k) + ","
     buffer += "\"candidate_k\":" + String(summary.candidate_k) + ","
     buffer += "\"query_count\":" + String(summary.query_count) + ","
+    buffer += "\"nominal_query_vector_count\":"
+    buffer += String(summary.nominal_query_vector_count) + ","
+    buffer += "\"nominal_document_vector_count\":"
+    buffer += String(summary.nominal_document_vector_count) + ","
     buffer += "\"document_count\":" + String(summary.document_count) + ","
     buffer += "\"token_count\":" + String(summary.token_count) + ","
     buffer += "\"vector_count\":" + String(summary.vector_count) + ","
@@ -273,6 +385,30 @@ def append_stage_aware_search_summary_json(
     buffer += "\"bytes_per_document\":"
     buffer += String(summary.bytes_per_document) + ","
     buffer += "\"bytes_per_vector\":" + String(summary.bytes_per_vector) + ","
+    buffer += "\"candidate_stage_document_count\":"
+    buffer += String(summary.candidate_stage_document_count) + ","
+    buffer += "\"candidate_stage_token_count\":"
+    buffer += String(summary.candidate_stage_token_count) + ","
+    buffer += "\"candidate_stage_vector_count\":"
+    buffer += String(summary.candidate_stage_vector_count) + ","
+    buffer += "\"candidate_stage_byte_size\":"
+    buffer += String(summary.candidate_stage_byte_size) + ","
+    buffer += "\"candidate_stage_bytes_per_document\":"
+    buffer += String(summary.candidate_stage_bytes_per_document) + ","
+    buffer += "\"candidate_stage_bytes_per_vector\":"
+    buffer += String(summary.candidate_stage_bytes_per_vector) + ","
+    buffer += "\"exact_stage_document_count\":"
+    buffer += String(summary.exact_stage_document_count) + ","
+    buffer += "\"exact_stage_token_count\":"
+    buffer += String(summary.exact_stage_token_count) + ","
+    buffer += "\"exact_stage_vector_count\":"
+    buffer += String(summary.exact_stage_vector_count) + ","
+    buffer += "\"exact_stage_byte_size\":"
+    buffer += String(summary.exact_stage_byte_size) + ","
+    buffer += "\"exact_stage_bytes_per_document\":"
+    buffer += String(summary.exact_stage_bytes_per_document) + ","
+    buffer += "\"exact_stage_bytes_per_vector\":"
+    buffer += String(summary.exact_stage_bytes_per_vector) + ","
     buffer += "\"vector_dim\":" + String(summary.vector_dim)
     buffer += "}"
 

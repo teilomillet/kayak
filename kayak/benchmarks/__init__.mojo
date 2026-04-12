@@ -25,6 +25,12 @@ from .fixtures import (
     make_exact_search_fixture,
     make_exact_search_fixture_for_profile,
 )
+from .single_core_scale_fixture import (
+    SingleCoreScaleFixture,
+    SingleCoreScaleProfile,
+    default_single_core_scale_profiles,
+    make_single_core_scale_fixture,
+)
 from .filter_fixtures import (
     FilterSelectivityFixture,
     default_filter_selectivity_fixtures,
