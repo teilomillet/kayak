@@ -22,6 +22,7 @@ from .index import (
 from .interop import (
     load_browsecomp_plus_gold_real_subset,
     load_browsecomp_plus_real_subset,
+    load_document_text_corpus_json,
     load_fiqa_real_subset,
     load_limit_small_real_subset,
     load_mock_python_task,
@@ -51,6 +52,7 @@ from .search import (
     search_exact_hybrid_flat_dim128,
     search_exact_hybrid_flat_dim128_with_flat_query,
 )
+from .text import DocumentTextCorpus, document_text_for_doc_id, normalize_text
 from .storage import (
     BrowsecompPlusGoldRealSubsetCache,
     BrowsecompPlusRealSubsetCache,
@@ -77,10 +79,15 @@ from .storage import (
     save_stored_packed_index,
 )
 from .verifier import (
+    ClauseTextRerankConfig,
     VerifierReranker,
+    clause_text_boost,
+    default_clause_text_rerank_config,
     effective_candidate_k,
     exact_late_interaction_verifier,
     no_verifier,
     rerank_hits_with_verifier,
+    rerank_hits_clause_text,
+    rescore_hits_clause_text,
     search_exact_with_verifier,
 )

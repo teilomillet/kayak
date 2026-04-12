@@ -207,3 +207,53 @@ Interpretation:
 - it looks like a clause-selection failure where the retriever locks onto general Gugulethu context before the school-specific answer document
 - a future richer second-stage verifier with `candidate_k >= 20` could, in principle, recover this query because the answer document is already in the candidate set by rank `18`
 - the current exact late-interaction verifier does not solve that class of miss by itself because it reranks with the same exact MaxSim signal rather than a richer text-level model
+
+## Clause-Text Prototype
+
+Command:
+
+```bash
+pixi run bench_browsecomp_plus_clause
+```
+
+Prototype design:
+- keep the main verifier pipeline unchanged and vector-only
+- load document text from the existing BrowseComp JSON task cache
+- rerank a `candidate_k = 20` exact-search window with a small clause-aware lexical boost
+- weight the final answer-bearing clause more heavily than earlier setup clauses
+
+This is a benchmarked prototype, not a claim that the generic verifier path is now text-aware.
+
+Observed on April 12, 2026:
+- the focus miss on query `772` is recovered inside the existing candidate window:
+  - baseline gold rank for doc `93372`: `18`
+  - clause-reranked gold rank for doc `93372`: `4`
+- gold slice metrics improve materially:
+  - baseline `ndcg@10 = 0.2851267779084149`
+  - clause-text `ndcg@10 = 0.3638261862358497`
+  - baseline `mrr@10 = 0.4375`
+  - clause-text `mrr@10 = 0.4375`
+  - baseline `recall@10 = 0.30833333333333335`
+  - clause-text `recall@10 = 0.5583333333333333`
+  - baseline `success@10 = 0.75`
+  - clause-text `success@10 = 1.0`
+- evidence slice is mixed rather than uniformly better:
+  - baseline `ndcg@10 = 0.26234761965070796`
+  - clause-text `ndcg@10 = 0.23928446246331353`
+  - baseline `mrr@10 = 0.4652777777777778`
+  - clause-text `mrr@10 = 0.4375`
+  - baseline `recall@10 = 0.2722222222222222`
+  - clause-text `recall@10 = 0.28055555555555556`
+  - baseline `success@10 = 1.0`
+  - clause-text `success@10 = 1.0`
+
+Interpretation:
+- the prototype validates the underlying hypothesis:
+  - a text-aware reranker can recover the answer-bearing gold document for the current hard miss because the document is already inside the top-`20` candidate window
+- the prototype is not yet a global improvement:
+  - it helps the gold-answer objective
+  - it slightly regresses the evidence objective
+- that means the next sound step is not "turn it on everywhere"
+- the next sound step is to keep it as an explicit benchmark path and either:
+  - tune the clause scorer more carefully
+  - or replace it with a stronger text-level reranker once storage exposes text as a first-class artifact

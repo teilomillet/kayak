@@ -220,6 +220,15 @@ This stage is intentionally vector-only in `v0.1`.
 That is an epistemic boundary, not a missing buzzword: the current stored artifacts contain token embeddings and ids, but not the raw text needed for an honest cross-encoder reranker.
 If we want a text-level verifier later, the storage layer must first persist the necessary text payload explicitly.
 
+There is now a narrow BrowseComp clause-text reranker prototype for
+benchmarking.
+It loads document text from the already-materialized BrowseComp JSON task cache
+instead of pretending the generic verifier pipeline has text available.
+That is deliberate:
+- the prototype measures whether text-aware reranking can recover answer-bearing
+  docs already present in the candidate window
+- it is not yet the generic default verifier path
+
 ## Commands
 
 Run the demo:
@@ -295,6 +304,7 @@ pixi run bench_browsecomp_plus
 pixi run bench_browsecomp_plus_gold
 pixi run bench_browsecomp_plus_diag
 pixi run bench_browsecomp_plus_ranks
+pixi run bench_browsecomp_plus_clause
 pixi run bench_real_subset_policies
 pixi run bench_real_subset_breakdown
 ```

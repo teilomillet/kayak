@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kayak"
-version = "0.1.0"
+version = "0.1.1"
 description = "Mojo-first late-interaction retrieval engine"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
@@ -66,6 +66,7 @@ bench_browsecomp_plus_raw = "python python/scripts/build_browsecomp_plus_task_js
 bench_browsecomp_plus_gold_raw = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/browsecomp_plus_gold_real_subset_search.mojo"
 bench_browsecomp_plus_diag = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/browsecomp_plus_query_diagnostics.mojo"
 bench_browsecomp_plus_ranks = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/browsecomp_plus_rank_coverage.mojo"
+bench_browsecomp_plus_clause = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/browsecomp_plus_clause_text_verifier.mojo"
 bench_real_subset_policies_raw = "mojo -I . benchmarks/real_subset_partition_policies.mojo"
 bench_real_subset_breakdown_raw = "mojo -I . benchmarks/real_subset_search_breakdown.mojo"
 bench_scifact = "bash scripts/run_bench_quiet.sh -- pixi run bench_scifact_raw"

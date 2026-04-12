@@ -2,6 +2,8 @@ from std.collections import List
 from std.testing import TestSuite, assert_equal
 
 from kayak import (
+    ClauseTextRerankConfig,
+    DocumentTextCorpus,
     EncodedDocument,
     EncodedQuery,
     ExactCpuBackend,
@@ -10,6 +12,7 @@ from kayak import (
     SearchHit,
     evaluate_task,
     evaluate_task_with_verifier,
+    rerank_hits_clause_text,
     exact_late_interaction_verifier,
     effective_candidate_k,
     no_verifier,
@@ -133,6 +136,31 @@ def test_exact_verifier_matches_exact_search_when_stage_one_is_exact() raises:
     for index in range(len(baseline_hits)):
         assert_equal(baseline_hits[index].doc_id, verifier_hits[index].doc_id)
         assert_equal(baseline_hits[index].score, verifier_hits[index].score)
+
+
+def test_clause_text_reranker_promotes_clause_specific_answer_doc() raises:
+    var candidate_hits = List[SearchHit]()
+    candidate_hits.append(SearchHit("doc-context", 10.0))
+    candidate_hits.append(SearchHit("doc-answer", 9.0))
+
+    var document_texts = DocumentTextCorpus(
+        ["doc-context", "doc-answer"],
+        [
+            "Gugulethu township logo emblem heritage schools history",
+            "Zama Dance School was founded in 1984 in Gugulethu and the longest serving employee started when the school began in a church.",
+        ],
+    )
+    var reranked_hits = rerank_hits_clause_text(
+        "A township unveiled a logo. According to a school established in 1984 that started in a church, what is the role of the longest-serving employee?",
+        candidate_hits,
+        document_texts,
+        2,
+        ClauseTextRerankConfig(1.0, 1.5, 1.0, 0.5, 0.2, 0.35, 1.0),
+    )
+
+    assert_equal(len(reranked_hits), 2)
+    assert_equal(reranked_hits[0].doc_id, "doc-answer")
+    assert_equal(reranked_hits[1].doc_id, "doc-context")
 
 
 def test_evaluate_task_with_verifier_matches_exact_evaluation() raises:
