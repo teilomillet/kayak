@@ -139,6 +139,18 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
     assert_equal(explain.final_hits[1].doc_id, "doc-c")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
+    assert_equal(explain.candidate_stage.score_histogram.bin_count, 8)
+    assert_equal(
+        explain.exact_stage.score_histogram.counts[0]
+            + explain.exact_stage.score_histogram.counts[1]
+            + explain.exact_stage.score_histogram.counts[2]
+            + explain.exact_stage.score_histogram.counts[3]
+            + explain.exact_stage.score_histogram.counts[4]
+            + explain.exact_stage.score_histogram.counts[5]
+            + explain.exact_stage.score_histogram.counts[6]
+            + explain.exact_stage.score_histogram.counts[7],
+        len(explain.final_hits),
+    )
     assert_equal(json.find("\"collection_id\":\"search-plan\"") != -1, True)
     assert_equal(json.find("\"candidate_generator_kind\":\"exact_full_scan\"") != -1, True)
 

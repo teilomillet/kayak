@@ -12,6 +12,7 @@ from .execution import (
     candidate_recall_at_final_k,
     final_hits_for_plan,
 )
+from .score_histogram import build_score_histogram
 from .search_plan import SearchPlan
 from .stage_profile import SearchStageProfile
 
@@ -72,6 +73,7 @@ def explain_collection_search(
             candidate_set.token_count,
             candidate_set.vector_count,
             candidate_set.byte_size,
+            build_score_histogram(candidate_set.hits, 8),
         ),
         SearchStageProfile(
             "exact_late_interaction",
@@ -82,6 +84,7 @@ def explain_collection_search(
             candidate_set.token_count,
             candidate_set.vector_count,
             candidate_set.byte_size,
+            build_score_histogram(final_hits, 8),
         ),
         candidate_recall_at_final_k(candidate_set, final_hits),
         final_hits^,

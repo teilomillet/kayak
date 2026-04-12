@@ -3,6 +3,7 @@ from std.collections import List
 from .candidate_set import CandidateSet
 from .collection_hit import CollectionHit
 from .explain import CollectionSearchExplain
+from .score_histogram import ScoreHistogram
 from .stage_profile import SearchStageProfile
 
 
@@ -43,7 +44,25 @@ def append_json_stage_profile(
     buffer += "\"document_count\":" + String(profile.document_count) + ","
     buffer += "\"token_count\":" + String(profile.token_count) + ","
     buffer += "\"vector_count\":" + String(profile.vector_count) + ","
-    buffer += "\"byte_size\":" + String(profile.byte_size)
+    buffer += "\"byte_size\":" + String(profile.byte_size) + ","
+    buffer += "\"score_histogram\":"
+    append_json_score_histogram(buffer, profile.score_histogram)
+    buffer += "}"
+
+
+def append_json_score_histogram(
+    mut buffer: String, read histogram: ScoreHistogram
+):
+    buffer += "{"
+    buffer += "\"bin_count\":" + String(histogram.bin_count) + ","
+    buffer += "\"min_score\":" + String(histogram.min_score) + ","
+    buffer += "\"max_score\":" + String(histogram.max_score) + ","
+    buffer += "\"counts\":["
+    for index in range(len(histogram.counts)):
+        if index > 0:
+            buffer += ","
+        buffer += String(histogram.counts[index])
+    buffer += "]"
     buffer += "}"
 
 

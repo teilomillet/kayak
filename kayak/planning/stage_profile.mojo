@@ -1,5 +1,7 @@
 # Counts that make search-stage behavior inspectable.
 
+from .score_histogram import ScoreHistogram
+
 
 struct SearchStageProfile(Copyable):
     var stage_name: String
@@ -10,6 +12,7 @@ struct SearchStageProfile(Copyable):
     var token_count: Int
     var vector_count: Int
     var byte_size: Int
+    var score_histogram: ScoreHistogram
 
     def __init__(
         out self,
@@ -21,6 +24,7 @@ struct SearchStageProfile(Copyable):
         token_count: Int,
         vector_count: Int,
         byte_size: Int,
+        score_histogram: ScoreHistogram,
     ) raises:
         if input_hit_count < 0:
             raise Error("search stage input_hit_count must be non-negative")
@@ -51,3 +55,4 @@ struct SearchStageProfile(Copyable):
         self.token_count = token_count
         self.vector_count = vector_count
         self.byte_size = byte_size
+        self.score_histogram = score_histogram.copy()

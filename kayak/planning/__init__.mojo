@@ -13,5 +13,10 @@ from .execution import (
 )
 from .explain import CollectionSearchExplain, explain_collection_search
 from .json import collection_search_explain_json
+from .score_histogram import (
+    ScoreHistogram,
+    build_score_histogram,
+    empty_score_histogram,
+)
 from .search_plan import SearchPlan, exact_full_scan_search_plan
 from .stage_profile import SearchStageProfile
