@@ -58,6 +58,12 @@ There is also a machine-readable storage report example for the same collection:
 pixi run report_scifact_collection_storage
 ```
 
+For the public smoke suite, there is also an aggregated storage-density report:
+
+```bash
+pixi run bench_real_subset_collection_storage_json
+```
+
 ## Why This Shape
 
 This layout is justified by the current project goal:

@@ -14,6 +14,11 @@ from .json_report import (
     build_real_slice_benchmark_summary,
     real_slice_benchmark_summaries_json,
 )
+from .storage_json_report import (
+    RealSliceCollectionStorageSummary,
+    build_real_slice_collection_storage_summary,
+    real_slice_collection_storage_summaries_json,
+)
 from .profile_fixtures import (
     DotProductFixture,
     PerDocumentScoreFixture,

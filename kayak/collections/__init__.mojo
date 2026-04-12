@@ -7,6 +7,7 @@ from .collection_store import (
 )
 from .compaction import CompactionPlan
 from .ids import CollectionId, NamespaceId, SegmentId, SnapshotId, TenantId
+from .mirror import ensure_one_segment_collection_mirror
 from .report import (
     CollectionStorageReport,
     build_collection_storage_report,

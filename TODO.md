@@ -284,7 +284,7 @@ Possible directions:
 - cold/hot tiering
 
 Immediate TODOs:
-- [ ] Benchmark byte cost per document and per token as a first-class metric
+- [x] Benchmark byte cost per document and per token as a first-class metric
 - [x] Add storage/report tooling before picking a default compression path
 - [ ] Prototype one compressed token format behind a non-default flag
 
