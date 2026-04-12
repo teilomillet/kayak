@@ -52,6 +52,11 @@ pixi run explain_scifact_collection
 ```
 
 The typed service-boundary contracts now also live under `kayak/service/`.
+There is also a machine-readable storage report example for the same collection:
+
+```bash
+pixi run report_scifact_collection_storage
+```
 
 ## Why This Shape
 

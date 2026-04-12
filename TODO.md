@@ -243,7 +243,7 @@ Immediate TODOs:
 - [ ] Add structured benchmark output JSON for all public benchmark entrypoints
 - [x] Add a query explain/profile command for one query against one collection
 - [ ] Add stage-level counters and histograms
-- [ ] Add segment-level storage reports
+- [x] Add segment-level storage reports
 
 ## Priority 5: Service Boundary
 
@@ -285,7 +285,7 @@ Possible directions:
 
 Immediate TODOs:
 - [ ] Benchmark byte cost per document and per token as a first-class metric
-- [ ] Add storage/report tooling before picking a default compression path
+- [x] Add storage/report tooling before picking a default compression path
 - [ ] Prototype one compressed token format behind a non-default flag
 
 ## Priority 7: GPU And Distributed Execution

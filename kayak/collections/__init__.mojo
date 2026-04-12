@@ -1,3 +1,4 @@
+from .density import StorageDensity
 from .collection import CollectionManifest
 from .collection_store import (
     collection_manifest_exists,
@@ -11,8 +12,10 @@ from .report import (
     build_collection_storage_report,
     load_collection_storage_report,
 )
+from .report_json import collection_storage_report_json
 from .resolved_snapshot import LoadedSealedSegment, ResolvedCollectionSnapshot
 from .resolver import load_resolved_collection_snapshot
+from .segment_report import SegmentStorageReport, build_segment_storage_report
 from .segment import SealedSegmentManifest, sealed_segment_has_text_corpus
 from .segment_store import (
     load_sealed_segment_manifest,

@@ -148,8 +148,12 @@ def test_resolved_snapshot_loads_segments_and_text_sidecars() raises:
     )
     assert_equal(resolved.segments[1].has_text_corpus, False)
     assert_equal(report.stats.document_count, 3)
+    assert_equal(report.density.bytes_per_document, 512.0)
     assert_equal(report.segment_count_with_text, 1)
     assert_equal(report.segment_count_without_text, 1)
+    assert_equal(len(report.segment_reports), 2)
+    assert_equal(report.segment_reports[0].segment_id, "segment-0001")
+    assert_equal(report.segment_reports[0].density.bytes_per_document, 512.0)
 
 
 def test_resolved_snapshot_rejects_segment_generation_ahead_of_snapshot() raises:
