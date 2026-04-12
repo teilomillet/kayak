@@ -1,3 +1,4 @@
+from std.math import abs, log2
 from std.collections import List
 from std.testing import TestSuite, assert_equal
 
@@ -11,7 +12,13 @@ from kayak import (
     ScoreScalar,
     SearchHit,
 )
-from kayak.eval import evaluate_task, recall_at_k, reciprocal_rank_at_k, success_at_k
+from kayak.eval import (
+    evaluate_task,
+    ndcg_at_k,
+    recall_at_k,
+    reciprocal_rank_at_k,
+    success_at_k,
+)
 
 
 struct Lcg(Copyable):
@@ -109,6 +116,39 @@ def reference_recall_at_k(
     return MetricScalar(found_count) / MetricScalar(len(relevant_doc_ids))
 
 
+def reference_ndcg_at_k(
+    hits: List[SearchHit], relevant_doc_ids: List[String], k: Int
+) -> MetricScalar:
+    if len(relevant_doc_ids) == 0:
+        return MetricScalar(0.0)
+
+    var limit = k
+    if limit > len(hits):
+        limit = len(hits)
+
+    var dcg = MetricScalar(0.0)
+    for index in range(limit):
+        if reference_is_relevant(hits[index].doc_id, relevant_doc_ids):
+            dcg += MetricScalar(1.0) / MetricScalar(
+                log2(MetricScalar(index + 2))
+            )
+
+    var ideal_limit = k
+    if ideal_limit > len(relevant_doc_ids):
+        ideal_limit = len(relevant_doc_ids)
+
+    var ideal_dcg = MetricScalar(0.0)
+    for index in range(ideal_limit):
+        ideal_dcg += MetricScalar(1.0) / MetricScalar(
+            log2(MetricScalar(index + 2))
+        )
+
+    if ideal_dcg == MetricScalar(0.0):
+        return MetricScalar(0.0)
+
+    return dcg / ideal_dcg
+
+
 def make_eval_fixture_task(primary_metric: String) raises -> JudgedTask:
     return JudgedTask(
         "mock",
@@ -162,6 +202,14 @@ def test_randomized_metrics_match_reference_formulas() raises:
                 recall_at_k(hits, relevant_doc_ids, k),
                 reference_recall_at_k(hits, relevant_doc_ids, k),
             )
+            assert_equal(
+                abs(
+                    ndcg_at_k(hits, relevant_doc_ids, k)
+                    - reference_ndcg_at_k(hits, relevant_doc_ids, k)
+                )
+                    < 0.0000001,
+                True,
+            )
 
 
 def test_success_and_recall_are_monotonic_in_k() raises:
@@ -208,6 +256,9 @@ def test_reciprocal_rank_activates_at_first_relevant_hit() raises:
 
 def test_evaluate_task_primary_metric_matches_selected_field() raises:
     var backend = ExactCpuBackend()
+
+    var ndcg_eval = evaluate_task(backend, make_eval_fixture_task("ndcg"))
+    assert_equal(ndcg_eval.primary_value, ndcg_eval.mean_ndcg_at_k)
 
     var mrr_eval = evaluate_task(backend, make_eval_fixture_task("mrr"))
     assert_equal(mrr_eval.primary_value, mrr_eval.mean_reciprocal_rank)

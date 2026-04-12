@@ -7,6 +7,7 @@ def print_result(result: TaskEvaluation):
     print("== ", result.family, ".", result.slice_name, " ==")
     print("primary: ", result.primary_metric, "@", result.k, " = ", result.primary_value)
     print("queries: ", result.query_count, " documents: ", result.document_count)
+    print("ndcg@", result.k, " = ", result.mean_ndcg_at_k)
     print("mrr@", result.k, " = ", result.mean_reciprocal_rank)
     print("recall@", result.k, " = ", result.mean_recall_at_k)
     print("success@", result.k, " = ", result.success_rate_at_k)

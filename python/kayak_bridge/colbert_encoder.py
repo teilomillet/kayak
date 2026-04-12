@@ -22,6 +22,7 @@ def _make_cpu_config() -> ColBERTConfig:
 @lru_cache(maxsize=4)
 def get_checkpoint(model_name: str = DEFAULT_MODEL_NAME) -> Checkpoint:
     torch.set_num_threads(1)
+    torch.multiprocessing.set_sharing_strategy("file_system")
     warnings.filterwarnings("ignore", category=FutureWarning)
     warnings.filterwarnings(
         "ignore", message="CUDA is not available.*", category=UserWarning

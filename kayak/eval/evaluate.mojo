@@ -5,7 +5,7 @@ from kayak.search import search_exact
 from kayak.verifier import VerifierReranker, search_exact_with_verifier
 
 from .judged_task import JudgedTask
-from .metrics import recall_at_k, reciprocal_rank_at_k, success_at_k
+from .metrics import ndcg_at_k, recall_at_k, reciprocal_rank_at_k, success_at_k
 
 
 struct TaskEvaluation(Copyable):
@@ -16,6 +16,7 @@ struct TaskEvaluation(Copyable):
     var k: Int
     var query_count: Int
     var document_count: Int
+    var mean_ndcg_at_k: MetricScalar
     var mean_reciprocal_rank: MetricScalar
     var mean_recall_at_k: MetricScalar
     var success_rate_at_k: MetricScalar
@@ -29,6 +30,7 @@ struct TaskEvaluation(Copyable):
         k: Int,
         query_count: Int,
         document_count: Int,
+        mean_ndcg_at_k: MetricScalar,
         mean_reciprocal_rank: MetricScalar,
         mean_recall_at_k: MetricScalar,
         success_rate_at_k: MetricScalar,
@@ -40,16 +42,21 @@ struct TaskEvaluation(Copyable):
         self.k = k
         self.query_count = query_count
         self.document_count = document_count
+        self.mean_ndcg_at_k = mean_ndcg_at_k
         self.mean_reciprocal_rank = mean_reciprocal_rank
         self.mean_recall_at_k = mean_recall_at_k
         self.success_rate_at_k = success_rate_at_k
 
 def choose_primary_value(
     primary_metric: String,
+    mean_ndcg_at_k: MetricScalar,
     mean_reciprocal_rank: MetricScalar,
     mean_recall_at_k: MetricScalar,
     success_rate_at_k: MetricScalar,
 ) raises -> MetricScalar:
+    if primary_metric == "ndcg":
+        return mean_ndcg_at_k
+
     if primary_metric == "mrr":
         return mean_reciprocal_rank
 
@@ -69,6 +76,7 @@ def evaluate_task(
         raise Error("cannot evaluate a task with zero queries")
 
     var index = pack_documents(task.documents)
+    var ndcg_total = zero_metric_scalar()
     var reciprocal_rank_total = zero_metric_scalar()
     var recall_total = zero_metric_scalar()
     var success_total = zero_metric_scalar()
@@ -76,6 +84,7 @@ def evaluate_task(
     for judged_query in task.queries:
         var hits = search_exact(backend, judged_query.query, index, task.k)
 
+        ndcg_total += ndcg_at_k(hits, judged_query.relevant_doc_ids, task.k)
         reciprocal_rank_total += reciprocal_rank_at_k(
             hits, judged_query.relevant_doc_ids, task.k
         )
@@ -85,6 +94,7 @@ def evaluate_task(
         )
 
     var query_count = len(task.queries)
+    var mean_ndcg_at_k = ndcg_total / MetricScalar(query_count)
     var mean_reciprocal_rank = reciprocal_rank_total / MetricScalar(query_count)
     var mean_recall_at_k = recall_total / MetricScalar(query_count)
     var success_rate_at_k = success_total / MetricScalar(query_count)
@@ -95,6 +105,7 @@ def evaluate_task(
         task.primary_metric.copy(),
         choose_primary_value(
             task.primary_metric,
+            mean_ndcg_at_k,
             mean_reciprocal_rank,
             mean_recall_at_k,
             success_rate_at_k,
@@ -102,6 +113,7 @@ def evaluate_task(
         task.k,
         query_count,
         len(task.documents),
+        mean_ndcg_at_k,
         mean_reciprocal_rank,
         mean_recall_at_k,
         success_rate_at_k,
@@ -117,6 +129,7 @@ def evaluate_task_with_verifier(
         raise Error("cannot evaluate a task with zero queries")
 
     var index = pack_documents(task.documents)
+    var ndcg_total = zero_metric_scalar()
     var reciprocal_rank_total = zero_metric_scalar()
     var recall_total = zero_metric_scalar()
     var success_total = zero_metric_scalar()
@@ -126,6 +139,7 @@ def evaluate_task_with_verifier(
             backend, judged_query.query, index, task.k, verifier
         )
 
+        ndcg_total += ndcg_at_k(hits, judged_query.relevant_doc_ids, task.k)
         reciprocal_rank_total += reciprocal_rank_at_k(
             hits, judged_query.relevant_doc_ids, task.k
         )
@@ -135,6 +149,7 @@ def evaluate_task_with_verifier(
         )
 
     var query_count = len(task.queries)
+    var mean_ndcg_at_k = ndcg_total / MetricScalar(query_count)
     var mean_reciprocal_rank = reciprocal_rank_total / MetricScalar(query_count)
     var mean_recall_at_k = recall_total / MetricScalar(query_count)
     var success_rate_at_k = success_total / MetricScalar(query_count)
@@ -145,6 +160,7 @@ def evaluate_task_with_verifier(
         task.primary_metric.copy(),
         choose_primary_value(
             task.primary_metric,
+            mean_ndcg_at_k,
             mean_reciprocal_rank,
             mean_recall_at_k,
             success_rate_at_k,
@@ -152,6 +168,7 @@ def evaluate_task_with_verifier(
         task.k,
         query_count,
         len(task.documents),
+        mean_ndcg_at_k,
         mean_reciprocal_rank,
         mean_recall_at_k,
         success_rate_at_k,

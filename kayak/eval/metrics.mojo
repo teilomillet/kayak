@@ -1,5 +1,5 @@
 from std.collections import List
-from std.math import min
+from std.math import log2, min
 
 from kayak.numeric import MetricScalar
 from kayak.search import SearchHit
@@ -51,3 +51,32 @@ def recall_at_k(
             found_count += 1
 
     return MetricScalar(found_count) / MetricScalar(len(relevant_doc_ids))
+
+
+def discounted_gain_at_rank(index: Int) -> MetricScalar:
+    return MetricScalar(1.0) / MetricScalar(log2(MetricScalar(index + 2)))
+
+
+def ndcg_at_k(
+    hits: List[SearchHit], relevant_doc_ids: List[String], k: Int
+) -> MetricScalar:
+    if len(relevant_doc_ids) == 0:
+        return MetricScalar(0.0)
+
+    var limit = min(k, len(hits))
+    var dcg = MetricScalar(0.0)
+
+    for index in range(limit):
+        if is_relevant(hits[index].doc_id, relevant_doc_ids):
+            dcg += discounted_gain_at_rank(index)
+
+    var ideal_limit = min(k, len(relevant_doc_ids))
+    var ideal_dcg = MetricScalar(0.0)
+
+    for index in range(ideal_limit):
+        ideal_dcg += discounted_gain_at_rank(index)
+
+    if ideal_dcg == MetricScalar(0.0):
+        return MetricScalar(0.0)
+
+    return dcg / ideal_dcg

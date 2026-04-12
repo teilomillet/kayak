@@ -18,7 +18,9 @@ from .index import (
     pack_documents,
 )
 from .interop import (
+    load_browsecomp_plus_real_subset,
     load_fiqa_real_subset,
+    load_limit_small_real_subset,
     load_mock_python_task,
     load_scifact_real_subset,
 )
@@ -46,14 +48,18 @@ from .search import (
     search_exact_hybrid_flat_dim128_with_flat_query,
 )
 from .storage import (
+    BrowsecompPlusRealSubsetCache,
     FiqaRealSubsetCache,
     HybridFlatDim128CacheEntry,
+    LimitSmallRealSubsetCache,
     ScifactRealSubsetCache,
     StoredHybridFlatDim128Index,
     StoredJudgedTask,
     StoredPackedIndex,
     build_stored_hybrid_flat_dim128_index,
+    ensure_browsecomp_plus_real_subset_cache,
     ensure_fiqa_real_subset_cache,
+    ensure_limit_small_real_subset_cache,
     ensure_scifact_real_subset_cache,
     ensure_stored_hybrid_flat_dim128_index,
     hybrid_flat_dim128_index_exists,

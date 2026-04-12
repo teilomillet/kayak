@@ -92,16 +92,31 @@ This is documented in [docs/robustness_testing.md](/Users/teilomillet/Code/kayak
 
 ## Real Subset Bridge
 
-The first real public end-to-end path uses:
+The real public benchmark path now uses:
 - `colbert-ai` for ColBERTv2 token embeddings on CPU
 - Mojo for packing, exact search, and evaluation
 - small `BEIR/SciFact` and `BEIR/FIQA` subsets as real benchmark slices
+- an official `LIMIT-small` slice with the full `46`-document corpus and a light `32`-query subset
+- a light `BrowseComp-Plus` evidence slice built from official decrypted queries, human-verified evidence documents, and the benchmark's curated hard negatives
 - repo-local storage so repeated runs can reload encoded tasks and packed indexes
 
-This is a deliberate first real subset, not a claim of full benchmark reproduction.
+This is still a deliberate smoke-oriented public suite, not a claim of full benchmark reproduction.
 `LoTTE` remains a target, but the straightforward official loader path currently pulls a 3.58 GB archive, which is too heavy for the fast smoke workflow this repo wants.
+`BrowseComp-Plus` is also intentionally sliced:
+- the official benchmark uses a fixed corpus of about `100k` documents and an agent loop
+- the repo keeps the retrieval core honest by using the benchmark's evidence docs and hard negatives
+- the repo does not yet claim full agent-benchmark reproduction inside `kayak`
 
-The persisted artifacts live under `.cache/kayak/scifact_real_subset/` and `.cache/kayak/fiqa_real_subset/`. The manifest records:
+The persisted artifacts live under:
+- `.cache/kayak/scifact_real_subset/`
+- `.cache/kayak/fiqa_real_subset/`
+- `.cache/kayak/limit_small_real_subset/`
+- `.cache/kayak/browsecomp_plus_real_subset/`
+
+For the BrowseComp-Plus slice, the raw Python task is also materialized once at:
+- `.cache/kayak/browsecomp_plus_real_subset/python_task.json`
+
+The manifest records:
 - storage format version
 - vector scalar type
 - dataset id
@@ -203,8 +218,17 @@ pixi run bench_matrix
 pixi run eval_matrix
 pixi run bench_scifact
 pixi run bench_fiqa
+pixi run bench_limit_small
+pixi run bench_browsecomp_plus
 pixi run bench_real_subset_policies
 pixi run bench_real_subset_breakdown
+```
+
+Materialize the BrowseComp-Plus task json explicitly if you want to separate the
+plain-Python encoding step from the Mojo benchmark run:
+
+```bash
+pixi run build_browsecomp_plus_task_json
 ```
 
 Run the curated mutation-smoke check:

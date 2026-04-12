@@ -1,3 +1,7 @@
+from .browsecomp_plus_cache import (
+    BrowsecompPlusRealSubsetCache,
+    ensure_browsecomp_plus_real_subset_cache,
+)
 from .fiqa_cache import FiqaRealSubsetCache, ensure_fiqa_real_subset_cache
 from .hybrid_flat_dim128_store import (
     HybridFlatDim128CacheEntry,
@@ -16,6 +20,10 @@ from .metadata import (
     StoredHybridFlatDim128Index,
     StoredJudgedTask,
     StoredPackedIndex,
+)
+from .limit_small_cache import (
+    LimitSmallRealSubsetCache,
+    ensure_limit_small_real_subset_cache,
 )
 from .packed_index_store import (
     load_stored_packed_index,
