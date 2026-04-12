@@ -1,6 +1,6 @@
 from std.pathlib import Path
 from std.testing import TestSuite, assert_equal
-from std.memory import Span
+from std.collections import List
 
 from kayak import (
     EncodedDocument,
@@ -12,9 +12,12 @@ from kayak import (
     VECTOR_SCALAR_NAME,
 )
 from kayak import (
+    build_stored_hybrid_flat_dim128_index,
     load_stored_judged_task,
+    load_stored_hybrid_flat_dim128_index,
     load_stored_packed_index,
     pack_documents,
+    save_stored_hybrid_flat_dim128_index,
     save_stored_judged_task,
     save_stored_packed_index,
 )
@@ -43,6 +46,15 @@ def make_storage_roundtrip_task() raises -> JudgedTask:
             )
         ],
     )
+
+
+def make_dim128_token(seed: Int) -> List[Float32]:
+    var values = List[Float32]()
+
+    for index in range(128):
+        values.append(Float32(((seed + 1) * (index + 3)) % 17) / 17.0)
+
+    return values^
 
 
 def test_stored_task_rejects_scalar_type_mismatch() raises:
@@ -140,6 +152,41 @@ def test_stored_index_rejects_invalid_binary_vector_payload() raises:
     var raised = False
     try:
         _ = load_stored_packed_index(root)
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_stored_hybrid_flat_index_rejects_invalid_scalar_payload() raises:
+    var root = Path("/tmp/kayak-storage-hybrid-flat-invalid-payload")
+    var stored_packed_index = StoredPackedIndex(
+        "mock://storage-hybrid-flat-invalid-payload",
+        "mock-model",
+        VECTOR_SCALAR_NAME,
+        pack_documents(
+            [
+                EncodedDocument(
+                    "doc-a", [make_dim128_token(0), make_dim128_token(1)]
+                ),
+                EncodedDocument(
+                    "doc-b", [make_dim128_token(2), make_dim128_token(3)]
+                ),
+            ]
+        ),
+    )
+    var stored_hybrid_index = build_stored_hybrid_flat_dim128_index(
+        stored_packed_index
+    )
+    save_stored_hybrid_flat_dim128_index(root, stored_hybrid_index)
+
+    var token_values_path = root / "token_values.bin"
+    var invalid = "broken"
+    token_values_path.write_bytes(invalid.as_bytes())
+
+    var raised = False
+    try:
+        _ = load_stored_hybrid_flat_dim128_index(root)
     except:
         raised = True
 

@@ -1,13 +1,39 @@
 from std.testing import TestSuite, assert_equal
 
+from kayak import (
+    HybridFlatDim128Index,
+    StoredHybridFlatDim128Index,
+    VECTOR_SCALAR_NAME,
+    build_hybrid_flat_dim128_index,
+    exact_scores_for_hybrid_flat_index_dim128,
+    load_stored_hybrid_flat_dim128_index,
+    save_stored_hybrid_flat_dim128_index,
+    search_exact_hybrid_flat_dim128,
+)
 from kayak.benchmarks import make_exact_search_fixture
 from kayak.runtime import ExactCpuBackend
 from kayak.search import search_exact
-from benchmarks.structural.hybrid_dim128 import (
-    build_hybrid_flat_dim128_index,
-    exact_scores_for_hybrid_flat_index_dim128,
-    search_exact_hybrid_flat_dim128,
-)
+from std.pathlib import Path
+
+
+def assert_hybrid_indexes_equal(
+    read lhs: HybridFlatDim128Index, read rhs: HybridFlatDim128Index
+) raises:
+    assert_equal(lhs.document_count, rhs.document_count)
+    assert_equal(lhs.total_vector_count, rhs.total_vector_count)
+    assert_equal(lhs.vector_dim, rhs.vector_dim)
+    assert_equal(len(lhs.doc_ids), len(rhs.doc_ids))
+    assert_equal(len(lhs.doc_offsets), len(rhs.doc_offsets))
+    assert_equal(len(lhs.token_values), len(rhs.token_values))
+
+    for index in range(len(lhs.doc_ids)):
+        assert_equal(lhs.doc_ids[index], rhs.doc_ids[index])
+
+    for index in range(len(lhs.doc_offsets)):
+        assert_equal(lhs.doc_offsets[index], rhs.doc_offsets[index])
+
+    for index in range(len(lhs.token_values)):
+        assert_equal(lhs.token_values[index], rhs.token_values[index])
 
 
 def test_hybrid_flat_dim128_scores_match_default_backend() raises:
@@ -46,6 +72,25 @@ def test_hybrid_flat_dim128_hits_match_default_search() raises:
     for index in range(len(nested_hits)):
         assert_equal(nested_hits[index].doc_id, hybrid_hits[index].doc_id)
         assert_equal(nested_hits[index].score, hybrid_hits[index].score)
+
+
+def test_hybrid_flat_dim128_storage_roundtrip_preserves_layout() raises:
+    var fixture = make_exact_search_fixture(24, 12, 6, 128, 5)
+    var root = Path("/tmp/kayak-hybrid-flat-dim128-roundtrip")
+    var expected = StoredHybridFlatDim128Index(
+        "mock://hybrid-roundtrip",
+        "mock-model",
+        VECTOR_SCALAR_NAME,
+        build_hybrid_flat_dim128_index(fixture.index),
+    )
+
+    save_stored_hybrid_flat_dim128_index(root, expected)
+    var loaded = load_stored_hybrid_flat_dim128_index(root)
+
+    assert_equal(loaded.dataset_id, "mock://hybrid-roundtrip")
+    assert_equal(loaded.model_name, "mock-model")
+    assert_equal(loaded.vector_scalar_name, VECTOR_SCALAR_NAME)
+    assert_hybrid_indexes_equal(expected.index, loaded.index)
 
 
 def main() raises:

@@ -1,17 +1,22 @@
 import std.benchmark as benchmark
 import std.benchmark.compiler as bench_compiler
+from std.pathlib import Path
 
-from kayak import ExactCpuBackend, JudgedTask, PackedIndex
+from kayak import (
+    ExactCpuBackend,
+    HybridFlatDim128Index,
+    JudgedTask,
+    PackedIndex,
+    build_hybrid_flat_dim128_index,
+    ensure_stored_hybrid_flat_dim128_index,
+    exact_scores_for_hybrid_flat_index_dim128,
+    load_stored_hybrid_flat_dim128_index,
+    search_exact_hybrid_flat_dim128,
+)
 from kayak.search import search_exact
 from kayak.storage import (
     ensure_fiqa_real_subset_cache,
     ensure_scifact_real_subset_cache,
-)
-from benchmarks.structural.hybrid_dim128 import (
-    HybridFlatDim128Index,
-    build_hybrid_flat_dim128_index,
-    exact_scores_for_hybrid_flat_index_dim128,
-    search_exact_hybrid_flat_dim128,
 )
 
 
@@ -31,11 +36,13 @@ def print_fixture_header(
     task: JudgedTask,
     task_source: String,
     index_source: String,
+    hybrid_index_source: String,
 ):
     print("dataset: ", dataset_name)
     print("slice: ", task.slice_name)
     print("task_source: ", task_source)
     print("index_source: ", index_source)
+    print("hybrid_index_source: ", hybrid_index_source)
     print("queries: ", len(task.queries))
     print("documents: ", len(task.documents))
     print("query_vectors≈ ", task.nominal_query_vector_count)
@@ -47,10 +54,20 @@ def print_fixture_header(
 def benchmark_build_hybrid_index(read index: PackedIndex) raises:
     print("== build_hybrid_flat_dim128_index ==")
 
-    def build_once() capturing:
+    def build_once() capturing raises:
         bench_compiler.keep(build_hybrid_flat_dim128_index(index))
 
     benchmark.run[build_once]().print()
+    print("")
+
+
+def benchmark_load_hybrid_index(root: Path) raises:
+    print("== load_stored_hybrid_flat_dim128_index ==")
+
+    def load_once() capturing raises:
+        bench_compiler.keep(load_stored_hybrid_flat_dim128_index(root))
+
+    benchmark.run[load_once]().print()
     print("")
 
 
@@ -146,11 +163,14 @@ def benchmark_hybrid_search_exact(
 
 
 def benchmark_task(
-    dataset_name: String, read task: JudgedTask, read index: PackedIndex
+    hybrid_root: Path,
+    read task: JudgedTask,
+    read index: PackedIndex,
+    read hybrid_index: HybridFlatDim128Index,
 ) raises:
     var backend = default_backend()
-    var hybrid_index = build_hybrid_flat_dim128_index(index)
     benchmark_build_hybrid_index(index)
+    benchmark_load_hybrid_index(hybrid_root)
     benchmark_nested_score_all(backend, task, index)
     benchmark_hybrid_score_all(backend, task, index, hybrid_index)
     benchmark_nested_search_exact(backend, task, index)
@@ -160,6 +180,10 @@ def benchmark_task(
 def benchmark_scifact_real_subset() raises:
     print("loading real BEIR/SciFact subset with storage...")
     var cache = ensure_scifact_real_subset_cache()
+    var hybrid_cache = ensure_stored_hybrid_flat_dim128_index(
+        Path(".cache/kayak/scifact_real_subset/hybrid_flat_dim128_index"),
+        cache.stored_index,
+    )
     var task = cache.stored_task.task.copy()
     var index = cache.stored_index.index.copy()
     print_fixture_header(
@@ -167,13 +191,25 @@ def benchmark_scifact_real_subset() raises:
         task,
         source_label(cache.loaded_task_from_storage, "colbert_cpu_encode"),
         source_label(cache.loaded_index_from_storage, "pack_documents"),
+        source_label(
+            hybrid_cache.loaded_from_storage, "build_hybrid_flat_dim128_index"
+        ),
     )
-    benchmark_task("SciFact", task, index)
+    benchmark_task(
+        Path(".cache/kayak/scifact_real_subset/hybrid_flat_dim128_index"),
+        task,
+        index,
+        hybrid_cache.stored_index.index,
+    )
 
 
 def benchmark_fiqa_real_subset() raises:
     print("loading real BEIR/FIQA subset with storage...")
     var cache = ensure_fiqa_real_subset_cache()
+    var hybrid_cache = ensure_stored_hybrid_flat_dim128_index(
+        Path(".cache/kayak/fiqa_real_subset/hybrid_flat_dim128_index"),
+        cache.stored_index,
+    )
     var task = cache.stored_task.task.copy()
     var index = cache.stored_index.index.copy()
     print_fixture_header(
@@ -181,8 +217,16 @@ def benchmark_fiqa_real_subset() raises:
         task,
         source_label(cache.loaded_task_from_storage, "colbert_cpu_encode"),
         source_label(cache.loaded_index_from_storage, "pack_documents"),
+        source_label(
+            hybrid_cache.loaded_from_storage, "build_hybrid_flat_dim128_index"
+        ),
     )
-    benchmark_task("FIQA", task, index)
+    benchmark_task(
+        Path(".cache/kayak/fiqa_real_subset/hybrid_flat_dim128_index"),
+        task,
+        index,
+        hybrid_cache.stored_index.index,
+    )
 
 
 def main() raises:

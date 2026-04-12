@@ -6,7 +6,12 @@ from .eval import (
     evaluate_task,
     evaluate_task_with_verifier,
 )
-from .index import PackedIndex, pack_documents
+from .index import (
+    HybridFlatDim128Index,
+    PackedIndex,
+    build_hybrid_flat_dim128_index,
+    pack_documents,
+)
 from .interop import (
     load_fiqa_real_subset,
     load_mock_python_task,
@@ -23,17 +28,28 @@ from .numeric import (
 )
 from .runtime import ExactCpuBackend
 from .scoring import ExactScoringConfig
-from .search import SearchHit, search_exact
+from .scoring import (
+    exact_score_for_hybrid_flat_document_dim128,
+    exact_scores_for_hybrid_flat_index_dim128,
+)
+from .search import SearchHit, search_exact, search_exact_hybrid_flat_dim128
 from .storage import (
     FiqaRealSubsetCache,
+    HybridFlatDim128CacheEntry,
     ScifactRealSubsetCache,
+    StoredHybridFlatDim128Index,
     StoredJudgedTask,
     StoredPackedIndex,
+    build_stored_hybrid_flat_dim128_index,
     ensure_fiqa_real_subset_cache,
     ensure_scifact_real_subset_cache,
+    ensure_stored_hybrid_flat_dim128_index,
+    hybrid_flat_dim128_index_exists,
     load_stored_judged_task,
+    load_stored_hybrid_flat_dim128_index,
     load_stored_packed_index,
     save_stored_judged_task,
+    save_stored_hybrid_flat_dim128_index,
     save_stored_packed_index,
 )
 from .verifier import (

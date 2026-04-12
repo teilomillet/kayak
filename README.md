@@ -12,7 +12,7 @@ The current scaffold is intentionally narrow:
 
 - `kayak/contracts/`: validated query/document contracts
 - `kayak/numeric/`: centralized scalar aliases and storage-format constants
-- `kayak/index/`: packed index layout and builders
+- `kayak/index/`: packed index layout and optional flat `dim128` document layouts
 - `kayak/scoring/`: exact MaxSim scoring kernels
 - `kayak/runtime/`: backend boundary, CPU backend first
 - `kayak/search/`: top-k search orchestration
@@ -20,7 +20,7 @@ The current scaffold is intentionally narrow:
 - `kayak/benchmarks/`: deterministic workload profiles and proxy benchmark tasks
 - `kayak/eval/`: judged tasks and lightweight retrieval metrics
 - `kayak/interop/`: Python bridge for external encoders and real public subsets
-- `kayak/storage/`: persisted judged tasks and packed indexes
+- `kayak/storage/`: persisted judged tasks, packed indexes, and optional derived layouts
 - `benchmarks/`: runnable benchmark entrypoints
 - `python/`: small Python bridge modules for ColBERT and dataset loading
 - `tests/`: runnable unit-test entrypoints using `std.testing.TestSuite`
@@ -115,6 +115,16 @@ That is a deliberate compromise:
 - metadata stays easy to inspect by eye
 - vector payloads stop paying TSV parse and size overhead on every reload
 - legacy `v1` text payloads still load for compatibility
+
+The repo also supports an optional persisted `hybrid_flat_dim128_index` artifact.
+This is a derived layout for `128`-dim document embeddings:
+- it keeps `doc_ids` and `doc_offsets`
+- it stores document token values as one flat scalar buffer
+- it is opt-in, not the default exact-search path
+
+That choice is deliberate.
+The current measurements support keeping it as a first-class optional artifact,
+but they do not yet support silently replacing the default CPU search path.
 
 ## Verifier Stage
 

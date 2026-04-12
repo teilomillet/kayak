@@ -62,6 +62,17 @@ def encode_binary_vector_payload(
     return bytes^
 
 
+def encode_binary_scalar_payload(
+    read values: List[VectorScalar]
+) raises -> List[Byte]:
+    var bytes = List[Byte]()
+
+    for value in values:
+        encode_vector_scalar_le(bytes, value)
+
+    return bytes^
+
+
 def read_uint32_le(read bytes: List[Byte], offset: Int) raises -> UInt32:
     if offset + 4 > len(bytes):
         raise Error("binary vector payload ended early")
@@ -137,6 +148,23 @@ def decode_binary_vector_payload(
     return vectors^
 
 
+def decode_binary_scalar_payload(
+    read bytes: List[Byte]
+) raises -> List[VectorScalar]:
+    var scalar_width = vector_scalar_byte_width()
+    if len(bytes) % scalar_width != 0:
+        raise Error("binary scalar payload byte length does not match scalar width")
+
+    var values = List[VectorScalar]()
+    var cursor = 0
+
+    while cursor < len(bytes):
+        values.append(decode_vector_scalar_le(bytes, cursor))
+        cursor += scalar_width
+
+    return values^
+
+
 def write_binary_vector_payload(
     path: Path, read vectors: List[List[VectorScalar]]
 ) raises:
@@ -144,7 +172,18 @@ def write_binary_vector_payload(
     path.write_bytes(Span(bytes))
 
 
+def write_binary_scalar_payload(
+    path: Path, read values: List[VectorScalar]
+) raises:
+    var bytes = encode_binary_scalar_payload(values)
+    path.write_bytes(Span(bytes))
+
+
 def read_binary_vector_payload(
     path: Path, vector_dim: Int
 ) raises -> List[List[VectorScalar]]:
     return decode_binary_vector_payload(path.read_bytes(), vector_dim)
+
+
+def read_binary_scalar_payload(path: Path) raises -> List[VectorScalar]:
+    return decode_binary_scalar_payload(path.read_bytes())

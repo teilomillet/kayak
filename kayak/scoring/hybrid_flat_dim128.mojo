@@ -2,54 +2,20 @@ from std.algorithm.backend.cpu.parallelize import sync_parallelize
 from std.collections import List
 
 from kayak.contracts import EncodedQuery
-from kayak.index import PackedIndex
-from kayak.numeric import (
-    ScoreScalar,
-    VectorScalar,
-    min_score_scalar,
-    zero_score_scalar,
-)
-from kayak.scoring import ExactScoringConfig
-from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
-from kayak.scoring.maxsim import (
+from kayak.index import HybridFlatDim128Index, PackedIndex
+from kayak.numeric import ScoreScalar, min_score_scalar, zero_score_scalar
+
+from .dot128 import COLBERT_VECTOR_DIM
+from .dot128_flat import dot_product_dim128_flat_at
+from .exact_scoring_config import ExactScoringConfig
+from .maxsim import (
     build_vector_balanced_boundaries,
     choose_parallel_work_item_count,
 )
-from kayak.search.hit import SearchHit
-from kayak.search.topk import top_k_hits
-
-from benchmarks.structural.flat_dim128 import (
-    dot_product_dim128_flat_at,
-    flatten_document_tokens,
-)
 
 
-struct HybridFlatDim128Index(Copyable):
-    var doc_offsets: List[Int]
-    var token_values: List[VectorScalar]
-    var document_count: Int
-
-    def __init__(
-        out self,
-        var doc_offsets: List[Int],
-        var token_values: List[VectorScalar],
-        document_count: Int,
-    ):
-        self.doc_offsets = doc_offsets^
-        self.token_values = token_values^
-        self.document_count = document_count
-
-
-def build_hybrid_flat_dim128_index(
-    read index: PackedIndex
-) -> HybridFlatDim128Index:
-    return HybridFlatDim128Index(
-        index.doc_offsets.copy(),
-        flatten_document_tokens(index.token_vectors),
-        index.document_count,
-    )
-
-
+# Owns exact MaxSim scoring for the optional flat dim128 index layout.
+# It relies on a nested PackedIndex only for document partitioning metadata.
 def exact_score_for_hybrid_flat_document_dim128(
     read query: EncodedQuery,
     read hybrid_index: HybridFlatDim128Index,
@@ -123,16 +89,3 @@ def exact_scores_for_hybrid_flat_index_dim128(
 
     sync_parallelize[score_partition](work_item_count)
     return scores^
-
-
-def search_exact_hybrid_flat_dim128(
-    read query: EncodedQuery,
-    read nested_index: PackedIndex,
-    read hybrid_index: HybridFlatDim128Index,
-    k: Int,
-    read config: ExactScoringConfig,
-) raises -> List[SearchHit]:
-    var scores = exact_scores_for_hybrid_flat_index_dim128(
-        query, nested_index, hybrid_index, config
-    )
-    return top_k_hits(nested_index.doc_ids, scores, k)
