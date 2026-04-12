@@ -1,10 +1,14 @@
+[build-system]
+requires = ["setuptools>=81", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "kayak"
 version = "0.1.0"
 description = "Mojo-first late-interaction retrieval engine"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
-dependencies = ["colbert-ai>=0.2.22,<0.3", "ir-datasets>=0.5.11,<0.6", "torch>=2.11.0,<3", "transformers<5"]
+dependencies = ["colbert-ai>=0.2.22,<0.3", "ir-datasets>=0.5.11,<0.6", "numpy>=2.0,<3", "torch>=2.11.0,<3", "transformers<5"]
 
 [tool.pixi.workspace]
 channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
@@ -14,11 +18,14 @@ platforms = ["osx-arm64"]
 demo = "mojo -I . examples/exact_search.mojo"
 demo_scifact = "mojo -I . examples/scifact_real_subset.mojo"
 demo_fiqa = "mojo -I . examples/fiqa_real_subset.mojo"
+demo_python_sdk = "PYTHONPATH=python python python/examples/quickstart.py"
+demo_python_sdk_mojo = "PYTHONPATH=python python python/examples/mojo_exact_cpu_quickstart.py"
 test_index = "mojo -I . tests/test_index.mojo"
 test_maxsim = "mojo -I . tests/test_maxsim.mojo"
 test_eval = "mojo -I . tests/test_eval_metrics.mojo"
 test_proxies = "mojo -I . tests/test_proxy_tasks.mojo"
 test_python_bridge = "mojo -I . tests/test_python_bridge.mojo"
+test_python_api = "PYTHONPATH=python python -m unittest discover -s python/tests -p 'test_*.py'"
 test_storage = "mojo -I . tests/test_storage.mojo"
 test_storage_compat = "mojo -I . tests/test_storage_compat.mojo"
 test_storage_invariants = "mojo -I . tests/test_storage_invariants.mojo"
@@ -77,3 +84,16 @@ package_mojo = "mojo package kayak -o dist/kayak.mojopkg"
 [tool.pixi.dependencies]
 mojo = ">=0.26.3.0.dev2026041020,<0.27"
 python = "3.11.*"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-dir]
+"" = "python"
+
+[tool.setuptools.packages.find]
+where = ["python"]
+include = ["kayak", "kayak_bridge"]
+
+[tool.setuptools.package-data]
+kayak_bridge = ["*.mojo", "_artifacts/*.mojopkg"]

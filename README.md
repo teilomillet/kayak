@@ -2,6 +2,10 @@
 
 `kayak` is a Mojo-first late-interaction retrieval engine.
 
+For developers using the Python SDK, the supported entrypoint is `import kayak`.
+The current monorepo keeps the Python SDK and Mojo engine together on purpose.
+The documented public SDK boundary is narrower than the full repo surface.
+
 The current scaffold is intentionally narrow:
 - encoder output is treated as an external boundary
 - indexing and exact MaxSim scoring live in Mojo
@@ -22,7 +26,7 @@ The current scaffold is intentionally narrow:
 - `kayak/interop/`: Python bridge for external encoders and real public subsets
 - `kayak/storage/`: persisted judged tasks, packed indexes, and optional derived layouts
 - `benchmarks/`: runnable benchmark entrypoints
-- `python/`: small Python bridge modules for ColBERT and dataset loading
+- `python/`: Python bridge modules, explicit late-interaction objects, and a reference exact backend
 - `tests/`: runnable unit-test entrypoints using `std.testing.TestSuite`
 
 ## Why This Shape
@@ -37,6 +41,60 @@ The code keeps vector counts explicit because search quality and systems cost bo
 - query vector count
 - document vector count
 - related sparse-attention or pruning budgets
+
+## Python Late-Interaction Layer
+
+The repo now includes an additive Python-facing late-interaction layer under
+`python/kayak_bridge/` plus a light `python/kayak/` facade for `import kayak`.
+The packaging config points Python packaging at the existing `python/` tree
+instead of introducing a second `src/kayak` tree on top of the repo's Mojo
+package layout.
+
+What it owns:
+- explicit `LateQuery`, `LateDocuments`, `LateIndex`, and `LateScores` objects
+- explicit layout conversions for `flat_dim128` queries and `hybrid_flat_dim128` indexes
+- exact `maxsim` and `search` operations over those objects
+- NumPy and PyTorch input ergonomics without pretending the data is a dense `B x T x D` tensor problem
+- a pip-installable Python package surface rooted at `import kayak`
+
+What it does not claim yet:
+- hidden approximation, implicit layout conversion, or overloaded tensor algebra
+- a published wheel that bundles the Mojo toolchain itself
+
+Current backend boundary:
+- `numpy_reference`: correctness-oriented NumPy reference path
+- `mojo_exact_cpu`: Mojo-backed exact CPU scoring through a compiled Python extension module
+
+Current packaging boundary:
+- `pip install .` from a source checkout is verified
+- when Mojo is available at build time, the wheel bundles `kayak.mojopkg` so the installed package can build the Python extension on demand
+- the current package still expects a local Mojo toolchain at runtime for `mojo_exact_cpu`
+
+Supported public Python boundary:
+- import from `kayak`
+- treat `kayak_bridge` as internal and unstable
+- treat the top-level Mojo package `kayak/` as engine code, not as the Python SDK
+
+The detailed SDK boundary, install paths, and quickstarts are documented in
+[docs/python_sdk.md](/Users/teilomillet/Code/kayak-wt/docs/python_sdk.md).
+
+Example:
+
+```python
+import kayak
+
+q = kayak.query(query_vectors)
+docs = kayak.documents(["doc-a", "doc-b"], document_vectors)
+index = docs.pack().to_layout("hybrid_flat_dim128")
+
+scores = kayak.maxsim(q, docs.pack(), backend=kayak.MOJO_EXACT_CPU_BACKEND)
+hits = kayak.search(
+    q.to_layout("flat_dim128"),
+    index,
+    k=10,
+    backend=kayak.NUMPY_REFERENCE_BACKEND,
+)
+```
 
 ## Benchmark Coverage
 
@@ -167,6 +225,8 @@ Run the demo:
 pixi run demo
 pixi run demo_scifact
 pixi run demo_fiqa
+pixi run demo_python_sdk
+pixi run demo_python_sdk_mojo
 ```
 
 Run tests:
@@ -177,6 +237,7 @@ pixi run test_maxsim
 pixi run test_eval
 pixi run test_proxies
 pixi run test_python_bridge
+pixi run test_python_api
 pixi run test_storage
 pixi run test_storage_compat
 pixi run test_storage_invariants
@@ -185,6 +246,12 @@ pixi run test_hybrid_flat_dim128
 pixi run test_verifier
 pixi run test_battle
 pixi run test_eval_battle
+```
+
+Install the Python package from a source checkout:
+
+```bash
+python -m pip install .
 ```
 
 Run the exact CPU benchmark:

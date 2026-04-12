@@ -10,6 +10,7 @@ HF_HOME = CACHE_ROOT / "huggingface"
 HF_DATASETS_CACHE = HF_HOME / "datasets"
 TORCH_EXTENSIONS_DIR = CACHE_ROOT / "torch_extensions"
 IR_DATASETS_HOME = CACHE_ROOT / "ir_datasets"
+PYTHON_MOJO_CACHE = CACHE_ROOT / "python_mojo"
 
 
 def configure_local_caches() -> None:
@@ -18,6 +19,7 @@ def configure_local_caches() -> None:
     HF_DATASETS_CACHE.mkdir(parents=True, exist_ok=True)
     TORCH_EXTENSIONS_DIR.mkdir(parents=True, exist_ok=True)
     IR_DATASETS_HOME.mkdir(parents=True, exist_ok=True)
+    PYTHON_MOJO_CACHE.mkdir(parents=True, exist_ok=True)
 
     os.environ.setdefault("HF_HOME", str(HF_HOME))
     os.environ.setdefault("HF_HUB_CACHE", str(HF_HOME / "hub"))
