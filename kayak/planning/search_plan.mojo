@@ -162,10 +162,16 @@ def centroid_postings_imputed_flat_search_plan(
 
 
 def gem_graph_search_plan(
-    final_k: Int, candidate_k: Int, faithfulness_policy: FaithfulnessPolicy
+    final_k: Int,
+    candidate_k: Int,
+    faithfulness_policy: FaithfulnessPolicy,
+    cluster_top_k_per_query_token: Int = 2,
+    beam_width: Int = 32,
 ) raises -> SearchPlan:
     return SearchPlan(
-        gem_graph_candidate_generator(),
+        gem_graph_candidate_generator(
+            cluster_top_k_per_query_token, beam_width
+        ),
         CandidateBudget(final_k, candidate_k),
         faithfulness_policy,
         "none",

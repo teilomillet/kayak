@@ -115,6 +115,12 @@ def append_json_search_plan(mut buffer: String, read request: SearchRequest):
     buffer += "\"faithfulness_policy_kind\":\""
     buffer += json_escape(request.plan.faithfulness_policy.kind)
     buffer += "\","
+    buffer += "\"graph_cluster_top_k_per_query_token\":"
+    buffer += String(
+        request.plan.candidate_generator.cluster_top_k_per_query_token
+    ) + ","
+    buffer += "\"graph_beam_width\":"
+    buffer += String(request.plan.candidate_generator.beam_width) + ","
     buffer += "\"final_k\":"
     buffer += String(request.plan.candidate_budget.final_k) + ","
     buffer += "\"candidate_k\":"

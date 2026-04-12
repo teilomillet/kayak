@@ -30,9 +30,9 @@ from kayak.collections import (
     search_artifact_snapshot_requirements,
 )
 from kayak.storage import (
-    StoredGemGraphIndex,
     StoredPackedIndex,
     build_stored_document_proxy_index,
+    build_stored_gem_graph_index,
     save_stored_document_proxy_index,
     save_stored_gem_graph_index,
     save_stored_packed_index,
@@ -264,7 +264,7 @@ def test_segment_manifest_rejects_non_relative_artifact_roots() raises:
     assert_equal(raised, True)
 
 
-def test_resolved_snapshot_loads_gem_graph_artifact_metadata() raises:
+def test_resolved_snapshot_loads_gem_graph_artifact_payload() raises:
     var collection_root = Path("/tmp/kayak-resolved-collection-gem-graph")
     save_collection_manifest(
         collection_root,
@@ -286,20 +286,15 @@ def test_resolved_snapshot_loads_gem_graph_artifact_metadata() raises:
         "colbertv2",
         [EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]])],
     )
+    var packed_index = StoredPackedIndex(
+        "collection://news",
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        pack_documents([EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]])]),
+    )
     save_stored_gem_graph_index(
         segment_root / "gem_graph",
-        StoredGemGraphIndex(
-            "collection://news",
-            "colbertv2",
-            VECTOR_SCALAR_NAME,
-            1,
-            2,
-            3,
-            1,
-            2,
-            16,
-            0,
-        ),
+        build_stored_gem_graph_index(packed_index, 1, 1, 1, 1, 1),
     )
     save_sealed_segment_manifest(
         segment_root,
@@ -338,8 +333,9 @@ def test_resolved_snapshot_loads_gem_graph_artifact_metadata() raises:
     assert_equal(loaded_segment_has_gem_graph_index(resolved.segments[0]), True)
     var stored_gem_graph = loaded_segment_stored_gem_graph_index(resolved.segments[0])
     assert_equal(stored_gem_graph.document_count, 1)
-    assert_equal(stored_gem_graph.cluster_count, 2)
-    assert_equal(stored_gem_graph.graph_edge_count, 3)
+    assert_equal(stored_gem_graph.cluster_count, 1)
+    assert_equal(stored_gem_graph.index.document_count, 1)
+    assert_equal(stored_gem_graph.index.doc_ids[0], "doc-a")
 
 
 def test_resolved_snapshot_can_skip_text_and_unrequested_sidecars() raises:

@@ -1,6 +1,7 @@
 from kayak.eval import JudgedTask
 from kayak.index import CentroidPostingIndex
 from kayak.index import DocumentProxyIndex
+from kayak.index import GemGraphIndex
 from kayak.index import HybridFlatDim128Index
 from kayak.index import PackedIndex
 
@@ -126,6 +127,9 @@ struct StoredGemGraphIndex(Copyable):
     var dataset_id: String
     var model_name: String
     var vector_scalar_name: String
+    var cluster_cutoff: Int
+    var construction_neighbor_count: Int
+    var degree_limit: Int
     var document_count: Int
     var cluster_count: Int
     var graph_edge_count: Int
@@ -133,12 +137,16 @@ struct StoredGemGraphIndex(Copyable):
     var entry_point_count: Int
     var quantization_centroid_count: Int
     var artifact_byte_size: Int
+    var index: GemGraphIndex
 
     def __init__(
         out self,
         var dataset_id: String,
         var model_name: String,
         var vector_scalar_name: String,
+        cluster_cutoff: Int,
+        construction_neighbor_count: Int,
+        degree_limit: Int,
         document_count: Int,
         cluster_count: Int,
         graph_edge_count: Int,
@@ -146,7 +154,16 @@ struct StoredGemGraphIndex(Copyable):
         entry_point_count: Int,
         quantization_centroid_count: Int,
         artifact_byte_size: Int,
+        var index: GemGraphIndex,
     ) raises:
+        if cluster_cutoff < 0:
+            raise Error("stored gem graph cluster_cutoff must be non-negative")
+        if construction_neighbor_count < 0:
+            raise Error(
+                "stored gem graph construction_neighbor_count must be non-negative"
+            )
+        if degree_limit < 0:
+            raise Error("stored gem graph degree_limit must be non-negative")
         if document_count < 0:
             raise Error("stored gem graph document_count must be non-negative")
         if cluster_count < 0:
@@ -163,10 +180,46 @@ struct StoredGemGraphIndex(Copyable):
             )
         if artifact_byte_size < 0:
             raise Error("stored gem graph artifact_byte_size must be non-negative")
+        if index.document_count != document_count:
+            raise Error("stored gem graph index document_count must match metadata")
+        if index.cluster_count != cluster_count:
+            raise Error("stored gem graph index cluster_count must match metadata")
+        if index.graph_edge_count != graph_edge_count:
+            raise Error("stored gem graph index graph_edge_count must match metadata")
+        if index.shortcut_edge_count != shortcut_edge_count:
+            raise Error(
+                "stored gem graph index shortcut_edge_count must match metadata"
+            )
+        if index.quantization_centroid_count != quantization_centroid_count:
+            raise Error(
+                "stored gem graph quantization centroid count must match metadata"
+            )
+        var derived_entry_point_count = 0
+        for entry_doc in index.entry_doc_indices:
+            if entry_doc != -1:
+                derived_entry_point_count += 1
+        if derived_entry_point_count != entry_point_count:
+            raise Error(
+                "stored gem graph entry_point_count must match index entry docs"
+            )
+        if index.cluster_cutoff != cluster_cutoff:
+            raise Error("stored gem graph cluster_cutoff must match index metadata")
+        if (
+            index.construction_neighbor_count
+            != construction_neighbor_count
+        ):
+            raise Error(
+                "stored gem graph construction_neighbor_count must match index metadata"
+            )
+        if index.degree_limit != degree_limit:
+            raise Error("stored gem graph degree_limit must match index metadata")
 
         self.dataset_id = dataset_id^
         self.model_name = model_name^
         self.vector_scalar_name = vector_scalar_name^
+        self.cluster_cutoff = cluster_cutoff
+        self.construction_neighbor_count = construction_neighbor_count
+        self.degree_limit = degree_limit
         self.document_count = document_count
         self.cluster_count = cluster_count
         self.graph_edge_count = graph_edge_count
@@ -174,6 +227,7 @@ struct StoredGemGraphIndex(Copyable):
         self.entry_point_count = entry_point_count
         self.quantization_centroid_count = quantization_centroid_count
         self.artifact_byte_size = artifact_byte_size
+        self.index = index^
 
 
 struct StoredHybridFlatDim128Index(Copyable):

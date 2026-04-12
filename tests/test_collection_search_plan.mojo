@@ -42,16 +42,19 @@ from kayak import (
     document_proxy_search_plan,
     exact_full_scan_search_plan,
     explain_collection_search,
+    gem_graph_search_artifact,
     gem_graph_search_plan,
     loaded_segment_stored_centroid_postings_index,
     load_resolved_collection_snapshot,
     oracle_full_recall_required_faithfulness_policy,
+    build_stored_gem_graph_index,
     save_collection_manifest,
     save_stored_centroid_heads_index,
     save_stored_centroid_posting_index,
     save_sealed_segment_manifest,
     save_snapshot_manifest,
     save_stored_document_proxy_index,
+    save_stored_gem_graph_index,
     save_stored_packed_index,
 )
 
@@ -284,6 +287,77 @@ def make_centroid_postings_collection_root() raises -> Path:
             1,
             [SegmentId("segment-0001")],
             CollectionStats(1, 2, 4, 4, 512),
+        ),
+    )
+    return root^
+
+
+def make_gem_graph_collection_root() raises -> Path:
+    var root = Path("/tmp/kayak-collection-gem-graph")
+    var segment_root = root / "segments" / "segment-0001"
+    var packed_index = pack_documents(
+        [
+            EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+            EncodedDocument("doc-b", [[1.0, 0.0], [1.0, 0.0]]),
+            EncodedDocument("doc-c", [[0.0, 1.0], [0.0, 1.0]]),
+        ]
+    )
+    var stored_index = StoredPackedIndex(
+        "collection://gem-graph",
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        packed_index.copy(),
+    )
+
+    save_collection_manifest(
+        root,
+        CollectionManifest(
+            CollectionId("gem-graph"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            1,
+        ),
+    )
+    save_stored_packed_index(segment_root / "packed_index", stored_index.copy())
+    save_stored_gem_graph_index(
+        segment_root / "gem_graph",
+        build_stored_gem_graph_index(stored_index, 2, 2, 2, 2, 2),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("gem-graph"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            "packed_index",
+            [gem_graph_search_artifact("gem_graph")],
+            "",
+            SegmentStats(
+                packed_index.document_count,
+                packed_index.total_vector_count,
+                packed_index.total_vector_count,
+                512,
+            ),
+        ),
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0001",
+        SnapshotManifest(
+            SnapshotId("snapshot-0001"),
+            CollectionId("gem-graph"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 3, 6, 6, 512),
         ),
     )
     return root^
@@ -900,25 +974,25 @@ def test_centroid_postings_imputed_flat_stage_matches_imputed_stage_scores() rai
         assert_equal(imputed_flat_scores[score_index], imputed_scores[score_index])
 
 
-def test_gem_graph_search_plan_is_explicitly_registered_but_not_executed() raises:
-    var root = make_collection_root()
-    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0002"))
+def test_gem_graph_search_plan_executes_with_exact_rerank() raises:
+    var root = make_gem_graph_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
     var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        gem_graph_search_plan(
+            1,
+            2,
+            oracle_full_recall_required_faithfulness_policy(),
+            1,
+            4,
+        ),
+    )
 
-    var raised = False
-    try:
-        _ = explain_collection_search(
-            ExactCpuBackend(),
-            query,
-            resolved,
-            gem_graph_search_plan(
-                1, 2, oracle_full_recall_required_faithfulness_policy()
-            ),
-        )
-    except:
-        raised = True
-
-    assert_equal(raised, True)
+    assert_equal(len(explain.candidate_set.hits) > 0, True)
+    assert_equal(explain.final_hits[0].doc_id, "doc-a")
 
 
 def main() raises:

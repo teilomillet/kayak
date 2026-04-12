@@ -10,6 +10,20 @@ from .document_proxy import (
     build_document_proxy_index,
     build_query_proxy_vector,
 )
+from .gem_graph import (
+    DEFAULT_GEM_GRAPH_CONSTRUCTION_NEIGHBOR_COUNT,
+    DEFAULT_GEM_GRAPH_DEGREE_LIMIT,
+    DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
+    DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
+    GemGraphIndex,
+    build_gem_graph_index,
+    build_quantization_distance_matrix,
+    document_profile_intersects_clusters,
+    quantize_query_codes,
+    quantized_chamfer_distance_for_document,
+    query_entry_doc_indices,
+    query_relevant_cluster_ids,
+)
 from .hybrid_flat_dim128 import (
     HybridFlatDim128Index,
     build_hybrid_flat_dim128_index,

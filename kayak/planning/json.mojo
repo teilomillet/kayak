@@ -122,6 +122,12 @@ def collection_search_explain_json(
     buffer += "\"faithfulness_policy_kind\":\""
     buffer += json_escape(explain.plan.faithfulness_policy.kind)
     buffer += "\","
+    buffer += "\"graph_cluster_top_k_per_query_token\":"
+    buffer += String(
+        explain.plan.candidate_generator.cluster_top_k_per_query_token
+    ) + ","
+    buffer += "\"graph_beam_width\":"
+    buffer += String(explain.plan.candidate_generator.beam_width) + ","
     buffer += "\"candidate_k\":" + String(explain.plan.candidate_budget.candidate_k) + ","
     buffer += "\"final_k\":" + String(explain.plan.candidate_budget.final_k) + ","
     buffer += "\"exact_stage_kind\":\"" + json_escape(explain.plan.exact_stage_kind) + "\","

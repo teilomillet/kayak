@@ -1,7 +1,7 @@
 from std.collections import List
 from std.pathlib import Path
 
-from kayak.index import CentroidPostingIndex, DocumentProxyIndex
+from kayak.index import CentroidPostingIndex, DocumentProxyIndex, GemGraphIndex
 from kayak.storage import (
     StoredCentroidPostingIndex,
     StoredDocumentProxyIndex,
@@ -102,6 +102,10 @@ def empty_stored_gem_graph_index(
         0,
         0,
         0,
+        0,
+        0,
+        0,
+        GemGraphIndex(),
     )
 
 
@@ -263,6 +267,12 @@ def require_loaded_gem_graph_matches_segment(
 
     if stored_gem_graph_index.document_count != segment.stats.document_count:
         raise Error("gem graph document_count does not match segment stats")
+
+    if (
+        stored_gem_graph_index.index.document_count != 0
+        and stored_gem_graph_index.index.vector_dim != segment.vector_dim
+    ):
+        raise Error("gem graph vector_dim does not match segment manifest")
 
 
 def aggregate_segment_stats(
