@@ -264,7 +264,7 @@ Minimum service API:
 - health and metrics
 
 Immediate TODOs:
-- [ ] Write the public API contract before implementing transport details
+- [x] Write the public API contract before implementing transport details
 - [ ] Keep HTTP/JSON simple first
 - [ ] Expose internal stage/profiling data directly in debug mode
 
@@ -384,7 +384,7 @@ These are the best next moves right now.
 - [x] Define `SearchPlan`, `CandidateGenerator`, and `CandidateSet`
 - [x] Emit structured benchmark JSON for the real-slice benchmarks
 - [x] Add one profile/explain command for a single query
-- [ ] Add a minimal service API design doc
+- [x] Add a minimal service API design doc
 
 ## What We Should Not Do Next
 

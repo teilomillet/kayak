@@ -17,6 +17,7 @@ The current scaffold is intentionally narrow:
 - `kayak/contracts/`: validated query/document contracts
 - `kayak/numeric/`: centralized scalar aliases and storage-format constants
 - `kayak/collections/`: serving-side collection, segment, snapshot, and compaction contracts
+- `kayak/service/`: canonical service requests and responses, before transport adapters
 - `kayak/planning/`: explicit search plans, candidate sets, collection-level explain data
 - `kayak/index/`: packed index layout and optional flat `dim128` document layouts
 - `kayak/scoring/`: exact MaxSim scoring kernels
@@ -33,6 +34,8 @@ The current scaffold is intentionally narrow:
 
 The Phase A storage boundary for hosted collections is documented in
 [docs/architecture/segment_storage.md](docs/architecture/segment_storage.md).
+The matching service-boundary draft is documented in
+[docs/architecture/service_api.md](docs/architecture/service_api.md).
 That boundary now includes persisted collection, segment, snapshot, and
 document-text-corpus manifest codecs under `kayak/collections/`.
 It also includes explicit snapshot resolution and collection storage reporting,
@@ -44,6 +47,8 @@ There is now a collection-level explain example for the real SciFact slice:
 ```bash
 pixi run explain_scifact_collection
 ```
+
+The typed service-boundary contracts now also live under `kayak/service/`.
 
 ## Why This Shape
 

@@ -54,6 +54,23 @@ from .planning import (
     final_hits_for_plan,
 )
 from .runtime import ExactCpuBackend
+from .service import (
+    CreateCollectionRequest,
+    CreateSnapshotRequest,
+    DebugSearchResponse,
+    DeleteDocumentsRequest,
+    ExplainRequest,
+    ExplainResponse,
+    ExportSnapshotRequest,
+    ImportSnapshotRequest,
+    SearchRequest,
+    SearchResponse,
+    ServiceHealthStatus,
+    ServiceMetricsSnapshot,
+    UpsertDocument,
+    UpsertDocumentsRequest,
+    default_exact_search_request,
+)
 from .scoring import ExactScoringConfig
 from .scoring import (
     exact_score_for_hybrid_flat_document_dim128,
