@@ -65,6 +65,7 @@ def empty_stored_centroid_posting_index(
         "",
         model_name.copy(),
         vector_scalar_name.copy(),
+        "",
         0,
         0,
         CentroidPostingIndex([], [], [0], [], [], vector_dim, 0),

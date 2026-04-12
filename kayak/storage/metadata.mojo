@@ -47,6 +47,7 @@ struct StoredCentroidPostingIndex(Copyable):
     var dataset_id: String
     var model_name: String
     var vector_scalar_name: String
+    var posting_order_kind: String
     var centroid_budget: Int
     var artifact_byte_size: Int
     var index: CentroidPostingIndex
@@ -56,6 +57,7 @@ struct StoredCentroidPostingIndex(Copyable):
         var dataset_id: String,
         var model_name: String,
         var vector_scalar_name: String,
+        var posting_order_kind: String,
         centroid_budget: Int,
         artifact_byte_size: Int,
         var index: CentroidPostingIndex,
@@ -69,6 +71,7 @@ struct StoredCentroidPostingIndex(Copyable):
         self.dataset_id = dataset_id^
         self.model_name = model_name^
         self.vector_scalar_name = vector_scalar_name^
+        self.posting_order_kind = posting_order_kind^
         self.centroid_budget = centroid_budget
         self.artifact_byte_size = artifact_byte_size
         self.index = index^

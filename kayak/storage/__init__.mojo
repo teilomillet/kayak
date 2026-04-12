@@ -7,6 +7,8 @@ from .browsecomp_plus_cache import (
     ensure_browsecomp_plus_real_subset_cache,
 )
 from .centroid_postings_store import (
+    CENTROID_POSTINGS_ORDER_UNSPECIFIED,
+    CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC,
     CentroidPostingCacheEntry,
     build_stored_centroid_posting_index,
     centroid_postings_index_exists,

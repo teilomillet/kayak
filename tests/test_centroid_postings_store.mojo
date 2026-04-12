@@ -4,6 +4,8 @@ from std.testing import TestSuite, assert_equal
 
 from kayak import EncodedDocument, StoredPackedIndex, VECTOR_SCALAR_NAME, pack_documents
 from kayak.storage import (
+    CENTROID_POSTINGS_ORDER_UNSPECIFIED,
+    CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC,
     build_stored_centroid_posting_index,
     centroid_postings_storage_byte_size,
     ensure_stored_centroid_posting_index,
@@ -52,7 +54,10 @@ def write_legacy_centroid_postings_root(
     source_root: Path, target_root: Path, include_document_counts: Bool = False
 ) raises:
     makedirs(target_root, exist_ok=True)
-    copy_storage_file(source_root, target_root, "manifest.tsv")
+    var legacy_manifest = (source_root / "manifest.tsv").read_text().replace(
+        "posting_order_kind\t" + CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC + "\n", ""
+    )
+    (target_root / "manifest.tsv").write_text(legacy_manifest)
     copy_storage_file(source_root, target_root, "centroid_dims.tsv")
     copy_storage_file(source_root, target_root, "posting_offsets.tsv")
     copy_storage_file(source_root, target_root, "posting_doc_indices.tsv")
@@ -70,6 +75,13 @@ def test_centroid_postings_roundtrip_preserves_summary_arrays() raises:
 
     var loaded = load_stored_centroid_posting_index(root)
 
+    assert_equal(
+        loaded.posting_order_kind, CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC
+    )
+    assert_equal(loaded.index.posting_doc_indices[0], 1)
+    assert_equal(loaded.index.posting_weights[0], 2)
+    assert_equal(loaded.index.posting_doc_indices[1], 0)
+    assert_equal(loaded.index.posting_weights[1], 1)
     assert_equal(loaded.index.centroid_document_counts[0], 2)
     assert_equal(loaded.index.centroid_document_counts[1], 1)
     assert_equal(loaded.index.centroid_token_counts[0], 3)
@@ -91,6 +103,7 @@ def test_centroid_postings_loads_legacy_layout_without_summary_files() raises:
 
     var loaded = load_stored_centroid_posting_index(root)
 
+    assert_equal(loaded.posting_order_kind, CENTROID_POSTINGS_ORDER_UNSPECIFIED)
     assert_equal(loaded.index.centroid_document_counts[0], 2)
     assert_equal(loaded.index.centroid_document_counts[1], 1)
     assert_equal(loaded.index.centroid_token_counts[0], 3)
@@ -131,6 +144,10 @@ def test_ensure_centroid_postings_rewrites_legacy_layout_with_summaries() raises
     var cache = ensure_stored_centroid_posting_index(root, stored_index, 0)
 
     assert_equal(cache.loaded_from_storage, False)
+    assert_equal(
+        cache.stored_index.posting_order_kind,
+        CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC,
+    )
     assert_equal((root / "centroid_document_counts.tsv").exists(), True)
     assert_equal((root / "centroid_token_counts.tsv").exists(), True)
 

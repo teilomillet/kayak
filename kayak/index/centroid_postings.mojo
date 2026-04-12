@@ -302,6 +302,64 @@ def append_dim_descending_by_count(
     sorted_dims[insert_at] = dim
 
 
+def append_posting_descending_by_weight(
+    mut sorted_doc_indices: List[Int],
+    mut sorted_weights: List[Int],
+    doc_index: Int,
+    posting_weight: Int,
+):
+    var insert_at = 0
+    while insert_at < len(sorted_weights):
+        if sorted_weights[insert_at] < posting_weight:
+            break
+        if (
+            sorted_weights[insert_at] == posting_weight
+            and sorted_doc_indices[insert_at] > doc_index
+        ):
+            break
+        insert_at += 1
+
+    sorted_doc_indices.append(doc_index)
+    sorted_weights.append(posting_weight)
+
+    var current = len(sorted_weights) - 1
+    while current > insert_at:
+        sorted_doc_indices[current] = sorted_doc_indices[current - 1]
+        sorted_weights[current] = sorted_weights[current - 1]
+        current -= 1
+
+    sorted_doc_indices[insert_at] = doc_index
+    sorted_weights[insert_at] = posting_weight
+
+
+struct SortedCentroidPostings(Copyable):
+    var doc_indices: List[Int]
+    var weights: List[Int]
+
+    def __init__(
+        out self, var doc_indices: List[Int], var weights: List[Int]
+    ):
+        self.doc_indices = doc_indices^
+        self.weights = weights^
+
+
+def sort_postings_descending_by_weight(
+    read doc_indices: List[Int], read weights: List[Int]
+) -> SortedCentroidPostings:
+    var sorted_doc_indices = List[Int]()
+    var sorted_weights = List[Int]()
+
+    for posting_index in range(len(doc_indices)):
+        append_posting_descending_by_weight(
+            sorted_doc_indices,
+            sorted_weights,
+            doc_indices[posting_index],
+            weights[posting_index],
+        )
+
+    return SortedCentroidPostings(sorted_doc_indices^, sorted_weights^)
+
+
 def selected_centroid_dims(
     read token_counts_by_dim: List[Int], centroid_budget: Int
 ) raises -> List[Int]:
@@ -368,10 +426,13 @@ def build_centroid_posting_index(
         centroid_vectors.append(
             divide_vector(sum_vectors_by_dim[dim], token_counts_by_dim[dim])
         )
+        var sorted_postings = sort_postings_descending_by_weight(
+            posting_doc_indices_by_dim[dim], posting_weights_by_dim[dim]
+        )
 
-        for posting_index in range(len(posting_doc_indices_by_dim[dim])):
-            posting_doc_indices.append(posting_doc_indices_by_dim[dim][posting_index])
-            posting_weights.append(posting_weights_by_dim[dim][posting_index])
+        for posting_index in range(len(sorted_postings.doc_indices)):
+            posting_doc_indices.append(sorted_postings.doc_indices[posting_index])
+            posting_weights.append(sorted_postings.weights[posting_index])
 
         posting_offsets.append(len(posting_doc_indices))
 

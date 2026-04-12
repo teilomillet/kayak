@@ -24,6 +24,10 @@ from .vector_payload_encoding import (
 )
 
 
+comptime CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC = "weight_desc_doc_asc"
+comptime CENTROID_POSTINGS_ORDER_UNSPECIFIED = "unspecified"
+
+
 struct CentroidPostingCacheEntry(Copyable):
     var stored_index: StoredCentroidPostingIndex
     var loaded_from_storage: Bool
@@ -81,6 +85,7 @@ def build_stored_centroid_posting_index(
         stored_packed_index.dataset_id.copy(),
         stored_packed_index.model_name.copy(),
         stored_packed_index.vector_scalar_name.copy(),
+        CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC,
         centroid_budget,
         0,
         build_centroid_posting_index(stored_packed_index.index, centroid_budget),
@@ -101,6 +106,14 @@ def read_int_lines(path: Path, name: String) raises -> List[Int]:
     return values^
 
 
+def load_optional_manifest_value(read entries: List[ManifestEntry], key: String) -> String:
+    for entry in entries:
+        if entry.key == key:
+            return entry.value.copy()
+
+    return ""
+
+
 def write_centroid_postings_manifest(
     root: Path,
     read stored: StoredCentroidPostingIndex,
@@ -116,6 +129,7 @@ def write_centroid_postings_manifest(
             ManifestEntry("dataset_id", stored.dataset_id),
             ManifestEntry("model_name", stored.model_name),
             ManifestEntry("vector_payload_encoding", vector_payload_encoding),
+            ManifestEntry("posting_order_kind", stored.posting_order_kind),
             ManifestEntry("vector_dim", String(stored.index.vector_dim)),
             ManifestEntry("document_count", String(stored.index.document_count)),
             ManifestEntry("centroid_budget", String(stored.centroid_budget)),
@@ -188,6 +202,11 @@ def load_stored_centroid_posting_index(
     var vector_payload_encoding = require_manifest_value(
         manifest, "vector_payload_encoding"
     )
+    var posting_order_kind = load_optional_manifest_value(
+        manifest, "posting_order_kind"
+    )
+    if posting_order_kind.byte_length() == 0:
+        posting_order_kind = CENTROID_POSTINGS_ORDER_UNSPECIFIED
     var centroid_dims = read_int_lines(root / "centroid_dims.tsv", "centroid_dim")
     var posting_offsets = read_int_lines(root / "posting_offsets.tsv", "posting_offset")
     var posting_doc_indices = read_int_lines(
@@ -210,6 +229,7 @@ def load_stored_centroid_posting_index(
             require_manifest_value(manifest, "dataset_id"),
             require_manifest_value(manifest, "model_name"),
             VECTOR_SCALAR_NAME,
+            posting_order_kind.copy(),
             parse_int(
                 require_manifest_value(manifest, "centroid_budget"),
                 "centroid_budget",
@@ -239,6 +259,7 @@ def load_stored_centroid_posting_index(
         require_manifest_value(manifest, "dataset_id"),
         require_manifest_value(manifest, "model_name"),
         VECTOR_SCALAR_NAME,
+        posting_order_kind,
         parse_int(require_manifest_value(manifest, "centroid_budget"), "centroid_budget"),
         parse_int(
             require_manifest_value(manifest, "artifact_byte_size"),
@@ -267,6 +288,8 @@ def ensure_stored_centroid_posting_index(
             loaded.centroid_budget == centroid_budget
             and loaded.dataset_id == stored_packed_index.dataset_id
             and loaded.model_name == stored_packed_index.model_name
+            and loaded.posting_order_kind
+                == CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC
             and loaded.index.document_count
                 == stored_packed_index.index.document_count
             and loaded.index.vector_dim == stored_packed_index.index.vector_dim
