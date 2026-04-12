@@ -9,6 +9,7 @@ from kayak import (
     centroid_postings_head_auto_search_plan,
     centroid_postings_blockmax_search_plan,
     centroid_postings_head_search_plan,
+    centroid_postings_imputed_flat_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
     document_proxy_search_plan,
@@ -104,6 +105,18 @@ def append_hard_recall_summaries(
                 stored_task,
                 snapshot,
                 document_proxy_search_plan(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                ),
+            )
+        )
+        summaries.append(
+            build_stage_aware_search_summary(
+                ExactCpuBackend(),
+                stored_task,
+                snapshot,
+                centroid_postings_imputed_flat_search_plan(
                     task.k,
                     candidate_k,
                     best_effort_faithfulness_policy(),

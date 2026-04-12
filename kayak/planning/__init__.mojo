@@ -8,6 +8,7 @@ from .candidate_generator import (
     centroid_postings_blockmax_candidate_generator,
     centroid_postings_head_candidate_generator,
     centroid_postings_imputed_candidate_generator,
+    centroid_postings_imputed_flat_candidate_generator,
     document_proxy_candidate_generator,
     exact_full_scan_candidate_generator,
 )
@@ -43,6 +44,10 @@ from .centroid_postings_blockmax_stage import (
     centroid_posting_blockmax_scores_for_segment,
     centroid_posting_blockmax_scores_for_segment_profiled,
 )
+from .centroid_postings_imputed_stage import centroid_posting_imputed_scores_for_segment
+from .centroid_postings_imputed_flat_stage import (
+    centroid_posting_imputed_flat_scores_for_segment,
+)
 from .centroid_postings_stage import centroid_posting_scores_for_segment
 from .centroid_postings_flat_stage import centroid_posting_flat_scores_for_segment
 from .search_plan import (
@@ -52,6 +57,7 @@ from .search_plan import (
     centroid_postings_head_auto_search_plan,
     centroid_postings_blockmax_search_plan,
     centroid_postings_imputed_search_plan,
+    centroid_postings_imputed_flat_search_plan,
     centroid_postings_head_search_plan,
     centroid_postings_search_plan,
     document_proxy_search_plan,

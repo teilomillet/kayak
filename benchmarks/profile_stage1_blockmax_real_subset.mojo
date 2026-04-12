@@ -22,6 +22,7 @@ from kayak import (
     centroid_postings_blockmax_search_plan,
     centroid_postings_head_auto_search_plan,
     centroid_postings_head_search_plan,
+    centroid_postings_imputed_flat_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
     ensure_fiqa_real_subset_cache,
@@ -404,6 +405,27 @@ def append_plan_measurements(
                 task,
                 snapshot,
                 centroid_imputed_plan,
+            ),
+        )
+    )
+
+    var centroid_imputed_flat_plan = centroid_postings_imputed_flat_search_plan(
+        task.k,
+        candidate_k,
+        best_effort_faithfulness_policy(),
+    )
+    print("== centroid_postings_imputed_flat ==")
+    measurements.append(
+        make_zero_profile_measurement(
+            dataset_name,
+            task.slice_name,
+            "centroid_postings_imputed_flat",
+            candidate_k,
+            benchmark_candidate_generation_mean_seconds(
+                backend,
+                task,
+                snapshot,
+                centroid_imputed_flat_plan,
             ),
         )
     )

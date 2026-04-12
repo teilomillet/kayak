@@ -247,11 +247,15 @@ Current interpretation:
 - `centroid_postings` is now the first search-native centroid/posting baseline.
 - `centroid_postings_flat` is now the tighter semantics-preserving native
   follow-on for that centroid/posting baseline.
+- `centroid_postings_imputed` is now the first heavier WARP-inspired reduction
+  baseline.
+- `centroid_postings_imputed_flat` is now the tighter layout follow-on for that
+  heavier native path.
 - approximate plans now carry explicit faithfulness policy rather than silently
   pretending to be exact
 - The next heavier engine step should be a tighter WARP/GEM-style native
-  engine path built on the flat/native layout, not another round of heuristic
-  reranking.
+  engine path built on `centroid_postings_imputed_flat`, not another round of
+  heuristic reranking on the older layout.
 
 ## Priority 3: Multi-Tenant Serving And Filter-Aware Retrieval
 

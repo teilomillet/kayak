@@ -8,6 +8,7 @@ This note records what the new evidence in `kayak` does and does not justify.
 Measured trace:
 - [docs/traces/2026-04-12_centroid_postings_baseline.md](../traces/2026-04-12_centroid_postings_baseline.md)
 - [docs/traces/2026-04-12_centroid_postings_flat.md](../traces/2026-04-12_centroid_postings_flat.md)
+- [docs/traces/2026-04-13_centroid_postings_imputed_flat.md](../traces/2026-04-13_centroid_postings_imputed_flat.md)
 
 ## Verified In Repo
 
@@ -86,20 +87,23 @@ Inference:
 
 ## Sound Next Native Step
 
-The next heavier engine step should now build on the tighter native layout, not
-on another heuristic sidecar layered over the older posting scan.
+The next heavier engine step should now build on the flatter WARP-inspired
+layout, not on another heuristic sidecar layered over the older posting scan.
 
 The best next candidate is:
 - a WARP or GEM-style native multi-vector engine path built on top of:
   - the verified stage boundary
   - the sealed sidecar benchmarks
   - the now-measured flat centroid execution layout
+  - the now-measured flat imputed execution layout
 
 Why this is the sound next step:
 - we already have:
   - one light proxy baseline
   - one more native centroid/posting baseline
   - one tighter semantics-preserving native follow-on
+  - one heavier WARP-inspired follow-on with the same public quality and
+    slightly better average timing
   - exact stage-2 reranking
   - oracle-recall and vector-budget traces
 - the remaining uncertainty is now about engine-native layout and pruning
@@ -119,6 +123,8 @@ That would risk:
 
 The next implementation milestone should be:
 - keep `document_proxy` and `centroid_postings` as regression baselines
-- add one tighter native candidate engine inspired by WARP or GEM
+- keep `centroid_postings_imputed` as the heavier-layout regression baseline
+- build the next tighter WARP/GEM-style engine step on
+  `centroid_postings_imputed_flat`
 - judge it on the same candidate-window, vector-budget, and storage traces
 - only promote it if it improves the current Pareto frontier on those artifacts

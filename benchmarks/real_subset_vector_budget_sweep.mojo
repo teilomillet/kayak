@@ -26,6 +26,7 @@ from kayak.planning import (
     centroid_postings_head_auto_search_plan,
     centroid_postings_blockmax_search_plan,
     centroid_postings_head_search_plan,
+    centroid_postings_imputed_flat_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
 )
@@ -122,6 +123,22 @@ def append_vector_budget_summaries_for_dataset(
                     task,
                     snapshot,
                     centroid_heads_search_plan(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                    ),
+                    query_vector_budget,
+                    centroid_budget,
+                )
+            )
+            summaries.append(
+                build_vector_budget_sweep_summary_for_plan(
+                    backend,
+                    dataset_id,
+                    model_name,
+                    task,
+                    snapshot,
+                    centroid_postings_imputed_flat_search_plan(
                         task.k,
                         candidate_k,
                         best_effort_faithfulness_policy(),

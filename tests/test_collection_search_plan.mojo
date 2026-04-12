@@ -28,11 +28,14 @@ from kayak import (
     build_stored_document_proxy_index,
     centroid_heads_search_plan,
     centroid_posting_flat_scores_for_segment,
+    centroid_posting_imputed_flat_scores_for_segment,
+    centroid_posting_imputed_scores_for_segment,
     centroid_postings_head_auto_search_plan,
     centroid_posting_scores_for_segment,
     centroid_postings_blockmax_search_plan,
     centroid_postings_flat_search_plan,
     centroid_postings_head_search_plan,
+    centroid_postings_imputed_flat_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
     collection_search_explain_json,
@@ -825,6 +828,70 @@ def test_centroid_postings_imputed_search_plan_reports_oracle_miss_when_shortlis
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(0.0))
     assert_equal(explain.faithfulness.passes, False)
     assert_equal(explain.faithfulness.evidence_kind, "oracle_recall_loss")
+
+
+def test_centroid_postings_imputed_flat_search_plan_exact_reranks_shortlist() raises:
+    var root = make_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        centroid_postings_imputed_flat_search_plan(
+            1, 2, oracle_full_recall_required_faithfulness_policy()
+        ),
+    )
+
+    assert_equal(
+        explain.plan.candidate_generator.kind, "centroid_postings_imputed_flat"
+    )
+    assert_equal(len(explain.candidate_set.hits), 2)
+    assert_equal(explain.final_hits[0].doc_id, "doc-a")
+    assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
+    assert_equal(explain.faithfulness.passes, True)
+    assert_equal(explain.faithfulness.evidence_kind, "oracle_full_recall")
+
+
+def test_centroid_postings_imputed_flat_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:
+    var root = make_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        centroid_postings_imputed_flat_search_plan(
+            1, 1, oracle_full_recall_required_faithfulness_policy()
+        ),
+    )
+
+    assert_equal(explain.candidate_set.hits[0].doc_id, "doc-b")
+    assert_equal(explain.final_hits[0].doc_id, "doc-b")
+    assert_equal(explain.candidate_recall_at_final_k, MetricScalar(0.0))
+    assert_equal(explain.faithfulness.passes, False)
+    assert_equal(explain.faithfulness.evidence_kind, "oracle_recall_loss")
+
+
+def test_centroid_postings_imputed_flat_stage_matches_imputed_stage_scores() raises:
+    var root = make_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var index = resolved.segments[0].stored_centroid_postings_index.index.copy()
+    var imputed_scores = centroid_posting_imputed_scores_for_segment(
+        query.token_vectors,
+        index,
+        1,
+    )
+    var imputed_flat_scores = centroid_posting_imputed_flat_scores_for_segment(
+        query,
+        index,
+        1,
+    )
+
+    assert_equal(len(imputed_flat_scores), len(imputed_scores))
+    for score_index in range(len(imputed_scores)):
+        assert_equal(imputed_flat_scores[score_index], imputed_scores[score_index])
 
 
 def main() raises:
