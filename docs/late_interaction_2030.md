@@ -71,6 +71,11 @@ Verified since the first version of this note:
 - non-exact stage-1 generators now sit behind explicit `SearchPlan` contracts
 - hard-recall benchmark output now reports candidate recall against an exact
   full-scan reference
+- the hosted-engine P0 mainline tranche is now implemented:
+  - draft mutations append mutation batches instead of rewriting one whole
+    draft packed index
+  - snapshot resolution can load only the sidecars required by a given plan
+  - snapshot creation now has explicit seal and publish boundaries
 
 Those are substrate wins, not proof of the stronger efficiency thesis.
 
@@ -112,6 +117,7 @@ Evidence:
 - [docs/traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md](traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md)
 - [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
 - [docs/traces/2026-04-12_synthetic_hard_recall_stage_aware.md](traces/2026-04-12_synthetic_hard_recall_stage_aware.md)
+- [docs/traces/2026-04-13_hosted_engine_p0.md](traces/2026-04-13_hosted_engine_p0.md)
 - [docs/epistemic_status.md](epistemic_status.md)
 
 ## What Kayak Should Change

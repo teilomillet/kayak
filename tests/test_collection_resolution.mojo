@@ -14,8 +14,12 @@ from kayak.collections import (
     SnapshotManifest,
     StoredDocumentTextCorpus,
     TenantId,
+    document_proxy_search_artifact,
+    exact_only_snapshot_requirements,
     gem_graph_search_artifact,
+    loaded_segment_has_document_proxy_index,
     loaded_segment_has_gem_graph_index,
+    loaded_segment_has_search_artifact,
     loaded_segment_stored_gem_graph_index,
     load_collection_storage_report,
     load_resolved_collection_snapshot,
@@ -23,10 +27,13 @@ from kayak.collections import (
     save_sealed_segment_manifest,
     save_snapshot_manifest,
     save_stored_document_text_corpus,
+    search_artifact_snapshot_requirements,
 )
 from kayak.storage import (
     StoredGemGraphIndex,
     StoredPackedIndex,
+    build_stored_document_proxy_index,
+    save_stored_document_proxy_index,
     save_stored_gem_graph_index,
     save_stored_packed_index,
 )
@@ -333,6 +340,122 @@ def test_resolved_snapshot_loads_gem_graph_artifact_metadata() raises:
     assert_equal(stored_gem_graph.document_count, 1)
     assert_equal(stored_gem_graph.cluster_count, 2)
     assert_equal(stored_gem_graph.graph_edge_count, 3)
+
+
+def test_resolved_snapshot_can_skip_text_and_unrequested_sidecars() raises:
+    var collection_root = Path("/tmp/kayak-resolved-collection-selective-load")
+    save_collection_manifest(
+        collection_root,
+        CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            4,
+        ),
+    )
+
+    var segment_root = collection_root / "segments" / "segment-0001"
+    var documents = [EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]])]
+    write_segment_payload(
+        segment_root,
+        "collection://news",
+        "colbertv2",
+        documents,
+    )
+    save_stored_document_proxy_index(
+        segment_root / "document_proxy",
+        build_stored_document_proxy_index(
+            StoredPackedIndex(
+                "collection://news",
+                "colbertv2",
+                VECTOR_SCALAR_NAME,
+                pack_documents(documents),
+            ),
+            0,
+        ),
+    )
+    save_stored_gem_graph_index(
+        segment_root / "gem_graph",
+        StoredGemGraphIndex(
+            "collection://news",
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            1,
+            2,
+            3,
+            1,
+            2,
+            16,
+            0,
+        ),
+    )
+    save_stored_document_text_corpus(
+        segment_root / "text_corpus",
+        StoredDocumentTextCorpus(
+            CollectionId("news"),
+            SegmentId("segment-0001"),
+            DocumentTextCorpus(["doc-a"], ["alpha"]),
+        ),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            4,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            "packed_index",
+            [
+                document_proxy_search_artifact("document_proxy"),
+                gem_graph_search_artifact("gem_graph"),
+            ],
+            "text_corpus",
+            SegmentStats(1, 2, 2, 512),
+        ),
+    )
+    save_snapshot_manifest(
+        collection_root / "snapshots" / "snapshot-0004",
+        SnapshotManifest(
+            SnapshotId("snapshot-0004"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            4,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 1, 2, 2, 512),
+        ),
+    )
+
+    var exact_only = load_resolved_collection_snapshot(
+        collection_root,
+        SnapshotId("snapshot-0004"),
+        exact_only_snapshot_requirements(),
+    )
+    assert_equal(exact_only.segments[0].has_text_corpus, False)
+    assert_equal(
+        loaded_segment_has_search_artifact(exact_only.segments[0], "document_proxy"),
+        False,
+    )
+    assert_equal(
+        loaded_segment_has_search_artifact(exact_only.segments[0], "gem_graph"),
+        False,
+    )
+
+    var proxy_only = load_resolved_collection_snapshot(
+        collection_root,
+        SnapshotId("snapshot-0004"),
+        search_artifact_snapshot_requirements("document_proxy"),
+    )
+    assert_equal(proxy_only.segments[0].has_text_corpus, False)
+    assert_equal(loaded_segment_has_document_proxy_index(proxy_only.segments[0]), True)
+    assert_equal(loaded_segment_has_gem_graph_index(proxy_only.segments[0]), False)
 
 
 def main() raises:

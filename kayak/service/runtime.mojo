@@ -1,50 +1,41 @@
 # Executable hosted-collection loop for create, mutate, snapshot, search, and explain.
 
-from std.collections import List
 from std.pathlib import Path
 
 from kayak.collections import (
     CollectionManifest,
     CollectionStats,
     SegmentId,
-    SegmentStats,
     SealedSegmentManifest,
     SnapshotExportBundleManifest,
     SnapshotManifest,
-    StoredDocumentTextCorpus,
+    SnapshotLoadRequirements,
     collection_manifest_exists,
+    exact_only_snapshot_requirements,
     export_snapshot_bundle,
     import_snapshot_bundle,
     load_collection_manifest,
     load_resolved_collection_snapshot,
+    promote_collection_generation,
+    publish_snapshot_manifest,
     save_collection_manifest,
-    save_sealed_segment_manifest,
-    save_snapshot_manifest,
-    save_stored_document_text_corpus,
+    seal_single_segment,
+    search_artifact_snapshot_requirements,
     snapshot_manifest_exists,
 )
 from kayak.contracts import EncodedDocument
 from kayak.filters import FilterExpression
-from kayak.index import pack_documents
 from kayak.planning import (
     explain_collection_search,
     search_collection_for_plan,
 )
 from kayak.runtime import ExactScoringBackend
-from kayak.storage import (
-    StoredPackedIndex,
-    centroid_postings_storage_byte_size,
-    document_proxy_storage_byte_size,
-    ensure_stored_centroid_posting_index,
-    ensure_stored_document_proxy_index,
-    save_stored_packed_index,
-)
-from kayak.text import DocumentTextCorpus
 
 from .collection_requests import CreateCollectionRequest
 from .document_requests import DeleteDocumentsRequest, UpsertDocumentsRequest
 from .draft_state import (
-    DraftCollectionState,
+    append_draft_delete_batch,
+    append_draft_upsert_batch,
     empty_draft_collection_state,
     load_draft_collection_state,
     save_draft_collection_state,
@@ -69,29 +60,6 @@ from .snapshot_requests import (
 def require_filter_is_match_all(read filter_expression: FilterExpression) raises:
     if not filter_expression.is_match_all():
         raise Error("hosted collection runtime currently supports match_all filters only")
-
-
-def packed_index_storage_byte_size(root: Path) raises -> Int:
-    var total = (root / "manifest.tsv").read_text().byte_length()
-    total += (root / "doc_ids.tsv").read_text().byte_length()
-    total += (root / "doc_offsets.tsv").read_text().byte_length()
-    if (root / "token_vectors.bin").exists():
-        total += len((root / "token_vectors.bin").read_bytes())
-    else:
-        total += (root / "token_vectors.tsv").read_text().byte_length()
-    return total
-
-
-def text_corpus_storage_byte_size(
-    root: Path, document_count: Int
-) raises -> Int:
-    var total = (root / "manifest.tsv").read_text().byte_length()
-    total += (root / "entries.tsv").read_text().byte_length()
-
-    for index in range(document_count):
-        total += (root / "texts" / (String(index) + ".txt")).read_text().byte_length()
-
-    return total
 
 
 def require_request_matches_collection(
@@ -195,10 +163,25 @@ def upsert_documents(service_root: Path, request: UpsertDocumentsRequest) raises
             texts[existing_index] = next_text^
 
     var final_document_count = len(documents)
-    save_draft_collection_state(
+    var normalized_documents = List[EncodedDocument]()
+    var normalized_texts = List[String]()
+    for upsert in request.documents:
+        var normalized_text = String()
+        var existing_index = find_document_index(state.documents, upsert.document.doc_id)
+        if existing_index != -1:
+            normalized_text = state.texts[existing_index].copy()
+        if upsert.has_text:
+            normalized_text = upsert.text.copy()
+
+        normalized_documents.append(upsert.document.copy())
+        normalized_texts.append(normalized_text^)
+
+    append_draft_upsert_batch(
         draft_state_root(collection_root),
         collection,
-        DraftCollectionState(documents^, texts^),
+        normalized_documents,
+        normalized_texts,
+        final_document_count,
     )
     return final_document_count
 
@@ -233,10 +216,11 @@ def delete_documents(service_root: Path, request: DeleteDocumentsRequest) raises
             kept_texts.append(state.texts[index].copy())
 
     var kept_document_count = len(kept_documents)
-    save_draft_collection_state(
+    append_draft_delete_batch(
         draft_state_root(collection_root),
         collection,
-        DraftCollectionState(kept_documents^, kept_texts^),
+        request.doc_ids,
+        kept_document_count,
     )
     return kept_document_count
 
@@ -246,6 +230,40 @@ def parse_file_uri(source_uri: String) raises -> Path:
         raise Error("snapshot import currently requires a file:// source_uri")
 
     return Path(source_uri.replace("file://", ""))
+
+
+def snapshot_load_requirements_for_request(
+    read request: SearchRequest
+) raises -> SnapshotLoadRequirements:
+    if request.plan.candidate_generator.artifact_family.byte_length() == 0:
+        return exact_only_snapshot_requirements()
+
+    return search_artifact_snapshot_requirements(
+        request.plan.candidate_generator.artifact_family
+    )
+
+
+def snapshot_manifest_for_segment(
+    read request: CreateSnapshotRequest,
+    read collection: CollectionManifest,
+    generation: Int,
+    read segment: SealedSegmentManifest,
+) raises -> SnapshotManifest:
+    return SnapshotManifest(
+        request.snapshot_id,
+        collection.collection_id,
+        collection.tenant_id,
+        collection.namespace_id,
+        generation,
+        [segment.segment_id.copy()],
+        CollectionStats(
+            1,
+            segment.stats.document_count,
+            segment.stats.token_count,
+            segment.stats.total_vector_count,
+            segment.stats.byte_size,
+        ),
+    )
 
 
 def create_snapshot(
@@ -274,109 +292,23 @@ def create_snapshot(
         raise Error("cannot create a snapshot from an empty draft collection")
 
     var generation = collection.latest_generation + 1
-    var packed_index = pack_documents(draft_state.documents)
-    var stored_index = StoredPackedIndex(
-        "collection://" + collection.collection_id.value,
-        collection.model_name.copy(),
-        collection.vector_scalar_name.copy(),
-        packed_index.copy(),
-    )
     var segment_id = SegmentId("segment-" + String(generation))
-    var segment_root = collection_root / "segments" / segment_id.value
-    var packed_index_root = segment_root / "packed_index"
-
-    save_stored_packed_index(
-        packed_index_root,
-        stored_index.copy(),
-    )
-
-    var byte_size = packed_index_storage_byte_size(packed_index_root)
-    _ = ensure_stored_document_proxy_index(
-        segment_root / "document_proxy",
-        stored_index,
-        0,
-    )
-    _ = ensure_stored_centroid_posting_index(
-        segment_root / "centroid_postings",
-        stored_index,
-        0,
-    )
-    byte_size += document_proxy_storage_byte_size(segment_root / "document_proxy")
-    byte_size += centroid_postings_storage_byte_size(segment_root / "centroid_postings")
-    var text_corpus_root_name = ""
-    if draft_state.has_any_text():
-        text_corpus_root_name = "text_corpus"
-        var doc_ids = List[String]()
-        for document in draft_state.documents:
-            doc_ids.append(document.doc_id.copy())
-
-        save_stored_document_text_corpus(
-            segment_root / text_corpus_root_name,
-            StoredDocumentTextCorpus(
-                collection.collection_id,
-                segment_id.copy(),
-                DocumentTextCorpus(doc_ids^, draft_state.texts.copy()),
-            ),
-        )
-        byte_size += text_corpus_storage_byte_size(
-            segment_root / text_corpus_root_name,
-            len(draft_state.documents),
-        )
-
-    var segment_stats = SegmentStats(
-        packed_index.document_count,
-        packed_index.total_vector_count,
-        packed_index.total_vector_count,
-        byte_size,
-    )
-    save_sealed_segment_manifest(
-        segment_root,
-        SealedSegmentManifest(
-            segment_id.copy(),
-            collection.collection_id,
-            collection.tenant_id,
-            collection.namespace_id,
-            generation,
-            collection.model_name.copy(),
-            collection.vector_scalar_name.copy(),
-            collection.vector_dim,
-            "packed_index",
-            "centroid_postings",
-            "",
-            "document_proxy",
-            text_corpus_root_name.copy(),
-            segment_stats.copy(),
-        ),
-    )
-
-    var snapshot = SnapshotManifest(
-        request.snapshot_id,
-        collection.collection_id,
-        collection.tenant_id,
-        collection.namespace_id,
-        generation,
-        [segment_id.copy()],
-        CollectionStats(
-            1,
-            segment_stats.document_count,
-            segment_stats.token_count,
-            segment_stats.total_vector_count,
-            segment_stats.byte_size,
-        ),
-    )
-    save_snapshot_manifest(collection_root / "snapshots" / request.snapshot_id.value, snapshot)
-    save_collection_manifest(
+    var sealed_segment = seal_single_segment(
         collection_root,
-        CollectionManifest(
-            collection.collection_id,
-            collection.tenant_id,
-            collection.namespace_id,
-            collection.model_name.copy(),
-            collection.vector_scalar_name.copy(),
-            collection.vector_dim,
-            generation,
-        ),
+        collection,
+        segment_id,
+        generation,
+        draft_state.documents,
+        draft_state.texts,
     )
+    var snapshot = snapshot_manifest_for_segment(
+        request,
+        collection,
+        generation,
+        sealed_segment,
+    )
+    publish_snapshot_manifest(collection_root, snapshot)
+    _ = promote_collection_generation(collection_root, collection, generation)
     return snapshot^
 
 
@@ -442,7 +374,11 @@ def execute_search[Backend: ExactScoringBackend](
         request.namespace_id.value,
         collection_root,
     )
-    var snapshot = load_resolved_collection_snapshot(collection_root, request.snapshot_id)
+    var snapshot = load_resolved_collection_snapshot(
+        collection_root,
+        request.snapshot_id,
+        snapshot_load_requirements_for_request(request),
+    )
     return SearchResponse(
         request.collection_id,
         request.tenant_id,
@@ -484,7 +420,11 @@ def execute_explain[Backend: ExactScoringBackend](
         request.namespace_id.value,
         collection_root,
     )
-    var snapshot = load_resolved_collection_snapshot(collection_root, request.snapshot_id)
+    var snapshot = load_resolved_collection_snapshot(
+        collection_root,
+        request.snapshot_id,
+        snapshot_load_requirements_for_request(request),
+    )
     return ExplainResponse(
         explain_collection_search(backend, request.query, snapshot, request.plan)
     )

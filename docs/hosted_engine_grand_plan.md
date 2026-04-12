@@ -20,6 +20,8 @@ Current repo state:
 - the engine already has explicit `SearchPlan` stages
 - hosted collection create, mutate, snapshot, export/import, search, and
   explain already exist
+- the hosted-engine P0 mainline tranche described here is now implemented on
+  the current branch
 - stage-aware evaluation already reports exact-reference candidate recall
 - stronger 2030 efficiency claims remain only partially established
 
@@ -39,13 +41,17 @@ That combination implies a clear next move:
 - explicit stage-aware execution in `kayak/planning/`
 - exact CPU correctness anchor in `kayak/runtime/`
 - a narrow stronger ceiling path in `kayak/verifier/`
+- append-style hosted draft mutations
+- explicit seal and publish helpers in the hosted snapshot path
+- capability-aware snapshot resolution
+- generic search-artifact manifests exercised by the mainline seal path
 
 ### What is still weak
 
-- mutation path is whole-draft and whole-snapshot oriented
-- snapshot publication is correctness-first, not append-friendly
-- search-native sidecars are handled as explicit fields, not as a scalable
-  artifact registry
+- draft mutation compaction and cleanup are not implemented yet
+- snapshot publication is explicit, but not yet atomic across crash boundaries
+- search-native sidecars still need policy-driven build selection and metadata
+  sidecars beyond today's baseline registry
 - filters exist in the request contract but not in hosted execution
 - service health and metrics contracts exist, but operational metrics do not
   yet drive runtime behavior

@@ -33,6 +33,7 @@ The goal is to make each major claim legible as:
 - [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
 - [docs/traces/2026-04-12_synthetic_hard_recall_stage_aware.md](traces/2026-04-12_synthetic_hard_recall_stage_aware.md)
 - [docs/traces/2026-04-13_centroid_primitives.md](traces/2026-04-13_centroid_primitives.md)
+- [docs/traces/2026-04-13_hosted_engine_p0.md](traces/2026-04-13_hosted_engine_p0.md)
 
 ## Status Key
 

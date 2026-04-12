@@ -1,0 +1,142 @@
+from std.collections import List
+from std.pathlib import Path
+
+from kayak.contracts import EncodedDocument
+from kayak.index import pack_documents
+from kayak.storage import (
+    StoredPackedIndex,
+    centroid_postings_storage_byte_size,
+    document_proxy_storage_byte_size,
+    ensure_stored_centroid_posting_index,
+    ensure_stored_document_proxy_index,
+    save_stored_packed_index,
+)
+from kayak.text import DocumentTextCorpus
+
+from .collection import CollectionManifest
+from .ids import SegmentId
+from .search_artifact import (
+    SearchArtifactManifest,
+    centroid_postings_search_artifact,
+    document_proxy_search_artifact,
+)
+from .segment import SealedSegmentManifest
+from .segment_store import save_sealed_segment_manifest
+from .stats import SegmentStats
+from .text_corpus import StoredDocumentTextCorpus
+from .text_corpus_store import save_stored_document_text_corpus
+
+
+def packed_index_storage_byte_size(root: Path) raises -> Int:
+    var total = (root / "manifest.tsv").read_text().byte_length()
+    total += (root / "doc_ids.tsv").read_text().byte_length()
+    total += (root / "doc_offsets.tsv").read_text().byte_length()
+    if (root / "token_vectors.bin").exists():
+        total += len((root / "token_vectors.bin").read_bytes())
+    else:
+        total += (root / "token_vectors.tsv").read_text().byte_length()
+    return total
+
+
+def text_corpus_storage_byte_size(
+    root: Path, document_count: Int
+) raises -> Int:
+    var total = (root / "manifest.tsv").read_text().byte_length()
+    total += (root / "entries.tsv").read_text().byte_length()
+
+    for index in range(document_count):
+        total += (root / "texts" / (String(index) + ".txt")).read_text().byte_length()
+
+    return total
+
+
+def seal_single_segment(
+    collection_root: Path,
+    read collection: CollectionManifest,
+    segment_id: SegmentId,
+    generation: Int,
+    read documents: List[EncodedDocument],
+    read texts: List[String],
+) raises -> SealedSegmentManifest:
+    if len(documents) == 0:
+        raise Error("cannot seal an empty segment")
+
+    if len(documents) != len(texts):
+        raise Error("segment seal requires aligned documents and texts")
+
+    var packed_index = pack_documents(documents)
+    var stored_index = StoredPackedIndex(
+        "collection://" + collection.collection_id.value,
+        collection.model_name.copy(),
+        collection.vector_scalar_name.copy(),
+        packed_index.copy(),
+    )
+    var segment_root = collection_root / "segments" / segment_id.value
+    var packed_index_root = segment_root / "packed_index"
+
+    save_stored_packed_index(packed_index_root, stored_index.copy())
+
+    var byte_size = packed_index_storage_byte_size(packed_index_root)
+    var search_artifacts = List[SearchArtifactManifest]()
+
+    _ = ensure_stored_document_proxy_index(
+        segment_root / "document_proxy",
+        stored_index,
+        0,
+    )
+    byte_size += document_proxy_storage_byte_size(segment_root / "document_proxy")
+    search_artifacts.append(document_proxy_search_artifact("document_proxy"))
+
+    _ = ensure_stored_centroid_posting_index(
+        segment_root / "centroid_postings",
+        stored_index,
+        0,
+    )
+    byte_size += centroid_postings_storage_byte_size(segment_root / "centroid_postings")
+    search_artifacts.append(centroid_postings_search_artifact("centroid_postings"))
+
+    var text_corpus_root_name = ""
+    if len(texts) != 0:
+        var doc_ids = List[String]()
+        var has_any_text = False
+        for index in range(len(documents)):
+            doc_ids.append(documents[index].doc_id.copy())
+            if texts[index].byte_length() != 0:
+                has_any_text = True
+
+        if has_any_text:
+            text_corpus_root_name = "text_corpus"
+            save_stored_document_text_corpus(
+                segment_root / text_corpus_root_name,
+                StoredDocumentTextCorpus(
+                    collection.collection_id,
+                    segment_id.copy(),
+                    DocumentTextCorpus(doc_ids^, texts.copy()),
+                ),
+            )
+            byte_size += text_corpus_storage_byte_size(
+                segment_root / text_corpus_root_name,
+                len(documents),
+            )
+
+    var manifest = SealedSegmentManifest(
+        segment_id,
+        collection.collection_id,
+        collection.tenant_id,
+        collection.namespace_id,
+        generation,
+        collection.model_name.copy(),
+        collection.vector_scalar_name.copy(),
+        collection.vector_dim,
+        "packed_index",
+        search_artifacts^,
+        text_corpus_root_name,
+        SegmentStats(
+            packed_index.document_count,
+            packed_index.total_vector_count,
+            packed_index.total_vector_count,
+            byte_size,
+        ),
+    )
+    save_sealed_segment_manifest(segment_root, manifest)
+    return manifest^

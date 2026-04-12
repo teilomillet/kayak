@@ -169,5 +169,80 @@ def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() 
     assert_equal(imported_search.hits[0].doc_id, "doc-a")
 
 
+def test_hosted_collection_runtime_persists_append_only_draft_mutations() raises:
+    var service_root = unique_service_root("kayak-service-runtime-draft-log")
+
+    var create_request = CreateCollectionRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        2,
+    )
+    var collection_root = create_collection(service_root, create_request)
+
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]), "alpha")],
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]), "beta")],
+        ),
+    )
+    var document_count_after_delete = delete_documents(
+        service_root,
+        DeleteDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            ["doc-a"],
+        ),
+    )
+    var snapshot = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "seal current draft",
+        ),
+    )
+
+    var draft_manifest = (collection_root / "draft" / "manifest.tsv").read_text()
+    assert_equal(draft_manifest.find("storage_kind\tmutation_log") >= 0, True)
+    assert_equal(draft_manifest.find("mutation_count\t3") >= 0, True)
+    assert_equal(
+        (collection_root / "draft" / "mutations" / "mutation-1" / "manifest.tsv").exists(),
+        True,
+    )
+    assert_equal(
+        (collection_root / "draft" / "mutations" / "mutation-2" / "manifest.tsv").exists(),
+        True,
+    )
+    assert_equal(
+        (collection_root / "draft" / "mutations" / "mutation-3" / "manifest.tsv").exists(),
+        True,
+    )
+    assert_equal(
+        (collection_root / "draft" / "packed_index" / "manifest.tsv").exists(),
+        False,
+    )
+    assert_equal(document_count_after_delete, 1)
+    assert_equal(snapshot.stats.document_count, 1)
+    assert_equal(snapshot.segment_ids[0].value, "segment-1")
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()

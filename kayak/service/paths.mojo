@@ -35,3 +35,29 @@ def draft_state_packed_index_root(draft_root: Path) -> Path:
 
 def draft_state_text_corpus_root(draft_root: Path) -> Path:
     return draft_root / "text_corpus"
+
+
+def draft_state_mutations_root(draft_root: Path) -> Path:
+    return draft_root / "mutations"
+
+
+def draft_state_mutation_root(draft_root: Path, mutation_index: Int) -> Path:
+    return draft_state_mutations_root(draft_root) / (
+        "mutation-" + String(mutation_index)
+    )
+
+
+def draft_state_mutation_manifest_path(mutation_root: Path) -> Path:
+    return mutation_root / "manifest.tsv"
+
+
+def draft_state_mutation_packed_index_root(mutation_root: Path) -> Path:
+    return mutation_root / "packed_index"
+
+
+def draft_state_mutation_text_corpus_root(mutation_root: Path) -> Path:
+    return mutation_root / "text_corpus"
+
+
+def draft_state_mutation_doc_ids_path(mutation_root: Path) -> Path:
+    return mutation_root / "doc_ids.tsv"

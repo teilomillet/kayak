@@ -3,7 +3,7 @@ from std.os import makedirs
 from std.pathlib import Path
 
 from kayak.index import PackedIndex
-from kayak.numeric import STORAGE_FORMAT_VERSION, VECTOR_SCALAR_NAME, VectorScalar
+from kayak.numeric import STORAGE_FORMAT_VERSION, VectorScalar
 
 from .binary_vector_codec import (
     read_binary_vector_payload_with_encoding,
@@ -90,6 +90,7 @@ def save_stored_packed_index_with_encoding(
 def load_stored_packed_index(root: Path) raises -> StoredPackedIndex:
     var manifest = read_manifest(packed_index_manifest_path(root))
     var format_version = require_supported_storage_format(manifest)
+    var vector_scalar_name = require_manifest_value(manifest, "vector_scalar_name")
 
     if require_manifest_value(manifest, "artifact_kind") != "packed_index":
         raise Error("storage artifact is not a packed index")
@@ -135,6 +136,6 @@ def load_stored_packed_index(root: Path) raises -> StoredPackedIndex:
     return StoredPackedIndex(
         require_manifest_value(manifest, "dataset_id"),
         require_manifest_value(manifest, "model_name"),
-        VECTOR_SCALAR_NAME,
+        vector_scalar_name,
         index^,
     )

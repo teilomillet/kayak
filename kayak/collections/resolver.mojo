@@ -22,6 +22,10 @@ from .paths import (
     collection_snapshot_root,
     resolve_segment_artifact_root,
 )
+from .resolution_requirements import (
+    SnapshotLoadRequirements,
+    load_all_snapshot_requirements,
+)
 from .resolved_snapshot import (
     LoadedSearchArtifact,
     LoadedSealedSegment,
@@ -306,7 +310,9 @@ def require_snapshot_stats_match_loaded_segments(
 
 
 def load_resolved_collection_snapshot(
-    collection_root: Path, snapshot_id: SnapshotId
+    collection_root: Path,
+    snapshot_id: SnapshotId,
+    read requirements: SnapshotLoadRequirements,
 ) raises -> ResolvedCollectionSnapshot:
     var collection = load_collection_manifest(collection_root)
     var snapshot = load_snapshot_manifest(
@@ -339,6 +345,11 @@ def load_resolved_collection_snapshot(
 
         var loaded_search_artifacts = List[LoadedSearchArtifact]()
         for search_artifact in segment.search_artifacts:
+            if not requirements.should_load_search_artifact_family(
+                search_artifact.family
+            ):
+                continue
+
             var stored_centroid_postings_index = empty_stored_centroid_posting_index(
                 segment.model_name,
                 segment.vector_scalar_name,
@@ -413,7 +424,9 @@ def load_resolved_collection_snapshot(
                 )
             )
 
-        var has_text_corpus = sealed_segment_has_text_corpus(segment)
+        var has_text_corpus = (
+            requirements.load_text_corpus and sealed_segment_has_text_corpus(segment)
+        )
         var stored_text_corpus = empty_stored_document_text_corpus(
             segment.collection_id,
             segment.segment_id,
@@ -440,3 +453,13 @@ def load_resolved_collection_snapshot(
 
     require_snapshot_stats_match_loaded_segments(snapshot, loaded_segments)
     return ResolvedCollectionSnapshot(collection, snapshot, loaded_segments)
+
+
+def load_resolved_collection_snapshot(
+    collection_root: Path, snapshot_id: SnapshotId
+) raises -> ResolvedCollectionSnapshot:
+    return load_resolved_collection_snapshot(
+        collection_root,
+        snapshot_id,
+        load_all_snapshot_requirements(),
+    )
