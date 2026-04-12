@@ -64,6 +64,9 @@ The public model should stay centered on:
 - explicit layouts
 - MaxSim semantics
 
+In other words, the primitive is token-level MaxSim over explicit query and
+document groups, not a generic rerank hook with hidden structure.
+
 Reason:
 - those are the invariants that control retrieval quality, index size, memory
   cost, and latency
@@ -211,7 +214,7 @@ scores = kayak.maxsim(
 
 The primary use cases are:
 - research code that wants late interaction as a first-class abstraction
-- offline evaluation and reranking pipelines
+- offline evaluation and explicit candidate-window rescoring pipelines
 - exact local validation against a reference backend
 - application code that wants retrieval semantics without directly depending on
   the whole hosted engine
@@ -269,7 +272,7 @@ The near-term plan for Kayak Python should be:
    fragile.
 
 4. Add only a small number of core operations.
-   Suggested center: `pack`, `to_layout`, `maxsim`, `search`, `rerank`.
+   Suggested center: `pack`, `to_layout`, `select`, `maxsim`, `search`.
    Reason: a small API is easier to make coherent and stable.
 
 5. Add a remote client layer only after the hosted service contract stabilizes.

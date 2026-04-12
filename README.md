@@ -24,7 +24,7 @@ The current scaffold is intentionally narrow:
 - `kayak/scoring/`: exact MaxSim scoring kernels
 - `kayak/runtime/`: backend boundary, CPU backend first
 - `kayak/search/`: top-k search orchestration
-- `kayak/verifier/`: optional candidate-window reranking and verifier pipeline
+- `kayak/verifier/`: optional candidate-window rescoring and verifier pipeline
 - `kayak/benchmarks/`: deterministic workload profiles and proxy benchmark tasks
 - `kayak/eval/`: judged tasks and lightweight retrieval metrics
 - `kayak/interop/`: Python bridge for external encoders and real public subsets
@@ -87,8 +87,10 @@ package layout.
 
 What it owns:
 - explicit `LateQuery`, `LateDocuments`, `LateIndex`, and `LateScores` objects
+- explicit `LateQueryBatch` plus batch scoring/search helpers
 - explicit layout conversions for `flat_dim128` queries and `hybrid_flat_dim128` indexes
 - exact `maxsim` and `search` operations over those objects
+- backend capability inspection through `available_backends()` and `backend_info(...)`
 - NumPy and PyTorch input ergonomics without pretending the data is a dense `B x T x D` tensor problem
 - a pip-installable Python package surface rooted at `import kayak`
 
@@ -107,13 +109,21 @@ Current packaging boundary:
 - when Mojo is available at build time, repo-head builds also bundle
   `kayak_bridge/_artifacts/kayak.mojopkg`
 - the current package still expects a local Mojo toolchain at runtime for `mojo_exact_cpu`
-- fresh-consumer validation on `2026-04-12` verified published `kayak 0.1.1` for `numpy_reference` through:
+- early fresh-consumer validation on `2026-04-12` verified published `kayak 0.1.1` for `numpy_reference` through:
   - `python -m pip install kayak` in a fresh Python `3.11` environment
   - `uv add kayak` in a fresh project constrained to Python `>=3.11,<3.12`
   - `pixi add --pypi kayak` in a fresh Pixi project with `python=3.11`
 - plain `pixi add kayak` did not work because no conda package was found for `kayak`
 - the published package did not contain `kayak_bridge/_artifacts/kayak.mojopkg`
 - because of that missing artifact, `mojo_exact_cpu` failed after published installs, including in a fresh Pixi environment that already had `mojo`
+- follow-up fresh-consumer validation on `2026-04-12` then verified published
+  `kayak 0.1.2` for `mojo_exact_cpu` through:
+  - `python -m pip install kayak` in an environment that already had a usable
+    `mojo` CLI
+  - `pixi add --pypi kayak` in a fresh Pixi project with `python=3.11` and
+    `mojo`
+- `uv add kayak` remains verified for `numpy_reference`; `mojo_exact_cpu` has
+  not yet been re-verified through that consumer path
 - local repo-head validation on `2026-04-12` verified `uv build` produced:
   - an sdist that includes the top-level `kayak/` Mojo sources
   - a wheel that includes both `kayak_bridge/_artifacts/kayak.mojopkg` and

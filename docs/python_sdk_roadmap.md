@@ -11,6 +11,17 @@ It is intentionally product-first:
 For the mission and philosophy behind this plan, see
 [docs/python_sdk_charter.md](python_sdk_charter.md).
 
+## Current Status
+
+As of `2026-04-12`, the first SDK pass of this roadmap is complete:
+- Phase 1 exit criteria are satisfied
+- Phase 2 ergonomics additions are implemented and tested
+- Phase 3 SDK-versus-engine boundary docs are in place
+- Phase 4 has an initial measured fast path for batched Mojo scoring
+
+Future work can still deepen the fast path, but the current roadmap items now
+have verified evidence instead of only intent.
+
 ## Guiding Decision
 
 Build `kayak` as the local Python late-interaction SDK first.
@@ -38,6 +49,9 @@ Why this matters:
 - the next work should stabilize and sharpen that SDK instead of redefining it
 
 ## Phase 1: Stabilize The Core SDK
+
+Status:
+- completed on `2026-04-12`
 
 Goal:
 - make `kayak` a small, coherent, trustworthy Python programming surface
@@ -68,15 +82,23 @@ Exit criteria:
 - `pixi add --pypi kayak` supports the reference path in a fresh Pixi project
 - the docs clearly distinguish the public SDK from internal engine modules
 
+Verified evidence:
+- [python/tests/test_public_api_contract.py](../python/tests/test_public_api_contract.py)
+- [python/tests/test_python_sdk_docs.py](../python/tests/test_python_sdk_docs.py)
+- install-path validation recorded in [docs/python_sdk.md](python_sdk.md)
+
 ## Phase 2: Improve Ergonomics Without Hiding Structure
+
+Status:
+- completed on `2026-04-12`
 
 Goal:
 - make the SDK feel better to use without turning it into implicit magic
 
 Likely additions:
-- first-class reranking helpers
 - explicit batch helpers where shapes remain readable
 - backend capability introspection
+- explicit candidate-window subsetting instead of a hidden rerank primitive
 - clearer conversion helpers for NumPy and PyTorch inputs
 - more runnable examples built around real late-interaction workflows
 
@@ -90,7 +112,19 @@ Exit criteria:
   choices
 - examples and tests cover the new ergonomics directly
 
+Verified evidence:
+- public exports now include `LateQueryBatch`, `query_batch`, `maxsim_batch`,
+  `search_batch`, `available_backends`, and `backend_info`
+- [python/tests/test_batch_api.py](../python/tests/test_batch_api.py)
+- [python/examples/query_batch.py](../python/examples/query_batch.py)
+- [python/examples/backend_info.py](../python/examples/backend_info.py)
+- explicit candidate-window subsetting is available through
+  `LateIndex.select(...)`
+
 ## Phase 3: Separate SDK And Engine Concerns Cleanly
+
+Status:
+- completed on `2026-04-12` for the current public SDK boundary
 
 Goal:
 - keep the public Python SDK usable on its own while allowing a richer engine
@@ -117,7 +151,16 @@ Exit criteria:
 - internal engine modules can evolve without changing the `kayak` import
   contract
 
+Verified evidence:
+- [docs/python_sdk_charter.md](python_sdk_charter.md)
+- [docs/python_sdk.md](python_sdk.md)
+- [python/kayak/__init__.py](../python/kayak/__init__.py)
+- [python/kayak_bridge/__init__.py](../python/kayak_bridge/__init__.py)
+
 ## Phase 4: Deepen The Fast Path
+
+Status:
+- initial fast-path step completed on `2026-04-12`
 
 Goal:
 - improve the Mojo-backed path without making it a hard prerequisite for SDK
@@ -136,6 +179,21 @@ Constraints:
 Exit criteria:
 - optimized paths have matching-reference tests
 - performance comparisons are backed by reproducible benchmark commands
+
+Verified evidence:
+- shared-index batch dispatch for `mojo_exact_cpu` reuses the loaded Mojo
+  module and precomputed index payload across all queries in a batch
+- [python/tests/test_batch_api.py](../python/tests/test_batch_api.py) now
+  differentially covers both packed and `hybrid_flat_dim128` Mojo paths
+- [python/ordeal_tests/test_python_sdk_chaos.py](../python/ordeal_tests/test_python_sdk_chaos.py)
+  exercises batch scoring in both NumPy-only and Mojo-enabled runs
+- reproducible benchmark commands now exist:
+  - `pixi run bench_python_batch_maxsim_naive_raw`
+  - `pixi run bench_python_batch_maxsim_shared_raw`
+  - `pixi run bench_python_batch_maxsim_naive`
+  - `pixi run bench_python_batch_maxsim_shared`
+- recorded trace:
+  [docs/traces/2026-04-12_python_sdk_batch_fast_path.md](traces/2026-04-12_python_sdk_batch_fast_path.md)
 
 ## Deferred Until The Service Boundary Is Ready
 

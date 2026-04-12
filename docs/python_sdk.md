@@ -40,10 +40,17 @@ What is verified:
 - the public API supports two explicit backends:
   - `numpy_reference`
   - `mojo_exact_cpu`
+- the public API supports explicit query batches via `LateQueryBatch`,
+  `query_batch`, `maxsim_batch`, and `search_batch`
+- the public API exposes backend capability inspection through
+  `available_backends()` and `backend_info(...)`
+- candidate-window rescoring can stay explicit through `LateIndex.select(...)`
+  plus `maxsim(...)` instead of a hidden rerank primitive
 
 What is not claimed:
-- a published package whose `mojo_exact_cpu` backend works in a fresh consumer
-  install
+- a published package whose `mojo_exact_cpu` backend works without a local
+  Mojo CLI in the consumer environment
+- `mojo_exact_cpu` verified across every published install path
 - plain `pixi add kayak` through conda channels
 - a runtime without a local Mojo toolchain for `mojo_exact_cpu`
 - a clean open-source split between the Python SDK and the proprietary engine
@@ -101,8 +108,8 @@ pixi run python -m ensurepip --upgrade
 pixi run python -m pip install /absolute/path/to/dist/kayak-<version>-py3-none-any.whl
 ```
 
-Important current boundary from fresh consumer-repo validation on `2026-04-12`
-against published `kayak 0.1.1`:
+Important historical boundary from early fresh-consumer validation on
+`2026-04-12` against published `kayak 0.1.1`:
 - `python -m pip install kayak` is verified for `numpy_reference`
 - `uv add kayak` is verified for `numpy_reference` when the consumer project is
   pinned to Python `>=3.11,<3.12`
@@ -112,6 +119,17 @@ against published `kayak 0.1.1`:
 - because of that missing artifact, `mojo_exact_cpu` did not work after any of
   the published-package installs, including a fresh Pixi environment that
   already had `mojo`
+
+Important current boundary from follow-up fresh-consumer validation on
+`2026-04-12` against published `kayak 0.1.2`:
+- `python -m pip install kayak` is verified for both `numpy_reference` and
+  `mojo_exact_cpu` when the consumer environment already has a usable `mojo`
+  CLI
+- `pixi add --pypi kayak` is verified for both `numpy_reference` and
+  `mojo_exact_cpu` when the consumer environment already has `python=3.11` and
+  `mojo`
+- `uv add kayak` remains verified for `numpy_reference`; `mojo_exact_cpu` has
+  not yet been re-verified through that path
 
 Important current boundary from fresh local-source consumer validation:
 - the Pixi local-package path is verified for `numpy_reference`
@@ -205,7 +223,18 @@ index = documents.pack()
 
 scores = kayak.maxsim(query, index, backend=kayak.NUMPY_REFERENCE_BACKEND)
 hits = kayak.search(query, index, k=2, backend=kayak.NUMPY_REFERENCE_BACKEND)
+
+candidate_index = index.select([hit.doc_id for hit in hits])
+candidate_scores = kayak.maxsim(
+    query,
+    candidate_index,
+    backend=kayak.NUMPY_REFERENCE_BACKEND,
+)
 ```
+
+That is the intended candidate-window story for the SDK: explicit selection
+plus exact MaxSim, not a separate primitive that hides the late-interaction
+structure.
 
 Runnable example:
 - [python/examples/quickstart.py](../python/examples/quickstart.py)
@@ -250,6 +279,49 @@ Runnable example:
 - still requires a usable Mojo CLI in the consumer environment when callers
   opt into the Mojo backend
 
+## Measured Batch Fast Path
+
+The currently measured Python-side fast path is batched `mojo_exact_cpu`
+scoring against a shared index payload.
+
+Verified raw benchmark commands:
+
+```bash
+pixi run bench_python_batch_maxsim_naive_raw
+pixi run bench_python_batch_maxsim_shared_raw
+```
+
+Verified quiet-wrapper commands:
+
+```bash
+pixi run bench_python_batch_maxsim_naive
+pixi run bench_python_batch_maxsim_shared
+```
+
+Measured shape in the current benchmark script:
+- `query_layout = flat_dim128`
+- `index_layout = hybrid_flat_dim128`
+- `batch_size = 24`
+- `query_vector_count = 6`
+- `document_count = 192`
+- `document_vector_count = 10`
+
+Observed result from the forced quiet-wrapper run recorded on `2026-04-12`:
+- naive per-query loop median run mean: `0.4388567123998655 s`
+- shared batch dispatch median run mean: `0.32399859379511325 s`
+- shared batch dispatch was about `1.35x` faster, or about `26.2%` lower time
+
+Important caveat:
+- the quiet wrapper had to run with `--force` because competing host CPU stayed
+  far above the default threshold
+- that makes the result directional rather than decision-quality for absolute
+  CPU claims
+- the direction is still meaningful because both modes were measured under the
+  same workload and both preserved score agreement against the NumPy reference
+
+Recorded trace:
+- [docs/traces/2026-04-12_python_sdk_batch_fast_path.md](traces/2026-04-12_python_sdk_batch_fast_path.md)
+
 ## Optional Ordeal Battle Test
 
 The repo now carries an optional Ordeal-based chaos test for the Python SDK at
@@ -258,8 +330,10 @@ plus a default [ordeal.toml](../ordeal.toml).
 
 This test is intentionally scoped to the Python SDK layer:
 - explicit fixture switches
+- explicit query-batch scoring
 - packed versus hybrid layout scoring
 - stable top-k behavior
+- backend capability invariants
 - optional NumPy versus Mojo backend agreement when
   `KAYAK_ORDEAL_ENABLE_MOJO=1`
 

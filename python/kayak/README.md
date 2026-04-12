@@ -5,6 +5,10 @@
 Its job is to make late interaction programmable in normal Python while keeping
 query/document vector counts, layouts, and MaxSim semantics explicit.
 
+Fundamentally, late interaction here means token-level MaxSim over explicit
+query and document vector groups. The SDK does not hide that structure behind a
+fake dense tensor API.
+
 It gives you explicit objects for:
 - queries
 - query batches
@@ -175,6 +179,17 @@ index = kayak.documents(
 scores_batch = kayak.maxsim_batch(batch, index)
 ```
 
+Candidate-window rescoring stays explicit:
+
+```python
+hits = kayak.search(query, index, k=10)
+candidate_index = index.select([hit.doc_id for hit in hits])
+candidate_scores = kayak.maxsim(query, candidate_index)
+```
+
+That is still late interaction as a primitive: explicit selection plus MaxSim,
+not a hidden rerank mode.
+
 ## Layouts
 
 Kayak keeps layout changes explicit.
@@ -277,6 +292,7 @@ It is a late-interaction retrieval API with:
 - ragged query and document vector counts
 - explicit layout conversion
 - exact MaxSim scoring
+- explicit candidate-window selection before rescoring
 - explicit search backends
 
 That makes it suitable for code that wants retrieval semantics first, while
