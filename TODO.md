@@ -76,9 +76,24 @@ In plain terms:
 - `BrowseComp-Plus` is materially harder and exposes real ranking pressure.
 - For the current gold-hard query `772`, the answer-bearing document is already in the top-`20` candidate window and sits at rank `18`, not deep in the corpus.
 - A BrowseComp-only text-sidecar prototype can move that document from rank `18` to rank `4`, improving the gold slice, but it is not yet a globally good default.
+- the new synthetic faithfulness frontier shows that on the deterministic scale
+  slice:
+  - `document_proxy` and `centroid_postings` can retain exact-reference recall
+    at very small `candidate_k`
+  - tighter head-capped variants can cut stage-1 storage much harder, but can
+    also collapse faithfulness
+- the new BrowseComp-Plus gold frontier shows that on the current `90`-document
+  public slice:
+  - `document_proxy` is the cheapest full-recall point that was measured
+  - the current centroid-family variants do not beat exact latency there once
+    they approach full recall
+  - judged `nDCG@10` can exceed the exact baseline before exact-reference
+    candidate recall reaches `1.0`
 
 Evidence:
 - [docs/traces/2026-04-12_limit_browsecomp_public_slices.md](docs/traces/2026-04-12_limit_browsecomp_public_slices.md)
+- [docs/traces/2026-04-12_single_core_faithfulness_frontier.md](docs/traces/2026-04-12_single_core_faithfulness_frontier.md)
+- [docs/traces/2026-04-12_browsecomp_plus_gold_faithfulness_frontier.md](docs/traces/2026-04-12_browsecomp_plus_gold_faithfulness_frontier.md)
 
 ### Inferences we are making
 
@@ -87,6 +102,8 @@ Evidence:
 - Optional text sidecars matter, but they should follow storage and query-contract design rather than precede it.
 - the next benchmark step should measure hard stage-1 recall pressure, not only
   "beat dense retrieval on an easy enough first-stage task"
+- the next native-candidate iteration should be justified by a win on a harder
+  public-slice frontier, not only by synthetic asymptotics
 
 Related strategic note:
 - [docs/late_interaction_2030.md](docs/late_interaction_2030.md)

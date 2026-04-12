@@ -180,6 +180,24 @@ through the real collection/search-plan stack. The goal is narrower than a
 headline performance claim: it gives the repo one verified local scaling curve
 before any stronger efficiency rhetoric.
 
+There is now also a faithfulness-frontier benchmark family that keeps exact
+stage-2 rescoring fixed while sweeping stage-1 knobs such as `candidate_k` and
+`posting_cap`. That benchmark exists in two forms:
+- a deterministic synthetic single-core frontier
+- a `BrowseComp-Plus` gold public-slice mirror
+
+Reason:
+- a latency claim without exact-reference candidate recall is incomplete
+- a candidate-recall claim without judged quality and stage-1 storage is also
+  incomplete
+
+The new frontier summaries therefore report all of these together:
+- candidate-generation latency
+- end-to-end search latency
+- candidate recall against exact full scan
+- judged retrieval quality
+- stage-1 bytes, tokens, and vectors
+
 The included slices are inspired by public benchmark families that are relevant to late interaction:
 - `LoTTE`: domain-specific forum retrieval in the ColBERT ecosystem
 - `BEIR`: heterogeneous factual retrieval across domains
@@ -447,6 +465,8 @@ pixi run bench_browsecomp_plus_clause
 pixi run bench_real_subset_policies
 pixi run bench_real_subset_breakdown
 pixi run bench_single_core_scale
+pixi run bench_single_core_faithfulness_frontier
+pixi run bench_browsecomp_plus_gold_faithfulness_frontier
 ```
 
 Materialize the BrowseComp-Plus task json explicitly if you want to separate the
@@ -459,6 +479,10 @@ pixi run build_browsecomp_plus_task_json
 That command now materializes both BrowseComp-Plus retrieval variants:
 - evidence qrels
 - gold qrels
+
+The first `bench_browsecomp_plus_gold_faithfulness_frontier` run in a clean
+checkout may also download the public subset inputs and the model assets needed
+by the Python task builder before the Mojo benchmark starts.
 
 Run the curated mutation-smoke check:
 

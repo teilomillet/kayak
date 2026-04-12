@@ -79,9 +79,20 @@ Verified after the first version of this note:
   corpus sizes
 - that benchmark already shows a measurable latency-recall tradeoff between
   exact full scan, `document_proxy`, and capped native candidate engines
+- there is now also one frontier benchmark that sweeps `candidate_k` and
+  `posting_cap` while keeping exact-reference recall, judged quality, and
+  stage-1 storage explicit in the same artifact
+- there is now one public BrowseComp-Plus gold mirror of that frontier
+  benchmark, and it shows a more constrained result:
+  - `document_proxy` reaches the cheapest full-recall point on that small
+    public slice
+  - the current centroid-family variants do not beat exact latency there once
+    they approach full recall
 
 Evidence:
 - [docs/traces/2026-04-12_single_core_scale.md](traces/2026-04-12_single_core_scale.md)
+- [docs/traces/2026-04-12_single_core_faithfulness_frontier.md](traces/2026-04-12_single_core_faithfulness_frontier.md)
+- [docs/traces/2026-04-12_browsecomp_plus_gold_faithfulness_frontier.md](traces/2026-04-12_browsecomp_plus_gold_faithfulness_frontier.md)
 
 ## What Kayak Should Change
 
@@ -131,7 +142,8 @@ Not yet locally verified:
 - vectors/document pruning laws anywhere near `sqrt(m)` in the regimes we care
   about
 - asymptotic native-engine scaling on harder or larger benchmark families well
-  beyond the current synthetic sweep
+  beyond the current synthetic sweep and one `90`-document BrowseComp gold
+  mirror
 - a benchmark family clearly harder than today's small public slices
 - a stronger expensive ceiling that is implemented and compared locally
 

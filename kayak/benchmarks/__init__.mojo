@@ -10,6 +10,12 @@ from .candidate_window_json import (
     candidate_window_sweep_summaries_json,
     standard_candidate_window_sizes,
 )
+from .faithfulness_frontier_json import (
+    FaithfulnessFrontierSummary,
+    build_faithfulness_frontier_summary_for_plan,
+    faithfulness_frontier_summaries_json,
+    faithfulness_frontier_summary_json,
+)
 from .policy_json import (
     BackendPolicyBenchmarkSummary,
     backend_policy_benchmark_summaries_json,
@@ -19,6 +25,12 @@ from .proxy_eval_json import (
     ProxyTaskEvaluationSummary,
     build_proxy_task_evaluation_summary,
     proxy_task_evaluation_summaries_json,
+)
+from .posting_cap_json import (
+    PostingCapSweepSummary,
+    build_posting_cap_sweep_summary_for_plan,
+    posting_cap_sweep_summaries_json,
+    standard_posting_cap_sizes,
 )
 from .fixtures import (
     ExactSearchFixture,

@@ -185,7 +185,7 @@ Exit criteria:
 ### Phase I4: Native Candidate Engine Asymptotics
 
 Status:
-- `Instrumented and partially measured on the synthetic scale slice`
+- `Implemented and locally measured on one synthetic scale slice plus one public hard-recall slice`
 
 Claim:
 - native stage-1 late-interaction engines can scale asymptotically better than
@@ -215,10 +215,21 @@ Current evidence:
   - `centroid_postings`
   - `centroid_heads`
   - `centroid_postings_head_auto`
-- it already exposed a real tradeoff:
-  - capped native engines stayed fast
-  - capped native engines also lost candidate recall as corpus size increased
-- broader public-benchmark confirmation is still pending
+- the synthetic faithfulness frontier now makes that tradeoff explicit across
+  `candidate_k` and `posting_cap`:
+  - [docs/traces/2026-04-12_single_core_faithfulness_frontier.md](traces/2026-04-12_single_core_faithfulness_frontier.md)
+  - `document_proxy` and `centroid_postings` recover full recall on the
+    deterministic synthetic slice at very small `candidate_k`
+  - tighter head-capped plans cut stage-1 bytes much harder, but they can also
+    collapse candidate recall
+- the BrowseComp-Plus gold frontier mirror now gives one harder public check:
+  - [docs/traces/2026-04-12_browsecomp_plus_gold_faithfulness_frontier.md](traces/2026-04-12_browsecomp_plus_gold_faithfulness_frontier.md)
+  - `document_proxy` reaches full recall at `candidate_k = 40` and stays
+    faster than exact on the `90`-document gold slice
+  - the current centroid-family plans need much larger budgets and do not beat
+    exact latency on that small public slice
+- broader public-benchmark confirmation beyond that one small public slice is
+  still pending
 
 ### Phase I5: Harder-Recall Benchmark Selection
 
@@ -288,6 +299,8 @@ continues.
   sweep.
 - Do not treat judged retrieval gains as equivalent to candidate recall against
   exact stage 2.
+- Do not generalize from one `90`-document BrowseComp gold slice to broader
+  native-engine asymptotics.
 - Do not present current public hard-recall slices as the final benchmark bar.
 
 ## Decision Rule
