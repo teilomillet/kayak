@@ -17,6 +17,7 @@ from kayak import (
     best_effort_faithfulness_policy,
     candidate_generation_for_plan,
     centroid_heads_search_plan,
+    centroid_postings_flat_search_plan,
     centroid_posting_blockmax_scores_for_segment_profiled,
     centroid_postings_blockmax_search_plan,
     centroid_postings_head_auto_search_plan,
@@ -277,6 +278,27 @@ def append_plan_measurements(
                 task,
                 snapshot,
                 centroid_postings_plan,
+            ),
+        )
+    )
+
+    var centroid_postings_flat_plan = centroid_postings_flat_search_plan(
+        task.k,
+        candidate_k,
+        best_effort_faithfulness_policy(),
+    )
+    print("== centroid_postings_flat ==")
+    measurements.append(
+        make_zero_profile_measurement(
+            dataset_name,
+            task.slice_name,
+            "centroid_postings_flat",
+            candidate_k,
+            benchmark_candidate_generation_mean_seconds(
+                backend,
+                task,
+                snapshot,
+                centroid_postings_flat_plan,
             ),
         )
     )

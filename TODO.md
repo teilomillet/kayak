@@ -213,10 +213,13 @@ Immediate TODOs:
 Current interpretation:
 - `document_proxy` is now the light proxy-vector baseline.
 - `centroid_postings` is now the first search-native centroid/posting baseline.
+- `centroid_postings_flat` is now the tighter semantics-preserving native
+  follow-on for that centroid/posting baseline.
 - approximate plans now carry explicit faithfulness policy rather than silently
   pretending to be exact
 - The next heavier engine step should be a tighter WARP/GEM-style native
-  engine path, not another round of heuristic reranking.
+  engine path built on the flat/native layout, not another round of heuristic
+  reranking.
 
 ## Priority 3: Multi-Tenant Serving And Filter-Aware Retrieval
 

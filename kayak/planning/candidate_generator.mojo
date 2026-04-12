@@ -12,6 +12,7 @@ struct CandidateGenerator(Copyable):
             kind != "exact_full_scan"
             and kind != "document_proxy"
             and kind != "centroid_postings"
+            and kind != "centroid_postings_flat"
             and kind != "centroid_heads"
             and kind != "centroid_postings_head"
             and kind != "centroid_postings_head_auto"
@@ -33,6 +34,10 @@ def document_proxy_candidate_generator() raises -> CandidateGenerator:
 
 def centroid_postings_candidate_generator() raises -> CandidateGenerator:
     return CandidateGenerator("centroid_postings")
+
+
+def centroid_postings_flat_candidate_generator() raises -> CandidateGenerator:
+    return CandidateGenerator("centroid_postings_flat")
 
 
 def centroid_heads_candidate_generator() raises -> CandidateGenerator:

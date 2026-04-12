@@ -92,6 +92,9 @@ def test_centroid_postings_roundtrip_preserves_summary_arrays() raises:
     assert_equal(loaded.index.centroid_token_counts[1], 1)
     assert_equal(loaded.index.total_centroid_token_count, 4)
     assert_equal(loaded.index.block_size, 16)
+    assert_equal(len(loaded.index.flat_centroid_values), 4)
+    assert_equal(loaded.index.flat_centroid_values[0], 0.8333333)
+    assert_equal(loaded.index.flat_centroid_values[1], 0.16666667)
     assert_equal(loaded.index.centroid_block_offsets[0], 0)
     assert_equal(loaded.index.centroid_block_offsets[1], 1)
     assert_equal(loaded.index.centroid_block_offsets[2], 2)
@@ -124,6 +127,7 @@ def test_centroid_postings_loads_legacy_layout_without_summary_files() raises:
     assert_equal(loaded.index.centroid_token_counts[1], 1)
     assert_equal(loaded.index.total_centroid_token_count, 4)
     assert_equal(loaded.index.block_size, 16)
+    assert_equal(len(loaded.index.flat_centroid_values), 4)
     assert_equal(loaded.index.total_block_count, 2)
 
 

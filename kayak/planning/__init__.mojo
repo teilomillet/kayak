@@ -3,6 +3,7 @@ from .candidate_generator import (
     CandidateGenerator,
     centroid_heads_candidate_generator,
     centroid_postings_candidate_generator,
+    centroid_postings_flat_candidate_generator,
     centroid_postings_head_auto_candidate_generator,
     centroid_postings_blockmax_candidate_generator,
     centroid_postings_head_candidate_generator,
@@ -42,9 +43,12 @@ from .centroid_postings_blockmax_stage import (
     centroid_posting_blockmax_scores_for_segment,
     centroid_posting_blockmax_scores_for_segment_profiled,
 )
+from .centroid_postings_stage import centroid_posting_scores_for_segment
+from .centroid_postings_flat_stage import centroid_posting_flat_scores_for_segment
 from .search_plan import (
     SearchPlan,
     centroid_heads_search_plan,
+    centroid_postings_flat_search_plan,
     centroid_postings_head_auto_search_plan,
     centroid_postings_blockmax_search_plan,
     centroid_postings_imputed_search_plan,

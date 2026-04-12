@@ -32,6 +32,7 @@ struct CentroidPostingBlocks(Copyable):
 struct CentroidPostingIndex(Copyable):
     var centroid_dims: List[Int]
     var centroid_vectors: List[List[VectorScalar]]
+    var flat_centroid_values: List[VectorScalar]
     var posting_offsets: List[Int]
     var posting_doc_indices: List[Int]
     var posting_weights: List[Int]
@@ -84,9 +85,13 @@ struct CentroidPostingIndex(Copyable):
             centroid_block_offsets,
             block_max_weights,
         )
+        var flat_centroid_values = flatten_centroid_vectors(
+            centroid_vectors, vector_dim
+        )
 
         self.centroid_dims = centroid_dims^
         self.centroid_vectors = centroid_vectors^
+        self.flat_centroid_values = flat_centroid_values^
         self.posting_offsets = posting_offsets^
         self.posting_doc_indices = posting_doc_indices^
         self.posting_weights = posting_weights^
@@ -208,6 +213,18 @@ def sum_ints(read values: List[Int]) -> Int:
         total += value
 
     return total
+
+
+def flatten_centroid_vectors(
+    read centroid_vectors: List[List[VectorScalar]], vector_dim: Int
+) -> List[VectorScalar]:
+    var flat_values = List[VectorScalar]()
+
+    for centroid_vector in centroid_vectors:
+        for value_index in range(vector_dim):
+            flat_values.append(centroid_vector[value_index])
+
+    return flat_values^
 
 
 def derive_centroid_document_counts(read posting_offsets: List[Int]) -> List[Int]:
