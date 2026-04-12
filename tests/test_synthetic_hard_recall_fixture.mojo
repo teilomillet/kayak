@@ -13,13 +13,22 @@ from kayak import (
     search_collection_for_plan,
 )
 from kayak.benchmarks import (
+    SyntheticHardRecallFixture,
     SyntheticHardRecallProfile,
     build_stage_aware_search_summary,
     make_synthetic_hard_recall_fixture,
 )
-from kayak.collections import ensure_one_segment_collection_mirror
+from kayak.collections import (
+    ResolvedCollectionSnapshot,
+    ensure_one_segment_collection_mirror,
+)
 from kayak.planning import (
+    SearchPlan,
     best_effort_faithfulness_policy,
+    centroid_postings_blockmax_search_plan,
+    centroid_postings_head_auto_search_plan,
+    centroid_postings_head_search_plan,
+    centroid_postings_imputed_search_plan,
     document_proxy_search_plan,
     exact_full_scan_search_plan,
 )
@@ -34,6 +43,23 @@ def unique_collection_root(prefix: String) -> Path:
         if not root.exists():
             return root
         suffix += 1
+
+
+def assert_stage_aware_plan_runs(
+    read fixture: SyntheticHardRecallFixture,
+    read snapshot: ResolvedCollectionSnapshot,
+    read plan: SearchPlan,
+    read profile: SyntheticHardRecallProfile,
+) raises:
+    var summary = build_stage_aware_search_summary(
+        ExactCpuBackend(),
+        fixture.stored_task,
+        snapshot,
+        plan,
+    )
+    assert_equal(summary.query_count, profile.query_count)
+    assert_equal(summary.candidate_stage_vector_count > 0, True)
+    assert_equal(summary.mean_candidate_recall_at_final_k >= 0.0, True)
 
 
 def test_synthetic_hard_recall_exact_full_scan_is_perfect() raises:
@@ -194,6 +220,65 @@ def test_synthetic_hard_recall_exact_rerank_recovers_when_candidates_cover_oracl
     assert_equal(explain.candidate_recall_at_final_k, 1.0)
     assert_equal(evaluation.recall_at_k, 1.0)
     assert_equal(evaluation.primary_value, 1.0)
+
+
+def test_synthetic_hard_recall_native_generators_smoke() raises:
+    var profile = SyntheticHardRecallProfile(
+        "synthetic_hard_recall",
+        "test_native_generators",
+        "Small shared-slot conjunction fixture for native-generator smoke coverage.",
+        4,
+        3,
+        6,
+        12,
+        2,
+        4,
+        2,
+        16,
+    )
+    var fixture = make_synthetic_hard_recall_fixture(profile)
+    var collection_root = ensure_one_segment_collection_mirror(
+        unique_collection_root("kayak-synthetic-hard-recall-native-generators"),
+        CollectionId("synthetic-hard-recall-native-generators"),
+        TenantId("public"),
+        NamespaceId("benchmark"),
+        SnapshotId("snapshot-0001"),
+        1,
+        fixture.stored_index,
+        0,
+        0,
+        profile.centroid_head_posting_cap,
+    )
+    var snapshot = load_resolved_collection_snapshot(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+    )
+    var task = fixture.stored_task.task.copy()
+    var policy = best_effort_faithfulness_policy()
+    assert_stage_aware_plan_runs(
+        fixture,
+        snapshot,
+        centroid_postings_head_search_plan(task.k, 8, policy),
+        profile,
+    )
+    assert_stage_aware_plan_runs(
+        fixture,
+        snapshot,
+        centroid_postings_head_auto_search_plan(task.k, 8, policy),
+        profile,
+    )
+    assert_stage_aware_plan_runs(
+        fixture,
+        snapshot,
+        centroid_postings_blockmax_search_plan(task.k, 8, policy),
+        profile,
+    )
+    assert_stage_aware_plan_runs(
+        fixture,
+        snapshot,
+        centroid_postings_imputed_search_plan(task.k, 8, policy),
+        profile,
+    )
 
 
 def main() raises:

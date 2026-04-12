@@ -144,9 +144,15 @@ The current plan families in that synthetic artifact are:
 - `centroid_postings`
 - `centroid_postings_flat`
 - `centroid_heads`
+- `centroid_postings_head`
+- `centroid_postings_head_auto`
+- `centroid_postings_blockmax`
+- `centroid_postings_imputed`
 
 This output is the current source of truth for:
 - how much candidate budget the tested stage-1 plans need to recover exact
   recall on a scalable conjunction-style family
 - how those recovery points move as corpus size grows from `1530` to `8288`
   documents while query width stays fixed
+- which tighter native generators fail to beat the current recovery frontier on
+  that family

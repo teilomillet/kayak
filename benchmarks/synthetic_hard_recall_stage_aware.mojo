@@ -6,6 +6,10 @@ from kayak import (
     best_effort_faithfulness_policy,
     centroid_heads_search_plan,
     centroid_postings_flat_search_plan,
+    centroid_postings_head_auto_search_plan,
+    centroid_postings_blockmax_search_plan,
+    centroid_postings_head_search_plan,
+    centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
     document_proxy_search_plan,
     exact_full_scan_search_plan,
@@ -145,6 +149,58 @@ def append_synthetic_hard_recall_summaries(
                     fixture.stored_task,
                     snapshot,
                     centroid_heads_search_plan(
+                        profile.final_k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                    ),
+                )
+            )
+            print_stage_aware_summary(summaries[len(summaries) - 1])
+            summaries.append(
+                build_stage_aware_search_summary(
+                    backend,
+                    fixture.stored_task,
+                    snapshot,
+                    centroid_postings_head_search_plan(
+                        profile.final_k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                    ),
+                )
+            )
+            print_stage_aware_summary(summaries[len(summaries) - 1])
+            summaries.append(
+                build_stage_aware_search_summary(
+                    backend,
+                    fixture.stored_task,
+                    snapshot,
+                    centroid_postings_head_auto_search_plan(
+                        profile.final_k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                    ),
+                )
+            )
+            print_stage_aware_summary(summaries[len(summaries) - 1])
+            summaries.append(
+                build_stage_aware_search_summary(
+                    backend,
+                    fixture.stored_task,
+                    snapshot,
+                    centroid_postings_blockmax_search_plan(
+                        profile.final_k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                    ),
+                )
+            )
+            print_stage_aware_summary(summaries[len(summaries) - 1])
+            summaries.append(
+                build_stage_aware_search_summary(
+                    backend,
+                    fixture.stored_task,
+                    snapshot,
+                    centroid_postings_imputed_search_plan(
                         profile.final_k,
                         candidate_k,
                         best_effort_faithfulness_policy(),

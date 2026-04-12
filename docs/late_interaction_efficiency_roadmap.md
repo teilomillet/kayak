@@ -289,8 +289,12 @@ Current evidence:
   - on the `1530`-document synthetic profile, `document_proxy`,
     `centroid_postings`, and `centroid_postings_flat` recover full recall only
     at `candidate_k = 64`
+  - `centroid_postings_imputed` matches that full-recall point on the same
+    slice, but it is slower
   - on the `8288`-document synthetic profile, those same plans recover full
     recall only at `candidate_k = 128`
+  - the head-capped and blockmax variants do not beat those recovery points on
+    the measured profiles
   - `centroid_heads` remains far below full recall even at `candidate_k = 128`
 - broader public-benchmark confirmation beyond the small public slices is still
   pending

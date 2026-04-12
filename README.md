@@ -209,8 +209,10 @@ roadmap:
     reranking
 - a scalable synthetic hard-recall family
   - compares exact full scan, `document_proxy`, `centroid_postings`,
-    `centroid_postings_flat`, and `centroid_heads` on shared-slot conjunction
-    workloads with explicit vector counts
+    `centroid_postings_flat`, `centroid_heads`,
+    `centroid_postings_head`, `centroid_postings_head_auto`,
+    `centroid_postings_blockmax`, and `centroid_postings_imputed`
+    on shared-slot conjunction workloads with explicit vector counts
 
 The included slices are inspired by public benchmark families that are relevant to late interaction:
 - `LoTTE`: domain-specific forum retrieval in the ColBERT ecosystem

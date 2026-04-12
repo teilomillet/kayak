@@ -38,6 +38,17 @@ Added:
 The regression test also verifies that exact reranking recovers full recall
 when the candidate set fully covers the exact oracle.
 
+The current synthetic benchmark entrypoint now evaluates:
+- `exact_full_scan`
+- `document_proxy`
+- `centroid_postings`
+- `centroid_postings_flat`
+- `centroid_heads`
+- `centroid_postings_head`
+- `centroid_postings_head_auto`
+- `centroid_postings_blockmax`
+- `centroid_postings_imputed`
+
 ## Command
 
 ```bash
@@ -88,9 +99,20 @@ Every query keeps `final_k = 2`.
   - stay at `0.0` candidate recall through `candidate_k = 16`
   - reach `0.25` at `candidate_k = 32`
   - recover to `1.0` only at `candidate_k = 64`
+- `centroid_postings_imputed`:
+  - also stays at `0.0` through `candidate_k = 16`
+  - reaches `0.25` at `candidate_k = 32`
+  - recovers to `1.0` at `candidate_k = 64`
+  - but is slower than the non-imputed full-recall paths on the same slice
 - `centroid_heads`:
   - stays at `0.0` through `candidate_k = 32`
   - reaches only `0.0833` at `candidate_k = 64` and `128`
+- `centroid_postings_head` and `centroid_postings_head_auto`:
+  - stay at `0.0` through `candidate_k = 32`
+  - reach only `0.0833` at `candidate_k = 64` and `128`
+- `centroid_postings_blockmax`:
+  - stays at `0.0` through `candidate_k = 16`
+  - reaches `0.25` only at `candidate_k = 128`
 
 ### `slots6_values4_docs8288`
 
@@ -102,9 +124,18 @@ Every query keeps `final_k = 2`.
 - `document_proxy`, `centroid_postings`, and `centroid_postings_flat`:
   - stay at `0.0` candidate recall through `candidate_k = 64`
   - recover to `1.0` only at `candidate_k = 128`
+- `centroid_postings_imputed`:
+  - also stays at `0.0` through `candidate_k = 64`
+  - recovers to `1.0` only at `candidate_k = 128`
+  - but is the slowest of the full-recall plans on this slice
 - `centroid_heads`:
   - stays at `0.0` through `candidate_k = 32`
   - reaches only `0.0625` at `candidate_k = 64` and `128`
+- `centroid_postings_head` and `centroid_postings_head_auto`:
+  - match the same weak `0.0625` ceiling at `candidate_k = 64` and `128`
+- `centroid_postings_blockmax`:
+  - stays at `0.0` through `candidate_k = 64`
+  - reaches only `0.0625` at `candidate_k = 128`
 
 ## What This Verifies
 
@@ -122,8 +153,14 @@ The most concrete frontier result is:
 - on the `1530`-document synthetic slice, `document_proxy`,
   `centroid_postings`, and `centroid_postings_flat` need `candidate_k = 64`
   to recover full recall
+- `centroid_postings_imputed` matches that same recovery point, but at higher
+  latency
 - on the `8288`-document synthetic slice, those same plans need
   `candidate_k = 128`
+- `centroid_postings_imputed` also needs `candidate_k = 128` there and remains
+  slower than the non-imputed full-recall plans
+- the head-capped and blockmax variants do not beat that recovery frontier on
+  the measured profiles
 
 ## What This Does Not Claim
 
