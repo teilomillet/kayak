@@ -145,6 +145,47 @@ def candidate_generation_for_plan[Backend: ExactScoringBackend](
             byte_size,
         )
 
+    if plan.candidate_generator.kind == "centroid_heads":
+        var vector_count = 0
+        var token_count = 0
+        var byte_size = 0
+
+        for segment in snapshot.segments:
+            if not segment.has_centroid_heads_index:
+                raise Error(
+                    "centroid_heads stage-1 requires a centroid heads sidecar for every segment"
+                )
+
+            vector_count += segment.stored_centroid_heads_index.index.centroid_count
+            token_count += segment.stored_centroid_heads_index.index.total_posting_count
+            byte_size += segment.stored_centroid_heads_index.artifact_byte_size
+
+            var scores = centroid_posting_scores_for_segment(
+                query.token_vectors,
+                segment.stored_centroid_heads_index.index,
+            )
+
+            for document_index in range(len(scores)):
+                insert_descending_collection_hit(
+                    hits,
+                    CollectionHit(
+                        segment.manifest.segment_id.value.copy(),
+                        segment.stored_index.index.doc_ids[document_index].copy(),
+                        scores[document_index],
+                    ),
+                    plan.candidate_budget.candidate_k,
+                )
+
+        return CandidateSet(
+            plan.candidate_generator.kind.copy(),
+            hits^,
+            snapshot.snapshot.stats.segment_count,
+            snapshot.snapshot.stats.document_count,
+            token_count,
+            vector_count,
+            byte_size,
+        )
+
     if plan.candidate_generator.kind == "centroid_postings_head":
         var vector_count = 0
         var token_count = 0
@@ -282,6 +323,27 @@ def final_hits_for_plan[Backend: ExactScoringBackend](
         candidate_set.hits,
         plan.candidate_budget.final_k,
     )
+
+
+def search_collection_for_plan[Backend: ExactScoringBackend](
+    read backend: Backend,
+    read query: EncodedQuery,
+    read snapshot: ResolvedCollectionSnapshot,
+    read plan: SearchPlan,
+) raises -> List[CollectionHit]:
+    var candidate_set = candidate_generation_for_plan(
+        backend,
+        query,
+        snapshot,
+        plan,
+    )
+    return final_hits_for_plan(
+        backend,
+        query,
+        snapshot,
+        candidate_set,
+        plan,
+    ).final_hits.copy()
 
 
 def final_hits_to_search_hits(

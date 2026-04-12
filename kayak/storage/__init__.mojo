@@ -17,6 +17,15 @@ from .centroid_postings_store import (
     load_stored_centroid_posting_index,
     save_stored_centroid_posting_index,
 )
+from .centroid_heads_store import (
+    CENTROID_HEADS_ARTIFACT_KIND,
+    build_stored_centroid_heads_index,
+    centroid_heads_index_exists,
+    centroid_heads_storage_byte_size,
+    ensure_stored_centroid_heads_index,
+    load_stored_centroid_heads_index,
+    save_stored_centroid_heads_index,
+)
 from .document_proxy_store import (
     DocumentProxyCacheEntry,
     build_stored_document_proxy_index,

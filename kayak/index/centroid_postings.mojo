@@ -281,6 +281,21 @@ def effective_centroid_budget(
     return requested_budget
 
 
+def effective_posting_cap(
+    requested_cap: Int, available_count: Int
+) raises -> Int:
+    if requested_cap <= 0:
+        raise Error("posting cap must be positive")
+
+    if available_count < 0:
+        raise Error("posting cap requires a non-negative available_count")
+
+    if requested_cap > available_count:
+        return available_count
+
+    return requested_cap
+
+
 def append_dim_descending_by_count(
     mut sorted_dims: List[Int],
     read token_counts_by_dim: List[Int],
@@ -433,6 +448,38 @@ def build_centroid_posting_index(
         for posting_index in range(len(sorted_postings.doc_indices)):
             posting_doc_indices.append(sorted_postings.doc_indices[posting_index])
             posting_weights.append(sorted_postings.weights[posting_index])
+
+        posting_offsets.append(len(posting_doc_indices))
+
+    return CentroidPostingIndex(
+        centroid_dims^,
+        centroid_vectors^,
+        posting_offsets^,
+        posting_doc_indices^,
+        posting_weights^,
+        index.vector_dim,
+        index.document_count,
+    )
+
+
+def build_centroid_head_index(
+    read index: CentroidPostingIndex, posting_cap: Int
+) raises -> CentroidPostingIndex:
+    var centroid_dims = index.centroid_dims.copy()
+    var centroid_vectors = index.centroid_vectors.copy()
+    var posting_offsets = [0]
+    var posting_doc_indices = List[Int]()
+    var posting_weights = List[Int]()
+
+    for centroid_index in range(index.centroid_count):
+        var start = index.posting_offsets[centroid_index]
+        var stop = index.posting_offsets[centroid_index + 1]
+        var available_count = stop - start
+        var capped_count = effective_posting_cap(posting_cap, available_count)
+
+        for posting_index in range(start, start + capped_count):
+            posting_doc_indices.append(index.posting_doc_indices[posting_index])
+            posting_weights.append(index.posting_weights[posting_index])
 
         posting_offsets.append(len(posting_doc_indices))
 

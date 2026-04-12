@@ -45,11 +45,25 @@ def encode_optional_centroid_postings_root(centroid_postings_root: String) -> St
     return centroid_postings_root.copy()
 
 
+def encode_optional_centroid_heads_root(centroid_heads_root: String) -> String:
+    if centroid_heads_root.byte_length() == 0:
+        return "-"
+
+    return centroid_heads_root.copy()
+
+
 def decode_optional_centroid_postings_root(centroid_postings_root: String) -> String:
     if centroid_postings_root == "-":
         return ""
 
     return centroid_postings_root.copy()
+
+
+def decode_optional_centroid_heads_root(centroid_heads_root: String) -> String:
+    if centroid_heads_root == "-":
+        return ""
+
+    return centroid_heads_root.copy()
 
 
 def decode_optional_document_proxy_root(document_proxy_root: String) -> String:
@@ -88,6 +102,11 @@ def save_sealed_segment_manifest(
         centroid_postings_root = require_relative_artifact_root(
             manifest.centroid_postings_root, "centroid_postings_root"
         )
+    var centroid_heads_root = String()
+    if manifest.centroid_heads_root.byte_length() != 0:
+        centroid_heads_root = require_relative_artifact_root(
+            manifest.centroid_heads_root, "centroid_heads_root"
+        )
 
     var entries = List[ManifestEntry]()
     entries.append(ManifestEntry("segment_id", manifest.segment_id.value))
@@ -105,6 +124,12 @@ def save_sealed_segment_manifest(
         ManifestEntry(
             "centroid_postings_root",
             encode_optional_centroid_postings_root(centroid_postings_root),
+        )
+    )
+    entries.append(
+        ManifestEntry(
+            "centroid_heads_root",
+            encode_optional_centroid_heads_root(centroid_heads_root),
         )
     )
     entries.append(
@@ -145,6 +170,9 @@ def load_sealed_segment_manifest(root: Path) raises -> SealedSegmentManifest:
         require_manifest_value(entries, "packed_index_root"),
         decode_optional_centroid_postings_root(
             load_optional_manifest_value(entries, "centroid_postings_root")
+        ),
+        decode_optional_centroid_heads_root(
+            load_optional_manifest_value(entries, "centroid_heads_root")
         ),
         decode_optional_document_proxy_root(
             load_optional_manifest_value(entries, "document_proxy_root")

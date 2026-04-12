@@ -21,6 +21,7 @@ from kayak.collections import (
 from kayak.eval import JudgedTask
 from kayak.planning import (
     best_effort_faithfulness_policy,
+    centroid_heads_search_plan,
     centroid_postings_head_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
@@ -34,6 +35,9 @@ from kayak.storage import (
     ensure_limit_small_real_subset_cache,
     ensure_scifact_real_subset_cache,
 )
+
+
+comptime CENTROID_HEAD_POSTING_CAP = 16
 
 
 def append_vector_budget_summaries_for_dataset(
@@ -97,6 +101,7 @@ def append_vector_budget_summaries_for_dataset(
             stored_index,
             0,
             centroid_budget,
+            CENTROID_HEAD_POSTING_CAP,
         )
         var snapshot = load_resolved_collection_snapshot(collection_root, snapshot_id)
         var candidate_k = task.k * 4
@@ -106,6 +111,22 @@ def append_vector_budget_summaries_for_dataset(
         for query_vector_budget in standard_query_vector_budget_sizes(
             task.nominal_query_vector_count
         ):
+            summaries.append(
+                build_vector_budget_sweep_summary_for_plan(
+                    backend,
+                    dataset_id,
+                    model_name,
+                    task,
+                    snapshot,
+                    centroid_heads_search_plan(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                    ),
+                    query_vector_budget,
+                    centroid_budget,
+                )
+            )
             summaries.append(
                 build_vector_budget_sweep_summary_for_plan(
                     backend,

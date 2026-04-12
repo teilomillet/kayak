@@ -19,6 +19,8 @@ struct LoadedSealedSegment(Copyable):
     var stored_index: StoredPackedIndex
     var has_centroid_postings_index: Bool
     var stored_centroid_postings_index: StoredCentroidPostingIndex
+    var has_centroid_heads_index: Bool
+    var stored_centroid_heads_index: StoredCentroidPostingIndex
     var has_document_proxy_index: Bool
     var stored_document_proxy_index: StoredDocumentProxyIndex
     var has_text_corpus: Bool
@@ -30,6 +32,8 @@ struct LoadedSealedSegment(Copyable):
         stored_index: StoredPackedIndex,
         has_centroid_postings_index: Bool,
         stored_centroid_postings_index: StoredCentroidPostingIndex,
+        has_centroid_heads_index: Bool,
+        stored_centroid_heads_index: StoredCentroidPostingIndex,
         has_document_proxy_index: Bool,
         stored_document_proxy_index: StoredDocumentProxyIndex,
         has_text_corpus: Bool,
@@ -39,6 +43,8 @@ struct LoadedSealedSegment(Copyable):
         self.stored_index = stored_index.copy()
         self.has_centroid_postings_index = has_centroid_postings_index
         self.stored_centroid_postings_index = stored_centroid_postings_index.copy()
+        self.has_centroid_heads_index = has_centroid_heads_index
+        self.stored_centroid_heads_index = stored_centroid_heads_index.copy()
         self.has_document_proxy_index = has_document_proxy_index
         self.stored_document_proxy_index = stored_document_proxy_index.copy()
         self.has_text_corpus = has_text_corpus

@@ -2,7 +2,9 @@ from std.pathlib import Path
 
 from kayak.storage import (
     StoredPackedIndex,
+    centroid_heads_storage_byte_size,
     centroid_postings_storage_byte_size,
+    ensure_stored_centroid_heads_index,
     ensure_stored_centroid_posting_index,
     document_proxy_storage_byte_size,
     ensure_stored_document_proxy_index,
@@ -49,6 +51,7 @@ def ensure_one_segment_collection_mirror(
     read stored_index: StoredPackedIndex,
     document_proxy_vector_budget: Int = 0,
     centroid_postings_vector_budget: Int = 0,
+    centroid_head_posting_cap: Int = 0,
 ) raises -> Path:
     var segment_id = SegmentId("segment-0001")
     var segment_root = collection_root / "segments" / segment_id.value
@@ -75,6 +78,20 @@ def ensure_one_segment_collection_mirror(
         stored_index,
         centroid_postings_vector_budget,
     )
+    if centroid_head_posting_cap > 0:
+        _ = ensure_stored_centroid_heads_index(
+            segment_root / "centroid_heads",
+            stored_index,
+            centroid_postings_vector_budget,
+            centroid_head_posting_cap,
+        )
+    var centroid_heads_byte_size = 0
+    var centroid_heads_root = String()
+    if centroid_head_posting_cap > 0:
+        centroid_heads_byte_size = centroid_heads_storage_byte_size(
+            segment_root / "centroid_heads"
+        )
+        centroid_heads_root = "centroid_heads"
 
     var segment_stats = SegmentStats(
         stored_index.index.document_count,
@@ -82,7 +99,8 @@ def ensure_one_segment_collection_mirror(
         stored_index.index.total_vector_count,
         packed_index_storage_byte_size(segment_root / "packed_index")
             + centroid_postings_storage_byte_size(segment_root / "centroid_postings")
-            + document_proxy_storage_byte_size(segment_root / "document_proxy"),
+            + document_proxy_storage_byte_size(segment_root / "document_proxy")
+            + centroid_heads_byte_size,
     )
     save_sealed_segment_manifest(
         segment_root,
@@ -97,6 +115,7 @@ def ensure_one_segment_collection_mirror(
             stored_index.index.vector_dim,
             "packed_index",
             "centroid_postings",
+            centroid_heads_root,
             "document_proxy",
             "",
             segment_stats.copy(),

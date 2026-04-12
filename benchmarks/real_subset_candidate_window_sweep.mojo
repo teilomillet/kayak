@@ -20,6 +20,7 @@ from kayak.collections import (
 from kayak.eval import JudgedTask
 from kayak.planning import (
     best_effort_faithfulness_policy,
+    centroid_heads_search_plan,
     centroid_postings_head_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
@@ -33,6 +34,9 @@ from kayak.storage import (
     ensure_limit_small_real_subset_cache,
     ensure_scifact_real_subset_cache,
 )
+
+
+comptime CENTROID_HEAD_POSTING_CAP = 16
 
 
 def append_sweep_for_dataset(
@@ -68,6 +72,22 @@ def append_sweep_for_dataset(
                 task,
                 snapshot,
                 document_proxy_search_plan(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                ),
+                0,
+                0,
+            )
+        )
+        summaries.append(
+            build_candidate_window_sweep_summary_for_plan(
+                backend,
+                dataset_id,
+                model_name,
+                task,
+                snapshot,
+                centroid_heads_search_plan(
                     task.k,
                     candidate_k,
                     best_effort_faithfulness_policy(),
@@ -145,6 +165,8 @@ def main() raises:
             1,
             scifact_cache.stored_index,
             0,
+            0,
+            CENTROID_HEAD_POSTING_CAP,
         ),
         scifact_cache.stored_task.task,
     )
@@ -164,6 +186,8 @@ def main() raises:
             1,
             fiqa_cache.stored_index,
             0,
+            0,
+            CENTROID_HEAD_POSTING_CAP,
         ),
         fiqa_cache.stored_task.task,
     )
@@ -183,6 +207,8 @@ def main() raises:
             1,
             limit_small_cache.stored_index,
             0,
+            0,
+            CENTROID_HEAD_POSTING_CAP,
         ),
         limit_small_cache.stored_task.task,
     )
@@ -202,6 +228,8 @@ def main() raises:
             1,
             browsecomp_cache.stored_index,
             0,
+            0,
+            CENTROID_HEAD_POSTING_CAP,
         ),
         browsecomp_cache.stored_task.task,
     )
@@ -221,6 +249,8 @@ def main() raises:
             1,
             browsecomp_gold_cache.stored_index,
             0,
+            0,
+            CENTROID_HEAD_POSTING_CAP,
         ),
         browsecomp_gold_cache.stored_task.task,
     )

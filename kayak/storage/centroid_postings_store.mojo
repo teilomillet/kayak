@@ -88,6 +88,7 @@ def build_stored_centroid_posting_index(
         CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC,
         centroid_budget,
         0,
+        0,
         build_centroid_posting_index(stored_packed_index.index, centroid_budget),
     )
 
@@ -117,6 +118,7 @@ def load_optional_manifest_value(read entries: List[ManifestEntry], key: String)
 def write_centroid_postings_manifest(
     root: Path,
     read stored: StoredCentroidPostingIndex,
+    artifact_kind: String,
     vector_payload_encoding: String,
     artifact_byte_size: Int,
 ) raises:
@@ -124,7 +126,7 @@ def write_centroid_postings_manifest(
         centroid_postings_manifest_path(root),
         [
             ManifestEntry("format_version", String(STORAGE_FORMAT_VERSION)),
-            ManifestEntry("artifact_kind", "centroid_posting_index"),
+            ManifestEntry("artifact_kind", artifact_kind),
             ManifestEntry("vector_scalar_name", stored.vector_scalar_name),
             ManifestEntry("dataset_id", stored.dataset_id),
             ManifestEntry("model_name", stored.model_name),
@@ -133,6 +135,7 @@ def write_centroid_postings_manifest(
             ManifestEntry("vector_dim", String(stored.index.vector_dim)),
             ManifestEntry("document_count", String(stored.index.document_count)),
             ManifestEntry("centroid_budget", String(stored.centroid_budget)),
+            ManifestEntry("posting_cap", String(stored.posting_cap)),
             ManifestEntry("centroid_count", String(stored.index.centroid_count)),
             ManifestEntry(
                 "total_posting_count", String(stored.index.total_posting_count)
@@ -142,15 +145,33 @@ def write_centroid_postings_manifest(
     )
 
 
-def save_stored_centroid_posting_index(
+def write_centroid_postings_manifest(
     root: Path,
     read stored: StoredCentroidPostingIndex,
+    vector_payload_encoding: String,
+    artifact_byte_size: Int,
+) raises:
+    write_centroid_postings_manifest(
+        root,
+        stored,
+        "centroid_posting_index",
+        vector_payload_encoding,
+        artifact_byte_size,
+    )
+
+
+def save_stored_centroid_posting_index_with_artifact_kind(
+    root: Path,
+    read stored: StoredCentroidPostingIndex,
+    artifact_kind: String,
     vector_payload_encoding: String = VECTOR_PAYLOAD_ENCODING_BINARY_LE,
 ) raises:
     require_supported_packed_index_vector_payload_encoding(vector_payload_encoding)
     makedirs(root, exist_ok=True)
 
-    write_centroid_postings_manifest(root, stored, vector_payload_encoding, 0)
+    write_centroid_postings_manifest(
+        root, stored, artifact_kind, vector_payload_encoding, 0
+    )
 
     write_int_lines(root / "centroid_dims.tsv", stored.index.centroid_dims)
     write_int_lines(
@@ -175,6 +196,7 @@ def save_stored_centroid_posting_index(
         write_centroid_postings_manifest(
             root,
             stored,
+            artifact_kind,
             vector_payload_encoding,
             artifact_byte_size,
         )
@@ -184,14 +206,27 @@ def save_stored_centroid_posting_index(
         artifact_byte_size = stabilized
 
 
-def load_stored_centroid_posting_index(
-    root: Path
+def save_stored_centroid_posting_index(
+    root: Path,
+    read stored: StoredCentroidPostingIndex,
+    vector_payload_encoding: String = VECTOR_PAYLOAD_ENCODING_BINARY_LE,
+) raises:
+    save_stored_centroid_posting_index_with_artifact_kind(
+        root,
+        stored,
+        "centroid_posting_index",
+        vector_payload_encoding,
+    )
+
+
+def load_stored_centroid_posting_index_with_artifact_kind(
+    root: Path, expected_artifact_kind: String
 ) raises -> StoredCentroidPostingIndex:
     var manifest = read_manifest(centroid_postings_manifest_path(root))
     _ = require_supported_storage_format(manifest)
 
-    if require_manifest_value(manifest, "artifact_kind") != "centroid_posting_index":
-        raise Error("storage artifact is not a centroid posting index")
+    if require_manifest_value(manifest, "artifact_kind") != expected_artifact_kind:
+        raise Error("storage artifact is not a " + expected_artifact_kind)
 
     var vector_dim = parse_int(
         require_manifest_value(manifest, "vector_dim"), "vector_dim"
@@ -207,6 +242,10 @@ def load_stored_centroid_posting_index(
     )
     if posting_order_kind.byte_length() == 0:
         posting_order_kind = CENTROID_POSTINGS_ORDER_UNSPECIFIED
+    var posting_cap_text = load_optional_manifest_value(manifest, "posting_cap")
+    var posting_cap = 0
+    if posting_cap_text.byte_length() != 0:
+        posting_cap = parse_int(posting_cap_text, "posting_cap")
     var centroid_dims = read_int_lines(root / "centroid_dims.tsv", "centroid_dim")
     var posting_offsets = read_int_lines(root / "posting_offsets.tsv", "posting_offset")
     var posting_doc_indices = read_int_lines(
@@ -234,6 +273,7 @@ def load_stored_centroid_posting_index(
                 require_manifest_value(manifest, "centroid_budget"),
                 "centroid_budget",
             ),
+            posting_cap,
             parse_int(
                 require_manifest_value(manifest, "artifact_byte_size"),
                 "artifact_byte_size",
@@ -261,6 +301,7 @@ def load_stored_centroid_posting_index(
         VECTOR_SCALAR_NAME,
         posting_order_kind,
         parse_int(require_manifest_value(manifest, "centroid_budget"), "centroid_budget"),
+        posting_cap,
         parse_int(
             require_manifest_value(manifest, "artifact_byte_size"),
             "artifact_byte_size",
@@ -274,6 +315,14 @@ def load_stored_centroid_posting_index(
             vector_dim,
             document_count,
         ),
+    )
+
+
+def load_stored_centroid_posting_index(
+    root: Path
+) raises -> StoredCentroidPostingIndex:
+    return load_stored_centroid_posting_index_with_artifact_kind(
+        root, "centroid_posting_index"
     )
 
 

@@ -5,6 +5,7 @@ from kayak.index import CentroidPostingIndex, DocumentProxyIndex
 from kayak.storage import (
     StoredCentroidPostingIndex,
     StoredDocumentProxyIndex,
+    load_stored_centroid_heads_index,
     load_stored_centroid_posting_index,
     load_stored_document_proxy_index,
     load_stored_packed_index,
@@ -22,6 +23,7 @@ from .paths import (
 from .resolved_snapshot import LoadedSealedSegment, ResolvedCollectionSnapshot
 from .segment import (
     SealedSegmentManifest,
+    sealed_segment_has_centroid_heads_index,
     sealed_segment_has_centroid_postings_index,
     sealed_segment_has_document_proxy_index,
     sealed_segment_has_text_corpus,
@@ -66,6 +68,7 @@ def empty_stored_centroid_posting_index(
         model_name.copy(),
         vector_scalar_name.copy(),
         "",
+        0,
         0,
         0,
         CentroidPostingIndex([], [], [0], [], [], vector_dim, 0),
@@ -198,6 +201,26 @@ def require_loaded_centroid_postings_matches_segment(
         raise Error("centroid postings document_count does not match segment stats")
 
 
+def require_loaded_centroid_heads_matches_segment(
+    read segment: SealedSegmentManifest,
+    read stored_centroid_heads_index: StoredCentroidPostingIndex,
+) raises:
+    if stored_centroid_heads_index.model_name != segment.model_name:
+        raise Error("centroid heads model_name does not match segment manifest")
+
+    if stored_centroid_heads_index.vector_scalar_name != segment.vector_scalar_name:
+        raise Error("centroid heads vector_scalar_name does not match segment manifest")
+
+    if stored_centroid_heads_index.index.vector_dim != segment.vector_dim:
+        raise Error("centroid heads vector_dim does not match segment manifest")
+
+    if (
+        stored_centroid_heads_index.index.document_count
+        != segment.stats.document_count
+    ):
+        raise Error("centroid heads document_count does not match segment stats")
+
+
 def aggregate_segment_stats(
     read segments: List[LoadedSealedSegment]
 ) raises -> CollectionStats:
@@ -294,6 +317,24 @@ def load_resolved_collection_snapshot(
                 segment, stored_centroid_postings_index
             )
 
+        var has_centroid_heads_index = sealed_segment_has_centroid_heads_index(segment)
+        var stored_centroid_heads_index = empty_stored_centroid_posting_index(
+            segment.model_name,
+            segment.vector_scalar_name,
+            segment.vector_dim,
+        )
+        if has_centroid_heads_index:
+            stored_centroid_heads_index = load_stored_centroid_heads_index(
+                resolve_segment_artifact_root(
+                    segment_root,
+                    segment.centroid_heads_root,
+                    "centroid_heads_root",
+                )
+            )
+            require_loaded_centroid_heads_matches_segment(
+                segment, stored_centroid_heads_index
+            )
+
         var has_document_proxy_index = sealed_segment_has_document_proxy_index(segment)
         var stored_document_proxy_index = empty_stored_document_proxy_index(
             segment.model_name,
@@ -333,6 +374,8 @@ def load_resolved_collection_snapshot(
                 stored_index,
                 has_centroid_postings_index,
                 stored_centroid_postings_index,
+                has_centroid_heads_index,
+                stored_centroid_heads_index,
                 has_document_proxy_index,
                 stored_document_proxy_index,
                 has_text_corpus,

@@ -23,8 +23,10 @@ from kayak import (
     NamespaceId,
     StoredPackedIndex,
     best_effort_faithfulness_policy,
+    build_stored_centroid_heads_index,
     build_stored_centroid_posting_index,
     build_stored_document_proxy_index,
+    centroid_heads_search_plan,
     centroid_postings_head_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
@@ -35,6 +37,7 @@ from kayak import (
     load_resolved_collection_snapshot,
     oracle_full_recall_required_faithfulness_policy,
     save_collection_manifest,
+    save_stored_centroid_heads_index,
     save_stored_centroid_posting_index,
     save_sealed_segment_manifest,
     save_snapshot_manifest,
@@ -252,6 +255,7 @@ def make_centroid_postings_collection_root() raises -> Path:
             "centroid_postings",
             "",
             "",
+            "",
             SegmentStats(
                 packed_index.document_count,
                 packed_index.total_vector_count,
@@ -265,6 +269,78 @@ def make_centroid_postings_collection_root() raises -> Path:
         SnapshotManifest(
             SnapshotId("snapshot-0001"),
             CollectionId("centroid-postings"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 2, 4, 4, 512),
+        ),
+    )
+    return root^
+
+
+def make_centroid_heads_collection_root() raises -> Path:
+    var root = Path("/tmp/kayak-collection-centroid-heads")
+    var segment_root = root / "segments" / "segment-0001"
+    var packed_index = pack_documents(
+        [
+            EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+            EncodedDocument("doc-b", [[0.6, 0.6], [0.6, 0.6]]),
+        ]
+    )
+    var stored_index = StoredPackedIndex(
+        "collection://centroid-heads",
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        packed_index.copy(),
+    )
+
+    save_collection_manifest(
+        root,
+        CollectionManifest(
+            CollectionId("centroid-heads"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            1,
+        ),
+    )
+    save_stored_packed_index(segment_root / "packed_index", stored_index.copy())
+    save_stored_centroid_heads_index(
+        segment_root / "centroid_heads",
+        build_stored_centroid_heads_index(stored_index, 0, 1),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("centroid-heads"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            "packed_index",
+            "",
+            "centroid_heads",
+            "",
+            "",
+            SegmentStats(
+                packed_index.document_count,
+                packed_index.total_vector_count,
+                packed_index.total_vector_count,
+                512,
+            ),
+        ),
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0001",
+        SnapshotManifest(
+            SnapshotId("snapshot-0001"),
+            CollectionId("centroid-heads"),
             TenantId("tenant-a"),
             NamespaceId("search"),
             1,
@@ -396,6 +472,49 @@ def test_centroid_postings_search_plan_reports_oracle_miss_when_shortlist_is_too
         query,
         resolved,
         centroid_postings_search_plan(
+            1, 1, oracle_full_recall_required_faithfulness_policy()
+        ),
+    )
+
+    assert_equal(explain.candidate_set.hits[0].doc_id, "doc-b")
+    assert_equal(explain.final_hits[0].doc_id, "doc-b")
+    assert_equal(explain.candidate_recall_at_final_k, MetricScalar(0.0))
+    assert_equal(explain.faithfulness.passes, False)
+    assert_equal(explain.faithfulness.evidence_kind, "oracle_recall_loss")
+
+
+def test_centroid_heads_search_plan_exact_reranks_shortlist() raises:
+    var root = make_centroid_heads_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        centroid_heads_search_plan(
+            1, 2, oracle_full_recall_required_faithfulness_policy()
+        ),
+    )
+
+    assert_equal(explain.plan.candidate_generator.kind, "centroid_heads")
+    assert_equal(len(explain.candidate_set.hits), 2)
+    assert_equal(explain.final_hits[0].doc_id, "doc-a")
+    assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
+    assert_equal(explain.faithfulness.passes, True)
+    assert_equal(explain.faithfulness.evidence_kind, "oracle_full_recall")
+    assert_equal(explain.candidate_stage.vector_count, 2)
+    assert_equal(explain.candidate_stage.token_count, 2)
+
+
+def test_centroid_heads_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:
+    var root = make_centroid_heads_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        centroid_heads_search_plan(
             1, 1, oracle_full_recall_required_faithfulness_policy()
         ),
     )

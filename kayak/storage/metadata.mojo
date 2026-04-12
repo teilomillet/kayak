@@ -49,6 +49,7 @@ struct StoredCentroidPostingIndex(Copyable):
     var vector_scalar_name: String
     var posting_order_kind: String
     var centroid_budget: Int
+    var posting_cap: Int
     var artifact_byte_size: Int
     var index: CentroidPostingIndex
 
@@ -59,11 +60,15 @@ struct StoredCentroidPostingIndex(Copyable):
         var vector_scalar_name: String,
         var posting_order_kind: String,
         centroid_budget: Int,
+        posting_cap: Int,
         artifact_byte_size: Int,
         var index: CentroidPostingIndex,
     ) raises:
         if centroid_budget < 0:
             raise Error("stored centroid budget must be non-negative")
+
+        if posting_cap < 0:
+            raise Error("stored centroid posting_cap must be non-negative")
 
         if artifact_byte_size < 0:
             raise Error("stored centroid artifact_byte_size must be non-negative")
@@ -73,6 +78,7 @@ struct StoredCentroidPostingIndex(Copyable):
         self.vector_scalar_name = vector_scalar_name^
         self.posting_order_kind = posting_order_kind^
         self.centroid_budget = centroid_budget
+        self.posting_cap = posting_cap
         self.artifact_byte_size = artifact_byte_size
         self.index = index^
 

@@ -1,6 +1,7 @@
 from .candidate_budget import CandidateBudget
 from .candidate_generator import (
     CandidateGenerator,
+    centroid_heads_candidate_generator,
     centroid_postings_candidate_generator,
     centroid_postings_head_candidate_generator,
     centroid_postings_imputed_candidate_generator,
@@ -14,6 +15,7 @@ from .execution import (
     candidate_recall_at_final_k,
     final_hits_for_plan,
     final_hits_to_search_hits,
+    search_collection_for_plan,
 )
 from .explain import CollectionSearchExplain, explain_collection_search
 from .faithfulness import (
@@ -34,6 +36,7 @@ from .score_histogram import (
 )
 from .search_plan import (
     SearchPlan,
+    centroid_heads_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_head_search_plan,
     centroid_postings_search_plan,

@@ -57,6 +57,7 @@ def write_legacy_centroid_postings_root(
     var legacy_manifest = (source_root / "manifest.tsv").read_text().replace(
         "posting_order_kind\t" + CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC + "\n", ""
     )
+    legacy_manifest = legacy_manifest.replace("posting_cap\t0\n", "")
     (target_root / "manifest.tsv").write_text(legacy_manifest)
     copy_storage_file(source_root, target_root, "centroid_dims.tsv")
     copy_storage_file(source_root, target_root, "posting_offsets.tsv")
@@ -78,6 +79,7 @@ def test_centroid_postings_roundtrip_preserves_summary_arrays() raises:
     assert_equal(
         loaded.posting_order_kind, CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC
     )
+    assert_equal(loaded.posting_cap, 0)
     assert_equal(loaded.index.posting_doc_indices[0], 1)
     assert_equal(loaded.index.posting_weights[0], 2)
     assert_equal(loaded.index.posting_doc_indices[1], 0)
@@ -104,6 +106,7 @@ def test_centroid_postings_loads_legacy_layout_without_summary_files() raises:
     var loaded = load_stored_centroid_posting_index(root)
 
     assert_equal(loaded.posting_order_kind, CENTROID_POSTINGS_ORDER_UNSPECIFIED)
+    assert_equal(loaded.posting_cap, 0)
     assert_equal(loaded.index.centroid_document_counts[0], 2)
     assert_equal(loaded.index.centroid_document_counts[1], 1)
     assert_equal(loaded.index.centroid_token_counts[0], 3)
