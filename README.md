@@ -16,6 +16,7 @@ The current scaffold is intentionally narrow:
 
 - `kayak/contracts/`: validated query/document contracts
 - `kayak/numeric/`: centralized scalar aliases and storage-format constants
+- `kayak/collections/`: serving-side collection, segment, snapshot, and compaction contracts
 - `kayak/index/`: packed index layout and optional flat `dim128` document layouts
 - `kayak/scoring/`: exact MaxSim scoring kernels
 - `kayak/runtime/`: backend boundary, CPU backend first
@@ -28,6 +29,9 @@ The current scaffold is intentionally narrow:
 - `benchmarks/`: runnable benchmark entrypoints
 - `python/`: Python bridge modules, explicit late-interaction objects, and a reference exact backend
 - `tests/`: runnable unit-test entrypoints using `std.testing.TestSuite`
+
+The Phase A storage boundary for hosted collections is documented in
+[docs/architecture/segment_storage.md](docs/architecture/segment_storage.md).
 
 ## Why This Shape
 
