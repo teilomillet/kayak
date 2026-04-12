@@ -72,23 +72,11 @@ def effective_imputed_centroid_nprobe(bound: Int) -> Int:
 
 
 def centroid_token_count(read index: CentroidPostingIndex, centroid_index: Int) -> Int:
-    var total = 0
-    var start = index.posting_offsets[centroid_index]
-    var stop = index.posting_offsets[centroid_index + 1]
-
-    for posting_index in range(start, stop):
-        total += index.posting_weights[posting_index]
-
-    return total
+    return index.centroid_token_counts[centroid_index]
 
 
 def total_centroid_token_count(read index: CentroidPostingIndex) -> Int:
-    var total = 0
-
-    for posting_weight in index.posting_weights:
-        total += posting_weight
-
-    return total
+    return index.total_centroid_token_count
 
 
 def warp_like_t_prime_max(final_k: Int) -> Int:

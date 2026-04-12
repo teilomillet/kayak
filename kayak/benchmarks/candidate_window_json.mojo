@@ -1,9 +1,12 @@
+from std.benchmark import run
+import std.benchmark.compiler as bench_compiler
 from std.collections import List
 
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.eval import JudgedTask
 from kayak.planning import (
     SearchPlan,
+    candidate_generation_for_plan,
     document_proxy_search_plan,
     exact_full_scan_search_plan,
     explain_collection_search,
@@ -22,6 +25,7 @@ struct CandidateWindowSweepSummary(Copyable):
     var query_vector_budget: Int
     var document_vector_budget: Int
     var query_count: Int
+    var mean_candidate_generation_seconds: Float64
     var mean_candidate_hit_count: Float64
     var mean_candidate_recall_at_final_k: Float64
 
@@ -37,6 +41,7 @@ struct CandidateWindowSweepSummary(Copyable):
         query_vector_budget: Int,
         document_vector_budget: Int,
         query_count: Int,
+        mean_candidate_generation_seconds: Float64,
         mean_candidate_hit_count: Float64,
         mean_candidate_recall_at_final_k: Float64,
     ):
@@ -50,6 +55,7 @@ struct CandidateWindowSweepSummary(Copyable):
         self.query_vector_budget = query_vector_budget
         self.document_vector_budget = document_vector_budget
         self.query_count = query_count
+        self.mean_candidate_generation_seconds = mean_candidate_generation_seconds
         self.mean_candidate_hit_count = mean_candidate_hit_count
         self.mean_candidate_recall_at_final_k = mean_candidate_recall_at_final_k
 
@@ -119,6 +125,27 @@ def build_candidate_window_sweep_summary_for_plan(
 ) raises -> CandidateWindowSweepSummary:
     var candidate_hit_total = 0.0
     var recall_total = 0.0
+    var query_index = 0
+
+    def candidate_once() capturing raises:
+        bench_compiler.keep(
+            candidate_generation_for_plan(
+                backend,
+                task.queries[query_index].query,
+                snapshot,
+                plan,
+            )
+        )
+        query_index += 1
+        if query_index == len(task.queries):
+            query_index = 0
+
+    var candidate_report = run[candidate_once](
+        num_warmup_iters=0,
+        max_iters=len(task.queries),
+        min_runtime_secs=0.0,
+        max_batch_size=1,
+    )
 
     for judged_query in task.queries:
         var explain = explain_collection_search(
@@ -141,6 +168,7 @@ def build_candidate_window_sweep_summary_for_plan(
         query_vector_budget,
         document_vector_budget,
         len(task.queries),
+        Float64(candidate_report.mean()),
         candidate_hit_total / Float64(len(task.queries)),
         recall_total / Float64(len(task.queries)),
     )
@@ -171,6 +199,8 @@ def append_candidate_window_sweep_summary_json(
     buffer += "\"document_vector_budget\":"
     buffer += String(summary.document_vector_budget) + ","
     buffer += "\"query_count\":" + String(summary.query_count) + ","
+    buffer += "\"mean_candidate_generation_seconds\":"
+    buffer += String(summary.mean_candidate_generation_seconds) + ","
     buffer += "\"mean_candidate_hit_count\":"
     buffer += String(summary.mean_candidate_hit_count) + ","
     buffer += "\"mean_candidate_recall_at_final_k\":"

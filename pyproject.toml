@@ -35,6 +35,7 @@ test_python_api = "PYTHONPATH=python python -m unittest discover -s python/tests
 test_python_sdk_ordeal = "PYTHONPATH=python uv run --python 3.11 --with ordeal ordeal explore -c ordeal.toml"
 test_python_sdk_ordeal_mojo = "KAYAK_ORDEAL_ENABLE_MOJO=1 PYTHONPATH=python uv run --python 3.11 --with ordeal ordeal explore -c ordeal.toml"
 test_storage = "mojo -I . tests/test_storage.mojo"
+test_centroid_postings_store = "mojo -I . tests/test_centroid_postings_store.mojo"
 test_collections = "mojo -I . tests/test_collection_contracts.mojo"
 test_collection_storage = "mojo -I . tests/test_collection_storage.mojo"
 test_collection_resolution = "mojo -I . tests/test_collection_resolution.mojo"

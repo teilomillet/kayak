@@ -41,6 +41,14 @@ def centroid_postings_manifest_path(root: Path) -> Path:
     return root / "manifest.tsv"
 
 
+def centroid_document_counts_path(root: Path) -> Path:
+    return root / "centroid_document_counts.tsv"
+
+
+def centroid_token_counts_path(root: Path) -> Path:
+    return root / "centroid_token_counts.tsv"
+
+
 def centroid_postings_index_exists(root: Path) -> Bool:
     return centroid_postings_manifest_path(root).exists()
 
@@ -59,6 +67,10 @@ def centroid_postings_storage_byte_size(root: Path) raises -> Int:
     total += file_size_bytes(root / "posting_doc_indices.tsv")
     total += file_size_bytes(root / "posting_weights.tsv")
     total += file_size_bytes(root / "centroid_vectors.bin")
+    if centroid_document_counts_path(root).exists():
+        total += file_size_bytes(centroid_document_counts_path(root))
+    if centroid_token_counts_path(root).exists():
+        total += file_size_bytes(centroid_token_counts_path(root))
     return total
 
 
@@ -89,45 +101,12 @@ def read_int_lines(path: Path, name: String) raises -> List[Int]:
     return values^
 
 
-def save_stored_centroid_posting_index(
+def write_centroid_postings_manifest(
     root: Path,
     read stored: StoredCentroidPostingIndex,
-    vector_payload_encoding: String = VECTOR_PAYLOAD_ENCODING_BINARY_LE,
+    vector_payload_encoding: String,
+    artifact_byte_size: Int,
 ) raises:
-    require_supported_packed_index_vector_payload_encoding(vector_payload_encoding)
-    makedirs(root, exist_ok=True)
-
-    write_manifest(
-        centroid_postings_manifest_path(root),
-        [
-            ManifestEntry("format_version", String(STORAGE_FORMAT_VERSION)),
-            ManifestEntry("artifact_kind", "centroid_posting_index"),
-            ManifestEntry("vector_scalar_name", stored.vector_scalar_name),
-            ManifestEntry("dataset_id", stored.dataset_id),
-            ManifestEntry("model_name", stored.model_name),
-            ManifestEntry("vector_payload_encoding", vector_payload_encoding),
-            ManifestEntry("vector_dim", String(stored.index.vector_dim)),
-            ManifestEntry("document_count", String(stored.index.document_count)),
-            ManifestEntry("centroid_budget", String(stored.centroid_budget)),
-            ManifestEntry("centroid_count", String(stored.index.centroid_count)),
-            ManifestEntry(
-                "total_posting_count", String(stored.index.total_posting_count)
-            ),
-            ManifestEntry("artifact_byte_size", "0"),
-        ],
-    )
-
-    write_int_lines(root / "centroid_dims.tsv", stored.index.centroid_dims)
-    write_int_lines(root / "posting_offsets.tsv", stored.index.posting_offsets)
-    write_int_lines(root / "posting_doc_indices.tsv", stored.index.posting_doc_indices)
-    write_int_lines(root / "posting_weights.tsv", stored.index.posting_weights)
-    write_binary_vector_payload_with_encoding(
-        root / "centroid_vectors.bin",
-        stored.index.centroid_vectors,
-        vector_payload_encoding,
-    )
-
-    var artifact_byte_size = centroid_postings_storage_byte_size(root)
     write_manifest(
         centroid_postings_manifest_path(root),
         [
@@ -147,6 +126,48 @@ def save_stored_centroid_posting_index(
             ManifestEntry("artifact_byte_size", String(artifact_byte_size)),
         ],
     )
+
+
+def save_stored_centroid_posting_index(
+    root: Path,
+    read stored: StoredCentroidPostingIndex,
+    vector_payload_encoding: String = VECTOR_PAYLOAD_ENCODING_BINARY_LE,
+) raises:
+    require_supported_packed_index_vector_payload_encoding(vector_payload_encoding)
+    makedirs(root, exist_ok=True)
+
+    write_centroid_postings_manifest(root, stored, vector_payload_encoding, 0)
+
+    write_int_lines(root / "centroid_dims.tsv", stored.index.centroid_dims)
+    write_int_lines(
+        centroid_document_counts_path(root),
+        stored.index.centroid_document_counts,
+    )
+    write_int_lines(
+        centroid_token_counts_path(root),
+        stored.index.centroid_token_counts,
+    )
+    write_int_lines(root / "posting_offsets.tsv", stored.index.posting_offsets)
+    write_int_lines(root / "posting_doc_indices.tsv", stored.index.posting_doc_indices)
+    write_int_lines(root / "posting_weights.tsv", stored.index.posting_weights)
+    write_binary_vector_payload_with_encoding(
+        root / "centroid_vectors.bin",
+        stored.index.centroid_vectors,
+        vector_payload_encoding,
+    )
+
+    var artifact_byte_size = centroid_postings_storage_byte_size(root)
+    while True:
+        write_centroid_postings_manifest(
+            root,
+            stored,
+            vector_payload_encoding,
+            artifact_byte_size,
+        )
+        var stabilized = centroid_postings_storage_byte_size(root)
+        if stabilized == artifact_byte_size:
+            break
+        artifact_byte_size = stabilized
 
 
 def load_stored_centroid_posting_index(
@@ -176,6 +197,43 @@ def load_stored_centroid_posting_index(
     var centroid_vectors = read_binary_vector_payload_with_encoding(
         root / "centroid_vectors.bin", vector_dim, vector_payload_encoding
     )
+    var has_centroid_document_counts = centroid_document_counts_path(root).exists()
+    var has_centroid_token_counts = centroid_token_counts_path(root).exists()
+
+    if has_centroid_document_counts != has_centroid_token_counts:
+        raise Error(
+            "centroid posting index summary files must either both exist or both be absent"
+        )
+
+    if has_centroid_document_counts:
+        return StoredCentroidPostingIndex(
+            require_manifest_value(manifest, "dataset_id"),
+            require_manifest_value(manifest, "model_name"),
+            VECTOR_SCALAR_NAME,
+            parse_int(
+                require_manifest_value(manifest, "centroid_budget"),
+                "centroid_budget",
+            ),
+            parse_int(
+                require_manifest_value(manifest, "artifact_byte_size"),
+                "artifact_byte_size",
+            ),
+            CentroidPostingIndex(
+                centroid_dims^,
+                centroid_vectors^,
+                posting_offsets^,
+                posting_doc_indices^,
+                posting_weights^,
+                read_int_lines(
+                    centroid_document_counts_path(root), "centroid_document_count"
+                ),
+                read_int_lines(
+                    centroid_token_counts_path(root), "centroid_token_count"
+                ),
+                vector_dim,
+                document_count,
+            ),
+        )
 
     return StoredCentroidPostingIndex(
         require_manifest_value(manifest, "dataset_id"),
@@ -212,6 +270,8 @@ def ensure_stored_centroid_posting_index(
             and loaded.index.document_count
                 == stored_packed_index.index.document_count
             and loaded.index.vector_dim == stored_packed_index.index.vector_dim
+            and centroid_document_counts_path(root).exists()
+            and centroid_token_counts_path(root).exists()
         ):
             return CentroidPostingCacheEntry(loaded.copy(), True)
 

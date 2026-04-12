@@ -11,10 +11,13 @@ struct CentroidPostingIndex(Copyable):
     var posting_offsets: List[Int]
     var posting_doc_indices: List[Int]
     var posting_weights: List[Int]
+    var centroid_document_counts: List[Int]
+    var centroid_token_counts: List[Int]
     var vector_dim: Int
     var document_count: Int
     var centroid_count: Int
     var total_posting_count: Int
+    var total_centroid_token_count: Int
 
     def __init__(
         out self,
@@ -23,6 +26,8 @@ struct CentroidPostingIndex(Copyable):
         var posting_offsets: List[Int],
         var posting_doc_indices: List[Int],
         var posting_weights: List[Int],
+        var centroid_document_counts: List[Int],
+        var centroid_token_counts: List[Int],
         vector_dim: Int,
         document_count: Int,
     ) raises:
@@ -35,16 +40,87 @@ struct CentroidPostingIndex(Copyable):
             vector_dim,
             document_count,
         )
+        require_valid_centroid_posting_summaries(
+            posting_offsets,
+            posting_weights,
+            centroid_document_counts,
+            centroid_token_counts,
+        )
 
         self.centroid_dims = centroid_dims^
         self.centroid_vectors = centroid_vectors^
         self.posting_offsets = posting_offsets^
         self.posting_doc_indices = posting_doc_indices^
         self.posting_weights = posting_weights^
+        self.centroid_document_counts = centroid_document_counts^
+        self.centroid_token_counts = centroid_token_counts^
         self.vector_dim = vector_dim
         self.document_count = document_count
         self.centroid_count = len(self.centroid_dims)
         self.total_posting_count = len(self.posting_doc_indices)
+        self.total_centroid_token_count = sum_ints(self.centroid_token_counts)
+
+    def __init__(
+        out self,
+        var centroid_dims: List[Int],
+        var centroid_vectors: List[List[VectorScalar]],
+        var posting_offsets: List[Int],
+        var posting_doc_indices: List[Int],
+        var posting_weights: List[Int],
+        vector_dim: Int,
+        document_count: Int,
+    ) raises:
+        var centroid_document_counts = derive_centroid_document_counts(posting_offsets)
+        var centroid_token_counts = derive_centroid_token_counts(
+            posting_offsets, posting_weights
+        )
+        self = CentroidPostingIndex(
+            centroid_dims^,
+            centroid_vectors^,
+            posting_offsets^,
+            posting_doc_indices^,
+            posting_weights^,
+            centroid_document_counts^,
+            centroid_token_counts^,
+            vector_dim,
+            document_count,
+        )
+
+
+def sum_ints(read values: List[Int]) -> Int:
+    var total = 0
+
+    for value in values:
+        total += value
+
+    return total
+
+
+def derive_centroid_document_counts(read posting_offsets: List[Int]) -> List[Int]:
+    var counts = List[Int]()
+
+    for centroid_index in range(len(posting_offsets) - 1):
+        counts.append(
+            posting_offsets[centroid_index + 1] - posting_offsets[centroid_index]
+        )
+
+    return counts^
+
+
+def derive_centroid_token_counts(
+    read posting_offsets: List[Int], read posting_weights: List[Int]
+) -> List[Int]:
+    var counts = List[Int]()
+
+    for centroid_index in range(len(posting_offsets) - 1):
+        var total = 0
+        var start = posting_offsets[centroid_index]
+        var stop = posting_offsets[centroid_index + 1]
+        for posting_index in range(start, stop):
+            total += posting_weights[posting_index]
+        counts.append(total)
+
+    return counts^
 
 
 def require_valid_centroid_posting_index(
@@ -109,6 +185,45 @@ def require_valid_centroid_posting_index(
         if doc_index < 0 or doc_index >= document_count:
             raise Error(
                 "centroid posting index posting doc index must fit document_count"
+            )
+
+
+def require_valid_centroid_posting_summaries(
+    read posting_offsets: List[Int],
+    read posting_weights: List[Int],
+    read centroid_document_counts: List[Int],
+    read centroid_token_counts: List[Int],
+) raises:
+    var centroid_count = len(posting_offsets) - 1
+
+    if len(centroid_document_counts) != centroid_count:
+        raise Error(
+            "centroid posting index centroid_document_counts must match centroid count"
+        )
+
+    if len(centroid_token_counts) != centroid_count:
+        raise Error(
+            "centroid posting index centroid_token_counts must match centroid count"
+        )
+
+    for centroid_index in range(centroid_count):
+        var derived_document_count = (
+            posting_offsets[centroid_index + 1] - posting_offsets[centroid_index]
+        )
+        if centroid_document_counts[centroid_index] != derived_document_count:
+            raise Error(
+                "centroid posting index centroid_document_counts must match posting offsets"
+            )
+
+        var derived_token_count = 0
+        var start = posting_offsets[centroid_index]
+        var stop = posting_offsets[centroid_index + 1]
+        for posting_index in range(start, stop):
+            derived_token_count += posting_weights[posting_index]
+
+        if centroid_token_counts[centroid_index] != derived_token_count:
+            raise Error(
+                "centroid posting index centroid_token_counts must match posting weights"
             )
 
 

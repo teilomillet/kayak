@@ -30,6 +30,7 @@ def test_candidate_window_sweep_json_contains_recall_fields() raises:
                 8,
                 32,
                 4,
+                0.0125,
                 20.0,
                 0.95,
             )
@@ -42,6 +43,9 @@ def test_candidate_window_sweep_json_contains_recall_fields() raises:
     assert_equal(
         json.find("\"candidate_generator_kind\":\"document_proxy\"") != -1,
         True,
+    )
+    assert_equal(
+        json.find("\"mean_candidate_generation_seconds\":0.0125") != -1, True
     )
     assert_equal(json.find("\"candidate_k\":20") != -1, True)
 
