@@ -122,6 +122,12 @@ This is a derived layout for `128`-dim document embeddings:
 - it stores document token values as one flat scalar buffer
 - it is opt-in, not the default exact-search path
 
+For the same late-interaction path, the repo also supports an optional
+`FlatQueryDim128` query layout.
+This still preserves the full multi-vector query representation.
+It changes query memory layout only; it does not collapse retrieval into a
+single-vector search.
+
 That choice is deliberate.
 The current measurements support keeping it as a first-class optional artifact,
 but they do not yet support silently replacing the default CPU search path.

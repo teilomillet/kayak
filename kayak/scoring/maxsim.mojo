@@ -22,11 +22,14 @@ def ceil_div(numerator: Int, denominator: Int) -> Int:
     return (numerator + denominator - 1) // denominator
 
 
-def choose_parallel_work_item_count(
-    read query: EncodedQuery,
+def choose_parallel_work_item_count_for_query_vector_count(
+    query_vector_count: Int,
     read index: PackedIndex,
     read config: ExactScoringConfig,
 ) -> Int:
+    if query_vector_count <= 0:
+        return 1
+
     if not config.enable_parallel_scoring:
         return 1
 
@@ -40,7 +43,7 @@ def choose_parallel_work_item_count(
     if worker_count <= 1:
         return 1
 
-    var total_similarity_pairs = query.vector_count * index.total_vector_count
+    var total_similarity_pairs = query_vector_count * index.total_vector_count
     if total_similarity_pairs < MIN_PARALLEL_SIMILARITY_PAIRS:
         return 1
 
@@ -64,6 +67,16 @@ def choose_parallel_work_item_count(
         return max_work_items
 
     return work_item_count
+
+
+def choose_parallel_work_item_count(
+    read query: EncodedQuery,
+    read index: PackedIndex,
+    read config: ExactScoringConfig,
+) -> Int:
+    return choose_parallel_work_item_count_for_query_vector_count(
+        query.vector_count, index, config
+    )
 
 
 def build_vector_balanced_boundaries(

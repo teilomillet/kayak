@@ -1,4 +1,9 @@
-from .contracts import EncodedDocument, EncodedQuery
+from .contracts import (
+    EncodedDocument,
+    EncodedQuery,
+    FlatQueryDim128,
+    build_flat_query_dim128,
+)
 from .eval import (
     JudgedQuery,
     JudgedTask,
@@ -30,9 +35,16 @@ from .runtime import ExactCpuBackend
 from .scoring import ExactScoringConfig
 from .scoring import (
     exact_score_for_hybrid_flat_document_dim128,
+    exact_score_for_hybrid_flat_document_dim128_with_flat_query,
     exact_scores_for_hybrid_flat_index_dim128,
+    exact_scores_for_hybrid_flat_index_dim128_with_flat_query,
 )
-from .search import SearchHit, search_exact, search_exact_hybrid_flat_dim128
+from .search import (
+    SearchHit,
+    search_exact,
+    search_exact_hybrid_flat_dim128,
+    search_exact_hybrid_flat_dim128_with_flat_query,
+)
 from .storage import (
     FiqaRealSubsetCache,
     HybridFlatDim128CacheEntry,

@@ -4,14 +4,18 @@ from std.pathlib import Path
 
 from kayak import (
     ExactCpuBackend,
+    FlatQueryDim128,
     HybridFlatDim128Index,
     JudgedTask,
     PackedIndex,
+    build_flat_query_dim128,
     build_hybrid_flat_dim128_index,
     ensure_stored_hybrid_flat_dim128_index,
     exact_scores_for_hybrid_flat_index_dim128,
+    exact_scores_for_hybrid_flat_index_dim128_with_flat_query,
     load_stored_hybrid_flat_dim128_index,
     search_exact_hybrid_flat_dim128,
+    search_exact_hybrid_flat_dim128_with_flat_query,
 )
 from kayak.search import search_exact
 from kayak.storage import (
@@ -89,6 +93,22 @@ def benchmark_nested_score_all(
     print("")
 
 
+def benchmark_build_flat_query(
+    read task: JudgedTask
+) raises:
+    print("== build_flat_query_dim128 ==")
+    var query_index = 0
+
+    def build_once() capturing raises:
+        bench_compiler.keep(build_flat_query_dim128(task.queries[query_index].query))
+        query_index += 1
+        if query_index == len(task.queries):
+            query_index = 0
+
+    benchmark.run[build_once]().print()
+    print("")
+
+
 def benchmark_hybrid_score_all(
     read backend: ExactCpuBackend,
     read task: JudgedTask,
@@ -102,6 +122,33 @@ def benchmark_hybrid_score_all(
         bench_compiler.keep(
             exact_scores_for_hybrid_flat_index_dim128(
                 task.queries[query_index].query,
+                index,
+                hybrid_index,
+                backend.scoring_config,
+            )
+        )
+        query_index += 1
+        if query_index == len(task.queries):
+            query_index = 0
+
+    benchmark.run[score_once]().print()
+    print("")
+
+
+def benchmark_hybrid_score_all_with_flat_query(
+    read backend: ExactCpuBackend,
+    read task: JudgedTask,
+    read index: PackedIndex,
+    read hybrid_index: HybridFlatDim128Index,
+) raises:
+    print("== hybrid score_all with flat query ==")
+    var query_index = 0
+
+    def score_once() capturing raises:
+        var flat_query = build_flat_query_dim128(task.queries[query_index].query)
+        bench_compiler.keep(
+            exact_scores_for_hybrid_flat_index_dim128_with_flat_query(
+                flat_query,
                 index,
                 hybrid_index,
                 backend.scoring_config,
@@ -162,6 +209,34 @@ def benchmark_hybrid_search_exact(
     print("")
 
 
+def benchmark_hybrid_search_exact_with_flat_query(
+    read backend: ExactCpuBackend,
+    read task: JudgedTask,
+    read index: PackedIndex,
+    read hybrid_index: HybridFlatDim128Index,
+) raises:
+    print("== hybrid search_exact with flat query ==")
+    var query_index = 0
+
+    def score_once() capturing raises:
+        var flat_query = build_flat_query_dim128(task.queries[query_index].query)
+        bench_compiler.keep(
+            search_exact_hybrid_flat_dim128_with_flat_query(
+                flat_query,
+                index,
+                hybrid_index,
+                task.k,
+                backend.scoring_config,
+            )
+        )
+        query_index += 1
+        if query_index == len(task.queries):
+            query_index = 0
+
+    benchmark.run[score_once]().print()
+    print("")
+
+
 def benchmark_task(
     hybrid_root: Path,
     read task: JudgedTask,
@@ -171,10 +246,15 @@ def benchmark_task(
     var backend = default_backend()
     benchmark_build_hybrid_index(index)
     benchmark_load_hybrid_index(hybrid_root)
+    benchmark_build_flat_query(task)
     benchmark_nested_score_all(backend, task, index)
     benchmark_hybrid_score_all(backend, task, index, hybrid_index)
+    benchmark_hybrid_score_all_with_flat_query(backend, task, index, hybrid_index)
     benchmark_nested_search_exact(backend, task, index)
     benchmark_hybrid_search_exact(backend, task, index, hybrid_index)
+    benchmark_hybrid_search_exact_with_flat_query(
+        backend, task, index, hybrid_index
+    )
 
 
 def benchmark_scifact_real_subset() raises:
