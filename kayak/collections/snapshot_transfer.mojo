@@ -1,6 +1,10 @@
 from std.pathlib import Path
 
-from kayak.storage import save_stored_packed_index
+from kayak.storage import (
+    save_stored_centroid_posting_index,
+    save_stored_document_proxy_index,
+    save_stored_packed_index,
+)
 
 from .collection import CollectionManifest
 from .collection_store import (
@@ -159,6 +163,12 @@ def require_segment_manifest_compatible(
     if existing.packed_index_root != imported.packed_index_root:
         raise Error("segment manifest packed_index_root mismatch during import")
 
+    if existing.centroid_postings_root != imported.centroid_postings_root:
+        raise Error("segment manifest centroid_postings_root mismatch during import")
+
+    if existing.document_proxy_root != imported.document_proxy_root:
+        raise Error("segment manifest document_proxy_root mismatch during import")
+
     if existing.text_corpus_root != imported.text_corpus_root:
         raise Error("segment manifest text_corpus_root mismatch during import")
 
@@ -233,6 +243,18 @@ def write_loaded_segment_into_collection_root(
         segment_root / segment.manifest.packed_index_root,
         segment.stored_index,
     )
+
+    if segment.has_centroid_postings_index:
+        save_stored_centroid_posting_index(
+            segment_root / segment.manifest.centroid_postings_root,
+            segment.stored_centroid_postings_index,
+        )
+
+    if segment.has_document_proxy_index:
+        save_stored_document_proxy_index(
+            segment_root / segment.manifest.document_proxy_root,
+            segment.stored_document_proxy_index,
+        )
 
     if segment.has_text_corpus:
         save_stored_document_text_corpus(

@@ -27,6 +27,16 @@ from kayak.storage import StoredPackedIndex, save_stored_packed_index
 from kayak.text import DocumentTextCorpus
 
 
+def unique_root(prefix: String) -> Path:
+    var suffix = 0
+
+    while True:
+        var root = Path("/tmp/" + prefix + "-" + String(suffix))
+        if not root.exists():
+            return root
+        suffix += 1
+
+
 def write_segment_payload(
     segment_root: Path,
     collection_id: String,
@@ -108,9 +118,9 @@ def build_source_collection(root: Path) raises:
 
 
 def test_snapshot_bundle_export_import_roundtrip() raises:
-    var source_root = Path("/tmp/kayak-snapshot-bundle-source")
-    var bundle_root = Path("/tmp/kayak-snapshot-bundle-export")
-    var target_root = Path("/tmp/kayak-snapshot-bundle-import")
+    var source_root = unique_root("kayak-snapshot-bundle-source")
+    var bundle_root = unique_root("kayak-snapshot-bundle-export")
+    var target_root = unique_root("kayak-snapshot-bundle-import")
 
     build_source_collection(source_root)
 
@@ -138,9 +148,9 @@ def test_snapshot_bundle_export_import_roundtrip() raises:
 
 
 def test_snapshot_bundle_import_rejects_collection_mismatch() raises:
-    var source_root = Path("/tmp/kayak-snapshot-bundle-mismatch-source")
-    var bundle_root = Path("/tmp/kayak-snapshot-bundle-mismatch-export")
-    var target_root = Path("/tmp/kayak-snapshot-bundle-mismatch-target")
+    var source_root = unique_root("kayak-snapshot-bundle-mismatch-source")
+    var bundle_root = unique_root("kayak-snapshot-bundle-mismatch-export")
+    var target_root = unique_root("kayak-snapshot-bundle-mismatch-target")
 
     build_source_collection(source_root)
     _ = export_snapshot_bundle(source_root, SnapshotId("snapshot-0004"), bundle_root)

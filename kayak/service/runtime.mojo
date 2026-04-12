@@ -28,10 +28,17 @@ from kayak.filters import FilterExpression
 from kayak.index import pack_documents
 from kayak.planning import (
     explain_collection_search,
-    final_hits_for_plan,
+    search_collection_for_plan,
 )
 from kayak.runtime import ExactScoringBackend
-from kayak.storage import StoredPackedIndex, save_stored_packed_index
+from kayak.storage import (
+    StoredPackedIndex,
+    centroid_postings_storage_byte_size,
+    document_proxy_storage_byte_size,
+    ensure_stored_centroid_posting_index,
+    ensure_stored_document_proxy_index,
+    save_stored_packed_index,
+)
 from kayak.text import DocumentTextCorpus
 
 from .collection_requests import CreateCollectionRequest
@@ -68,7 +75,10 @@ def packed_index_storage_byte_size(root: Path) raises -> Int:
     var total = (root / "manifest.tsv").read_text().byte_length()
     total += (root / "doc_ids.tsv").read_text().byte_length()
     total += (root / "doc_offsets.tsv").read_text().byte_length()
-    total += len((root / "token_vectors.bin").read_bytes())
+    if (root / "token_vectors.bin").exists():
+        total += len((root / "token_vectors.bin").read_bytes())
+    else:
+        total += (root / "token_vectors.tsv").read_text().byte_length()
     return total
 
 
@@ -265,21 +275,34 @@ def create_snapshot(
 
     var generation = collection.latest_generation + 1
     var packed_index = pack_documents(draft_state.documents)
+    var stored_index = StoredPackedIndex(
+        "collection://" + collection.collection_id.value,
+        collection.model_name.copy(),
+        collection.vector_scalar_name.copy(),
+        packed_index.copy(),
+    )
     var segment_id = SegmentId("segment-" + String(generation))
     var segment_root = collection_root / "segments" / segment_id.value
     var packed_index_root = segment_root / "packed_index"
 
     save_stored_packed_index(
         packed_index_root,
-        StoredPackedIndex(
-            "collection://" + collection.collection_id.value,
-            collection.model_name.copy(),
-            collection.vector_scalar_name.copy(),
-            packed_index.copy(),
-        ),
+        stored_index.copy(),
     )
 
     var byte_size = packed_index_storage_byte_size(packed_index_root)
+    _ = ensure_stored_document_proxy_index(
+        segment_root / "document_proxy",
+        stored_index,
+        0,
+    )
+    _ = ensure_stored_centroid_posting_index(
+        segment_root / "centroid_postings",
+        stored_index,
+        0,
+    )
+    byte_size += document_proxy_storage_byte_size(segment_root / "document_proxy")
+    byte_size += centroid_postings_storage_byte_size(segment_root / "centroid_postings")
     var text_corpus_root_name = ""
     if draft_state.has_any_text():
         text_corpus_root_name = "text_corpus"
@@ -318,6 +341,9 @@ def create_snapshot(
             collection.vector_scalar_name.copy(),
             collection.vector_dim,
             "packed_index",
+            "centroid_postings",
+            "",
+            "document_proxy",
             text_corpus_root_name.copy(),
             segment_stats.copy(),
         ),
@@ -417,14 +443,15 @@ def execute_search[Backend: ExactScoringBackend](
         collection_root,
     )
     var snapshot = load_resolved_collection_snapshot(collection_root, request.snapshot_id)
-    var explain = explain_collection_search(backend, request.query, snapshot, request.plan)
     return SearchResponse(
         request.collection_id,
         request.tenant_id,
         request.namespace_id,
         request.snapshot_id,
         request.plan,
-        final_hits_for_plan(explain.candidate_set, request.plan),
+        search_collection_for_plan(
+            backend, request.query, snapshot, request.plan
+        ),
     )
 
 

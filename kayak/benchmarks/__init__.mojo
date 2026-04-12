@@ -38,6 +38,13 @@ from .json_report import (
     real_slice_benchmark_summary_json,
     real_slice_benchmark_summaries_json,
 )
+from .stage_aware_json import (
+    StageAwareSearchSummary,
+    build_stage_aware_search_summary_from_measurement,
+    build_stage_aware_search_summary,
+    stage_aware_search_summary_json,
+    stage_aware_search_summaries_json,
+)
 from .storage_json_report import (
     RealSliceCollectionStorageSummary,
     build_real_slice_collection_storage_summary,

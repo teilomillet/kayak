@@ -464,17 +464,17 @@ Reason:
 
 These are the best next moves right now.
 
-- [ ] Wire `kayak/service/` collection and snapshot requests to the serving
+- [x] Wire `kayak/service/` collection and snapshot requests to the serving
   storage layer
-- [ ] Add one end-to-end hosted collection smoke path:
+- [x] Add one end-to-end hosted collection smoke path:
   create, ingest, snapshot, search, explain
-- [ ] Execute exact search through an explicit `SearchPlan` runtime path rather
+- [x] Execute exact search through an explicit `SearchPlan` runtime path rather
   than benchmark-specific orchestration only
-- [ ] Implement one tighter WARP/GEM-style native candidate engine behind
+- [x] Implement one tighter WARP/GEM-style native candidate engine behind
   `SearchPlan`
-- [ ] Extend stage-1 recall reporting to compare the native engine against both
+- [x] Extend stage-1 recall reporting to compare the native engine against both
   `document_proxy` and `centroid_postings`
-- [ ] Write one benchmark-selection note for hard-recall tasks before adding
+- [x] Write one benchmark-selection note for hard-recall tasks before adding
   more benchmark families
 
 ## What We Should Not Do Next
