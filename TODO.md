@@ -157,7 +157,7 @@ Immediate TODOs:
 - [x] Split "judged task storage" from "serving collection storage"
 - [x] Add an explicit optional text-sidecar artifact keyed by `doc_id`
 - [x] Add segment-level stats: doc count, token count, vector count, average vectors/doc, byte size
-- [ ] Add snapshot/export/import boundaries
+- [x] Add snapshot/export/import boundaries
 
 ## Priority 2: Candidate Generation As A First-Class Engine Stage
 

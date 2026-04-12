@@ -200,12 +200,13 @@ These remain intentionally undecided:
 
 The next service-adjacent work should be:
 
-1. implement snapshot export/import storage boundaries
-2. define the filter expression model
-3. add a minimal HTTP adapter that translates JSON bodies into
+1. define the filter expression model
+2. add a minimal HTTP adapter that translates JSON bodies into
    `kayak/service/` typed contracts
-4. route debug mode directly to `CollectionSearchExplain`
-5. reuse collection storage reports in the metrics endpoint
+3. route debug mode directly to `CollectionSearchExplain`
+4. reuse collection storage reports and snapshot-bundle export/import in the
+   service layer
+5. add an auth and tenant-isolation story once the core request grammar settles
 
 That sequence preserves the current engine contracts and keeps the transport
 thin.
