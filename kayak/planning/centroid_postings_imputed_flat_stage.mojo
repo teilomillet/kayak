@@ -9,9 +9,12 @@ from kayak.numeric import ScoreScalar, VectorScalar, min_score_scalar, zero_scor
 from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
 from kayak.scoring.dot128_flat import dot_product_dim128_flat_pair_at
 
+from .centroid_primitives import (
+    ScoredCentroidSelection,
+    accumulate_selected_centroid_scores,
+)
 from .centroid_postings_flat_stage import dot_product_flat_pair_at_generic
 from .centroid_postings_imputed_stage import (
-    ImputedCentroidSelection,
     append_descending_centroid_index,
     centroid_token_count,
     effective_imputed_centroid_bound,
@@ -25,7 +28,7 @@ def centroid_selection_for_flat_query_token_generic(
     query_offset: Int,
     read index: CentroidPostingIndex,
     final_k: Int,
-) -> ImputedCentroidSelection:
+) -> ScoredCentroidSelection:
     var sorted_centroid_indices = List[Int]()
     var sorted_centroid_scores = List[ScoreScalar]()
 
@@ -63,7 +66,7 @@ def centroid_selection_for_flat_query_token_generic(
         if cumulative_size >= t_prime:
             break
 
-    return ImputedCentroidSelection(
+    return ScoredCentroidSelection(
         selected_centroid_indices^,
         selected_centroid_scores^,
         missing_similarity_estimate,
@@ -75,7 +78,7 @@ def centroid_selection_for_flat_query_token_dim128(
     query_index: Int,
     read index: CentroidPostingIndex,
     final_k: Int,
-) -> ImputedCentroidSelection:
+) -> ScoredCentroidSelection:
     var sorted_centroid_indices = List[Int]()
     var sorted_centroid_scores = List[ScoreScalar]()
     var query_offset = query_index * COLBERT_VECTOR_DIM
@@ -113,7 +116,7 @@ def centroid_selection_for_flat_query_token_dim128(
         if cumulative_size >= t_prime:
             break
 
-    return ImputedCentroidSelection(
+    return ScoredCentroidSelection(
         selected_centroid_indices^,
         selected_centroid_scores^,
         missing_similarity_estimate,
@@ -126,7 +129,7 @@ def centroid_posting_imputed_flat_scores_for_segment_generic(
     final_k: Int,
 ) -> List[ScoreScalar]:
     var flat_query_values = List[VectorScalar]()
-    var selections = List[ImputedCentroidSelection]()
+    var selections = List[ScoredCentroidSelection]()
     var base_score = zero_score_scalar()
 
     for token_vector in query.token_vectors:
@@ -141,44 +144,23 @@ def centroid_posting_imputed_flat_scores_for_segment_generic(
             final_k,
         )
         selections.append(selection.copy())
-        base_score += selection.missing_similarity_estimate
+        base_score += selection.baseline_correction
 
     var scores = List[ScoreScalar]()
+    var active_flags = List[Int]()
+    var active_doc_indices = List[Int]()
     for _ in range(index.document_count):
         scores.append(base_score)
+        active_flags.append(0)
 
     for selection in selections:
-        var token_best_scores = List[ScoreScalar]()
-        var token_active_doc_indices = List[Int]()
-        var token_active_flags = List[Int]()
-
-        for _ in range(index.document_count):
-            token_best_scores.append(min_score_scalar())
-            token_active_flags.append(0)
-
-        for centroid_list_index in range(len(selection.centroid_indices)):
-            var centroid_index = selection.centroid_indices[centroid_list_index]
-            var centroid_score = selection.centroid_scores[centroid_list_index]
-            var start = index.posting_offsets[centroid_index]
-            var stop = index.posting_offsets[centroid_index + 1]
-
-            for posting_index in range(start, stop):
-                var doc_index = index.posting_doc_indices[posting_index]
-                var approximate_score = (
-                    centroid_score * ScoreScalar(index.posting_weights[posting_index])
-                )
-
-                if token_active_flags[doc_index] == 0:
-                    token_active_doc_indices.append(doc_index)
-                    token_active_flags[doc_index] = 1
-
-                if approximate_score > token_best_scores[doc_index]:
-                    token_best_scores[doc_index] = approximate_score
-
-        for doc_index in token_active_doc_indices:
-            scores[doc_index] += (
-                token_best_scores[doc_index] - selection.missing_similarity_estimate
-            )
+        accumulate_selected_centroid_scores(
+            selection,
+            index,
+            scores,
+            active_doc_indices,
+            active_flags,
+        )
 
     return scores^
 
@@ -188,7 +170,7 @@ def centroid_posting_imputed_flat_scores_for_segment_dim128(
     read index: CentroidPostingIndex,
     final_k: Int,
 ) -> List[ScoreScalar]:
-    var selections = List[ImputedCentroidSelection]()
+    var selections = List[ScoredCentroidSelection]()
     var base_score = zero_score_scalar()
 
     for query_index in range(query.vector_count):
@@ -196,44 +178,23 @@ def centroid_posting_imputed_flat_scores_for_segment_dim128(
             query, query_index, index, final_k
         )
         selections.append(selection.copy())
-        base_score += selection.missing_similarity_estimate
+        base_score += selection.baseline_correction
 
     var scores = List[ScoreScalar]()
+    var active_flags = List[Int]()
+    var active_doc_indices = List[Int]()
     for _ in range(index.document_count):
         scores.append(base_score)
+        active_flags.append(0)
 
     for selection in selections:
-        var token_best_scores = List[ScoreScalar]()
-        var token_active_doc_indices = List[Int]()
-        var token_active_flags = List[Int]()
-
-        for _ in range(index.document_count):
-            token_best_scores.append(min_score_scalar())
-            token_active_flags.append(0)
-
-        for centroid_list_index in range(len(selection.centroid_indices)):
-            var centroid_index = selection.centroid_indices[centroid_list_index]
-            var centroid_score = selection.centroid_scores[centroid_list_index]
-            var start = index.posting_offsets[centroid_index]
-            var stop = index.posting_offsets[centroid_index + 1]
-
-            for posting_index in range(start, stop):
-                var doc_index = index.posting_doc_indices[posting_index]
-                var approximate_score = (
-                    centroid_score * ScoreScalar(index.posting_weights[posting_index])
-                )
-
-                if token_active_flags[doc_index] == 0:
-                    token_active_doc_indices.append(doc_index)
-                    token_active_flags[doc_index] = 1
-
-                if approximate_score > token_best_scores[doc_index]:
-                    token_best_scores[doc_index] = approximate_score
-
-        for doc_index in token_active_doc_indices:
-            scores[doc_index] += (
-                token_best_scores[doc_index] - selection.missing_similarity_estimate
-            )
+        accumulate_selected_centroid_scores(
+            selection,
+            index,
+            scores,
+            active_doc_indices,
+            active_flags,
+        )
 
     return scores^
 

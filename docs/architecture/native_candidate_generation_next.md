@@ -128,3 +128,25 @@ The next implementation milestone should be:
   `centroid_postings_imputed_flat`
 - judge it on the same candidate-window, vector-budget, and storage traces
 - only promote it if it improves the current Pareto frontier on those artifacts
+
+## Primitive Layer
+
+The centroid family now also has an explicit primitive layer:
+
+- `ScoredCentroidSelection`
+- `accumulate_selected_centroid_scores(...)`
+
+Measured trace:
+
+- [docs/traces/2026-04-13_centroid_primitives.md](../traces/2026-04-13_centroid_primitives.md)
+
+What that trace justifies:
+
+- the public quality guardrails stay unchanged after primitive extraction
+- the imputed selection kernel is the dominant primitive cost
+- accumulation is not the next hot path to optimize first
+
+Inference:
+
+- the next CPU-native step should target tighter imputed selection traversal
+  and layout, then only move into heavier WARP/GEM-style engine work

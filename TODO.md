@@ -251,6 +251,11 @@ Current interpretation:
   baseline.
 - `centroid_postings_imputed_flat` is now the tighter layout follow-on for that
   heavier native path.
+- the centroid family now has an explicit primitive layer for:
+  - scored centroid selection
+  - posting-score accumulation
+- the current primitive profile says the imputed selection kernel is the next
+  CPU hot path, not accumulation
 - approximate plans now carry explicit faithfulness policy rather than silently
   pretending to be exact
 - The next heavier engine step should be a tighter WARP/GEM-style native

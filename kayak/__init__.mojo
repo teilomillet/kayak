@@ -72,6 +72,8 @@ from .planning import (
     build_score_histogram,
     candidate_generation_for_plan,
     candidate_recall_at_final_k,
+    ScoredCentroidSelection,
+    accumulate_selected_centroid_scores,
     centroid_heads_candidate_generator,
     centroid_heads_search_plan,
     centroid_posting_blockmax_scores_for_segment,

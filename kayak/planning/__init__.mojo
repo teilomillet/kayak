@@ -13,6 +13,10 @@ from .candidate_generator import (
     exact_full_scan_candidate_generator,
 )
 from .candidate_set import CandidateSet
+from .centroid_primitives import (
+    ScoredCentroidSelection,
+    accumulate_selected_centroid_scores,
+)
 from .collection_hit import CollectionHit, to_search_hit
 from .execution import (
     candidate_generation_for_plan,

@@ -4,10 +4,14 @@ from kayak.index import CentroidPostingIndex
 from kayak.numeric import (
     ScoreScalar,
     VectorScalar,
-    min_score_scalar,
     zero_score_scalar,
 )
 from kayak.scoring.dot import dot_product
+
+from .centroid_primitives import (
+    ScoredCentroidSelection,
+    accumulate_selected_centroid_scores,
+)
 
 
 comptime QUERY_TOKEN_CENTROID_PROBE_COUNT = 2
@@ -50,9 +54,9 @@ def insert_descending_centroid_match(
     centroid_scores[insert_at] = centroid_score
 
 
-def top_centroid_indices_for_query_token(
+def top_centroid_selection_for_query_token(
     read query_token: List[VectorScalar], read index: CentroidPostingIndex
-) -> List[Int]:
+) -> ScoredCentroidSelection:
     var centroid_indices = List[Int]()
     var centroid_scores = List[ScoreScalar]()
 
@@ -65,46 +69,15 @@ def top_centroid_indices_for_query_token(
             QUERY_TOKEN_CENTROID_PROBE_COUNT,
         )
 
-    return centroid_indices^
+    return ScoredCentroidSelection(centroid_indices^, centroid_scores^, ScoreScalar(0.0))
 
 
-def accumulate_token_best_doc_scores(
-    read query_token: List[VectorScalar], read index: CentroidPostingIndex,
-    mut scores: List[ScoreScalar], mut active_doc_indices: List[Int],
-    mut active_flags: List[Int],
-):
-    var token_best_scores = List[ScoreScalar]()
-    var token_active_doc_indices = List[Int]()
-    var token_active_flags = List[Int]()
-
-    for _ in range(len(scores)):
-        token_best_scores.append(min_score_scalar())
-        token_active_flags.append(0)
-
-    for centroid_index in top_centroid_indices_for_query_token(query_token, index):
-        var similarity = dot_product(query_token, index.centroid_vectors[centroid_index])
-        var start = index.posting_offsets[centroid_index]
-        var stop = index.posting_offsets[centroid_index + 1]
-
-        for posting_index in range(start, stop):
-            var doc_index = index.posting_doc_indices[posting_index]
-            var weighted_similarity = (
-                similarity * ScoreScalar(index.posting_weights[posting_index])
-            )
-
-            if token_active_flags[doc_index] == 0:
-                token_active_doc_indices.append(doc_index)
-                token_active_flags[doc_index] = 1
-
-            if weighted_similarity > token_best_scores[doc_index]:
-                token_best_scores[doc_index] = weighted_similarity
-
-    for doc_index in token_active_doc_indices:
-        if active_flags[doc_index] == 0:
-            active_doc_indices.append(doc_index)
-            active_flags[doc_index] = 1
-
-        scores[doc_index] += token_best_scores[doc_index]
+def top_centroid_indices_for_query_token(
+    read query_token: List[VectorScalar], read index: CentroidPostingIndex
+) -> List[Int]:
+    return top_centroid_selection_for_query_token(
+        query_token, index
+    ).centroid_indices.copy()
 
 
 def centroid_posting_scores_for_segment(
@@ -119,8 +92,12 @@ def centroid_posting_scores_for_segment(
         active_flags.append(0)
 
     for query_token in query_token_vectors:
-        accumulate_token_best_doc_scores(
-            query_token, index, scores, active_doc_indices, active_flags
+        accumulate_selected_centroid_scores(
+            top_centroid_selection_for_query_token(query_token, index),
+            index,
+            scores,
+            active_doc_indices,
+            active_flags,
         )
 
     return scores^
