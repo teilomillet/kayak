@@ -33,3 +33,14 @@ from .snapshot_requests import (
     ExportSnapshotRequest,
     ImportSnapshotRequest,
 )
+from .runtime import (
+    create_collection,
+    create_snapshot,
+    delete_documents,
+    execute_debug_search,
+    execute_explain,
+    execute_search,
+    export_snapshot,
+    import_snapshot,
+    upsert_documents,
+)

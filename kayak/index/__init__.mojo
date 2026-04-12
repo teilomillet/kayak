@@ -13,3 +13,4 @@ from .hybrid_flat_dim128 import (
     build_hybrid_flat_dim128_index,
 )
 from .packed_index import PackedIndex
+from .unpack import unpack_documents
