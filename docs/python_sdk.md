@@ -5,6 +5,8 @@ this monorepo.
 
 For the product-level mission and scope, see
 [docs/python_sdk_charter.md](python_sdk_charter.md).
+For the planned sequence of SDK work, see
+[docs/python_sdk_roadmap.md](python_sdk_roadmap.md).
 
 ## Status
 

@@ -7,6 +7,9 @@ It is a product-positioning note, not a packaging trace.
 The goal is to keep the public story stable even while the internal engine
 keeps evolving.
 
+For the implementation sequence behind this position, see
+[docs/python_sdk_roadmap.md](python_sdk_roadmap.md).
+
 ## Core Claim
 
 `kayak` for Python should make late interaction feel native in Python.

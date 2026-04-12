@@ -22,6 +22,8 @@ the parts that matter in late interaction:
 For the higher-level product positioning and the split between the open Python
 SDK and the hosted engine, see
 [docs/python_sdk_charter.md](../../docs/python_sdk_charter.md).
+For the execution plan behind that position, see
+[docs/python_sdk_roadmap.md](../../docs/python_sdk_roadmap.md).
 
 ## Install
 

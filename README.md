@@ -137,6 +137,8 @@ The detailed SDK boundary, install paths, and quickstarts are documented in
 [docs/python_sdk.md](docs/python_sdk.md).
 The product positioning for Kayak Python versus the hosted engine is documented
 in [docs/python_sdk_charter.md](docs/python_sdk_charter.md).
+The execution plan for that SDK is documented in
+[docs/python_sdk_roadmap.md](docs/python_sdk_roadmap.md).
 
 Example:
 
