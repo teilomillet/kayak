@@ -285,6 +285,12 @@ This is a derived layout for `128`-dim document embeddings:
 
 For the same late-interaction path, the repo also supports an optional
 `FlatQueryDim128` query layout.
+
+The exact late-interaction runtime now has an explicit backend contract in
+`kayak/runtime/ExactScoringBackend`.
+That keeps the current CPU path unchanged while making the replacement seam for
+future GPU scoring explicit in search, evaluation, verifier, and collection
+planning code.
 This still preserves the full multi-vector query representation.
 It changes query memory layout only; it does not collapse retrieval into a
 single-vector search.

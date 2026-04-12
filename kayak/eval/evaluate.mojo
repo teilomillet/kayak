@@ -1,6 +1,6 @@
 from kayak.index import pack_documents
 from kayak.numeric import MetricScalar, zero_metric_scalar
-from kayak.runtime import ExactCpuBackend
+from kayak.runtime import ExactScoringBackend
 from kayak.search import search_exact
 from kayak.verifier import VerifierReranker, search_exact_with_verifier
 
@@ -49,8 +49,8 @@ struct TaskEvaluation(Copyable):
         self.success_rate_at_k = success_rate_at_k
 
 
-def evaluate_task(
-    read backend: ExactCpuBackend, read task: JudgedTask
+def evaluate_task[Backend: ExactScoringBackend](
+    read backend: Backend, read task: JudgedTask
 ) raises -> TaskEvaluation:
     if len(task.queries) == 0:
         raise Error("cannot evaluate a task with zero queries")
@@ -100,8 +100,8 @@ def evaluate_task(
     )
 
 
-def evaluate_task_with_verifier(
-    read backend: ExactCpuBackend,
+def evaluate_task_with_verifier[Backend: ExactScoringBackend](
+    read backend: Backend,
     read task: JudgedTask,
     read verifier: VerifierReranker,
 ) raises -> TaskEvaluation:

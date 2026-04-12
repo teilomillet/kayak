@@ -297,8 +297,8 @@ Decision:
 - GPU and distributed work should target the stabilized stage contracts, not bypass them
 
 Immediate TODOs:
-- [ ] Keep backend boundaries explicit in `runtime/`
-- [ ] Design stage interfaces so GPU kernels can replace CPU kernels cleanly
+- [x] Keep backend boundaries explicit in `runtime/`
+- [x] Design stage interfaces so GPU kernels can replace CPU kernels cleanly
 - [ ] Delay distributed sharding design until segment and tenancy contracts are settled
 
 ## Execution Plan

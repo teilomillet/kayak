@@ -5,8 +5,10 @@ from kayak.index import PackedIndex
 from kayak.numeric import ScoreScalar
 from kayak.scoring import ExactScoringConfig, exact_scores_for_index_with_config
 
+from .exact_backend import ExactScoringBackend
 
-struct ExactCpuBackend(Copyable):
+
+struct ExactCpuBackend(Copyable, ExactScoringBackend):
     var scoring_config: ExactScoringConfig
 
     def __init__(out self):

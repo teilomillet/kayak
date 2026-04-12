@@ -2,7 +2,7 @@ from std.collections import List
 
 from kayak.contracts import EncodedQuery
 from kayak.index import PackedIndex
-from kayak.runtime import ExactCpuBackend
+from kayak.runtime import ExactScoringBackend
 from kayak.search import SearchHit, search_exact
 
 from .exact_late_interaction import rerank_hits_exact_late_interaction
@@ -29,8 +29,8 @@ def rerank_hits_with_verifier(
     raise Error("unknown verifier kind: " + verifier.kind)
 
 
-def search_exact_with_verifier(
-    read backend: ExactCpuBackend,
+def search_exact_with_verifier[Backend: ExactScoringBackend](
+    read backend: Backend,
     read query: EncodedQuery,
     read index: PackedIndex,
     k: Int,

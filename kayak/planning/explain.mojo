@@ -3,7 +3,7 @@ from std.collections import List
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.contracts import EncodedQuery
 from kayak.numeric import MetricScalar
-from kayak.runtime import ExactCpuBackend
+from kayak.runtime import ExactScoringBackend
 
 from .candidate_set import CandidateSet
 from .collection_hit import CollectionHit
@@ -48,8 +48,8 @@ struct CollectionSearchExplain(Copyable):
         self.final_hits = final_hits^
 
 
-def explain_collection_search(
-    read backend: ExactCpuBackend,
+def explain_collection_search[Backend: ExactScoringBackend](
+    read backend: Backend,
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,

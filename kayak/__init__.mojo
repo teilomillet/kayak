@@ -65,7 +65,7 @@ from .planning import (
     explain_collection_search,
     final_hits_for_plan,
 )
-from .runtime import ExactCpuBackend
+from .runtime import ExactCpuBackend, ExactScoringBackend
 from .service import (
     CreateCollectionRequest,
     CreateSnapshotRequest,

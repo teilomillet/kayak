@@ -3,7 +3,7 @@ from std.collections import List
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.contracts import EncodedQuery
 from kayak.numeric import MetricScalar
-from kayak.runtime import ExactCpuBackend
+from kayak.runtime import ExactScoringBackend
 from kayak.search import SearchHit
 
 from .candidate_set import CandidateSet
@@ -12,8 +12,8 @@ from .search_plan import SearchPlan
 from .topk import insert_descending_collection_hit
 
 
-def candidate_generation_for_plan(
-    read backend: ExactCpuBackend,
+def candidate_generation_for_plan[Backend: ExactScoringBackend](
+    read backend: Backend,
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
