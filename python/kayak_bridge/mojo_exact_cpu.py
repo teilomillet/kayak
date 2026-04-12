@@ -60,21 +60,91 @@ def _compiled_extension_suffix() -> str:
     return suffixes[0]
 
 
+def _mojo_binary_names() -> tuple[str, ...]:
+    if os.name == "nt":
+        return ("mojo.exe", "mojo")
+    return ("mojo",)
+
+
+def _candidate_mojo_directories() -> tuple[Path, ...]:
+    candidates = [
+        Path(sys.executable).resolve().parent,
+        Path(sys.prefix) / "bin",
+        Path(sys.exec_prefix) / "bin",
+        Path(sys.prefix) / "Scripts",
+        Path(sys.exec_prefix) / "Scripts",
+    ]
+
+    virtual_env = os.environ.get("VIRTUAL_ENV")
+    if virtual_env:
+        candidates.extend(
+            [Path(virtual_env) / "bin", Path(virtual_env) / "Scripts"]
+        )
+
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidates.extend(
+            [Path(conda_prefix) / "bin", Path(conda_prefix) / "Scripts"]
+        )
+
+    ordered: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        ordered.append(candidate)
+    return tuple(ordered)
+
+
+def _command_is_usable(command: list[str]) -> bool:
+    result = subprocess.run(
+        [*command, "--version"],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _interpreter_local_mojo_command() -> list[str] | None:
+    for directory in _candidate_mojo_directories():
+        for binary_name in _mojo_binary_names():
+            candidate = directory / binary_name
+            if not candidate.exists() or not candidate.is_file():
+                continue
+            if not os.access(candidate, os.X_OK):
+                continue
+
+            command = [str(candidate)]
+            if _command_is_usable(command):
+                return command
+
+    return None
+
+
 def _detect_mojo_command() -> list[str]:
     configured = os.environ.get("KAYAK_MOJO_CLI")
     if configured:
         return [configured]
 
+    interpreter_local = _interpreter_local_mojo_command()
+    if interpreter_local is not None:
+        return interpreter_local
+
     mojo_path = shutil.which("mojo")
-    if mojo_path is not None:
+    if mojo_path is not None and _command_is_usable([mojo_path]):
         return [mojo_path]
 
     pixi_path = shutil.which("pixi")
     if pixi_path is not None:
-        return [pixi_path, "run", "mojo"]
+        pixi_command = [pixi_path, "run", "mojo"]
+        if _command_is_usable(pixi_command):
+            return pixi_command
 
     raise RuntimeError(
-        "Kayak could not find a Mojo CLI. Set KAYAK_MOJO_CLI or install Mojo."
+        "Kayak could not find a usable Mojo CLI. Set KAYAK_MOJO_CLI, install "
+        "Mojo into the active Python environment, or make `mojo` available "
+        "on PATH."
     )
 
 

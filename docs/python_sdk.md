@@ -208,13 +208,70 @@ Runnable example:
 - depends on the monorepo's Mojo engine package today
 - is appropriate for internal use and controlled distribution
 - should be treated as more operationally constrained than `numpy_reference`
+- discovers Mojo in this order:
+  - `KAYAK_MOJO_CLI`
+  - a usable `mojo` binary in the active Python environment
+  - `mojo` on `PATH`
+  - `pixi run mojo`
+- does not switch on automatically; callers still choose
+  `backend=kayak.MOJO_EXACT_CPU_BACKEND`
 - worked in fresh-consumer testing after `pip install /path/to/kayak` in an
   environment that already had `mojo`
 - worked in fresh-consumer testing after installing a locally built repo-head
   wheel in a Pixi environment that already had `mojo`
-- did not work in fresh-consumer testing after the published-package paths
-  `pip install kayak`, `uv add kayak`, or `pixi add --pypi kayak` because the
-  installed package did not contain a bundled `kayak.mojopkg`
+- worked in fresh-consumer testing after `pip install kayak` and
+  `pixi add --pypi kayak` once the published `0.1.2` wheel bundled the engine
+  sources and `kayak.mojopkg`
+- still requires a usable Mojo CLI in the consumer environment when callers
+  opt into the Mojo backend
+
+## Optional Ordeal Battle Test
+
+The repo now carries an optional Ordeal-based chaos test for the Python SDK at
+[python/ordeal_tests/test_python_sdk_chaos.py](../python/ordeal_tests/test_python_sdk_chaos.py)
+plus a default [ordeal.toml](../ordeal.toml).
+
+This test is intentionally scoped to the Python SDK layer:
+- explicit fixture switches
+- packed versus hybrid layout scoring
+- stable top-k behavior
+- optional NumPy versus Mojo backend agreement when
+  `KAYAK_ORDEAL_ENABLE_MOJO=1`
+
+That shape is justified by the current SDK boundary:
+- the strongest Python-layer risks are layout mistakes, backend drift, and
+  shape/ordering regressions
+- the SDK does not currently own rich retry or network-failure behavior that
+  would justify synthetic I/O fault campaigns
+- the default Ordeal path should stay lightweight enough for local smoke runs,
+  so the config keeps one worker and a short time budget by default
+- the config uses a dedicated SDK seed corpus so it does not replay unrelated
+  repo-wide Ordeal seeds
+
+Verified command:
+
+```bash
+PYTHONPATH=python uv run --python 3.11 --with ordeal ordeal explore -c ordeal.toml
+```
+
+Repo task:
+
+```bash
+pixi run test_python_sdk_ordeal
+```
+
+Optional Mojo agreement run:
+
+```bash
+KAYAK_ORDEAL_ENABLE_MOJO=1 \
+PYTHONPATH=python uv run --python 3.11 --with ordeal ordeal explore -c ordeal.toml
+```
+
+Repo task:
+
+```bash
+pixi run test_python_sdk_ordeal_mojo
+```
 
 ## Recommendation
 

@@ -1,0 +1,19 @@
+[explorer]
+target_modules = ["kayak", "kayak_bridge"]
+max_time = 5
+max_runs = 24
+max_checkpoints = 32
+seed = 0
+steps_per_run = 12
+workers = 1
+
+[[tests]]
+class = "ordeal_tests.test_python_sdk_chaos:KayakPythonSdkChaos"
+
+[report]
+format = "text"
+output = ".ordeal/kayak-python-sdk-report.txt"
+traces = false
+traces_dir = ".ordeal/traces"
+verbose = false
+corpus_dir = ".ordeal/kayak-python-sdk-seeds"

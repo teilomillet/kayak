@@ -36,6 +36,60 @@ With Pixi and PyPI:
 pixi add --pypi kayak
 ```
 
+## Optional Mojo Backend
+
+The default Python SDK path uses the NumPy reference backend.
+
+The Python package does not expose a separate "Mojo-mode" import surface.
+You still write normal Python:
+- `import kayak`
+- build `query`, `documents`, and `index`
+- opt into the Mojo backend explicitly on the operation call
+
+You only need Mojo if you want the explicit exact CPU Mojo backend:
+- `kayak.MOJO_EXACT_CPU_BACKEND`
+
+Examples:
+
+```bash
+# global or activated environment
+pip install kayak
+mojo --version
+```
+
+```bash
+# Pixi project
+pixi add python=3.11 mojo
+pixi add --pypi kayak
+pixi run python app.py
+```
+
+Then select the backend explicitly:
+
+```python
+scores = kayak.maxsim(
+    query,
+    index,
+    backend=kayak.MOJO_EXACT_CPU_BACKEND,
+)
+```
+
+Kayak does not silently switch to the Mojo backend just because Mojo is
+installed. The backend choice stays explicit.
+
+If you are running inside an activated virtual environment or `pixi run
+python`, Kayak first checks that active Python environment for a usable `mojo`
+binary before falling back to `PATH`.
+
+Current CLI discovery order for the Mojo backend:
+- `KAYAK_MOJO_CLI`
+- a usable `mojo` binary in the active Python environment
+- `mojo` on `PATH`
+- `pixi run mojo`
+
+If you do not pass `backend=kayak.MOJO_EXACT_CPU_BACKEND`, Kayak stays on the
+NumPy reference backend and does not require Mojo.
+
 ## Core API
 
 Create a query:
@@ -89,11 +143,31 @@ hits = kayak.search(query, index, k=2)
 
 Kayak keeps layout changes explicit.
 
+`flat_dim128` and `hybrid_flat_dim128` require `vector_dim == 128`.
+
 Example:
 
 ```python
-flat_query = query.to_layout("flat_dim128")
-hybrid_index = index.to_layout("hybrid_flat_dim128")
+import kayak
+import numpy as np
+
+def dim128(index: int) -> np.ndarray:
+    vector = np.zeros(128, dtype=np.float32)
+    vector[index] = 1.0
+    return vector
+
+query128 = kayak.query(np.stack([dim128(0), dim128(1)]))
+documents128 = kayak.documents(
+    ["doc-a", "doc-b"],
+    [
+        np.stack([dim128(0), dim128(1)]),
+        np.stack([dim128(0), dim128(0)]),
+    ],
+)
+index128 = documents128.pack()
+
+flat_query = query128.to_layout("flat_dim128")
+hybrid_index = index128.to_layout("hybrid_flat_dim128")
 
 scores = kayak.maxsim(flat_query, hybrid_index)
 ```
