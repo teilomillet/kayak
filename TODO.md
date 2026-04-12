@@ -377,7 +377,6 @@ Exit criteria:
 
 These are the best next moves right now.
 
-- [ ] Write `docs/architecture/segment_storage.md` describing collection, segment, manifest, snapshot, and compaction primitives
 - [x] Write `docs/architecture/segment_storage.md` describing collection, segment, manifest, snapshot, and compaction primitives
 - [x] Introduce a serving-oriented storage package parallel to benchmark task storage
 - [x] Add `StoredDocumentTextCorpus` as an optional artifact
