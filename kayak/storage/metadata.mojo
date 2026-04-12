@@ -1,4 +1,5 @@
 from kayak.eval import JudgedTask
+from kayak.index import CentroidPostingIndex
 from kayak.index import DocumentProxyIndex
 from kayak.index import HybridFlatDim128Index
 from kayak.index import PackedIndex
@@ -39,6 +40,37 @@ struct StoredPackedIndex(Copyable):
         self.dataset_id = dataset_id^
         self.model_name = model_name^
         self.vector_scalar_name = vector_scalar_name^
+        self.index = index^
+
+
+struct StoredCentroidPostingIndex(Copyable):
+    var dataset_id: String
+    var model_name: String
+    var vector_scalar_name: String
+    var centroid_budget: Int
+    var artifact_byte_size: Int
+    var index: CentroidPostingIndex
+
+    def __init__(
+        out self,
+        var dataset_id: String,
+        var model_name: String,
+        var vector_scalar_name: String,
+        centroid_budget: Int,
+        artifact_byte_size: Int,
+        var index: CentroidPostingIndex,
+    ) raises:
+        if centroid_budget < 0:
+            raise Error("stored centroid budget must be non-negative")
+
+        if artifact_byte_size < 0:
+            raise Error("stored centroid artifact_byte_size must be non-negative")
+
+        self.dataset_id = dataset_id^
+        self.model_name = model_name^
+        self.vector_scalar_name = vector_scalar_name^
+        self.centroid_budget = centroid_budget
+        self.artifact_byte_size = artifact_byte_size
         self.index = index^
 
 

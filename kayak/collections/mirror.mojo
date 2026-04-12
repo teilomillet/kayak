@@ -2,6 +2,8 @@ from std.pathlib import Path
 
 from kayak.storage import (
     StoredPackedIndex,
+    centroid_postings_storage_byte_size,
+    ensure_stored_centroid_posting_index,
     document_proxy_storage_byte_size,
     ensure_stored_document_proxy_index,
     save_stored_packed_index,
@@ -45,7 +47,8 @@ def ensure_one_segment_collection_mirror(
     snapshot_id: SnapshotId,
     generation: Int,
     read stored_index: StoredPackedIndex,
-    document_proxy_vector_budget: Int,
+    document_proxy_vector_budget: Int = 0,
+    centroid_postings_vector_budget: Int = 0,
 ) raises -> Path:
     var segment_id = SegmentId("segment-0001")
     var segment_root = collection_root / "segments" / segment_id.value
@@ -67,12 +70,18 @@ def ensure_one_segment_collection_mirror(
         stored_index,
         document_proxy_vector_budget,
     )
+    _ = ensure_stored_centroid_posting_index(
+        segment_root / "centroid_postings",
+        stored_index,
+        centroid_postings_vector_budget,
+    )
 
     var segment_stats = SegmentStats(
         stored_index.index.document_count,
         stored_index.index.total_vector_count,
         stored_index.index.total_vector_count,
         packed_index_storage_byte_size(segment_root / "packed_index")
+            + centroid_postings_storage_byte_size(segment_root / "centroid_postings")
             + document_proxy_storage_byte_size(segment_root / "document_proxy"),
     )
     save_sealed_segment_manifest(
@@ -87,6 +96,7 @@ def ensure_one_segment_collection_mirror(
             stored_index.vector_scalar_name.copy(),
             stored_index.index.vector_dim,
             "packed_index",
+            "centroid_postings",
             "document_proxy",
             "",
             segment_stats.copy(),

@@ -18,7 +18,10 @@ from kayak.collections import (
     load_resolved_collection_snapshot,
 )
 from kayak.eval import JudgedTask
-from kayak.planning import document_proxy_search_plan, exact_full_scan_search_plan
+from kayak.planning import (
+    centroid_postings_search_plan,
+    document_proxy_search_plan,
+)
 from kayak.runtime import ExactCpuBackend
 from kayak.storage import (
     ensure_browsecomp_plus_gold_real_subset_cache,
@@ -62,6 +65,18 @@ def append_sweep_for_dataset(
                 task,
                 snapshot,
                 document_proxy_search_plan(task.k, candidate_k),
+                0,
+                0,
+            )
+        )
+        summaries.append(
+            build_candidate_window_sweep_summary_for_plan(
+                backend,
+                dataset_id,
+                model_name,
+                task,
+                snapshot,
+                centroid_postings_search_plan(task.k, candidate_k),
                 0,
                 0,
             )

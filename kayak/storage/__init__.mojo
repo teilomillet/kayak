@@ -6,6 +6,15 @@ from .browsecomp_plus_cache import (
     BrowsecompPlusRealSubsetCache,
     ensure_browsecomp_plus_real_subset_cache,
 )
+from .centroid_postings_store import (
+    CentroidPostingCacheEntry,
+    build_stored_centroid_posting_index,
+    centroid_postings_index_exists,
+    centroid_postings_storage_byte_size,
+    ensure_stored_centroid_posting_index,
+    load_stored_centroid_posting_index,
+    save_stored_centroid_posting_index,
+)
 from .document_proxy_store import (
     DocumentProxyCacheEntry,
     build_stored_document_proxy_index,
@@ -30,6 +39,7 @@ from .judged_task_store import (
     save_stored_judged_task,
 )
 from .metadata import (
+    StoredCentroidPostingIndex,
     StoredDocumentProxyIndex,
     StoredHybridFlatDim128Index,
     StoredJudgedTask,

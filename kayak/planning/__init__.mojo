@@ -1,6 +1,7 @@
 from .candidate_budget import CandidateBudget
 from .candidate_generator import (
     CandidateGenerator,
+    centroid_postings_candidate_generator,
     document_proxy_candidate_generator,
     exact_full_scan_candidate_generator,
 )
@@ -22,6 +23,7 @@ from .score_histogram import (
 )
 from .search_plan import (
     SearchPlan,
+    centroid_postings_search_plan,
     document_proxy_search_plan,
     exact_full_scan_search_plan,
 )

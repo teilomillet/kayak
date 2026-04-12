@@ -5,6 +5,7 @@ from std.pathlib import Path
 from kayak.benchmarks import (
     VectorBudgetSweepSummary,
     build_vector_budget_sweep_summary,
+    build_vector_budget_sweep_summary_for_plan,
     standard_document_vector_budget_sizes,
     standard_query_vector_budget_sizes,
     vector_budget_sweep_summaries_json,
@@ -18,6 +19,7 @@ from kayak.collections import (
     load_resolved_collection_snapshot,
 )
 from kayak.eval import JudgedTask
+from kayak.planning import centroid_postings_search_plan
 from kayak.runtime import ExactCpuBackend
 from kayak.storage import (
     StoredPackedIndex,
@@ -74,6 +76,41 @@ def append_vector_budget_summaries_for_dataset(
                     query_vector_budget,
                     document_vector_budget,
                     candidate_k,
+                )
+            )
+
+    for centroid_budget in standard_document_vector_budget_sizes(
+        stored_index.index.vector_dim
+    ):
+        var collection_root = ensure_one_segment_collection_mirror(
+            Path(collection_root_prefix + "_centroid_budget_" + String(centroid_budget)),
+            CollectionId(collection_name),
+            tenant_id,
+            namespace_id,
+            snapshot_id,
+            generation,
+            stored_index,
+            0,
+            centroid_budget,
+        )
+        var snapshot = load_resolved_collection_snapshot(collection_root, snapshot_id)
+        var candidate_k = task.k * 4
+        if candidate_k > snapshot.snapshot.stats.document_count:
+            candidate_k = snapshot.snapshot.stats.document_count
+
+        for query_vector_budget in standard_query_vector_budget_sizes(
+            task.nominal_query_vector_count
+        ):
+            summaries.append(
+                build_vector_budget_sweep_summary_for_plan(
+                    backend,
+                    dataset_id,
+                    model_name,
+                    task,
+                    snapshot,
+                    centroid_postings_search_plan(task.k, candidate_k),
+                    query_vector_budget,
+                    centroid_budget,
                 )
             )
 

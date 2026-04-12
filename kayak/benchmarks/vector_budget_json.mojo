@@ -5,6 +5,7 @@ from kayak.contracts import EncodedQuery
 from kayak.eval import JudgedTask, evaluate_query_hits
 from kayak.numeric import MetricScalar, VectorScalar, zero_metric_scalar
 from kayak.planning import (
+    SearchPlan,
     document_proxy_search_plan,
     explain_collection_search,
     final_hits_to_search_hits,
@@ -127,12 +128,33 @@ def build_vector_budget_sweep_summary(
     document_vector_budget: Int,
     candidate_k: Int,
 ) raises -> VectorBudgetSweepSummary:
+    return build_vector_budget_sweep_summary_for_plan(
+        backend,
+        dataset_id,
+        model_name,
+        task,
+        snapshot,
+        document_proxy_search_plan(task.k, candidate_k),
+        query_vector_budget,
+        document_vector_budget,
+    )
+
+
+def build_vector_budget_sweep_summary_for_plan(
+    read backend: ExactCpuBackend,
+    dataset_id: String,
+    model_name: String,
+    read task: JudgedTask,
+    read snapshot: ResolvedCollectionSnapshot,
+    read plan: SearchPlan,
+    query_vector_budget: Int,
+    document_vector_budget: Int,
+) raises -> VectorBudgetSweepSummary:
     var ndcg_total = zero_metric_scalar()
     var reciprocal_rank_total = zero_metric_scalar()
     var recall_total = zero_metric_scalar()
     var success_total = zero_metric_scalar()
     var candidate_recall_total = 0.0
-    var plan = document_proxy_search_plan(task.k, candidate_k)
 
     for judged_query in task.queries:
         var budgeted_query = truncate_query_to_vector_budget(
@@ -162,7 +184,7 @@ def build_vector_budget_sweep_summary(
         model_name,
         plan.candidate_generator.kind.copy(),
         task.k,
-        candidate_k,
+        plan.candidate_budget.candidate_k,
         query_vector_budget,
         document_vector_budget,
         query_count,

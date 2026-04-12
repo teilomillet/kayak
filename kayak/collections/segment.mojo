@@ -15,6 +15,7 @@ struct SealedSegmentManifest(Copyable):
     var vector_scalar_name: String
     var vector_dim: Int
     var packed_index_root: String
+    var centroid_postings_root: String
     var document_proxy_root: String
     var text_corpus_root: String
     var stats: SegmentStats
@@ -30,6 +31,7 @@ struct SealedSegmentManifest(Copyable):
         vector_scalar_name: String,
         vector_dim: Int,
         packed_index_root: String,
+        centroid_postings_root: String,
         document_proxy_root: String,
         text_corpus_root: String,
         stats: SegmentStats,
@@ -47,9 +49,47 @@ struct SealedSegmentManifest(Copyable):
         self.packed_index_root = require_non_empty_string(
             packed_index_root, "packed_index_root"
         )
+        self.centroid_postings_root = centroid_postings_root.copy()
         self.document_proxy_root = document_proxy_root.copy()
         self.text_corpus_root = text_corpus_root.copy()
         self.stats = stats.copy()
+
+    def __init__(
+        out self,
+        segment_id: SegmentId,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        generation: Int,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        packed_index_root: String,
+        document_proxy_root: String,
+        text_corpus_root: String,
+        stats: SegmentStats,
+    ) raises:
+        self = SealedSegmentManifest(
+            segment_id,
+            collection_id,
+            tenant_id,
+            namespace_id,
+            generation,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            packed_index_root,
+            "",
+            document_proxy_root,
+            text_corpus_root,
+            stats,
+        )
+
+
+def sealed_segment_has_centroid_postings_index(
+    read segment: SealedSegmentManifest
+) -> Bool:
+    return segment.centroid_postings_root.byte_length() != 0
 
 
 def sealed_segment_has_document_proxy_index(

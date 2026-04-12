@@ -260,19 +260,25 @@ Machine-readable benchmark artifacts now also land under `.cache/kayak/`:
 - `proxy_eval_matrix.json`
 - `workload_matrix.json`
 
-The collection mirror path now persists a search-native `document_proxy` sidecar
-per sealed segment alongside the packed late-interaction index. This is
-deliberately a first non-default stage-1 family, not a claim of a native
+The collection mirror path now persists search-native sidecars per sealed
+segment alongside the packed late-interaction index. Today those sidecars are:
+- `document_proxy/`
+- `centroid_postings/`
+
+This is deliberately a staged progression, not a claim of a full native
 PLAID/WARP/GEM-class engine yet:
-- stage 1 can now use `document_proxy`
+- stage 1 can now use `document_proxy` or `centroid_postings`
 - stage 2 now reranks the shortlisted documents with exact late interaction
 - stage-1 recall is measured against an exact full-corpus oracle in the public
   candidate-window and vector-budget artifacts
 
 Current epistemic status:
 - `exact_full_scan` remains the correctness anchor
-- `document_proxy` is the first real non-default candidate generator
-- heavier native candidate-generation work should now be driven by the new
+- `document_proxy` is still the stronger light baseline on the current public
+  slices at equal `candidate_k`
+- `centroid_postings` is the first search-native centroid/posting baseline and
+  is now benchmarked on the same axes
+- heavier native candidate-generation work should now be driven by these
   recall-vs-budget traces instead of by assumption
 
 The next heavier native-index step is documented in

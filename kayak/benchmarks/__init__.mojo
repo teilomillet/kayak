@@ -69,6 +69,7 @@ from .workload_registry import default_workload_profiles
 from .vector_budget_json import (
     VectorBudgetSweepSummary,
     build_vector_budget_sweep_summary,
+    build_vector_budget_sweep_summary_for_plan,
     standard_document_vector_budget_sizes,
     standard_query_vector_budget_sizes,
     truncate_query_to_vector_budget,

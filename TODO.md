@@ -212,9 +212,9 @@ Immediate TODOs:
 
 Current interpretation:
 - `document_proxy` is now the light proxy-vector baseline.
-- The next heavier engine step should be a segment-native centroid or posting
-  family inspired by PLAID/MUVERA/GEM ideas, not another round of heuristic
-  reranking.
+- `centroid_postings` is now the first search-native centroid/posting baseline.
+- The next heavier engine step should be a tighter WARP/GEM-style native
+  engine path, not another round of heuristic reranking.
 
 ## Priority 3: Multi-Tenant Serving And Filter-Aware Retrieval
 
@@ -468,10 +468,10 @@ These are the best next moves right now.
   create, ingest, snapshot, search, explain
 - [ ] Execute exact search through an explicit `SearchPlan` runtime path rather
   than benchmark-specific orchestration only
-- [ ] Implement one non-exact or pruning-based candidate generator behind
+- [ ] Implement one tighter WARP/GEM-style native candidate engine behind
   `SearchPlan`
-- [ ] Add stage-1 recall reporting against exact full scan on at least one
-  public slice
+- [ ] Extend stage-1 recall reporting to compare the native engine against both
+  `document_proxy` and `centroid_postings`
 - [ ] Write one benchmark-selection note for hard-recall tasks before adding
   more benchmark families
 

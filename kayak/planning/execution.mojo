@@ -9,6 +9,7 @@ from kayak.scoring.dot import dot_product
 from kayak.search import SearchHit
 
 from .candidate_set import CandidateSet
+from .centroid_postings_stage import centroid_posting_scores_for_segment
 from .collection_hit import CollectionHit, to_search_hit
 from .exact_stage import ExactStageResult, exact_rerank_candidates_for_plan
 from .search_plan import SearchPlan
@@ -90,6 +91,49 @@ def candidate_generation_for_plan[Backend: ExactScoringBackend](
             snapshot.snapshot.stats.segment_count,
             snapshot.snapshot.stats.document_count,
             0,
+            vector_count,
+            byte_size,
+        )
+
+    if plan.candidate_generator.kind == "centroid_postings":
+        var vector_count = 0
+        var token_count = 0
+        var byte_size = 0
+
+        for segment in snapshot.segments:
+            if not segment.has_centroid_postings_index:
+                raise Error(
+                    "centroid_postings stage-1 requires a centroid postings sidecar for every segment"
+                )
+
+            vector_count += segment.stored_centroid_postings_index.index.centroid_count
+            token_count += (
+                segment.stored_centroid_postings_index.index.total_posting_count
+            )
+            byte_size += segment.stored_centroid_postings_index.artifact_byte_size
+
+            var scores = centroid_posting_scores_for_segment(
+                query.token_vectors,
+                segment.stored_centroid_postings_index.index,
+            )
+
+            for document_index in range(len(scores)):
+                insert_descending_collection_hit(
+                    hits,
+                    CollectionHit(
+                        segment.manifest.segment_id.value.copy(),
+                        segment.stored_index.index.doc_ids[document_index].copy(),
+                        scores[document_index],
+                    ),
+                    plan.candidate_budget.candidate_k,
+                )
+
+        return CandidateSet(
+            plan.candidate_generator.kind.copy(),
+            hits^,
+            snapshot.snapshot.stats.segment_count,
+            snapshot.snapshot.stats.document_count,
+            token_count,
             vector_count,
             byte_size,
         )

@@ -1,4 +1,8 @@
 from .builder import pack_documents
+from .centroid_postings import (
+    CentroidPostingIndex,
+    build_centroid_posting_index,
+)
 from .document_proxy import (
     DocumentProxyIndex,
     build_document_proxy_index,

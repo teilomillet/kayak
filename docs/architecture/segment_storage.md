@@ -162,6 +162,13 @@ The important contract is the object model, not the exact directory spelling.
         doc_ids.tsv
         doc_offsets.tsv
         token_vectors.bin
+      centroid_postings/     # optional search-native stage-1 sidecar
+        manifest.tsv
+        centroid_dims.tsv
+        centroid_vectors.bin
+        posting_offsets.tsv
+        posting_doc_indices.tsv
+        posting_weights.tsv
       document_proxy/        # optional search-native stage-1 sidecar
         manifest.tsv
         doc_ids.tsv
@@ -192,7 +199,7 @@ These are the core storage invariants that should hold across the service.
 2. Every sealed segment must satisfy that same vector contract.
 3. Search operates on snapshots, not on arbitrary half-built segment directories.
 4. Every segment and collection manifest must keep vector counts explicit.
-5. Search-native sidecars such as `document_proxy` are optional and versioned separately from the exact packed index.
+5. Search-native sidecars such as `document_proxy` and `centroid_postings` are optional and versioned separately from the exact packed index.
 6. Text sidecars are optional and versioned separately from vector payloads.
 7. Compaction never mutates the source searchable segment in place; it creates a
    replacement output that a later snapshot can adopt.

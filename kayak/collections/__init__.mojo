@@ -20,6 +20,7 @@ from .resolver import load_resolved_collection_snapshot
 from .segment_report import SegmentStorageReport, build_segment_storage_report
 from .segment import (
     SealedSegmentManifest,
+    sealed_segment_has_centroid_postings_index,
     sealed_segment_has_document_proxy_index,
     sealed_segment_has_text_corpus,
 )
