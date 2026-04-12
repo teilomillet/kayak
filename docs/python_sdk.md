@@ -8,6 +8,17 @@ For the product-level mission and scope, see
 For the planned sequence of SDK work, see
 [docs/python_sdk_roadmap.md](python_sdk_roadmap.md).
 
+## Positioning
+
+The intended product split is:
+- `kayak` is the public Python SDK for local late-interaction programming
+- the hosted engine is a separate surface for collections, storage, snapshots,
+  and service operations
+
+That distinction is deliberate.
+The Python package should be useful on its own even when the engine product
+evolves separately or remains private.
+
 ## Status
 
 What is verified:

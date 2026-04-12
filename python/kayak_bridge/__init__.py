@@ -1,4 +1,4 @@
-"""Internal compatibility layer for the Python Kayak package.
+"""Internal implementation layer for the Python Kayak package.
 
 This module exists so the monorepo can share implementation code between the
 public ``kayak`` package and the internal Mojo-backed adapters.

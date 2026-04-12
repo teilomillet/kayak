@@ -35,6 +35,13 @@ class PublicApiContractTests(unittest.TestCase):
         self.assertIsNotNone(kayak_bridge.__doc__)
         self.assertIn("not a stable public import surface", kayak_bridge.__doc__)
 
+    def test_package_docstrings_match_sdk_boundary(self) -> None:
+        self.assertIsNotNone(kayak.__doc__)
+        self.assertIn("Public Python SDK", kayak.__doc__)
+        self.assertIn("not the hosted engine surface", kayak.__doc__)
+        self.assertIsNotNone(kayak_bridge.__doc__)
+        self.assertIn("internal implementation layer", kayak_bridge.__doc__.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
