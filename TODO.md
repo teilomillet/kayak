@@ -28,6 +28,12 @@ In plain terms:
 
 ### Sources checked on April 12, 2026
 
+- Omar Khattab "Late Interaction in 2030" workshop talk transcript:
+  - user-provided transcript in repo discussion on `2026-04-12`
+  - argues that late interaction should be treated as a paradigm of local
+    interaction plus sublinear search, not as one fixed model family
+  - argues that hard-recall retrieval tasks are likely underrepresented when
+    the field assumes retrieve-and-rerank up front
 - ColBERT official repository:
   - https://github.com/stanford-futuredata/ColBERT
   - stable branch explicitly describes `main` as `ColBERTv2 + PLAID`
@@ -79,6 +85,11 @@ Evidence:
 - The highest-leverage missing pieces are storage, candidate generation, and serving boundaries, not another benchmark-specific reranker tweak.
 - `kayak` should compete as a late-interaction-native engine, not as a generic vector search wrapper.
 - Optional text sidecars matter, but they should follow storage and query-contract design rather than precede it.
+- the next benchmark step should measure hard stage-1 recall pressure, not only
+  "beat dense retrieval on an easy enough first-stage task"
+
+Related strategic note:
+- [docs/late_interaction_2030.md](docs/late_interaction_2030.md)
 
 ## North Star
 
@@ -373,17 +384,85 @@ Deliverables:
 Exit criteria:
 - an external user can run `kayak` as a service and reason about its performance
 
-## Near-Term TODOs
+## Phase F: Hosted Collection Loop
+
+Goal:
+- make the service and storage contracts executable end to end
+
+Deliverables:
+- create collection
+- ingest and upsert documents
+- delete documents
+- snapshot and restore
+- exact search and explain against a hosted collection
+
+Exit criteria:
+- an external user can run one hosted exact late-interaction collection without
+  benchmark-only fixtures
+
+Reason:
+- the repo already has the contract surface
+- the next step is to make that surface real rather than keep expanding design
+  notes
+
+## Phase G: Native Stage-1 Candidate Generation
+
+Goal:
+- move from exact-only serving to an explicit stage-1 plus stage-2 engine
+
+Deliverables:
+- exact full-scan candidate generator
+- one pruning or approximate candidate generator
+- candidate-set tracing wired into `SearchPlan`
+- recall reporting against exact final results
+
+Exit criteria:
+- every result set can report which stage produced which candidates and what
+  stage-1 recall it achieved against exact
+
+Reason:
+- this is the point where Kayak begins to compete as an engine rather than only
+  as an exact scorer
+- this is also the point where hard-recall benchmark claims become honest
+
+## Phase H: Hard-Recall Evaluation
+
+Goal:
+- test the engine on tasks where weak stage-1 recall is the real bottleneck
+
+Deliverables:
+- one or two harder public or synthetic tasks selected for low-recall pressure
+- ceiling comparisons against a much more expensive path when justified
+- benchmark outputs that separate:
+  - stage-1 recall
+  - final retrieval quality
+  - latency and storage cost
+
+Exit criteria:
+- Kayak can explain why its stage design matters on tasks where reranking alone
+  cannot rescue poor first-stage recall
+
+Reason:
+- the repo should not keep expanding benchmark scope casually
+- but once stage contracts exist, harder-recall evaluation becomes the right
+  place to test whether the engine is actually ambitious enough
+
+## Next-Cycle TODOs
 
 These are the best next moves right now.
 
-- [x] Write `docs/architecture/segment_storage.md` describing collection, segment, manifest, snapshot, and compaction primitives
-- [x] Introduce a serving-oriented storage package parallel to benchmark task storage
-- [x] Add `StoredDocumentTextCorpus` as an optional artifact
-- [x] Define `SearchPlan`, `CandidateGenerator`, and `CandidateSet`
-- [x] Emit structured benchmark JSON for the real-slice benchmarks
-- [x] Add one profile/explain command for a single query
-- [x] Add a minimal service API design doc
+- [ ] Wire `kayak/service/` collection and snapshot requests to the serving
+  storage layer
+- [ ] Add one end-to-end hosted collection smoke path:
+  create, ingest, snapshot, search, explain
+- [ ] Execute exact search through an explicit `SearchPlan` runtime path rather
+  than benchmark-specific orchestration only
+- [ ] Implement one non-exact or pruning-based candidate generator behind
+  `SearchPlan`
+- [ ] Add stage-1 recall reporting against exact full scan on at least one
+  public slice
+- [ ] Write one benchmark-selection note for hard-recall tasks before adding
+  more benchmark families
 
 ## What We Should Not Do Next
 
@@ -391,6 +470,8 @@ These are the best next moves right now.
 - [ ] Do not add many more benchmark families before the serving storage contract exists
 - [ ] Do not hide late-interaction specifics behind generic vector DB abstractions
 - [ ] Do not make GPU work the next milestone before storage and stage contracts settle
+- [ ] Do not treat "beats dense retrieval" as a sufficient evaluation story by
+  itself
 
 ## Success Metrics
 
@@ -408,6 +489,9 @@ Retrieval metrics:
 - `MRR@10`
 - `recall@10`
 - candidate recall at stage 1
+- candidate recall at fixed budgets such as `100` and `1000`
+- final quality versus a more expensive reference path when that comparison is
+  justified
 
 Product metrics:
 - one-command local service startup
