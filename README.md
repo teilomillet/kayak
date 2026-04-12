@@ -198,6 +198,16 @@ The new frontier summaries therefore report all of these together:
 - judged retrieval quality
 - stage-1 bytes, tokens, and vectors
 
+There are now three additional focused benchmark surfaces around the same
+roadmap:
+- storage encoding on `BrowseComp-Plus` gold
+  - compares `binary_le` vs `binary_f16_le` persisted packed-index payloads
+- vectors/document pruning on `BrowseComp-Plus` gold
+  - compares pruned exact indexes directly against the full exact reference
+- a stronger local ceiling comparison on `BrowseComp-Plus` gold
+  - compares exact MaxSim and `document_proxy` against exact-plus-`clause_text`
+    reranking
+
 The included slices are inspired by public benchmark families that are relevant to late interaction:
 - `LoTTE`: domain-specific forum retrieval in the ColBERT ecosystem
 - `BEIR`: heterogeneous factual retrieval across domains
@@ -467,6 +477,9 @@ pixi run bench_real_subset_breakdown
 pixi run bench_single_core_scale
 pixi run bench_single_core_faithfulness_frontier
 pixi run bench_browsecomp_plus_gold_faithfulness_frontier
+pixi run bench_browsecomp_plus_gold_storage_encoding
+pixi run bench_browsecomp_plus_gold_vector_pruning
+pixi run bench_browsecomp_plus_gold_ceiling_comparison
 ```
 
 Materialize the BrowseComp-Plus task json explicitly if you want to separate the

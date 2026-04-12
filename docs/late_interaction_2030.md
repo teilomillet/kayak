@@ -88,11 +88,24 @@ Verified after the first version of this note:
     public slice
   - the current centroid-family variants do not beat exact latency there once
     they approach full recall
+- there is now one measured compressed packed-index path on BrowseComp gold:
+  - `binary_f16_le` halves persisted bytes/vector relative to `binary_le`
+  - measured retrieval quality did not change on that slice
+- there is now one direct vectors/document benchmark on BrowseComp gold:
+  - naive prefix pruning in the `sqrt(m)` neighborhood is not supported on
+    that slice
+- there is now one local stronger ceiling comparison:
+  - exact full scan plus `clause_text` reranking can outperform exact MaxSim
+  - it is also much more expensive than the current stage-aware vector-only
+    path
 
 Evidence:
 - [docs/traces/2026-04-12_single_core_scale.md](traces/2026-04-12_single_core_scale.md)
 - [docs/traces/2026-04-12_single_core_faithfulness_frontier.md](traces/2026-04-12_single_core_faithfulness_frontier.md)
 - [docs/traces/2026-04-12_browsecomp_plus_gold_faithfulness_frontier.md](traces/2026-04-12_browsecomp_plus_gold_faithfulness_frontier.md)
+- [docs/traces/2026-04-12_browsecomp_plus_gold_storage_encoding.md](traces/2026-04-12_browsecomp_plus_gold_storage_encoding.md)
+- [docs/traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md](traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md)
+- [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
 
 ## What Kayak Should Change
 
@@ -139,13 +152,14 @@ The strongest claims implied by the talk are still open.
 Not yet locally verified:
 - under-`200ms` single-core search at multi-billion-token scale
 - token storage close to `6 bytes/vector`
-- vectors/document pruning laws anywhere near `sqrt(m)` in the regimes we care
-  about
+- vectors/document pruning laws anywhere near `sqrt(m)` beyond the current
+  naive prefix-pruning falsification
 - asymptotic native-engine scaling on harder or larger benchmark families well
   beyond the current synthetic sweep and one `90`-document BrowseComp gold
   mirror
 - a benchmark family clearly harder than today's small public slices
-- a stronger expensive ceiling that is implemented and compared locally
+- a cross-encoder or long-context expensive ceiling that is implemented and
+  compared locally
 
 That gap matters because it is now easy to confuse "the repo has the right
 substrate" with "the repo has already proved the efficiency thesis."

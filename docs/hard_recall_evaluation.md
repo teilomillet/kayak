@@ -63,15 +63,20 @@ That is the minimum shape needed to reason about the stage tradeoff honestly.
 
 ## What The Current Benchmark Does Not Claim
 
-The current benchmark does not yet compare against a long-context LLM or a
-cross-attention ceiling.
+The current stage-aware benchmark still does not compare against a long-context
+LLM or a cross-attention ceiling.
 
 Reason:
 - that comparison is not yet implemented or locally verified in this repo
 - using an unverified external ceiling would weaken the epistemic quality of
   the benchmark
 
-For now, the verified reference ceiling is:
+The repo now does have one stronger local comparison path:
+- exact full scan plus `clause_text` reranking on BrowseComp gold
+- recorded separately in
+  [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
+
+For the stage-aware benchmark itself, the verified reference ceiling remains:
 - exact full-scan late interaction on the same collection snapshot
 
 ## Current Benchmark Entry Point

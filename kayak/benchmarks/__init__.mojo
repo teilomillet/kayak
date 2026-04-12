@@ -10,6 +10,14 @@ from .candidate_window_json import (
     candidate_window_sweep_summaries_json,
     standard_candidate_window_sizes,
 )
+from .ceiling_comparison_json import (
+    CeilingComparisonSummary,
+    build_exact_clause_text_ceiling_summary,
+    build_exact_full_scan_ceiling_summary,
+    build_stage_aware_ceiling_summary_for_plan,
+    ceiling_comparison_summaries_json,
+    ceiling_comparison_summary_json,
+)
 from .faithfulness_frontier_json import (
     FaithfulnessFrontierSummary,
     build_faithfulness_frontier_summary_for_plan,
@@ -42,6 +50,19 @@ from .single_core_scale_fixture import (
     SingleCoreScaleProfile,
     default_single_core_scale_profiles,
     make_single_core_scale_fixture,
+)
+from .storage_encoding_json import (
+    StorageEncodingSummary,
+    build_storage_encoding_summary,
+    storage_encoding_summaries_json,
+    storage_encoding_summary_json,
+)
+from .vector_pruning_json import (
+    VectorPruningSummary,
+    build_vector_pruning_summary,
+    standard_vector_pruning_budget_sizes,
+    vector_pruning_summaries_json,
+    vector_pruning_summary_json,
 )
 from .filter_fixtures import (
     FilterSelectivityFixture,

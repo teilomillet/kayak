@@ -136,7 +136,7 @@ Current evidence:
 ### Phase I2: Bytes-Per-Vector Compression
 
 Status:
-- `Unverified claim`
+- `Implemented and locally measured on one public hard-recall slice`
 
 Claim:
 - current late-interaction storage is materially over-provisioned, and a much
@@ -159,10 +159,22 @@ Exit criteria:
 - Kayak can quantify the storage-quality-latency tradeoff of one compressed
   path
 
+Current evidence:
+- [docs/traces/2026-04-12_browsecomp_plus_gold_storage_encoding.md](traces/2026-04-12_browsecomp_plus_gold_storage_encoding.md)
+- the repo's existing `binary_f16_le` packed-index payload is now benchmarked
+  on BrowseComp gold
+- on that slice:
+  - persisted bytes/vector dropped from about `512.08` to `256.08`
+  - measured retrieval quality did not change
+  - load time rose slightly, which matches decode-on-load rather than
+    quantized in-memory scoring
+- this is evidence for one explicit compressed storage path, not for a
+  `6 bytes/vector` regime
+
 ### Phase I3: Token Redundancy And Vector-Count Laws
 
 Status:
-- `Unverified claim`
+- `Implemented and locally measured on one public slice for a naive prefix-pruning baseline`
 
 Claim:
 - contextualized tokens are redundant enough that aggressive vectors/document
@@ -181,6 +193,19 @@ Deliverables:
 Exit criteria:
 - Kayak can say something measured about vector-count laws rather than gesture
   at them
+
+Current evidence:
+- [docs/traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md](traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md)
+- the repo now has a direct vectors/document benchmark over a pruned exact
+  index
+- measured result on BrowseComp gold:
+  - average full vectors/document ≈ `175.07`
+  - `sqrt(175.07) ≈ 13.23`
+  - budget `16` preserved only `62.5%` of the full exact top-`10`
+  - judged quality also dropped sharply at that budget
+- inference:
+  - the `sqrt(m)` story is unsupported for naive prefix pruning on this slice
+  - broader pruning claims now need a better pruning policy
 
 ### Phase I4: Native Candidate Engine Asymptotics
 
@@ -234,7 +259,7 @@ Current evidence:
 ### Phase I5: Harder-Recall Benchmark Selection
 
 Status:
-- `Instrumented but unproven`
+- `Closed as a documented deferral with an explicit next-family selection`
 
 Claim:
 - current public slices are useful, but they are not yet the strongest stress
@@ -253,10 +278,19 @@ Exit criteria:
 - Kayak has at least one harder-recall benchmark family beyond the current
   small public slices, or an explicit reason it does not yet
 
+Current evidence:
+- [docs/harder_recall_benchmark_selection.md](harder_recall_benchmark_selection.md)
+- the repo now states explicitly that:
+  - current small public slices are informative but not final
+  - `BrowseComp-Plus` gold is currently the strongest verified public slice
+  - the next harder family should be a scalable conjunction-style synthetic
+    family or a larger retrieval-only BrowseComp-style corpus path
+- that phase is closed as an explicit deferral rather than a hidden omission
+
 ### Phase I6: Stronger Ceiling Comparisons
 
 Status:
-- `Unverified claim`
+- `Implemented with one local text-aware ceiling on BrowseComp gold`
 
 Claim:
 - the real bar is not only dense retrieval; it is a much more expensive
@@ -276,31 +310,48 @@ Exit criteria:
 - Kayak can compare itself against a stronger ceiling without relying on vague
   external claims
 
+Current evidence:
+- [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
+- the repo now benchmarks:
+  - exact full scan
+  - stage-aware `document_proxy`
+  - exact full scan plus `clause_text` reranking
+- verified result on BrowseComp gold:
+  - the clause-text ceiling improves `nDCG@10` over exact MaxSim
+  - it does so at a much higher latency cost
+- boundary:
+  - this is a local text-aware ceiling
+  - it is not yet a cross-encoder or long-context LLM ceiling
+
 ## Immediate Parallel TODOs
 
 These are the next moves that should happen while ongoing engine work
 continues.
 
 - [x] add one single-core scaling benchmark over increasing corpus sizes
-- [ ] add one compressed-token benchmark that reports bytes/vector explicitly
-- [ ] add one vectors/document sweep that tests aggressive document-vector
+- [x] add one compressed-token benchmark that reports bytes/vector explicitly
+- [x] add one vectors/document sweep that tests aggressive document-vector
   reduction
 - [x] add one asymptotic scaling benchmark for native candidate engines
-- [ ] add one benchmark-selection note for a harder-recall family beyond the
+- [x] add one benchmark-selection note for a harder-recall family beyond the
   current default public slices
-- [ ] add one stronger-ceiling comparison only after that path exists locally
+- [x] add one stronger-ceiling comparison only after that path exists locally
 
 ## What Not To Claim Yet
 
 - Do not claim the Omar-style single-core efficiency story without local
   scaling numbers.
 - Do not claim `6 bytes/vector` viability without a measured compressed format.
-- Do not claim `sqrt(m)` pruning laws without an explicit vectors/document
-  sweep.
+- Do not claim `6 bytes/vector` viability from the current `binary_f16_le`
+  result; it only reaches about `256 bytes/vector` on BrowseComp gold.
+- Do not claim `sqrt(m)` support from the current vectors/document work; naive
+  prefix pruning contradicts that story on BrowseComp gold.
 - Do not treat judged retrieval gains as equivalent to candidate recall against
   exact stage 2.
 - Do not generalize from one `90`-document BrowseComp gold slice to broader
   native-engine asymptotics.
+- Do not oversell the current clause-text ceiling as a cross-encoder or
+  long-context benchmark.
 - Do not present current public hard-recall slices as the final benchmark bar.
 
 ## Decision Rule

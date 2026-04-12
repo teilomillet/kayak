@@ -89,11 +89,24 @@ In plain terms:
     they approach full recall
   - judged `nDCG@10` can exceed the exact baseline before exact-reference
     candidate recall reaches `1.0`
+- the `binary_f16_le` packed-index payload now has a measured storage result on
+  BrowseComp gold:
+  - persisted bytes/vector dropped from about `512.08` to `256.08`
+  - measured retrieval quality did not change on that slice
+- the direct vectors/document pruning benchmark now shows that naive
+  prefix-pruning does **not** support a `sqrt(m)`-style budget on BrowseComp
+  gold
+- the local clause-text ceiling benchmark now shows that a richer text-aware
+  path can beat exact MaxSim on BrowseComp gold, but only at much higher
+  latency
 
 Evidence:
 - [docs/traces/2026-04-12_limit_browsecomp_public_slices.md](docs/traces/2026-04-12_limit_browsecomp_public_slices.md)
 - [docs/traces/2026-04-12_single_core_faithfulness_frontier.md](docs/traces/2026-04-12_single_core_faithfulness_frontier.md)
 - [docs/traces/2026-04-12_browsecomp_plus_gold_faithfulness_frontier.md](docs/traces/2026-04-12_browsecomp_plus_gold_faithfulness_frontier.md)
+- [docs/traces/2026-04-12_browsecomp_plus_gold_storage_encoding.md](docs/traces/2026-04-12_browsecomp_plus_gold_storage_encoding.md)
+- [docs/traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md](docs/traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md)
+- [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
 
 ### Inferences we are making
 
@@ -104,6 +117,8 @@ Evidence:
   "beat dense retrieval on an easy enough first-stage task"
 - the next native-candidate iteration should be justified by a win on a harder
   public-slice frontier, not only by synthetic asymptotics
+- the next harder hard-recall family should be selected explicitly instead of
+  pretending the current small public slices are already sufficient
 
 Related strategic note:
 - [docs/late_interaction_2030.md](docs/late_interaction_2030.md)
