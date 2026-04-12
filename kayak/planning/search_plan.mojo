@@ -4,6 +4,7 @@ from .candidate_budget import CandidateBudget
 from .candidate_generator import (
     CandidateGenerator,
     centroid_postings_candidate_generator,
+    centroid_postings_imputed_candidate_generator,
     document_proxy_candidate_generator,
     exact_full_scan_candidate_generator,
 )
@@ -70,6 +71,17 @@ def centroid_postings_search_plan(
 ) raises -> SearchPlan:
     return SearchPlan(
         centroid_postings_candidate_generator(),
+        CandidateBudget(final_k, candidate_k),
+        faithfulness_policy,
+        "none",
+    )
+
+
+def centroid_postings_imputed_search_plan(
+    final_k: Int, candidate_k: Int, faithfulness_policy: FaithfulnessPolicy
+) raises -> SearchPlan:
+    return SearchPlan(
+        centroid_postings_imputed_candidate_generator(),
         CandidateBudget(final_k, candidate_k),
         faithfulness_policy,
         "none",

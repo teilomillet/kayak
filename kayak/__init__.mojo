@@ -69,6 +69,8 @@ from .planning import (
     candidate_generation_for_plan,
     candidate_recall_at_final_k,
     centroid_postings_candidate_generator,
+    centroid_postings_imputed_candidate_generator,
+    centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
     collection_search_explain_json,
     document_proxy_candidate_generator,
