@@ -40,6 +40,22 @@ pixi add --pypi --editable "kayak @ file:///absolute/path/to/kayak"
 The second path is verified only for a local editable source checkout, not for a
 published package index.
 
+Important current boundary from fresh consumer-repo validation:
+- the Pixi local-package path is verified for `numpy_reference`
+- it is not yet verified for `mojo_exact_cpu`
+
+The currently verified fresh-consumer path for `mojo_exact_cpu` is:
+
+```bash
+pixi init .
+pixi add python=3.11 mojo
+pixi run python -m ensurepip --default-pip
+pixi run python -m pip install /absolute/path/to/kayak
+```
+
+That path works because the package build can bundle `kayak.mojopkg` when Mojo
+is available during installation.
+
 ## Public Python API
 
 Application code should import only from `kayak`.
@@ -123,6 +139,10 @@ Runnable example:
 - depends on the monorepo's Mojo engine package today
 - is appropriate for internal use and controlled distribution
 - should be treated as more operationally constrained than `numpy_reference`
+- worked in fresh-consumer testing after `pip install /path/to/kayak` in an
+  environment that already had `mojo`
+- did not work in fresh-consumer testing after `pixi add --pypi "kayak @
+  file:///..."` because that path did not produce a bundled `kayak.mojopkg`
 
 ## Recommendation
 

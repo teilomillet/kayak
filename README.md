@@ -69,6 +69,9 @@ Current packaging boundary:
 - `pip install .` from a source checkout is verified
 - when Mojo is available at build time, the wheel bundles `kayak.mojopkg` so the installed package can build the Python extension on demand
 - the current package still expects a local Mojo toolchain at runtime for `mojo_exact_cpu`
+- fresh-consumer testing verified `numpy_reference` through a local Pixi package add
+- fresh-consumer testing verified `mojo_exact_cpu` through `pip install /path/to/kayak` with `mojo` present during install
+- fresh-consumer testing did not verify `mojo_exact_cpu` through `pixi add --pypi "kayak @ file://..."` because that path did not bundle `kayak.mojopkg`
 
 Supported public Python boundary:
 - import from `kayak`
