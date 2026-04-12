@@ -67,19 +67,39 @@ Current backend boundary:
 
 Current packaging boundary:
 - `pip install .` from a source checkout is verified
-- when Mojo is available at build time, the wheel bundles `kayak.mojopkg` so the installed package can build the Python extension on demand
+- repo-head builds now stage bundled engine sources under
+  `kayak_bridge/_engine/kayak` inside the Python distribution
+- when Mojo is available at build time, repo-head builds also bundle
+  `kayak_bridge/_artifacts/kayak.mojopkg`
 - the current package still expects a local Mojo toolchain at runtime for `mojo_exact_cpu`
-- fresh-consumer testing verified `numpy_reference` through a local Pixi package add
-- fresh-consumer testing verified `mojo_exact_cpu` through `pip install /path/to/kayak` with `mojo` present during install
-- fresh-consumer testing did not verify `mojo_exact_cpu` through `pixi add --pypi "kayak @ file://..."` because that path did not bundle `kayak.mojopkg`
+- fresh-consumer validation on `2026-04-12` verified published `kayak 0.1.1` for `numpy_reference` through:
+  - `python -m pip install kayak` in a fresh Python `3.11` environment
+  - `uv add kayak` in a fresh project constrained to Python `>=3.11,<3.12`
+  - `pixi add --pypi kayak` in a fresh Pixi project with `python=3.11`
+- plain `pixi add kayak` did not work because no conda package was found for `kayak`
+- the published package did not contain `kayak_bridge/_artifacts/kayak.mojopkg`
+- because of that missing artifact, `mojo_exact_cpu` failed after published installs, including in a fresh Pixi environment that already had `mojo`
+- local repo-head validation on `2026-04-12` verified `uv build` produced:
+  - an sdist that includes the top-level `kayak/` Mojo sources
+  - a wheel that includes both `kayak_bridge/_artifacts/kayak.mojopkg` and
+    `kayak_bridge/_engine/kayak/...`
+- fresh-consumer validation on `2026-04-12` verified `mojo_exact_cpu` from that
+  locally built wheel after:
+  - `pixi init .`
+  - `pixi add python=3.11 mojo`
+  - `pixi run python -m ensurepip --upgrade`
+  - `pixi run python -m pip install /path/to/kayak-<version>-py3-none-any.whl`
 
 Supported public Python boundary:
 - import from `kayak`
 - treat `kayak_bridge` as internal and unstable
 - treat the top-level Mojo package `kayak/` as engine code, not as the Python SDK
 
+The package-scoped Python README lives at
+[python/kayak/README.md](python/kayak/README.md).
+
 The detailed SDK boundary, install paths, and quickstarts are documented in
-[docs/python_sdk.md](/Users/teilomillet/Code/kayak-wt/docs/python_sdk.md).
+[docs/python_sdk.md](docs/python_sdk.md).
 
 Example:
 
@@ -117,7 +137,8 @@ Important epistemic boundary:
 - they are intended to keep the code runnable, fast, and easy to scale later
 - official full-benchmark claims still require running the public datasets and their evaluation protocols
 
-The source rationale for those families is recorded in [docs/benchmark_rationale.md](/Users/teilomillet/Code/kayak/docs/benchmark_rationale.md).
+The source rationale for those families is recorded in
+[docs/benchmark_rationale.md](docs/benchmark_rationale.md).
 
 ## Profiling Benchmarks
 
@@ -149,7 +170,7 @@ The repo now includes a small robustness layer inspired by property-first testin
 - `tests/test_eval_battle.mojo`: metric reference and evaluation invariants
 - `python/scripts/mutation_smoke.py`: curated mutation-smoke harness for core kernels, metrics, and storage guards
 
-This is documented in [docs/robustness_testing.md](/Users/teilomillet/Code/kayak/docs/robustness_testing.md).
+This is documented in [docs/robustness_testing.md](docs/robustness_testing.md).
 
 ## Real Subset Bridge
 

@@ -21,6 +21,7 @@ MODULE_SHORT_NAME = "_mojo_exact_cpu_bindings"
 MODULE_FULL_NAME = f"kayak_bridge.{MODULE_SHORT_NAME}"
 BINDING_SOURCE = Path(__file__).with_name(f"{MODULE_SHORT_NAME}.mojo")
 ARTIFACTS_DIR = Path(__file__).with_name("_artifacts")
+BUNDLED_ENGINE_ROOT = Path(__file__).with_name("_engine")
 
 
 def _hash_inputs(paths: list[Path]) -> str:
@@ -33,9 +34,21 @@ def _hash_inputs(paths: list[Path]) -> str:
     return digest.hexdigest()[:16]
 
 
-def _repo_mojo_sources() -> list[Path]:
-    source_root = REPO_ROOT / "kayak"
-    if not source_root.exists():
+def _mojo_source_root() -> Path | None:
+    repo_source_root = REPO_ROOT / "kayak"
+    if repo_source_root.exists():
+        return repo_source_root
+
+    bundled_source_root = BUNDLED_ENGINE_ROOT / "kayak"
+    if bundled_source_root.exists():
+        return bundled_source_root
+
+    return None
+
+
+def _mojo_sources() -> list[Path]:
+    source_root = _mojo_source_root()
+    if source_root is None:
         return []
     return sorted(source_root.rglob("*.mojo"))
 
@@ -55,10 +68,6 @@ def _detect_mojo_command() -> list[str]:
     mojo_path = shutil.which("mojo")
     if mojo_path is not None:
         return [mojo_path]
-
-    pixi_mojo = REPO_ROOT / ".pixi" / "envs" / "default" / "bin" / "mojo"
-    if pixi_mojo.exists():
-        return [str(pixi_mojo)]
 
     pixi_path = shutil.which("pixi")
     if pixi_path is not None:
@@ -81,10 +90,11 @@ def _build_mojopkg(cache_key: str) -> Path:
     if bundled is not None:
         return bundled
 
-    source_root = REPO_ROOT / "kayak"
-    if not source_root.exists():
+    source_root = _mojo_source_root()
+    if source_root is None:
         raise RuntimeError(
-            "Kayak could not find Mojo sources or a bundled kayak.mojopkg artifact."
+            "Kayak could not find Mojo sources in the repo or the installed "
+            "package, and no bundled kayak.mojopkg artifact was present."
         )
 
     artifact_dir = PYTHON_MOJO_CACHE / cache_key
@@ -171,7 +181,7 @@ def _load_extension(extension_path: Path) -> ModuleType:
 
 @lru_cache(maxsize=1)
 def load_module() -> ModuleType:
-    mojo_sources = _repo_mojo_sources()
+    mojo_sources = _mojo_sources()
     cache_key = _hash_inputs([BINDING_SOURCE, *mojo_sources])
     mojopkg_path = _build_mojopkg(cache_key)
     extension_path = _build_extension(cache_key, mojopkg_path)

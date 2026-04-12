@@ -8,13 +8,27 @@ this monorepo.
 What is verified:
 - the public Python import surface is `import kayak`
 - `python -m pip install .` from a source checkout works
+- repo-head `uv build` now produces:
+  - an sdist that includes the top-level `kayak/` Mojo sources
+  - a wheel that includes both `kayak_bridge/_artifacts/kayak.mojopkg` and
+    `kayak_bridge/_engine/kayak/...`
+- published `python -m pip install kayak` works in a fresh Python `3.11`
+  environment for `numpy_reference`
+- published `uv add kayak` works in a fresh project constrained to Python
+  `>=3.11,<3.12` for `numpy_reference`
+- published `pixi add --pypi kayak` works in a fresh Pixi project with
+  `python=3.11` for `numpy_reference`
 - local editable consumption from Pixi works after adding Python
+- fresh-consumer installation from the locally built wheel works for
+  `mojo_exact_cpu` in a Pixi project with `python=3.11` and `mojo`
 - the public API supports two explicit backends:
   - `numpy_reference`
   - `mojo_exact_cpu`
 
 What is not claimed:
-- a published `pip install kayak` workflow from PyPI
+- a published package whose `mojo_exact_cpu` backend works in a fresh consumer
+  install
+- plain `pixi add kayak` through conda channels
 - a runtime without a local Mojo toolchain for `mojo_exact_cpu`
 - a clean open-source split between the Python SDK and the proprietary engine
 
@@ -40,9 +54,60 @@ pixi add --pypi --editable "kayak @ file:///absolute/path/to/kayak"
 The second path is verified only for a local editable source checkout, not for a
 published package index.
 
-Important current boundary from fresh consumer-repo validation:
+Published package with pip:
+
+```bash
+python -m pip install kayak
+```
+
+Published package with UV:
+
+```bash
+# inside a project pinned to Python >=3.11,<3.12
+uv add kayak
+```
+
+Published package with Pixi and PyPI:
+
+```bash
+pixi init .
+pixi add python=3.11
+pixi add --pypi kayak
+```
+
+Locally built wheel with Pixi and Mojo:
+
+```bash
+uv build
+pixi init .
+pixi add python=3.11 mojo
+pixi run python -m ensurepip --upgrade
+pixi run python -m pip install /absolute/path/to/dist/kayak-<version>-py3-none-any.whl
+```
+
+Important current boundary from fresh consumer-repo validation on `2026-04-12`
+against published `kayak 0.1.1`:
+- `python -m pip install kayak` is verified for `numpy_reference`
+- `uv add kayak` is verified for `numpy_reference` when the consumer project is
+  pinned to Python `>=3.11,<3.12`
+- `pixi add --pypi kayak` is verified for `numpy_reference`
+- plain `pixi add kayak` is not verified because no conda package was found
+- the published package did not contain `kayak_bridge/_artifacts/kayak.mojopkg`
+- because of that missing artifact, `mojo_exact_cpu` did not work after any of
+  the published-package installs, including a fresh Pixi environment that
+  already had `mojo`
+
+Important current boundary from fresh local-source consumer validation:
 - the Pixi local-package path is verified for `numpy_reference`
-- it is not yet verified for `mojo_exact_cpu`
+- it is not verified for `mojo_exact_cpu`
+
+Important current boundary from fresh local-wheel consumer validation on
+`2026-04-12` against repo-head builds:
+- `uv build` produced an sdist that includes the top-level `kayak/` Mojo sources
+- `uv build` produced a wheel that includes both
+  `kayak_bridge/_artifacts/kayak.mojopkg` and `kayak_bridge/_engine/kayak/...`
+- a fresh Pixi consumer project with `python=3.11` and `mojo` was able to
+  install that wheel and run `mojo_exact_cpu`
 
 The currently verified fresh-consumer path for `mojo_exact_cpu` is:
 
@@ -76,7 +141,11 @@ Supported exports today:
 - `NUMPY_REFERENCE_BACKEND`
 - `MOJO_EXACT_CPU_BACKEND`
 
-This contract is enforced by [python/tests/test_public_api_contract.py](/Users/teilomillet/Code/kayak-wt/python/tests/test_public_api_contract.py).
+This contract is enforced by
+[python/tests/test_public_api_contract.py](../python/tests/test_public_api_contract.py).
+
+For a package-scoped user README that avoids the wider monorepo context, see
+[python/kayak/README.md](../python/kayak/README.md).
 
 ## Internal And Unstable Modules
 
@@ -116,7 +185,7 @@ hits = kayak.search(query, index, k=2, backend=kayak.NUMPY_REFERENCE_BACKEND)
 ```
 
 Runnable example:
-- [python/examples/quickstart.py](/Users/teilomillet/Code/kayak-wt/python/examples/quickstart.py)
+- [python/examples/quickstart.py](../python/examples/quickstart.py)
 
 Mojo exact CPU quickstart:
 
@@ -125,7 +194,7 @@ scores = kayak.maxsim(query, index, backend=kayak.MOJO_EXACT_CPU_BACKEND)
 ```
 
 Runnable example:
-- [python/examples/mojo_exact_cpu_quickstart.py](/Users/teilomillet/Code/kayak-wt/python/examples/mojo_exact_cpu_quickstart.py)
+- [python/examples/mojo_exact_cpu_quickstart.py](../python/examples/mojo_exact_cpu_quickstart.py)
 
 ## Backend Notes
 
@@ -141,8 +210,11 @@ Runnable example:
 - should be treated as more operationally constrained than `numpy_reference`
 - worked in fresh-consumer testing after `pip install /path/to/kayak` in an
   environment that already had `mojo`
-- did not work in fresh-consumer testing after `pixi add --pypi "kayak @
-  file:///..."` because that path did not produce a bundled `kayak.mojopkg`
+- worked in fresh-consumer testing after installing a locally built repo-head
+  wheel in a Pixi environment that already had `mojo`
+- did not work in fresh-consumer testing after the published-package paths
+  `pip install kayak`, `uv add kayak`, or `pixi add --pypi kayak` because the
+  installed package did not contain a bundled `kayak.mojopkg`
 
 ## Recommendation
 
