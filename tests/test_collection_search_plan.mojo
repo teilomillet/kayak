@@ -27,6 +27,7 @@ from kayak import (
     build_stored_centroid_posting_index,
     build_stored_document_proxy_index,
     centroid_heads_search_plan,
+    centroid_postings_head_auto_search_plan,
     centroid_postings_head_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
@@ -567,6 +568,47 @@ def test_centroid_postings_head_search_plan_reports_oracle_miss_when_shortlist_i
     assert_equal(explain.faithfulness.evidence_kind, "oracle_recall_loss")
 
 
+def test_centroid_postings_head_auto_search_plan_exact_reranks_shortlist() raises:
+    var root = make_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        centroid_postings_head_auto_search_plan(
+            1, 2, oracle_full_recall_required_faithfulness_policy()
+        ),
+    )
+
+    assert_equal(explain.plan.candidate_generator.kind, "centroid_postings_head_auto")
+    assert_equal(len(explain.candidate_set.hits), 2)
+    assert_equal(explain.final_hits[0].doc_id, "doc-a")
+    assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
+    assert_equal(explain.faithfulness.passes, True)
+    assert_equal(explain.faithfulness.evidence_kind, "oracle_full_recall")
+
+
+def test_centroid_postings_head_auto_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:
+    var root = make_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        centroid_postings_head_auto_search_plan(
+            1, 1, oracle_full_recall_required_faithfulness_policy()
+        ),
+    )
+
+    assert_equal(explain.candidate_set.hits[0].doc_id, "doc-b")
+    assert_equal(explain.final_hits[0].doc_id, "doc-b")
+    assert_equal(explain.candidate_recall_at_final_k, MetricScalar(0.0))
+    assert_equal(explain.faithfulness.passes, False)
+    assert_equal(explain.faithfulness.evidence_kind, "oracle_recall_loss")
+
+
 def test_centroid_postings_head_requires_weight_sorted_sidecar() raises:
     var root = make_centroid_postings_collection_root()
     var manifest_path = (
@@ -584,6 +626,32 @@ def test_centroid_postings_head_requires_weight_sorted_sidecar() raises:
             EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
             resolved,
             centroid_postings_head_search_plan(
+                1, 2, oracle_full_recall_required_faithfulness_policy()
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_centroid_postings_head_auto_requires_weight_sorted_sidecar() raises:
+    var root = make_centroid_postings_collection_root()
+    var manifest_path = (
+        root / "segments" / "segment-0001" / "centroid_postings" / "manifest.tsv"
+    )
+    manifest_path.write_text(
+        manifest_path.read_text().replace("posting_order_kind\tweight_desc_doc_asc\n", "")
+    )
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var raised = False
+
+    try:
+        _ = explain_collection_search(
+            ExactCpuBackend(),
+            EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
+            resolved,
+            centroid_postings_head_auto_search_plan(
                 1, 2, oracle_full_recall_required_faithfulness_policy()
             ),
         )

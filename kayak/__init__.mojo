@@ -73,6 +73,8 @@ from .planning import (
     centroid_heads_candidate_generator,
     centroid_heads_search_plan,
     centroid_postings_candidate_generator,
+    centroid_postings_head_auto_candidate_generator,
+    centroid_postings_head_auto_search_plan,
     centroid_postings_head_candidate_generator,
     centroid_postings_imputed_candidate_generator,
     centroid_postings_head_search_plan,

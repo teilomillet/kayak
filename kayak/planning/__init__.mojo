@@ -3,6 +3,7 @@ from .candidate_generator import (
     CandidateGenerator,
     centroid_heads_candidate_generator,
     centroid_postings_candidate_generator,
+    centroid_postings_head_auto_candidate_generator,
     centroid_postings_head_candidate_generator,
     centroid_postings_imputed_candidate_generator,
     document_proxy_candidate_generator,
@@ -37,6 +38,7 @@ from .score_histogram import (
 from .search_plan import (
     SearchPlan,
     centroid_heads_search_plan,
+    centroid_postings_head_auto_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_head_search_plan,
     centroid_postings_search_plan,

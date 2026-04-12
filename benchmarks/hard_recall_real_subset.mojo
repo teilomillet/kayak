@@ -5,6 +5,7 @@ from std.pathlib import Path
 from kayak import (
     best_effort_faithfulness_policy,
     centroid_heads_search_plan,
+    centroid_postings_head_auto_search_plan,
     centroid_postings_head_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
@@ -137,6 +138,18 @@ def append_hard_recall_summaries(
                 stored_task,
                 snapshot,
                 centroid_postings_head_search_plan(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                ),
+            )
+        )
+        summaries.append(
+            build_stage_aware_search_summary(
+                ExactCpuBackend(),
+                stored_task,
+                snapshot,
+                centroid_postings_head_auto_search_plan(
                     task.k,
                     candidate_k,
                     best_effort_faithfulness_policy(),
