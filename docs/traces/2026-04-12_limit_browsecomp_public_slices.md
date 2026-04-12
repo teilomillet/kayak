@@ -27,10 +27,12 @@ Date: April 12, 2026
   - full `46`-document corpus
   - `32` encoded queries
   - exact late interaction end to end in Mojo after the encoder boundary
-- Added `BrowseComp-Plus` as a light evidence slice:
+- Added `BrowseComp-Plus` as light retrieval slices:
   - `4` decrypted official queries
-  - official human-verified evidence docs as positives
+  - an evidence task with official human-verified evidence docs as positives
+  - a gold task with official answer-containing gold docs as positives
   - official curated hard negatives from the benchmark rows
+  - supporting evidence docs remain in the gold slice corpus as realistic distractors
   - this is intentionally not the full `100k`-document agent benchmark
 
 ## Important Boundary
@@ -42,7 +44,10 @@ Evidence:
 - embedded Mojo build failed with `unable to open shared memory object </torch_...>`
 
 Resolution:
-- materialize the BrowseComp-Plus task once as `.cache/kayak/browsecomp_plus_real_subset/python_task.json` in a plain Python process
+- materialize the BrowseComp-Plus tasks once as:
+  - `.cache/kayak/browsecomp_plus_real_subset/python_task_evidence.json`
+  - `.cache/kayak/browsecomp_plus_real_subset/python_task_gold.json`
+  in a plain Python process
 - keep task decoding, storage, packing, search, and evaluation in Mojo
 
 This is a systems workaround, not a benchmark change.
@@ -58,6 +63,7 @@ pixi run test_storage
 pixi run bench_limit_small_raw
 pixi run build_browsecomp_plus_task_json
 pixi run bench_browsecomp_plus_raw
+pixi run bench_browsecomp_plus_gold_raw
 ```
 
 Quiet-wrapper follow-up attempted:
@@ -108,8 +114,25 @@ So the latency numbers below should be treated as exploratory raw timings, not l
 - search timing:
   - raw mean `0.0009456092072934178 s`
 
+### BrowseComp-Plus gold slice
+
+- shape:
+  - `4` queries
+  - `90` docs
+  - query vectors about `32`
+  - doc vectors about `175`
+  - dim `128`
+- retrieval quality:
+  - `ndcg@10 = 0.2851267779084149`
+  - `mrr@10 = 0.4375`
+  - `recall@10 = 0.30833333333333335`
+  - `success@10 = 0.75`
+- search timing:
+  - raw mean `0.0016518212535014006 s`
+
 ## Interpretation
 
 - `LIMIT-small` is almost solved by exact ColBERTv2 on this light slice, which makes it useful as a compact adversarial regression target.
 - `BrowseComp-Plus` is materially harder even after slicing, which is good evidence that it adds real pressure rather than duplicating BEIR-style smoke tests.
+- On this current `4`-query light slice, the gold task is slightly better on `nDCG@10` and recall than the evidence task, but worse on `success@10`. That is useful signal: the two qrel sets are not interchangeable, so carrying both is justified.
 - The BrowseComp-Plus slice is still light enough for iterative CPU profiling while preserving benchmark-native hard negatives.

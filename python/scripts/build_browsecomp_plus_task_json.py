@@ -10,30 +10,46 @@ PYTHON_ROOT = REPO_ROOT / "python"
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.append(str(PYTHON_ROOT))
 
-from kayak_bridge.browsecomp_plus_subset import build_browsecomp_plus_colbert_subset
+from kayak_bridge.browsecomp_plus_subset import (
+    build_browsecomp_plus_encoded_slice,
+    build_browsecomp_plus_task_from_encoded_slice,
+)
 
 
-OUTPUT_PATH = (
+OUTPUT_ROOT = (
     REPO_ROOT
     / ".cache"
     / "kayak"
     / "browsecomp_plus_real_subset"
-    / "python_task.json"
 )
+EVIDENCE_OUTPUT_PATH = OUTPUT_ROOT / "python_task_evidence.json"
+GOLD_OUTPUT_PATH = OUTPUT_ROOT / "python_task_gold.json"
 
 
 def main() -> None:
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
-    if OUTPUT_PATH.exists():
-        print(f"using cached task json: {OUTPUT_PATH}")
+    if EVIDENCE_OUTPUT_PATH.exists() and GOLD_OUTPUT_PATH.exists():
+        print(f"using cached task json: {EVIDENCE_OUTPUT_PATH}")
+        print(f"using cached task json: {GOLD_OUTPUT_PATH}")
         return
 
-    task = build_browsecomp_plus_colbert_subset()
-    with OUTPUT_PATH.open("w", encoding="utf-8") as handle:
-        json.dump(task, handle)
+    encoded_slice = build_browsecomp_plus_encoded_slice()
+    evidence_task = build_browsecomp_plus_task_from_encoded_slice(
+        encoded_slice, relevance_kind="evidence"
+    )
+    gold_task = build_browsecomp_plus_task_from_encoded_slice(
+        encoded_slice, relevance_kind="gold"
+    )
 
-    print(f"wrote task json: {OUTPUT_PATH}")
+    with EVIDENCE_OUTPUT_PATH.open("w", encoding="utf-8") as handle:
+        json.dump(evidence_task, handle)
+
+    with GOLD_OUTPUT_PATH.open("w", encoding="utf-8") as handle:
+        json.dump(gold_task, handle)
+
+    print(f"wrote task json: {EVIDENCE_OUTPUT_PATH}")
+    print(f"wrote task json: {GOLD_OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

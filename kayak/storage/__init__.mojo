@@ -1,3 +1,7 @@
+from .browsecomp_plus_gold_cache import (
+    BrowsecompPlusGoldRealSubsetCache,
+    ensure_browsecomp_plus_gold_real_subset_cache,
+)
 from .browsecomp_plus_cache import (
     BrowsecompPlusRealSubsetCache,
     ensure_browsecomp_plus_real_subset_cache,
