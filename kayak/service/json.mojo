@@ -112,6 +112,9 @@ def append_json_search_plan(mut buffer: String, read request: SearchRequest):
     buffer += "\"candidate_generator_kind\":\""
     buffer += json_escape(request.plan.candidate_generator.kind)
     buffer += "\","
+    buffer += "\"faithfulness_policy_kind\":\""
+    buffer += json_escape(request.plan.faithfulness_policy.kind)
+    buffer += "\","
     buffer += "\"final_k\":"
     buffer += String(request.plan.candidate_budget.final_k) + ","
     buffer += "\"candidate_k\":"
@@ -271,6 +274,8 @@ def search_response_json(read response: SearchResponse) -> String:
     buffer += "\"snapshot_id\":\"" + json_escape(response.snapshot_id.value) + "\","
     buffer += "\"candidate_generator_kind\":\""
     buffer += json_escape(response.plan.candidate_generator.kind) + "\","
+    buffer += "\"faithfulness_policy_kind\":\""
+    buffer += json_escape(response.plan.faithfulness_policy.kind) + "\","
     buffer += "\"final_k\":" + String(response.plan.candidate_budget.final_k) + ","
     buffer += "\"candidate_k\":" + String(response.plan.candidate_budget.candidate_k) + ","
     buffer += "\"hits\":"

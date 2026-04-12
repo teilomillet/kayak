@@ -22,6 +22,7 @@ from kayak import (
     TenantId,
     NamespaceId,
     StoredPackedIndex,
+    best_effort_faithfulness_policy,
     build_stored_centroid_posting_index,
     build_stored_document_proxy_index,
     centroid_postings_search_plan,
@@ -30,6 +31,7 @@ from kayak import (
     exact_full_scan_search_plan,
     explain_collection_search,
     load_resolved_collection_snapshot,
+    oracle_full_recall_required_faithfulness_policy,
     save_collection_manifest,
     save_stored_centroid_posting_index,
     save_sealed_segment_manifest,
@@ -301,6 +303,8 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
     )
     assert_equal(json.find("\"collection_id\":\"search-plan\"") != -1, True)
     assert_equal(json.find("\"candidate_generator_kind\":\"exact_full_scan\"") != -1, True)
+    assert_equal(json.find("\"faithfulness_policy_kind\":\"exact_stage1_required\"") != -1, True)
+    assert_equal(json.find("\"faithfulness\":") != -1, True)
 
 
 def test_candidate_budget_rejects_candidate_k_below_final_k() raises:
@@ -322,13 +326,17 @@ def test_document_proxy_search_plan_exact_reranks_shortlist() raises:
         ExactCpuBackend(),
         query,
         resolved,
-        document_proxy_search_plan(1, 2),
+        document_proxy_search_plan(
+            1, 2, oracle_full_recall_required_faithfulness_policy()
+        ),
     )
 
     assert_equal(explain.plan.candidate_generator.kind, "document_proxy")
     assert_equal(len(explain.candidate_set.hits), 2)
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
+    assert_equal(explain.faithfulness.passes, True)
+    assert_equal(explain.faithfulness.evidence_kind, "oracle_full_recall")
     assert_equal(explain.candidate_stage.vector_count, 2)
     assert_equal(explain.exact_stage.document_count, 2)
 
@@ -341,12 +349,16 @@ def test_document_proxy_search_plan_reports_oracle_miss_when_shortlist_is_too_sm
         ExactCpuBackend(),
         query,
         resolved,
-        document_proxy_search_plan(1, 1),
+        document_proxy_search_plan(
+            1, 1, oracle_full_recall_required_faithfulness_policy()
+        ),
     )
 
     assert_equal(explain.candidate_set.hits[0].doc_id, "doc-b")
     assert_equal(explain.final_hits[0].doc_id, "doc-b")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(0.0))
+    assert_equal(explain.faithfulness.passes, False)
+    assert_equal(explain.faithfulness.evidence_kind, "oracle_recall_loss")
 
 
 def test_centroid_postings_search_plan_exact_reranks_shortlist() raises:
@@ -357,13 +369,17 @@ def test_centroid_postings_search_plan_exact_reranks_shortlist() raises:
         ExactCpuBackend(),
         query,
         resolved,
-        centroid_postings_search_plan(1, 2),
+        centroid_postings_search_plan(
+            1, 2, oracle_full_recall_required_faithfulness_policy()
+        ),
     )
 
     assert_equal(explain.plan.candidate_generator.kind, "centroid_postings")
     assert_equal(len(explain.candidate_set.hits), 2)
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
+    assert_equal(explain.faithfulness.passes, True)
+    assert_equal(explain.faithfulness.evidence_kind, "oracle_full_recall")
     assert_equal(explain.candidate_stage.vector_count, 2)
     assert_equal(explain.candidate_stage.token_count, 3)
     assert_equal(explain.exact_stage.document_count, 2)
@@ -377,12 +393,16 @@ def test_centroid_postings_search_plan_reports_oracle_miss_when_shortlist_is_too
         ExactCpuBackend(),
         query,
         resolved,
-        centroid_postings_search_plan(1, 1),
+        centroid_postings_search_plan(
+            1, 1, oracle_full_recall_required_faithfulness_policy()
+        ),
     )
 
     assert_equal(explain.candidate_set.hits[0].doc_id, "doc-b")
     assert_equal(explain.final_hits[0].doc_id, "doc-b")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(0.0))
+    assert_equal(explain.faithfulness.passes, False)
+    assert_equal(explain.faithfulness.evidence_kind, "oracle_recall_loss")
 
 
 def main() raises:

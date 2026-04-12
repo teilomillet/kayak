@@ -23,7 +23,11 @@ from kayak import (
     UpsertDocument,
     UpsertDocumentsRequest,
     VECTOR_SCALAR_NAME,
+    FaithfulnessAssessment,
+    best_effort_faithfulness_policy,
     default_exact_search_request,
+    document_proxy_search_plan,
+    oracle_full_recall_required_faithfulness_policy,
 )
 from kayak.filters import match_all_filter
 from kayak.planning import CandidateSet, exact_full_scan_search_plan
@@ -80,6 +84,15 @@ def make_explain() raises -> CollectionSearchExplain:
             ScoreHistogram(1, 1.0, 1.0, [1]),
         ),
         1.0,
+        FaithfulnessAssessment(
+            "exact_stage1_required",
+            "exact_stage1",
+            True,
+            True,
+            1.0,
+            True,
+            "faithfulness policy satisfied: stage 1 is exact",
+        ),
         hits^,
     )
 
@@ -137,8 +150,48 @@ def test_default_search_request_builds_exact_plan() raises:
     assert_equal(request.snapshot_id.value, "snapshot-0001")
     assert_equal(request.filter_expression.is_match_all(), True)
     assert_equal(request.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(request.plan.faithfulness_policy.kind, "exact_stage1_required")
     assert_equal(request.plan.candidate_budget.final_k, 3)
     assert_equal(request.debug_mode, True)
+
+
+def test_search_request_rejects_unverifiable_oracle_guardrail_without_debug() raises:
+    var raised = False
+
+    try:
+        _ = SearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            match_all_filter(),
+            document_proxy_search_plan(
+                2,
+                2,
+                oracle_full_recall_required_faithfulness_policy(),
+            ),
+            False,
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_search_request_allows_best_effort_approximate_search_without_debug() raises:
+    var request = SearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        make_query(),
+        match_all_filter(),
+        document_proxy_search_plan(2, 2, best_effort_faithfulness_policy()),
+        False,
+    )
+
+    assert_equal(request.plan.faithfulness_policy.kind, "best_effort")
 
 
 def test_search_and_debug_responses_match_explain_scope() raises:

@@ -3,6 +3,7 @@ from std.collections import List
 from .candidate_set import CandidateSet
 from .collection_hit import CollectionHit
 from .explain import CollectionSearchExplain
+from .faithfulness import FaithfulnessAssessment
 from .score_histogram import ScoreHistogram
 from .stage_profile import SearchStageProfile
 
@@ -80,6 +81,33 @@ def append_json_candidate_set(mut buffer: String, read candidate_set: CandidateS
     buffer += "}"
 
 
+def append_json_faithfulness_assessment(
+    mut buffer: String, read assessment: FaithfulnessAssessment
+):
+    buffer += "{"
+    buffer += "\"policy_kind\":\"" + json_escape(assessment.policy_kind) + "\","
+    buffer += "\"evidence_kind\":\"" + json_escape(assessment.evidence_kind) + "\","
+    buffer += "\"stage1_is_exact\":"
+    if assessment.stage1_is_exact:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"has_oracle_recall_measurement\":"
+    if assessment.has_oracle_recall_measurement:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"observed_candidate_recall_at_final_k\":"
+    buffer += String(assessment.observed_candidate_recall_at_final_k) + ","
+    buffer += "\"passes\":"
+    if assessment.passes:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"message\":\"" + json_escape(assessment.message) + "\""
+    buffer += "}"
+
+
 def collection_search_explain_json(
     read explain: CollectionSearchExplain
 ) -> String:
@@ -90,6 +118,9 @@ def collection_search_explain_json(
     buffer += "\"plan\":{"
     buffer += "\"candidate_generator_kind\":\""
     buffer += json_escape(explain.plan.candidate_generator.kind)
+    buffer += "\","
+    buffer += "\"faithfulness_policy_kind\":\""
+    buffer += json_escape(explain.plan.faithfulness_policy.kind)
     buffer += "\","
     buffer += "\"candidate_k\":" + String(explain.plan.candidate_budget.candidate_k) + ","
     buffer += "\"final_k\":" + String(explain.plan.candidate_budget.final_k) + ","
@@ -107,6 +138,9 @@ def collection_search_explain_json(
     buffer += ","
     buffer += "\"candidate_recall_at_final_k\":"
     buffer += String(explain.candidate_recall_at_final_k)
+    buffer += ","
+    buffer += "\"faithfulness\":"
+    append_json_faithfulness_assessment(buffer, explain.faithfulness)
     buffer += ","
     buffer += "\"final_hits\":"
     append_json_hit_list(buffer, explain.final_hits)

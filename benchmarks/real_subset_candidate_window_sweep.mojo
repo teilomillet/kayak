@@ -19,6 +19,7 @@ from kayak.collections import (
 )
 from kayak.eval import JudgedTask
 from kayak.planning import (
+    best_effort_faithfulness_policy,
     centroid_postings_search_plan,
     document_proxy_search_plan,
 )
@@ -64,7 +65,11 @@ def append_sweep_for_dataset(
                 model_name,
                 task,
                 snapshot,
-                document_proxy_search_plan(task.k, candidate_k),
+                document_proxy_search_plan(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                ),
                 0,
                 0,
             )
@@ -76,7 +81,11 @@ def append_sweep_for_dataset(
                 model_name,
                 task,
                 snapshot,
-                centroid_postings_search_plan(task.k, candidate_k),
+                centroid_postings_search_plan(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                ),
                 0,
                 0,
             )

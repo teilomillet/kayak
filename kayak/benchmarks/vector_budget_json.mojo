@@ -6,6 +6,7 @@ from kayak.eval import JudgedTask, evaluate_query_hits
 from kayak.numeric import MetricScalar, VectorScalar, zero_metric_scalar
 from kayak.planning import (
     SearchPlan,
+    best_effort_faithfulness_policy,
     document_proxy_search_plan,
     explain_collection_search,
     final_hits_to_search_hits,
@@ -134,7 +135,11 @@ def build_vector_budget_sweep_summary(
         model_name,
         task,
         snapshot,
-        document_proxy_search_plan(task.k, candidate_k),
+        document_proxy_search_plan(
+            task.k,
+            candidate_k,
+            best_effort_faithfulness_policy(),
+        ),
         query_vector_budget,
         document_vector_budget,
     )

@@ -14,6 +14,15 @@ from .execution import (
     final_hits_to_search_hits,
 )
 from .explain import CollectionSearchExplain, explain_collection_search
+from .faithfulness import (
+    FaithfulnessAssessment,
+    FaithfulnessPolicy,
+    assess_faithfulness,
+    best_effort_faithfulness_policy,
+    exact_stage1_required_faithfulness_policy,
+    oracle_full_recall_required_faithfulness_policy,
+    stage1_generator_is_exact,
+)
 from .exact_stage import ExactStageResult
 from .json import collection_search_explain_json
 from .score_histogram import (

@@ -58,9 +58,13 @@ from .planning import (
     CollectionHit,
     CollectionSearchExplain,
     ExactStageResult,
+    FaithfulnessAssessment,
+    FaithfulnessPolicy,
     ScoreHistogram,
     SearchPlan,
     SearchStageProfile,
+    assess_faithfulness,
+    best_effort_faithfulness_policy,
     build_score_histogram,
     candidate_generation_for_plan,
     candidate_recall_at_final_k,
@@ -70,10 +74,13 @@ from .planning import (
     document_proxy_candidate_generator,
     document_proxy_search_plan,
     empty_score_histogram,
+    exact_stage1_required_faithfulness_policy,
     exact_full_scan_candidate_generator,
     exact_full_scan_search_plan,
     explain_collection_search,
     final_hits_for_plan,
+    oracle_full_recall_required_faithfulness_policy,
+    stage1_generator_is_exact,
 )
 from .runtime import ExactCpuBackend, ExactScoringBackend
 from .service import (

@@ -7,6 +7,7 @@ from kayak import (
     CreateCollectionRequest,
     DebugSearchResponse,
     ExplainResponse,
+    FaithfulnessAssessment,
     NamespaceId,
     ScoreHistogram,
     ScoreScalar,
@@ -63,6 +64,15 @@ def make_debug_response() raises -> DebugSearchResponse:
             ScoreHistogram(1, 1.0, 1.0, [1]),
         ),
         1.0,
+        FaithfulnessAssessment(
+            "exact_stage1_required",
+            "exact_stage1",
+            True,
+            True,
+            1.0,
+            True,
+            "faithfulness policy satisfied: stage 1 is exact",
+        ),
         hits^,
     )
     return DebugSearchResponse(search, explain)
@@ -90,6 +100,8 @@ def test_debug_search_response_json_embeds_explain_payload() raises:
     assert_equal(json.find("\"search\":") != -1, True)
     assert_equal(json.find("\"debug\":") != -1, True)
     assert_equal(json.find("\"candidate_generator_kind\":\"exact_full_scan\"") != -1, True)
+    assert_equal(json.find("\"faithfulness_policy_kind\":\"exact_stage1_required\"") != -1, True)
+    assert_equal(json.find("\"faithfulness\":") != -1, True)
     assert_equal(json.find("\"candidate_stage\":") != -1, True)
 
 

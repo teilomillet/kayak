@@ -13,6 +13,7 @@ from .execution import (
     final_hits_for_plan,
 )
 from .exact_stage import exact_oracle_hits_for_snapshot
+from .faithfulness import FaithfulnessAssessment, assess_faithfulness
 from .score_histogram import build_score_histogram
 from .search_plan import SearchPlan
 from .stage_profile import SearchStageProfile
@@ -26,6 +27,7 @@ struct CollectionSearchExplain(Copyable):
     var candidate_stage: SearchStageProfile
     var exact_stage: SearchStageProfile
     var candidate_recall_at_final_k: MetricScalar
+    var faithfulness: FaithfulnessAssessment
     var final_hits: List[CollectionHit]
 
     def __init__(
@@ -37,6 +39,7 @@ struct CollectionSearchExplain(Copyable):
         candidate_stage: SearchStageProfile,
         exact_stage: SearchStageProfile,
         candidate_recall_at_final_k: MetricScalar,
+        faithfulness: FaithfulnessAssessment,
         var final_hits: List[CollectionHit],
     ):
         self.collection_id = collection_id^
@@ -46,6 +49,7 @@ struct CollectionSearchExplain(Copyable):
         self.candidate_stage = candidate_stage.copy()
         self.exact_stage = exact_stage.copy()
         self.candidate_recall_at_final_k = candidate_recall_at_final_k
+        self.faithfulness = faithfulness.copy()
         self.final_hits = final_hits^
 
 
@@ -63,6 +67,9 @@ def explain_collection_search[Backend: ExactScoringBackend](
     )
     var oracle_final_hits = exact_oracle_hits_for_snapshot(
         backend, query, snapshot, plan.candidate_budget.final_k
+    )
+    var observed_candidate_recall_at_final_k = candidate_recall_at_final_k(
+        candidate_set, oracle_final_hits
     )
 
     return CollectionSearchExplain(
@@ -92,6 +99,11 @@ def explain_collection_search[Backend: ExactScoringBackend](
             exact_stage.byte_size,
             build_score_histogram(exact_stage.final_hits, 8),
         ),
-        candidate_recall_at_final_k(candidate_set, oracle_final_hits),
+        observed_candidate_recall_at_final_k,
+        assess_faithfulness(
+            plan.faithfulness_policy,
+            plan.candidate_generator.kind,
+            observed_candidate_recall_at_final_k,
+        ),
         exact_stage.final_hits.copy(),
     )

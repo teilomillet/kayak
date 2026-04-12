@@ -278,6 +278,8 @@ Current epistemic status:
   slices at equal `candidate_k`
 - `centroid_postings` is the first search-native centroid/posting baseline and
   is now benchmarked on the same axes
+- approximate `SearchPlan`s now carry an explicit faithfulness policy and the
+  explain/debug path reports whether that policy passed against the exact oracle
 - heavier native candidate-generation work should now be driven by these
   recall-vs-budget traces instead of by assumption
 

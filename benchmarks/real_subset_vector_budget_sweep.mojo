@@ -19,7 +19,10 @@ from kayak.collections import (
     load_resolved_collection_snapshot,
 )
 from kayak.eval import JudgedTask
-from kayak.planning import centroid_postings_search_plan
+from kayak.planning import (
+    best_effort_faithfulness_policy,
+    centroid_postings_search_plan,
+)
 from kayak.runtime import ExactCpuBackend
 from kayak.storage import (
     StoredPackedIndex,
@@ -108,7 +111,11 @@ def append_vector_budget_summaries_for_dataset(
                     model_name,
                     task,
                     snapshot,
-                    centroid_postings_search_plan(task.k, candidate_k),
+                    centroid_postings_search_plan(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                    ),
                     query_vector_budget,
                     centroid_budget,
                 )

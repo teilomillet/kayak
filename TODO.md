@@ -213,6 +213,8 @@ Immediate TODOs:
 Current interpretation:
 - `document_proxy` is now the light proxy-vector baseline.
 - `centroid_postings` is now the first search-native centroid/posting baseline.
+- approximate plans now carry explicit faithfulness policy rather than silently
+  pretending to be exact
 - The next heavier engine step should be a tighter WARP/GEM-style native
   engine path, not another round of heuristic reranking.
 

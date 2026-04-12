@@ -114,6 +114,15 @@ The engine already knows how to reason about:
 
 So the stable internal contract should name those things directly.
 
+Additional guardrail now present in the typed contract:
+- `SearchPlan` carries an explicit faithfulness policy
+- exact plans default to `exact_stage1_required`
+- non-exact plans must declare whether they are `best_effort` or require
+  exact-oracle full recall
+- the service contract rejects a non-exact plan with
+  `oracle_full_recall_required` unless the caller asks for a verifiable
+  debug/explain path
+
 Inference:
 - a future HTTP layer may accept a simpler body such as `{ "k": 10 }`
   and translate it into `default_exact_search_request(...)`

@@ -45,6 +45,15 @@ struct SearchRequest(Copyable):
         self.plan = plan.copy()
         self.debug_mode = debug_mode
 
+        if (
+            self.plan.faithfulness_policy.kind == "oracle_full_recall_required"
+            and self.plan.candidate_generator.kind != "exact_full_scan"
+            and not self.debug_mode
+        ):
+            raise Error(
+                "oracle_full_recall_required faithfulness policy requires debug_mode for non-exact stage-1 search"
+            )
+
 
 def default_exact_search_request(
     collection_id: CollectionId,
