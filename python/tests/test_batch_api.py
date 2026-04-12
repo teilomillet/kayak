@@ -152,6 +152,29 @@ class BatchApiTests(unittest.TestCase):
         ):
             np.testing.assert_allclose(actual_scores.numpy(), expected_scores.numpy())
 
+    @unittest.skipUnless(
+        _mojo_backend_available.__func__(), "mojo_exact_cpu backend requires Mojo"
+    )
+    def test_mojo_batch_matches_numpy_batch_for_packed(self) -> None:
+        query_batch = self._build_query_batch()
+        index = self._build_index()
+
+        numpy_scores = kayak.maxsim_batch(
+            query_batch,
+            index,
+            backend=kayak.NUMPY_REFERENCE_BACKEND,
+        )
+        mojo_scores = kayak.maxsim_batch(
+            query_batch,
+            index,
+            backend=kayak.MOJO_EXACT_CPU_BACKEND,
+        )
+
+        for actual_scores, expected_scores in zip(
+            mojo_scores, numpy_scores, strict=True
+        ):
+            np.testing.assert_allclose(actual_scores.numpy(), expected_scores.numpy())
+
 
 if __name__ == "__main__":
     unittest.main()

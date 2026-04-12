@@ -67,6 +67,7 @@ class _FixtureCase:
     def __init__(self, fixture_name: str) -> None:
         spec = FIXTURE_SPECS[fixture_name]
         query = kayak.query(_vector_matrix(spec["query"]))
+        prefix_query = kayak.query(query.as_vector_matrix()[:-1])
         documents = kayak.documents(
             spec["doc_ids"],
             [_vector_matrix(document) for document in spec["documents"]],
@@ -75,10 +76,20 @@ class _FixtureCase:
 
         self.fixture_name = fixture_name
         self.query = query
+        self.prefix_query = prefix_query
+        self.query_batch = kayak.query_batch(
+            [query.as_vector_matrix(), prefix_query.as_vector_matrix()]
+        )
         self.index = index
         self.flat_query = query.to_layout("flat_dim128")
+        self.flat_query_batch = self.query_batch.to_layout("flat_dim128")
         self.hybrid_index = index.to_layout("hybrid_flat_dim128")
         self.expected_scores = np.array(spec["expected_scores"], dtype=np.float32)
+        self.expected_prefix_scores = kayak.maxsim(
+            self.prefix_query,
+            self.index,
+            backend=kayak.NUMPY_REFERENCE_BACKEND,
+        ).numpy()
         self.expected_hits = tuple(spec["expected_hits"])
         self.expected_vector_counts = tuple(spec["expected_vector_counts"])
 
@@ -145,6 +156,29 @@ class KayakPythonSdkChaos(ChaosTest):
         )
 
     @rule()
+    def score_batch_numpy(self) -> None:
+        case = _fixture_case(self.fixture_name)
+        scores_batch = kayak.maxsim_batch(
+            case.query_batch,
+            case.index,
+            backend=kayak.NUMPY_REFERENCE_BACKEND,
+        )
+        always(
+            bool(
+                np.allclose(scores_batch[0].numpy(), case.expected_scores)
+            ),
+            f"{case.fixture_name} batch numpy primary scores match fixture",
+        )
+        always(
+            bool(
+                np.allclose(
+                    scores_batch[1].numpy(), case.expected_prefix_scores
+                )
+            ),
+            f"{case.fixture_name} batch numpy prefix scores match fixture",
+        )
+
+    @rule()
     def score_mojo_exact_cpu(self) -> None:
         if not _mojo_backend_enabled():
             return
@@ -161,6 +195,32 @@ class KayakPythonSdkChaos(ChaosTest):
             f"{case.fixture_name} hybrid mojo scores match fixture",
         )
 
+    @rule()
+    def score_batch_mojo_exact_cpu(self) -> None:
+        if not _mojo_backend_enabled():
+            return
+
+        case = _fixture_case(self.fixture_name)
+        scores_batch = kayak.maxsim_batch(
+            case.flat_query_batch,
+            case.hybrid_index,
+            backend=kayak.MOJO_EXACT_CPU_BACKEND,
+        )
+        always(
+            bool(
+                np.allclose(scores_batch[0].numpy(), case.expected_scores)
+            ),
+            f"{case.fixture_name} batch mojo primary scores match fixture",
+        )
+        always(
+            bool(
+                np.allclose(
+                    scores_batch[1].numpy(), case.expected_prefix_scores
+                )
+            ),
+            f"{case.fixture_name} batch mojo prefix scores match fixture",
+        )
+
     @invariant()
     def shape_invariants_hold(self) -> None:
         case = _fixture_case(self.fixture_name)
@@ -168,6 +228,14 @@ class KayakPythonSdkChaos(ChaosTest):
         assert case.index.vector_dim == 128
         assert tuple(case.index.vector_counts) == case.expected_vector_counts
         assert case.index.total_vector_count == sum(case.expected_vector_counts)
+
+    @invariant()
+    def backend_contract_holds(self) -> None:
+        numpy_info = kayak.backend_info(kayak.NUMPY_REFERENCE_BACKEND)
+        assert numpy_info.available
+        assert not numpy_info.requires_mojo
+        assert "nested" in numpy_info.query_layouts
+        assert "packed" in numpy_info.index_layouts
 
 
 TestKayakPythonSdkChaos = KayakPythonSdkChaos.TestCase
