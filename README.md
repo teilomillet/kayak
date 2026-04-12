@@ -17,6 +17,7 @@ The current scaffold is intentionally narrow:
 - `kayak/contracts/`: validated query/document contracts
 - `kayak/numeric/`: centralized scalar aliases and storage-format constants
 - `kayak/collections/`: serving-side collection, segment, snapshot, and compaction contracts
+- `kayak/planning/`: explicit search plans, candidate sets, collection-level explain data
 - `kayak/index/`: packed index layout and optional flat `dim128` document layouts
 - `kayak/scoring/`: exact MaxSim scoring kernels
 - `kayak/runtime/`: backend boundary, CPU backend first
@@ -37,6 +38,12 @@ document-text-corpus manifest codecs under `kayak/collections/`.
 It also includes explicit snapshot resolution and collection storage reporting,
 both keyed by an explicit snapshot id rather than a hidden "current snapshot"
 convention.
+
+There is now a collection-level explain example for the real SciFact slice:
+
+```bash
+pixi run explain_scifact_collection
+```
 
 ## Why This Shape
 

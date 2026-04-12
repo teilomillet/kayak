@@ -153,10 +153,10 @@ Required properties:
 - format versioning
 
 Immediate TODOs:
-- [ ] Define a retrieval segment manifest format
-- [ ] Split "judged task storage" from "serving collection storage"
-- [ ] Add an explicit optional text-sidecar artifact keyed by `doc_id`
-- [ ] Add segment-level stats: doc count, token count, vector count, average vectors/doc, byte size
+- [x] Define a retrieval segment manifest format
+- [x] Split "judged task storage" from "serving collection storage"
+- [x] Add an explicit optional text-sidecar artifact keyed by `doc_id`
+- [x] Add segment-level stats: doc count, token count, vector count, average vectors/doc, byte size
 - [ ] Add snapshot/export/import boundaries
 
 ## Priority 2: Candidate Generation As A First-Class Engine Stage
@@ -189,8 +189,8 @@ Candidate-generation families to support:
 - future native multi-vector index path if we implement something closer to GEM/WARP ideas
 
 Immediate TODOs:
-- [ ] Define a `SearchPlan` contract that names each stage explicitly
-- [ ] Add a candidate-set artifact and profiling output
+- [x] Define a `SearchPlan` contract that names each stage explicitly
+- [x] Add a candidate-set artifact and profiling output
 - [ ] Add benchmark output for recall of stage 1 against exact final results
 - [ ] Add candidate-window sweeps as a standard benchmark
 
@@ -213,7 +213,7 @@ Required properties:
 - predictable update/delete behavior
 
 Immediate TODOs:
-- [ ] Define tenant and namespace boundaries in storage manifests
+- [x] Define tenant and namespace boundaries in storage manifests
 - [ ] Define a filter expression model for search requests
 - [ ] Add per-tenant and cross-tenant segment layout design note
 - [ ] Add benchmark fixtures for low-selectivity and high-selectivity filters
@@ -241,7 +241,7 @@ Required outputs:
 
 Immediate TODOs:
 - [ ] Add structured benchmark output JSON for all public benchmark entrypoints
-- [ ] Add a query explain/profile command for one query against one collection
+- [x] Add a query explain/profile command for one query against one collection
 - [ ] Add stage-level counters and histograms
 - [ ] Add segment-level storage reports
 
@@ -378,11 +378,12 @@ Exit criteria:
 These are the best next moves right now.
 
 - [ ] Write `docs/architecture/segment_storage.md` describing collection, segment, manifest, snapshot, and compaction primitives
-- [ ] Introduce a serving-oriented storage package parallel to benchmark task storage
-- [ ] Add `StoredDocumentTextCorpus` as an optional artifact
-- [ ] Define `SearchPlan`, `CandidateGenerator`, and `CandidateSet`
+- [x] Write `docs/architecture/segment_storage.md` describing collection, segment, manifest, snapshot, and compaction primitives
+- [x] Introduce a serving-oriented storage package parallel to benchmark task storage
+- [x] Add `StoredDocumentTextCorpus` as an optional artifact
+- [x] Define `SearchPlan`, `CandidateGenerator`, and `CandidateSet`
 - [ ] Emit structured benchmark JSON for the real-slice benchmarks
-- [ ] Add one profile/explain command for a single query
+- [x] Add one profile/explain command for a single query
 - [ ] Add a minimal service API design doc
 
 ## What We Should Not Do Next

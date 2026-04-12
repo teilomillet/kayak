@@ -37,6 +37,22 @@ from .numeric import (
     ScoreScalar,
     VectorScalar,
 )
+from .planning import (
+    CandidateBudget,
+    CandidateGenerator,
+    CandidateSet,
+    CollectionHit,
+    CollectionSearchExplain,
+    SearchPlan,
+    SearchStageProfile,
+    candidate_generation_for_plan,
+    candidate_recall_at_final_k,
+    collection_search_explain_json,
+    exact_full_scan_candidate_generator,
+    exact_full_scan_search_plan,
+    explain_collection_search,
+    final_hits_for_plan,
+)
 from .runtime import ExactCpuBackend
 from .scoring import ExactScoringConfig
 from .scoring import (
@@ -53,6 +69,34 @@ from .search import (
     search_exact_hybrid_flat_dim128_with_flat_query,
 )
 from .text import DocumentTextCorpus, document_text_for_doc_id, normalize_text
+from .collections import (
+    CollectionId,
+    CollectionManifest,
+    CollectionStorageReport,
+    CollectionStats,
+    LoadedSealedSegment,
+    NamespaceId,
+    ResolvedCollectionSnapshot,
+    SegmentId,
+    SegmentStats,
+    SealedSegmentManifest,
+    SnapshotId,
+    SnapshotManifest,
+    StoredDocumentTextCorpus,
+    TenantId,
+    build_collection_storage_report,
+    collection_manifest_exists,
+    load_collection_manifest,
+    load_collection_storage_report,
+    load_resolved_collection_snapshot,
+    load_sealed_segment_manifest,
+    load_snapshot_manifest,
+    load_stored_document_text_corpus,
+    save_collection_manifest,
+    save_sealed_segment_manifest,
+    save_snapshot_manifest,
+    save_stored_document_text_corpus,
+)
 from .storage import (
     BrowsecompPlusGoldRealSubsetCache,
     BrowsecompPlusRealSubsetCache,
