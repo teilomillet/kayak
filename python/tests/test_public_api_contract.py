@@ -9,20 +9,27 @@ import kayak_bridge
 class PublicApiContractTests(unittest.TestCase):
     def test_public_api_exports_match_supported_contract(self) -> None:
         expected = {
+            "BackendInfo",
             "LateDocuments",
             "LateIndex",
             "LateQuery",
+            "LateQueryBatch",
             "LateScores",
             "SearchHit",
             "MOJO_EXACT_CPU_BACKEND",
             "NUMPY_REFERENCE_BACKEND",
+            "available_backends",
+            "backend_info",
             "documents",
             "flat_query_dim128",
             "hybrid_flat_dim128_index",
             "maxsim",
+            "maxsim_batch",
             "packed_index",
             "query",
+            "query_batch",
             "search",
+            "search_batch",
         }
 
         self.assertEqual(set(kayak.PUBLIC_API), expected)

@@ -166,6 +166,30 @@ class LateIndex:
         stop = int(self.doc_offsets[document_index + 1])
         return self.as_packed_token_matrix()[start:stop]
 
+    def select(self, doc_ids: object) -> "LateIndex":
+        selected_doc_ids = to_doc_ids(doc_ids, "selected index doc_ids")
+        positions = {doc_id: index for index, doc_id in enumerate(self.doc_ids)}
+
+        selected_offsets = [0]
+        selected_matrices = []
+        running_offset = 0
+        for doc_id in selected_doc_ids:
+            if doc_id not in positions:
+                raise ValueError(f"document id not found in index: {doc_id}")
+
+            matrix = self.document_token_matrix(positions[doc_id])
+            selected_matrices.append(matrix)
+            running_offset += int(matrix.shape[0])
+            selected_offsets.append(running_offset)
+
+        selected_vectors = np.concatenate(selected_matrices, axis=0)
+        selected_index = LateIndex.from_packed(
+            selected_doc_ids,
+            selected_offsets,
+            selected_vectors,
+        )
+        return selected_index.to_layout(self.layout)
+
     def maxsim(
         self, query: "LateQuery", *, backend: str = NUMPY_REFERENCE_BACKEND
     ) -> "LateScores":

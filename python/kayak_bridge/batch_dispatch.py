@@ -1,0 +1,44 @@
+"""Dispatches explicit batched late-interaction scoring without hiding query raggedness."""
+
+from __future__ import annotations
+
+from .backend_dispatch import _mojo_scores_for_query_and_index, maxsim_scores
+from .late_scores import LateScores
+from .layouts import MOJO_EXACT_CPU_BACKEND, NUMPY_REFERENCE_BACKEND
+from .mojo_exact_cpu import load_module as load_mojo_exact_cpu_module
+from .mojo_payloads import index_payload
+
+
+def maxsim_scores_batch(
+    query_batch: "LateQueryBatch",
+    index: "LateIndex",
+    *,
+    backend: str = NUMPY_REFERENCE_BACKEND,
+) -> tuple[LateScores, ...]:
+    if query_batch.vector_dim != index.vector_dim:
+        raise ValueError("query batch and index must share the same vector dimension")
+
+    if backend == NUMPY_REFERENCE_BACKEND:
+        return tuple(
+            maxsim_scores(query, index, backend=backend)
+            for query in query_batch.queries
+        )
+
+    if backend == MOJO_EXACT_CPU_BACKEND:
+        module = load_mojo_exact_cpu_module()
+        payload = index_payload(index)
+        return tuple(
+            LateScores.from_values(
+                backend,
+                index.doc_ids,
+                _mojo_scores_for_query_and_index(
+                    query,
+                    index,
+                    module=module,
+                    payload=payload,
+                ),
+            )
+            for query in query_batch.queries
+        )
+
+    raise ValueError(f"unsupported backend: {backend}")

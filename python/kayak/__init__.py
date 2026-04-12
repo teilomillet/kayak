@@ -11,37 +11,51 @@ surface.
 """
 
 from kayak_bridge import (
+    BackendInfo,
     LateDocuments,
     LateIndex,
     LateQuery,
+    LateQueryBatch,
     LateScores,
     MOJO_EXACT_CPU_BACKEND,
     NUMPY_REFERENCE_BACKEND,
     SearchHit,
+    available_backends,
+    backend_info,
     documents,
     flat_query_dim128,
     hybrid_flat_dim128_index,
     maxsim,
+    maxsim_batch,
     packed_index,
     query,
+    query_batch,
     search,
+    search_batch,
 )
 
 PUBLIC_API = (
+    "BackendInfo",
     "LateDocuments",
     "LateIndex",
     "LateQuery",
+    "LateQueryBatch",
     "LateScores",
     "SearchHit",
     "MOJO_EXACT_CPU_BACKEND",
     "NUMPY_REFERENCE_BACKEND",
+    "available_backends",
+    "backend_info",
     "documents",
     "flat_query_dim128",
     "hybrid_flat_dim128_index",
     "maxsim",
+    "maxsim_batch",
     "packed_index",
     "query",
+    "query_batch",
     "search",
+    "search_batch",
 )
 
 __all__ = [

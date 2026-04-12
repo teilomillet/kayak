@@ -142,18 +142,25 @@ is available during installation.
 Application code should import only from `kayak`.
 
 Supported exports today:
+- `BackendInfo`
 - `LateQuery`
+- `LateQueryBatch`
 - `LateDocuments`
 - `LateIndex`
 - `LateScores`
 - `SearchHit`
+- `available_backends`
+- `backend_info`
 - `query`
+- `query_batch`
 - `documents`
 - `packed_index`
 - `hybrid_flat_dim128_index`
 - `flat_query_dim128`
 - `maxsim`
+- `maxsim_batch`
 - `search`
+- `search_batch`
 - `NUMPY_REFERENCE_BACKEND`
 - `MOJO_EXACT_CPU_BACKEND`
 
@@ -202,6 +209,8 @@ hits = kayak.search(query, index, k=2, backend=kayak.NUMPY_REFERENCE_BACKEND)
 
 Runnable example:
 - [python/examples/quickstart.py](../python/examples/quickstart.py)
+- [python/examples/query_batch.py](../python/examples/query_batch.py)
+- [python/examples/backend_info.py](../python/examples/backend_info.py)
 
 Mojo exact CPU quickstart:
 

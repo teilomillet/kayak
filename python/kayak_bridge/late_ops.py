@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+from .backend_info import BackendInfo, available_backends, backend_info
 from .dtypes import FLAT_DIM128_VECTOR_DIM
+from .late_query_batch import LateQueryBatch
 from .late_documents import LateDocuments
 from .late_index import LateIndex
 from .late_query import LateQuery
 from .late_scores import LateScores, SearchHit
+from .batch_dispatch import maxsim_scores_batch
 from .layouts import MOJO_EXACT_CPU_BACKEND, NUMPY_REFERENCE_BACKEND
 from .backend_dispatch import maxsim_scores
 
 
 def query(token_vectors: object) -> LateQuery:
     return LateQuery.from_vectors(token_vectors)
+
+
+def query_batch(token_vectors: object) -> LateQueryBatch:
+    return LateQueryBatch.from_inputs(token_vectors)
 
 
 def flat_query_dim128(token_values: object) -> LateQuery:
@@ -46,6 +53,15 @@ def maxsim(
     return maxsim_scores(late_query, late_index, backend=backend)
 
 
+def maxsim_batch(
+    late_query_batch: LateQueryBatch,
+    late_index: LateIndex,
+    *,
+    backend: str = NUMPY_REFERENCE_BACKEND,
+) -> tuple[LateScores, ...]:
+    return maxsim_scores_batch(late_query_batch, late_index, backend=backend)
+
+
 def search(
     late_query: LateQuery,
     late_index: LateIndex,
@@ -54,3 +70,16 @@ def search(
     backend: str = NUMPY_REFERENCE_BACKEND,
 ) -> tuple[SearchHit, ...]:
     return maxsim(late_query, late_index, backend=backend).topk(k)
+
+
+def search_batch(
+    late_query_batch: LateQueryBatch,
+    late_index: LateIndex,
+    *,
+    k: int,
+    backend: str = NUMPY_REFERENCE_BACKEND,
+) -> tuple[tuple[SearchHit, ...], ...]:
+    return tuple(
+        scores.topk(k)
+        for scores in maxsim_batch(late_query_batch, late_index, backend=backend)
+    )

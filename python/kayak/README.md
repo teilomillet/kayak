@@ -7,6 +7,7 @@ query/document vector counts, layouts, and MaxSim semantics explicit.
 
 It gives you explicit objects for:
 - queries
+- query batches
 - documents
 - packed indexes
 - MaxSim scores
@@ -148,6 +149,32 @@ Search:
 hits = kayak.search(query, index, k=2)
 ```
 
+Create an explicit query batch without pretending it is one dense tensor:
+
+```python
+def dim128(index: int) -> np.ndarray:
+    vector = np.zeros(128, dtype=np.float32)
+    vector[index] = 1.0
+    return vector
+
+batch = kayak.query_batch(
+    [
+        np.stack([dim128(0), dim128(1)]),
+        np.stack([dim128(0), dim128(1), dim128(2)]),
+    ]
+)
+
+index = kayak.documents(
+    ["doc-a", "doc-b"],
+    [
+        np.stack([dim128(0), dim128(1), dim128(2)]),
+        np.stack([dim128(0), dim128(1)]),
+    ],
+).pack()
+
+scores_batch = kayak.maxsim_batch(batch, index)
+```
+
 ## Layouts
 
 Kayak keeps layout changes explicit.
@@ -187,6 +214,13 @@ The package exposes two named backends:
 - `kayak.NUMPY_REFERENCE_BACKEND`
 - `kayak.MOJO_EXACT_CPU_BACKEND`
 
+You can inspect backend availability explicitly:
+
+```python
+print(kayak.available_backends())
+print(kayak.backend_info(kayak.MOJO_EXACT_CPU_BACKEND))
+```
+
 Example:
 
 ```python
@@ -215,18 +249,25 @@ scores = kayak.maxsim(
 Application code should import from `kayak`.
 
 Main exports:
+- `BackendInfo`
 - `LateQuery`
+- `LateQueryBatch`
 - `LateDocuments`
 - `LateIndex`
 - `LateScores`
 - `SearchHit`
+- `available_backends`
+- `backend_info`
 - `query`
+- `query_batch`
 - `documents`
 - `packed_index`
 - `hybrid_flat_dim128_index`
 - `flat_query_dim128`
 - `maxsim`
+- `maxsim_batch`
 - `search`
+- `search_batch`
 
 ## Mental Model
 

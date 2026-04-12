@@ -8,18 +8,21 @@ from .dtypes import SCORE_DTYPE
 from .late_scores import LateScores
 from .layouts import MOJO_EXACT_CPU_BACKEND, NUMPY_REFERENCE_BACKEND
 from .mojo_exact_cpu import load_module as load_mojo_exact_cpu_module
+from .mojo_payloads import index_payload, query_payload, MojoIndexPayload
 from .reference_maxsim import maxsim_scores as numpy_maxsim_scores
 
 
 def _mojo_scores_for_query_and_index(
     query: "LateQuery",
     index: "LateIndex",
+    *,
+    module: object | None = None,
+    payload: MojoIndexPayload | None = None,
 ) -> np.ndarray:
-    module = load_mojo_exact_cpu_module()
-
-    doc_ids = list(index.doc_ids)
-    doc_offsets = [int(offset) for offset in index.doc_offsets]
-    packed_vectors = index.as_packed_token_matrix().tolist()
+    if module is None:
+        module = load_mojo_exact_cpu_module()
+    if payload is None:
+        payload = index_payload(index)
 
     if index.layout == "packed":
         if query.layout != "nested":
@@ -27,10 +30,10 @@ def _mojo_scores_for_query_and_index(
 
         return np.asarray(
             module.exact_scores_packed(
-                query.as_vector_matrix().tolist(),
-                doc_ids,
-                doc_offsets,
-                packed_vectors,
+                query_payload(query),
+                payload.doc_ids,
+                payload.doc_offsets,
+                payload.packed_vectors,
             ),
             dtype=SCORE_DTYPE,
         )
@@ -38,15 +41,15 @@ def _mojo_scores_for_query_and_index(
     if index.layout != "hybrid_flat_dim128":
         raise ValueError(f"unsupported index layout: {index.layout}")
 
-    token_values = index.as_flat_token_values().tolist()
+    assert payload.flat_token_values is not None
     if query.layout == "nested":
         return np.asarray(
             module.exact_scores_hybrid_flat_dim128(
-                query.as_vector_matrix().tolist(),
-                doc_ids,
-                doc_offsets,
-                packed_vectors,
-                token_values,
+                query_payload(query),
+                payload.doc_ids,
+                payload.doc_offsets,
+                payload.packed_vectors,
+                payload.flat_token_values,
             ),
             dtype=SCORE_DTYPE,
         )
@@ -54,11 +57,11 @@ def _mojo_scores_for_query_and_index(
     if query.layout == "flat_dim128":
         return np.asarray(
             module.exact_scores_hybrid_flat_dim128_with_flat_query(
-                query.as_flat_values().tolist(),
-                doc_ids,
-                doc_offsets,
-                packed_vectors,
-                token_values,
+                query_payload(query),
+                payload.doc_ids,
+                payload.doc_offsets,
+                payload.packed_vectors,
+                payload.flat_token_values,
             ),
             dtype=SCORE_DTYPE,
         )

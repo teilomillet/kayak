@@ -88,6 +88,36 @@ def to_document_matrices(value: Any, owner: str) -> tuple[np.ndarray, ...]:
     return matrices
 
 
+def to_query_matrices(value: Any, owner: str) -> tuple[np.ndarray, ...]:
+    if _is_torch_tensor(value):
+        tensor = value.detach().cpu().numpy()
+        if tensor.ndim != 3:
+            raise ValueError(f"{owner} torch input must be a 3D tensor")
+        return tuple(
+            to_vector_matrix(tensor[index], f"{owner}[{index}]")
+            for index in range(tensor.shape[0])
+        )
+
+    if isinstance(value, np.ndarray):
+        if value.ndim != 3:
+            raise ValueError(f"{owner} ndarray input must be a 3D array")
+        return tuple(
+            to_vector_matrix(value[index], f"{owner}[{index}]")
+            for index in range(value.shape[0])
+        )
+
+    if not isinstance(value, Sequence):
+        raise ValueError(f"{owner} must be a sequence of 2D arrays")
+
+    matrices = tuple(
+        to_vector_matrix(query_vectors, f"{owner}[{index}]")
+        for index, query_vectors in enumerate(value)
+    )
+    if not matrices:
+        raise ValueError(f"{owner} must contain at least one query")
+    return matrices
+
+
 def to_index_offsets(
     value: Any, owner: str, *, expected_length: int
 ) -> np.ndarray:

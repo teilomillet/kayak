@@ -8,33 +8,47 @@ from ``kayak`` instead.
 
 from .late_documents import LateDocuments
 from .late_index import LateIndex
+from .late_query_batch import LateQueryBatch
 from .late_ops import (
+    BackendInfo,
+    available_backends,
+    backend_info,
     documents,
     flat_query_dim128,
     hybrid_flat_dim128_index,
     maxsim,
+    maxsim_batch,
     MOJO_EXACT_CPU_BACKEND,
     NUMPY_REFERENCE_BACKEND,
     packed_index,
     query,
+    query_batch,
     search,
+    search_batch,
 )
 from .late_query import LateQuery
 from .late_scores import LateScores, SearchHit
 
 __all__ = [
+    "BackendInfo",
     "LateDocuments",
     "LateIndex",
     "LateQuery",
+    "LateQueryBatch",
     "LateScores",
     "SearchHit",
     "MOJO_EXACT_CPU_BACKEND",
     "NUMPY_REFERENCE_BACKEND",
+    "available_backends",
+    "backend_info",
     "documents",
     "flat_query_dim128",
     "hybrid_flat_dim128_index",
     "maxsim",
+    "maxsim_batch",
     "packed_index",
     "query",
+    "query_batch",
     "search",
+    "search_batch",
 ]
