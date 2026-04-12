@@ -191,8 +191,8 @@ Candidate-generation families to support:
 Immediate TODOs:
 - [x] Define a `SearchPlan` contract that names each stage explicitly
 - [x] Add a candidate-set artifact and profiling output
-- [ ] Add benchmark output for recall of stage 1 against exact final results
-- [ ] Add candidate-window sweeps as a standard benchmark
+- [x] Add benchmark output for recall of stage 1 against exact final results
+- [x] Add candidate-window sweeps as a standard benchmark
 
 ## Priority 3: Multi-Tenant Serving And Filter-Aware Retrieval
 

@@ -1,3 +1,9 @@
+from .candidate_window_json import (
+    CandidateWindowSweepSummary,
+    build_candidate_window_sweep_summary,
+    candidate_window_sweep_summaries_json,
+    standard_candidate_window_sizes,
+)
 from .fixtures import (
     ExactSearchFixture,
     make_exact_search_fixture,
