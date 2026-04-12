@@ -264,6 +264,19 @@ That is a deliberate compromise:
 - vector payloads stop paying TSV parse and size overhead on every reload
 - legacy `v1` text payloads still load for compatibility
 
+Packed-index storage now also has an opt-in `binary_f16_le` payload encoding.
+This is intentionally storage-only:
+- the manifest still records the runtime scalar type separately
+- payloads decode back into the current `VectorScalar` on load
+- the exact-search kernels keep the same in-memory semantics
+- the lossy tradeoff is explicit and non-default through `save_stored_packed_index_with_encoding(...)`
+
+Current repo measurements from `pixi run bench_profile_storage_real_subset_raw`
+show the expected byte win but not a load-latency win yet:
+- SciFact packed index: `4,936,043` bytes in `binary_le` vs `2,468,463` bytes in `binary_f16_le`
+- FIQA packed index: `5,202,408` bytes in `binary_le` vs `2,601,708` bytes in `binary_f16_le`
+- reload stays slightly slower with `binary_f16_le` today because load still expands half precision back to the runtime scalar type
+
 The repo also supports an optional persisted `hybrid_flat_dim128_index` artifact.
 This is a derived layout for `128`-dim document embeddings:
 - it keeps `doc_ids` and `doc_offsets`

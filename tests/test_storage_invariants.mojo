@@ -158,6 +158,34 @@ def test_stored_index_rejects_invalid_binary_vector_payload() raises:
     assert_equal(raised, True)
 
 
+def test_stored_index_rejects_unknown_vector_payload_encoding() raises:
+    var root = Path("/tmp/kayak-storage-index-unknown-encoding")
+    var task = make_storage_roundtrip_task()
+    var stored_index = StoredPackedIndex(
+        "mock://storage-index-unknown-encoding",
+        "mock-model",
+        VECTOR_SCALAR_NAME,
+        pack_documents(task.documents),
+    )
+    save_stored_packed_index(root, stored_index)
+
+    var manifest_path = root / "manifest.tsv"
+    manifest_path.write_text(
+        manifest_path.read_text().replace(
+            "vector_payload_encoding\tbinary_le",
+            "vector_payload_encoding\tbinary_unknown",
+        )
+    )
+
+    var raised = False
+    try:
+        _ = load_stored_packed_index(root)
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
 def test_stored_hybrid_flat_index_rejects_invalid_scalar_payload() raises:
     var root = Path("/tmp/kayak-storage-hybrid-flat-invalid-payload")
     var stored_packed_index = StoredPackedIndex(

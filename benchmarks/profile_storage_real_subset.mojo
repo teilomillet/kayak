@@ -4,12 +4,14 @@ from std.pathlib import Path
 
 from kayak import StoredJudgedTask, StoredPackedIndex
 from kayak.storage import (
+    VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE,
     ensure_fiqa_real_subset_cache,
     ensure_scifact_real_subset_cache,
     load_stored_judged_task,
     load_stored_packed_index,
     save_stored_judged_task,
     save_stored_packed_index,
+    save_stored_packed_index_with_encoding,
 )
 from benchmarks.storage_legacy_text import (
     judged_task_storage_byte_size,
@@ -24,6 +26,7 @@ struct PreparedStorageFormats(Copyable):
     var v1_index_root: Path
     var v2_task_root: Path
     var v2_index_root: Path
+    var v2_f16_index_root: Path
 
     def __init__(
         out self,
@@ -31,11 +34,13 @@ struct PreparedStorageFormats(Copyable):
         var v1_index_root: Path,
         var v2_task_root: Path,
         var v2_index_root: Path,
+        var v2_f16_index_root: Path,
     ):
         self.v1_task_root = v1_task_root^
         self.v1_index_root = v1_index_root^
         self.v2_task_root = v2_task_root^
         self.v2_index_root = v2_index_root^
+        self.v2_f16_index_root = v2_f16_index_root^
 
 
 def print_size_line(label: String, byte_count: Int):
@@ -71,17 +76,24 @@ def prepare_storage_formats(
     var v1_index_root = root / "v1" / "packed_index"
     var v2_task_root = root / "v2" / "judged_task"
     var v2_index_root = root / "v2" / "packed_index"
+    var v2_f16_index_root = root / "v2_f16" / "packed_index"
 
     write_v1_stored_judged_task(v1_task_root, stored_task.copy())
     write_v1_stored_packed_index(v1_index_root, stored_index.copy())
     save_stored_judged_task(v2_task_root, stored_task.copy())
     save_stored_packed_index(v2_index_root, stored_index.copy())
+    save_stored_packed_index_with_encoding(
+        v2_f16_index_root,
+        stored_index.copy(),
+        VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE,
+    )
 
     return PreparedStorageFormats(
         v1_task_root^,
         v1_index_root^,
         v2_task_root^,
         v2_index_root^,
+        v2_f16_index_root^,
     )
 
 
@@ -106,12 +118,17 @@ def benchmark_dataset(
     print_size_line(
         "packed_index v2 size", packed_index_storage_byte_size(roots.v2_index_root)
     )
+    print_size_line(
+        "packed_index v2_f16 size",
+        packed_index_storage_byte_size(roots.v2_f16_index_root),
+    )
     print("")
 
     benchmark_load_task("v1", roots.v1_task_root)
     benchmark_load_task("v2", roots.v2_task_root)
     benchmark_load_index("v1", roots.v1_index_root)
     benchmark_load_index("v2", roots.v2_index_root)
+    benchmark_load_index("v2_f16", roots.v2_f16_index_root)
 
 
 def benchmark_scifact_real_subset() raises:

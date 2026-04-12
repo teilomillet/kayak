@@ -286,7 +286,7 @@ Possible directions:
 Immediate TODOs:
 - [x] Benchmark byte cost per document and per token as a first-class metric
 - [x] Add storage/report tooling before picking a default compression path
-- [ ] Prototype one compressed token format behind a non-default flag
+- [x] Prototype one compressed token format behind a non-default flag
 
 ## Priority 7: GPU And Distributed Execution
 

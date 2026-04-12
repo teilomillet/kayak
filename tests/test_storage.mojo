@@ -15,6 +15,10 @@ from kayak import (
 from kayak import evaluate_task, load_stored_judged_task, load_stored_packed_index
 from kayak import pack_documents, save_stored_judged_task, save_stored_packed_index
 from kayak import search_exact
+from kayak.storage import (
+    VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE,
+    save_stored_packed_index_with_encoding,
+)
 
 def make_storage_roundtrip_task() raises -> JudgedTask:
     return JudgedTask(
@@ -85,6 +89,43 @@ def test_storage_roundtrip_preserves_task_and_index() raises:
     assert_equal(loaded_index.model_name, "mock-model")
     assert_equal(loaded_index.index.document_count, 2)
     assert_equal(loaded_index.index.total_vector_count, 4)
+    assert_equal(hits[0].doc_id, "doc-a")
+
+
+def test_storage_roundtrip_supports_binary_f16_packed_index_payloads() raises:
+    var root = Path("/tmp/kayak-storage-roundtrip-f16")
+    var index_root = root / "packed_index"
+    var task = make_storage_roundtrip_task()
+
+    var stored_index = StoredPackedIndex(
+        "mock://storage-roundtrip-f16",
+        "mock-model",
+        VECTOR_SCALAR_NAME,
+        pack_documents(task.documents),
+    )
+    save_stored_packed_index_with_encoding(
+        index_root,
+        stored_index,
+        VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE,
+    )
+
+    var manifest_text = (index_root / "manifest.tsv").read_text()
+    var token_bytes = (index_root / "token_vectors.bin").read_bytes()
+    var loaded_index = load_stored_packed_index(index_root)
+    var hits = search_exact(
+        ExactCpuBackend(),
+        task.queries[0].query,
+        loaded_index.index,
+        task.k,
+    )
+
+    assert_equal(
+        manifest_text.find(
+            "vector_payload_encoding\t" + VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE
+        ) != -1,
+        True,
+    )
+    assert_equal(len(token_bytes), 16)
     assert_equal(hits[0].doc_id, "doc-a")
 
 

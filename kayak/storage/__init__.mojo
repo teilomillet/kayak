@@ -33,5 +33,10 @@ from .packed_index_store import (
     load_stored_packed_index,
     packed_index_exists,
     save_stored_packed_index,
+    save_stored_packed_index_with_encoding,
 )
 from .scifact_cache import ScifactRealSubsetCache, ensure_scifact_real_subset_cache
+from .vector_payload_encoding import (
+    VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE,
+    VECTOR_PAYLOAD_ENCODING_BINARY_LE,
+)
