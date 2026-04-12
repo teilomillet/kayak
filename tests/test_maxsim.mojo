@@ -8,7 +8,7 @@ from kayak import (
     ExactScoringConfig,
     pack_documents,
 )
-from kayak import search_exact
+from kayak import search_exact, search_exact_all
 
 
 def basis_vector(vector_dim: Int, hot_index: Int) -> List[Float32]:
@@ -68,6 +68,26 @@ def test_exact_search_uses_dim128_fast_path_without_changing_scores() raises:
     assert_equal(hits[0].score, 2.0)
     assert_equal(hits[1].score, 1.0)
     assert_equal(hits[2].score, 0.0)
+
+
+def test_exact_search_all_matches_full_top_k_ordering() raises:
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var documents = [
+        EncodedDocument("doc-perfect", [[1.0, 0.0], [0.0, 1.0]]),
+        EncodedDocument("doc-mixed", [[1.0, 0.0], [0.5, 0.5]]),
+        EncodedDocument("doc-weak", [[1.0, 0.0], [0.0, 0.0]]),
+    ]
+
+    var index = pack_documents(documents)
+    var full_hits = search_exact_all(ExactCpuBackend(), query.copy(), index.copy())
+    var top_k_hits = search_exact(ExactCpuBackend(), query, index, 3)
+
+    assert_equal(len(full_hits), 3)
+    assert_equal(len(full_hits), len(top_k_hits))
+
+    for index in range(len(full_hits)):
+        assert_equal(full_hits[index].doc_id, top_k_hits[index].doc_id)
+        assert_equal(full_hits[index].score, top_k_hits[index].score)
 
 
 def test_exact_search_toggle_keeps_dim128_scores_identical() raises:

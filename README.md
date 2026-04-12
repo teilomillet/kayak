@@ -291,6 +291,7 @@ pixi run bench_limit_small
 pixi run bench_browsecomp_plus
 pixi run bench_browsecomp_plus_gold
 pixi run bench_browsecomp_plus_diag
+pixi run bench_browsecomp_plus_ranks
 pixi run bench_real_subset_policies
 pixi run bench_real_subset_breakdown
 ```

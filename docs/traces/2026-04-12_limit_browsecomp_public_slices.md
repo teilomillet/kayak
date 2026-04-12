@@ -168,3 +168,42 @@ Interpretation:
 - some queries need earlier concentration of already-retrieved relevant evidence
 - at least one query needs better candidate generation entirely because the gold-positive document never enters the top `10`
 - that makes the diagnostic benchmark a justified next baseline for any retrieval-side changes
+
+## Rank-Coverage Follow-Up
+
+Command:
+
+```bash
+pixi run bench_browsecomp_plus_ranks
+```
+
+Purpose:
+- score the full `90`-document slice instead of truncating at `k=10`
+- verify that evidence and gold caches produce the same exact ranking
+- measure how far the missed gold-positive docs sit below the current top-`10` cutoff
+
+Observed on April 12, 2026:
+- the evidence and gold rankings are identical for every query in the slice
+  - that matters because it confirms the current difference is qrels, not index drift
+- query `772` is a near miss rather than a deep-corpus miss:
+  - `best_evidence_rank = 9`
+  - `best_gold_rank = 18`
+  - the only gold-positive doc is `93372`
+  - `score(93372) = 12.640364`
+  - `top10_cutoff = 13.685546`
+  - `delta_to_top10 = -1.0451822`
+- the evidence side of the same query shows the model already retrieves township-context evidence:
+  - evidence doc `11848` reaches rank `9`
+  - evidence doc `92455` is just outside the cutoff at rank `11`
+  - the gold doc `93372` is present but later at rank `18`
+- the candidate-window implication is concrete:
+  - gold `hits@5 = 0 / 1`
+  - gold `hits@10 = 0 / 1`
+  - gold `hits@20 = 1 / 1`
+  - gold `hits@50 = 1 / 1`
+
+Interpretation:
+- this does not look like a hopeless first-stage failure
+- it looks like a clause-selection failure where the retriever locks onto general Gugulethu context before the school-specific answer document
+- a future richer second-stage verifier with `candidate_k >= 20` could, in principle, recover this query because the answer document is already in the candidate set by rank `18`
+- the current exact late-interaction verifier does not solve that class of miss by itself because it reranks with the same exact MaxSim signal rather than a richer text-level model

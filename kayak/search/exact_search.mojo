@@ -16,3 +16,12 @@ def search_exact(
 ) raises -> List[SearchHit]:
     var scores = backend.score_all(query, index)
     return top_k_hits(index.doc_ids, scores, k)
+
+
+def search_exact_all(
+    read backend: ExactCpuBackend,
+    read query: EncodedQuery,
+    read index: PackedIndex,
+) raises -> List[SearchHit]:
+    var scores = backend.score_all(query, index)
+    return top_k_hits(index.doc_ids, scores, len(index.doc_ids))

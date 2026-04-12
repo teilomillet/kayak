@@ -47,6 +47,7 @@ from .scoring import (
 from .search import (
     SearchHit,
     search_exact,
+    search_exact_all,
     search_exact_hybrid_flat_dim128,
     search_exact_hybrid_flat_dim128_with_flat_query,
 )
