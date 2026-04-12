@@ -382,7 +382,7 @@ These are the best next moves right now.
 - [x] Introduce a serving-oriented storage package parallel to benchmark task storage
 - [x] Add `StoredDocumentTextCorpus` as an optional artifact
 - [x] Define `SearchPlan`, `CandidateGenerator`, and `CandidateSet`
-- [ ] Emit structured benchmark JSON for the real-slice benchmarks
+- [x] Emit structured benchmark JSON for the real-slice benchmarks
 - [x] Add one profile/explain command for a single query
 - [ ] Add a minimal service API design doc
 

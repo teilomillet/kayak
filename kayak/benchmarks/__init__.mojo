@@ -3,6 +3,11 @@ from .fixtures import (
     make_exact_search_fixture,
     make_exact_search_fixture_for_profile,
 )
+from .json_report import (
+    RealSliceBenchmarkSummary,
+    build_real_slice_benchmark_summary,
+    real_slice_benchmark_summaries_json,
+)
 from .profile_fixtures import (
     DotProductFixture,
     PerDocumentScoreFixture,
