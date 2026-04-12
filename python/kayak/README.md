@@ -2,6 +2,9 @@
 
 `kayak` is a Python SDK for late-interaction retrieval.
 
+Its job is to make late interaction programmable in normal Python while keeping
+query/document vector counts, layouts, and MaxSim semantics explicit.
+
 It gives you explicit objects for:
 - queries
 - documents
@@ -15,6 +18,10 @@ the parts that matter in late interaction:
 - document vector count stays explicit
 - layout stays explicit
 - backend choice stays explicit
+
+For the higher-level product positioning and the split between the open Python
+SDK and the hosted engine, see
+[docs/python_sdk_charter.md](../../docs/python_sdk_charter.md).
 
 ## Install
 

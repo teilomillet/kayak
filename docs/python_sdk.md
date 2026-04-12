@@ -3,6 +3,9 @@
 This document defines the current Python SDK boundary for Kayak as it exists in
 this monorepo.
 
+For the product-level mission and scope, see
+[docs/python_sdk_charter.md](python_sdk_charter.md).
+
 ## Status
 
 What is verified:
