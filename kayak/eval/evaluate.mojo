@@ -6,6 +6,7 @@ from kayak.verifier import VerifierReranker, search_exact_with_verifier
 
 from .judged_task import JudgedTask
 from .metrics import ndcg_at_k, recall_at_k, reciprocal_rank_at_k, success_at_k
+from .primary_metric import choose_primary_value
 
 
 struct TaskEvaluation(Copyable):
@@ -46,27 +47,6 @@ struct TaskEvaluation(Copyable):
         self.mean_reciprocal_rank = mean_reciprocal_rank
         self.mean_recall_at_k = mean_recall_at_k
         self.success_rate_at_k = success_rate_at_k
-
-def choose_primary_value(
-    primary_metric: String,
-    mean_ndcg_at_k: MetricScalar,
-    mean_reciprocal_rank: MetricScalar,
-    mean_recall_at_k: MetricScalar,
-    success_rate_at_k: MetricScalar,
-) raises -> MetricScalar:
-    if primary_metric == "ndcg":
-        return mean_ndcg_at_k
-
-    if primary_metric == "mrr":
-        return mean_reciprocal_rank
-
-    if primary_metric == "recall":
-        return mean_recall_at_k
-
-    if primary_metric == "success":
-        return success_rate_at_k
-
-    raise Error("unknown primary metric: " + primary_metric)
 
 
 def evaluate_task(

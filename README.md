@@ -98,6 +98,7 @@ The real public benchmark path now uses:
 - small `BEIR/SciFact` and `BEIR/FIQA` subsets as real benchmark slices
 - an official `LIMIT-small` slice with the full `46`-document corpus and a light `32`-query subset
 - light `BrowseComp-Plus` evidence and gold slices built from official decrypted queries, human-verified evidence documents, gold answer documents, and the benchmark's curated hard negatives
+- a query-diagnostic benchmark that scores the same BrowseComp ranking against both evidence and gold qrels
 - repo-local storage so repeated runs can reload encoded tasks and packed indexes
 
 This is still a deliberate smoke-oriented public suite, not a claim of full benchmark reproduction.
@@ -222,6 +223,7 @@ pixi run bench_fiqa
 pixi run bench_limit_small
 pixi run bench_browsecomp_plus
 pixi run bench_browsecomp_plus_gold
+pixi run bench_browsecomp_plus_diag
 pixi run bench_real_subset_policies
 pixi run bench_real_subset_breakdown
 ```

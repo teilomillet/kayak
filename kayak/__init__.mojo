@@ -7,7 +7,9 @@ from .contracts import (
 from .eval import (
     JudgedQuery,
     JudgedTask,
+    QueryEvaluation,
     TaskEvaluation,
+    evaluate_query_hits,
     evaluate_task,
     evaluate_task_with_verifier,
 )

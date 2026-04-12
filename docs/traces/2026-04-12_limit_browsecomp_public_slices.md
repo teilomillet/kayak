@@ -64,6 +64,7 @@ pixi run bench_limit_small_raw
 pixi run build_browsecomp_plus_task_json
 pixi run bench_browsecomp_plus_raw
 pixi run bench_browsecomp_plus_gold_raw
+pixi run bench_browsecomp_plus_diag
 ```
 
 Quiet-wrapper follow-up attempted:
@@ -136,3 +137,34 @@ So the latency numbers below should be treated as exploratory raw timings, not l
 - `BrowseComp-Plus` is materially harder even after slicing, which is good evidence that it adds real pressure rather than duplicating BEIR-style smoke tests.
 - On this current `4`-query light slice, the gold task is slightly better on `nDCG@10` and recall than the evidence task, but worse on `success@10`. That is useful signal: the two qrel sets are not interchangeable, so carrying both is justified.
 - The BrowseComp-Plus slice is still light enough for iterative CPU profiling while preserving benchmark-native hard negatives.
+
+## Query-Level Diagnostic Follow-Up
+
+Command:
+
+```bash
+pixi run bench_browsecomp_plus_diag
+```
+
+Purpose:
+- hold the ranked retrieval results fixed
+- score the same retrieved list against both evidence and gold qrels
+- distinguish low-rank partial hits from complete misses
+
+Observed on April 12, 2026:
+- query `769` is a partial-hit case:
+  - the top two hits are relevant under both qrel sets
+  - the remaining score loss comes from additional relevant documents staying below the top `10`
+- queries `770` and `771` are low-rank cases:
+  - the first relevant hit appears at rank `4` and rank `2`
+  - retrieval finds some signal, but not early enough
+- query `772` is the clean miss:
+  - `gold success@10 = 0.0`
+  - none of the top `10` docs are gold-relevant
+  - the evidence slice still shows a weak late hit, which explains why evidence and gold disagree most strongly on this query
+
+Interpretation:
+- the current BrowseComp failure mode is not uniform
+- some queries need earlier concentration of already-retrieved relevant evidence
+- at least one query needs better candidate generation entirely because the gold-positive document never enters the top `10`
+- that makes the diagnostic benchmark a justified next baseline for any retrieval-side changes

@@ -14,6 +14,7 @@ from kayak import (
 )
 from kayak.eval import (
     evaluate_task,
+    evaluate_query_hits,
     ndcg_at_k,
     recall_at_k,
     reciprocal_rank_at_k,
@@ -268,6 +269,24 @@ def test_evaluate_task_primary_metric_matches_selected_field() raises:
 
     var success_eval = evaluate_task(backend, make_eval_fixture_task("success"))
     assert_equal(success_eval.primary_value, success_eval.success_rate_at_k)
+
+
+def test_evaluate_query_hits_matches_query_metrics() raises:
+    var task = make_eval_fixture_task("ndcg")
+    var judged_query = task.queries[0].copy()
+    var hits = [
+        SearchHit("doc-a", 4.0),
+        SearchHit("doc-c", 3.0),
+        SearchHit("doc-b", 2.0),
+    ]
+    var query_eval = evaluate_query_hits(judged_query, hits, 3, "ndcg")
+
+    assert_equal(query_eval.query_id, "q-a")
+    assert_equal(query_eval.relevant_doc_count, 2)
+    assert_equal(query_eval.hit_count, 3)
+    assert_equal(query_eval.primary_value, query_eval.ndcg_at_k)
+    assert_equal(query_eval.reciprocal_rank_at_k, 1.0)
+    assert_equal(query_eval.success_at_k, 1.0)
 
 
 def test_evaluate_task_rejects_zero_queries() raises:

@@ -42,7 +42,7 @@ These are intentionally lightweight and fast. They are not official benchmark re
 
 ## First Real Slices
 
-- The current real public end-to-end slices in the repo are `BEIR/SciFact`, `BEIR/FIQA`, `LIMIT-small`, and a light `BrowseComp-Plus` evidence slice.
+- The current real public end-to-end slices in the repo are `BEIR/SciFact`, `BEIR/FIQA`, `LIMIT-small`, and light `BrowseComp-Plus` evidence and gold slices.
 - These were chosen after checking the practical loader costs and official dataset shapes on April 11-12, 2026:
   - `beir/scifact/test` loaded through `ir_datasets` with `5,183` docs, `300` queries, and `339` qrels, and downloaded a `2.82 MB` archive in our environment.
   - `beir/fiqa/test` loaded through `ir_datasets` with `57,638` docs, `648` queries, and `1,706` qrels, and downloaded a `17.9 MB` archive in our environment.
@@ -57,4 +57,5 @@ These are intentionally lightweight and fast. They are not official benchmark re
   - it is a fixed-corpus benchmark rather than a live-web benchmark
   - it ships human-verified evidence documents, gold answer documents, and curated hard negatives
   - it is much harder than BEIR-style factual smoke tests without forcing the full deep-research agent stack into `kayak`
+  - its evidence and gold qrels diverge on the current slice, so keeping both is empirically justified
 - That makes `SciFact` the sound first real smoke path for CPU ColBERT-to-Mojo integration, `FIQA` the next good slice for broader domain/scale coverage, `LIMIT-small` the next good adversarial retrieval slice, and `BrowseComp-Plus` the next good reasoning-heavy retrieval slice, while `LoTTE` remains the preferred later late-interaction benchmark once we add a lighter data-access path or accept the heavier download.
