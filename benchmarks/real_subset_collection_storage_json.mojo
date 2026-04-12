@@ -60,6 +60,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             1,
             scifact_cache.stored_index,
+            0,
         ),
         scifact_cache.stored_index.model_name,
     )
@@ -77,6 +78,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             1,
             fiqa_cache.stored_index,
+            0,
         ),
         fiqa_cache.stored_index.model_name,
     )
@@ -94,6 +96,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             1,
             limit_small_cache.stored_index,
+            0,
         ),
         limit_small_cache.stored_index.model_name,
     )
@@ -111,6 +114,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             1,
             browsecomp_cache.stored_index,
+            0,
         ),
         browsecomp_cache.stored_index.model_name,
     )
@@ -128,6 +132,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             1,
             browsecomp_gold_cache.stored_index,
+            0,
         ),
         browsecomp_gold_cache.stored_index.model_name,
     )

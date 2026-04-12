@@ -11,6 +11,7 @@ from .artifact_manifest import (
     write_collection_artifact_manifest,
 )
 from .ids import CollectionId, NamespaceId, SegmentId, TenantId
+from .manifest_util import load_optional_manifest_value
 from .paths import require_relative_artifact_root, segment_manifest_path
 from .segment import SealedSegmentManifest
 from .stats_manifest import (
@@ -28,6 +29,20 @@ def encode_optional_text_corpus_root(text_corpus_root: String) -> String:
         return "-"
 
     return text_corpus_root.copy()
+
+
+def encode_optional_document_proxy_root(document_proxy_root: String) -> String:
+    if document_proxy_root.byte_length() == 0:
+        return "-"
+
+    return document_proxy_root.copy()
+
+
+def decode_optional_document_proxy_root(document_proxy_root: String) -> String:
+    if document_proxy_root == "-":
+        return ""
+
+    return document_proxy_root.copy()
 
 
 def decode_optional_text_corpus_root(text_corpus_root: String) -> String:
@@ -49,6 +64,11 @@ def save_sealed_segment_manifest(
         text_corpus_root = require_relative_artifact_root(
             manifest.text_corpus_root, "text_corpus_root"
         )
+    var document_proxy_root = String()
+    if manifest.document_proxy_root.byte_length() != 0:
+        document_proxy_root = require_relative_artifact_root(
+            manifest.document_proxy_root, "document_proxy_root"
+        )
 
     var entries = List[ManifestEntry]()
     entries.append(ManifestEntry("segment_id", manifest.segment_id.value))
@@ -62,6 +82,12 @@ def save_sealed_segment_manifest(
     )
     entries.append(ManifestEntry("vector_dim", String(manifest.vector_dim)))
     entries.append(ManifestEntry("packed_index_root", packed_index_root))
+    entries.append(
+        ManifestEntry(
+            "document_proxy_root",
+            encode_optional_document_proxy_root(document_proxy_root),
+        )
+    )
     entries.append(
         ManifestEntry(
             "text_corpus_root",
@@ -92,8 +118,11 @@ def load_sealed_segment_manifest(root: Path) raises -> SealedSegmentManifest:
         require_current_vector_scalar_name(entries, "sealed segment manifest"),
         parse_int(require_manifest_value(entries, "vector_dim"), "vector_dim"),
         require_manifest_value(entries, "packed_index_root"),
+        decode_optional_document_proxy_root(
+            load_optional_manifest_value(entries, "document_proxy_root")
+        ),
         decode_optional_text_corpus_root(
-            require_manifest_value(entries, "text_corpus_root")
+            load_optional_manifest_value(entries, "text_corpus_root")
         ),
         load_segment_stats_from_manifest(entries),
     )

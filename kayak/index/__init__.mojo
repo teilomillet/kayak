@@ -1,4 +1,9 @@
 from .builder import pack_documents
+from .document_proxy import (
+    DocumentProxyIndex,
+    build_document_proxy_index,
+    build_query_proxy_vector,
+)
 from .hybrid_flat_dim128 import (
     HybridFlatDim128Index,
     build_hybrid_flat_dim128_index,

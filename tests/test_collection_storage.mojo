@@ -62,6 +62,7 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
             VECTOR_SCALAR_NAME,
             128,
             "packed_index",
+            "",
             "text_corpus",
             SegmentStats(2, 11, 10, 4096),
         ),

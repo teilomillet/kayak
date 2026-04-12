@@ -2,7 +2,12 @@ from std.collections import List
 
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.eval import JudgedTask
-from kayak.planning import exact_full_scan_search_plan, explain_collection_search
+from kayak.planning import (
+    SearchPlan,
+    document_proxy_search_plan,
+    exact_full_scan_search_plan,
+    explain_collection_search,
+)
 from kayak.runtime import ExactCpuBackend
 
 
@@ -11,8 +16,11 @@ struct CandidateWindowSweepSummary(Copyable):
     var collection_id: String
     var snapshot_id: String
     var model_name: String
+    var candidate_generator_kind: String
     var final_k: Int
     var candidate_k: Int
+    var query_vector_budget: Int
+    var document_vector_budget: Int
     var query_count: Int
     var mean_candidate_hit_count: Float64
     var mean_candidate_recall_at_final_k: Float64
@@ -23,8 +31,11 @@ struct CandidateWindowSweepSummary(Copyable):
         var collection_id: String,
         var snapshot_id: String,
         var model_name: String,
+        var candidate_generator_kind: String,
         final_k: Int,
         candidate_k: Int,
+        query_vector_budget: Int,
+        document_vector_budget: Int,
         query_count: Int,
         mean_candidate_hit_count: Float64,
         mean_candidate_recall_at_final_k: Float64,
@@ -33,8 +44,11 @@ struct CandidateWindowSweepSummary(Copyable):
         self.collection_id = collection_id^
         self.snapshot_id = snapshot_id^
         self.model_name = model_name^
+        self.candidate_generator_kind = candidate_generator_kind^
         self.final_k = final_k
         self.candidate_k = candidate_k
+        self.query_vector_budget = query_vector_budget
+        self.document_vector_budget = document_vector_budget
         self.query_count = query_count
         self.mean_candidate_hit_count = mean_candidate_hit_count
         self.mean_candidate_recall_at_final_k = mean_candidate_recall_at_final_k
@@ -81,6 +95,28 @@ def build_candidate_window_sweep_summary(
     read snapshot: ResolvedCollectionSnapshot,
     candidate_k: Int,
 ) raises -> CandidateWindowSweepSummary:
+    return build_candidate_window_sweep_summary_for_plan(
+        backend,
+        dataset_id,
+        model_name,
+        task,
+        snapshot,
+        exact_full_scan_search_plan(task.k, candidate_k),
+        0,
+        0,
+    )
+
+
+def build_candidate_window_sweep_summary_for_plan(
+    read backend: ExactCpuBackend,
+    dataset_id: String,
+    model_name: String,
+    read task: JudgedTask,
+    read snapshot: ResolvedCollectionSnapshot,
+    read plan: SearchPlan,
+    query_vector_budget: Int,
+    document_vector_budget: Int,
+) raises -> CandidateWindowSweepSummary:
     var candidate_hit_total = 0.0
     var recall_total = 0.0
 
@@ -89,7 +125,7 @@ def build_candidate_window_sweep_summary(
             backend,
             judged_query.query,
             snapshot,
-            exact_full_scan_search_plan(task.k, candidate_k),
+            plan,
         )
         candidate_hit_total += Float64(len(explain.candidate_set.hits))
         recall_total += Float64(explain.candidate_recall_at_final_k)
@@ -99,8 +135,11 @@ def build_candidate_window_sweep_summary(
         snapshot.collection.collection_id.value.copy(),
         snapshot.snapshot.snapshot_id.value.copy(),
         model_name,
+        plan.candidate_generator.kind.copy(),
         task.k,
-        candidate_k,
+        plan.candidate_budget.candidate_k,
+        query_vector_budget,
+        document_vector_budget,
         len(task.queries),
         candidate_hit_total / Float64(len(task.queries)),
         recall_total / Float64(len(task.queries)),
@@ -124,8 +163,13 @@ def append_candidate_window_sweep_summary_json(
     buffer += "\"collection_id\":\"" + json_escape(summary.collection_id) + "\","
     buffer += "\"snapshot_id\":\"" + json_escape(summary.snapshot_id) + "\","
     buffer += "\"model_name\":\"" + json_escape(summary.model_name) + "\","
+    buffer += "\"candidate_generator_kind\":\""
+    buffer += json_escape(summary.candidate_generator_kind) + "\","
     buffer += "\"final_k\":" + String(summary.final_k) + ","
     buffer += "\"candidate_k\":" + String(summary.candidate_k) + ","
+    buffer += "\"query_vector_budget\":" + String(summary.query_vector_budget) + ","
+    buffer += "\"document_vector_budget\":"
+    buffer += String(summary.document_vector_budget) + ","
     buffer += "\"query_count\":" + String(summary.query_count) + ","
     buffer += "\"mean_candidate_hit_count\":"
     buffer += String(summary.mean_candidate_hit_count) + ","

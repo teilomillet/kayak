@@ -2,12 +2,15 @@ from std.collections import List
 
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.contracts import EncodedQuery
+from kayak.index import build_query_proxy_vector
 from kayak.numeric import MetricScalar
 from kayak.runtime import ExactScoringBackend
+from kayak.scoring.dot import dot_product
 from kayak.search import SearchHit
 
 from .candidate_set import CandidateSet
 from .collection_hit import CollectionHit, to_search_hit
+from .exact_stage import ExactStageResult, exact_rerank_candidates_for_plan
 from .search_plan import SearchPlan
 from .topk import insert_descending_collection_hit
 
@@ -18,51 +21,82 @@ def candidate_generation_for_plan[Backend: ExactScoringBackend](
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
 ) raises -> CandidateSet:
-    if plan.candidate_generator.kind != "exact_full_scan":
-        raise Error(
-            "unsupported candidate generator kind: "
-            + plan.candidate_generator.kind
+    var hits = List[CollectionHit]()
+    if plan.candidate_generator.kind == "exact_full_scan":
+        for segment in snapshot.segments:
+            var scores = backend.score_all(query, segment.stored_index.index)
+
+            for index in range(len(scores)):
+                insert_descending_collection_hit(
+                    hits,
+                    CollectionHit(
+                        segment.manifest.segment_id.value.copy(),
+                        segment.stored_index.index.doc_ids[index].copy(),
+                        scores[index],
+                    ),
+                    plan.candidate_budget.candidate_k,
+                )
+
+        return CandidateSet(
+            plan.candidate_generator.kind.copy(),
+            hits^,
+            snapshot.snapshot.stats.segment_count,
+            snapshot.snapshot.stats.document_count,
+            snapshot.snapshot.stats.token_count,
+            snapshot.snapshot.stats.total_vector_count,
+            snapshot.snapshot.stats.byte_size,
         )
 
-    var hits = List[CollectionHit]()
+    if plan.candidate_generator.kind == "document_proxy":
+        var query_proxy = build_query_proxy_vector(query, 0)
+        var vector_count = 0
+        var byte_size = 0
 
-    for segment in snapshot.segments:
-        var scores = backend.score_all(query, segment.stored_index.index)
+        for segment in snapshot.segments:
+            if not segment.has_document_proxy_index:
+                raise Error(
+                    "document_proxy stage-1 requires a document proxy sidecar for every segment"
+                )
 
-        for index in range(len(scores)):
-            insert_descending_collection_hit(
-                hits,
-                CollectionHit(
-                    segment.manifest.segment_id.value.copy(),
-                    segment.stored_index.index.doc_ids[index].copy(),
-                    scores[index],
-                ),
-                plan.candidate_budget.candidate_k,
+            vector_count += (
+                segment.stored_document_proxy_index.index.document_count
+                * segment.stored_document_proxy_index.proxy_vector_count_per_document
             )
+            byte_size += segment.stored_document_proxy_index.artifact_byte_size
 
-    return CandidateSet(
-        plan.candidate_generator.kind.copy(),
-        hits^,
-        snapshot.snapshot.stats.segment_count,
-        snapshot.snapshot.stats.document_count,
-        snapshot.snapshot.stats.token_count,
-        snapshot.snapshot.stats.total_vector_count,
-        snapshot.snapshot.stats.byte_size,
+            for document_index in range(
+                segment.stored_document_proxy_index.index.document_count
+            ):
+                insert_descending_collection_hit(
+                    hits,
+                    CollectionHit(
+                        segment.manifest.segment_id.value.copy(),
+                        segment.stored_document_proxy_index.index.doc_ids[
+                            document_index
+                        ].copy(),
+                        dot_product(
+                            query_proxy,
+                            segment.stored_document_proxy_index.index.proxy_vectors[
+                                document_index
+                            ],
+                        ),
+                    ),
+                    plan.candidate_budget.candidate_k,
+                )
+
+        return CandidateSet(
+            plan.candidate_generator.kind.copy(),
+            hits^,
+            snapshot.snapshot.stats.segment_count,
+            snapshot.snapshot.stats.document_count,
+            0,
+            vector_count,
+            byte_size,
+        )
+
+    raise Error(
+        "unsupported candidate generator kind: " + plan.candidate_generator.kind
     )
-
-
-def final_hits_for_plan(
-    read candidate_set: CandidateSet, read plan: SearchPlan
-) -> List[CollectionHit]:
-    var hits = List[CollectionHit]()
-    var limit = plan.candidate_budget.final_k
-    if limit > len(candidate_set.hits):
-        limit = len(candidate_set.hits)
-
-    for index in range(limit):
-        hits.append(candidate_set.hits[index].copy())
-
-    return hits^
 
 
 def collection_hit_matches(
@@ -86,6 +120,22 @@ def candidate_recall_at_final_k(
                 break
 
     return MetricScalar(found_count) / MetricScalar(len(final_hits))
+
+
+def final_hits_for_plan[Backend: ExactScoringBackend](
+    read backend: Backend,
+    read query: EncodedQuery,
+    read snapshot: ResolvedCollectionSnapshot,
+    read candidate_set: CandidateSet,
+    read plan: SearchPlan,
+) raises -> ExactStageResult:
+    return exact_rerank_candidates_for_plan(
+        backend,
+        query,
+        snapshot,
+        candidate_set.hits,
+        plan.candidate_budget.final_k,
+    )
 
 
 def final_hits_to_search_hits(

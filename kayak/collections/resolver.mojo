@@ -1,7 +1,12 @@
 from std.collections import List
 from std.pathlib import Path
 
-from kayak.storage import load_stored_packed_index
+from kayak.index import DocumentProxyIndex
+from kayak.storage import (
+    StoredDocumentProxyIndex,
+    load_stored_document_proxy_index,
+    load_stored_packed_index,
+)
 from kayak.text import DocumentTextCorpus
 
 from .collection import CollectionManifest
@@ -13,7 +18,11 @@ from .paths import (
     resolve_segment_artifact_root,
 )
 from .resolved_snapshot import LoadedSealedSegment, ResolvedCollectionSnapshot
-from .segment import SealedSegmentManifest, sealed_segment_has_text_corpus
+from .segment import (
+    SealedSegmentManifest,
+    sealed_segment_has_document_proxy_index,
+    sealed_segment_has_text_corpus,
+)
 from .segment_store import load_sealed_segment_manifest
 from .snapshot import SnapshotManifest
 from .snapshot_store import load_snapshot_manifest
@@ -29,6 +38,20 @@ def empty_stored_document_text_corpus(
         collection_id.copy(),
         segment_id.copy(),
         DocumentTextCorpus([], []),
+    )
+
+
+def empty_stored_document_proxy_index(
+    model_name: String, vector_scalar_name: String, vector_dim: Int
+) raises -> StoredDocumentProxyIndex:
+    return StoredDocumentProxyIndex(
+        "",
+        model_name.copy(),
+        vector_scalar_name.copy(),
+        0,
+        1,
+        0,
+        DocumentProxyIndex([], [], vector_dim),
     )
 
 
@@ -111,6 +134,28 @@ def require_loaded_text_corpus_matches_segment(
         raise Error("text corpus document_count does not match segment stats")
 
 
+def require_loaded_document_proxy_matches_segment(
+    read segment: SealedSegmentManifest,
+    read stored_document_proxy_index: StoredDocumentProxyIndex,
+) raises:
+    if stored_document_proxy_index.model_name != segment.model_name:
+        raise Error("document proxy model_name does not match segment manifest")
+
+    if stored_document_proxy_index.vector_scalar_name != segment.vector_scalar_name:
+        raise Error(
+            "document proxy vector_scalar_name does not match segment manifest"
+        )
+
+    if stored_document_proxy_index.index.vector_dim != segment.vector_dim:
+        raise Error("document proxy vector_dim does not match segment manifest")
+
+    if (
+        stored_document_proxy_index.index.document_count
+        != segment.stats.document_count
+    ):
+        raise Error("document proxy document_count does not match segment stats")
+
+
 def aggregate_segment_stats(
     read segments: List[LoadedSealedSegment]
 ) raises -> CollectionStats:
@@ -187,6 +232,24 @@ def load_resolved_collection_snapshot(
             stored_index.vector_scalar_name,
         )
 
+        var has_document_proxy_index = sealed_segment_has_document_proxy_index(segment)
+        var stored_document_proxy_index = empty_stored_document_proxy_index(
+            segment.model_name,
+            segment.vector_scalar_name,
+            segment.vector_dim,
+        )
+        if has_document_proxy_index:
+            stored_document_proxy_index = load_stored_document_proxy_index(
+                resolve_segment_artifact_root(
+                    segment_root,
+                    segment.document_proxy_root,
+                    "document_proxy_root",
+                )
+            )
+            require_loaded_document_proxy_matches_segment(
+                segment, stored_document_proxy_index
+            )
+
         var has_text_corpus = sealed_segment_has_text_corpus(segment)
         var stored_text_corpus = empty_stored_document_text_corpus(
             segment.collection_id,
@@ -206,6 +269,8 @@ def load_resolved_collection_snapshot(
             LoadedSealedSegment(
                 segment,
                 stored_index,
+                has_document_proxy_index,
+                stored_document_proxy_index,
                 has_text_corpus,
                 stored_text_corpus,
             )

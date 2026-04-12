@@ -6,6 +6,15 @@ from .browsecomp_plus_cache import (
     BrowsecompPlusRealSubsetCache,
     ensure_browsecomp_plus_real_subset_cache,
 )
+from .document_proxy_store import (
+    DocumentProxyCacheEntry,
+    build_stored_document_proxy_index,
+    document_proxy_index_exists,
+    document_proxy_storage_byte_size,
+    ensure_stored_document_proxy_index,
+    load_stored_document_proxy_index,
+    save_stored_document_proxy_index,
+)
 from .fiqa_cache import FiqaRealSubsetCache, ensure_fiqa_real_subset_cache
 from .hybrid_flat_dim128_store import (
     HybridFlatDim128CacheEntry,
@@ -21,6 +30,7 @@ from .judged_task_store import (
     save_stored_judged_task,
 )
 from .metadata import (
+    StoredDocumentProxyIndex,
     StoredHybridFlatDim128Index,
     StoredJudgedTask,
     StoredPackedIndex,

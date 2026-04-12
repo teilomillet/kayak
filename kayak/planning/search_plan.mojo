@@ -3,6 +3,7 @@
 from .candidate_budget import CandidateBudget
 from .candidate_generator import (
     CandidateGenerator,
+    document_proxy_candidate_generator,
     exact_full_scan_candidate_generator,
 )
 
@@ -31,6 +32,14 @@ struct SearchPlan(Copyable):
 def exact_full_scan_search_plan(final_k: Int, candidate_k: Int) raises -> SearchPlan:
     return SearchPlan(
         exact_full_scan_candidate_generator(),
+        CandidateBudget(final_k, candidate_k),
+        "none",
+    )
+
+
+def document_proxy_search_plan(final_k: Int, candidate_k: Int) raises -> SearchPlan:
+    return SearchPlan(
+        document_proxy_candidate_generator(),
         CandidateBudget(final_k, candidate_k),
         "none",
     )

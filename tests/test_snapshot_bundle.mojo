@@ -88,6 +88,7 @@ def build_source_collection(root: Path) raises:
             VECTOR_SCALAR_NAME,
             2,
             "packed_index",
+            "",
             "text_corpus",
             SegmentStats(2, 4, 4, 1024),
         ),

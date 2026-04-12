@@ -5,6 +5,7 @@ from std.pathlib import Path
 from kayak.benchmarks import (
     CandidateWindowSweepSummary,
     build_candidate_window_sweep_summary,
+    build_candidate_window_sweep_summary_for_plan,
     candidate_window_sweep_summaries_json,
     standard_candidate_window_sizes,
 )
@@ -17,6 +18,7 @@ from kayak.collections import (
     load_resolved_collection_snapshot,
 )
 from kayak.eval import JudgedTask
+from kayak.planning import document_proxy_search_plan, exact_full_scan_search_plan
 from kayak.runtime import ExactCpuBackend
 from kayak.storage import (
     ensure_browsecomp_plus_gold_real_subset_cache,
@@ -52,6 +54,18 @@ def append_sweep_for_dataset(
                 candidate_k,
             )
         )
+        summaries.append(
+            build_candidate_window_sweep_summary_for_plan(
+                backend,
+                dataset_id,
+                model_name,
+                task,
+                snapshot,
+                document_proxy_search_plan(task.k, candidate_k),
+                0,
+                0,
+            )
+        )
 
 
 def main() raises:
@@ -72,6 +86,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             1,
             scifact_cache.stored_index,
+            0,
         ),
         scifact_cache.stored_task.task,
     )
@@ -90,6 +105,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             1,
             fiqa_cache.stored_index,
+            0,
         ),
         fiqa_cache.stored_task.task,
     )
@@ -108,6 +124,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             1,
             limit_small_cache.stored_index,
+            0,
         ),
         limit_small_cache.stored_task.task,
     )
@@ -126,6 +143,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             1,
             browsecomp_cache.stored_index,
+            0,
         ),
         browsecomp_cache.stored_task.task,
     )
@@ -144,6 +162,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             1,
             browsecomp_gold_cache.stored_index,
+            0,
         ),
         browsecomp_gold_cache.stored_task.task,
     )

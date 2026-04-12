@@ -56,6 +56,7 @@ def test_collection_contracts_hold_serving_metadata() raises:
         VECTOR_SCALAR_NAME,
         128,
         "segments/segment-0001/packed_index",
+        "",
         "segments/segment-0001/text_corpus",
         segment_stats.copy(),
     )

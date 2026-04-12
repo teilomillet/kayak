@@ -204,6 +204,17 @@ Immediate TODOs:
 - [x] Add a candidate-set artifact and profiling output
 - [x] Add benchmark output for recall of stage 1 against exact final results
 - [x] Add candidate-window sweeps as a standard benchmark
+- [x] Add a real non-default stage-1 generator with exact stage-2 reranking
+- [x] Persist one search-native sidecar per sealed segment
+- [x] Make vector budget a first-class benchmark axis
+- [x] Measure stage-1 recall against a full exact oracle, not against its own shortlist
+- [x] Use that evidence to unblock the next heavier native candidate-generation step
+
+Current interpretation:
+- `document_proxy` is now the light proxy-vector baseline.
+- The next heavier engine step should be a segment-native centroid or posting
+  family inspired by PLAID/MUVERA/GEM ideas, not another round of heuristic
+  reranking.
 
 ## Priority 3: Multi-Tenant Serving And Filter-Aware Retrieval
 

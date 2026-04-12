@@ -15,6 +15,7 @@ struct SealedSegmentManifest(Copyable):
     var vector_scalar_name: String
     var vector_dim: Int
     var packed_index_root: String
+    var document_proxy_root: String
     var text_corpus_root: String
     var stats: SegmentStats
 
@@ -29,6 +30,7 @@ struct SealedSegmentManifest(Copyable):
         vector_scalar_name: String,
         vector_dim: Int,
         packed_index_root: String,
+        document_proxy_root: String,
         text_corpus_root: String,
         stats: SegmentStats,
     ) raises:
@@ -45,8 +47,15 @@ struct SealedSegmentManifest(Copyable):
         self.packed_index_root = require_non_empty_string(
             packed_index_root, "packed_index_root"
         )
+        self.document_proxy_root = document_proxy_root.copy()
         self.text_corpus_root = text_corpus_root.copy()
         self.stats = stats.copy()
+
+
+def sealed_segment_has_document_proxy_index(
+    read segment: SealedSegmentManifest
+) -> Bool:
+    return segment.document_proxy_root.byte_length() != 0
 
 
 def sealed_segment_has_text_corpus(read segment: SealedSegmentManifest) -> Bool:

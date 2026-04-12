@@ -6,6 +6,7 @@ from .breakdown_json import (
 from .candidate_window_json import (
     CandidateWindowSweepSummary,
     build_candidate_window_sweep_summary,
+    build_candidate_window_sweep_summary_for_plan,
     candidate_window_sweep_summaries_json,
     standard_candidate_window_sizes,
 )
@@ -65,3 +66,11 @@ from .workload_json import (
     workload_benchmark_summaries_json,
 )
 from .workload_registry import default_workload_profiles
+from .vector_budget_json import (
+    VectorBudgetSweepSummary,
+    build_vector_budget_sweep_summary,
+    standard_document_vector_budget_sizes,
+    standard_query_vector_budget_sizes,
+    truncate_query_to_vector_budget,
+    vector_budget_sweep_summaries_json,
+)

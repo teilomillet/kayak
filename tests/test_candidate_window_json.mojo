@@ -24,8 +24,11 @@ def test_candidate_window_sweep_json_contains_recall_fields() raises:
                 "mock_collection",
                 "snapshot-0001",
                 "mock-model",
+                "document_proxy",
                 10,
                 20,
+                8,
+                32,
                 4,
                 20.0,
                 0.95,
@@ -35,6 +38,10 @@ def test_candidate_window_sweep_json_contains_recall_fields() raises:
 
     assert_equal(
         json.find("\"mean_candidate_recall_at_final_k\":0.95") != -1, True
+    )
+    assert_equal(
+        json.find("\"candidate_generator_kind\":\"document_proxy\"") != -1,
+        True,
     )
     assert_equal(json.find("\"candidate_k\":20") != -1, True)
 

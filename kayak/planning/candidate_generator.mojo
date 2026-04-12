@@ -8,7 +8,7 @@ struct CandidateGenerator(Copyable):
         self.kind = "exact_full_scan"
 
     def __init__(out self, var kind: String) raises:
-        if kind != "exact_full_scan":
+        if kind != "exact_full_scan" and kind != "document_proxy":
             raise Error("unknown candidate generator kind: " + kind)
 
         self.kind = kind^
@@ -16,3 +16,7 @@ struct CandidateGenerator(Copyable):
 
 def exact_full_scan_candidate_generator() -> CandidateGenerator:
     return CandidateGenerator()
+
+
+def document_proxy_candidate_generator() raises -> CandidateGenerator:
+    return CandidateGenerator("document_proxy")

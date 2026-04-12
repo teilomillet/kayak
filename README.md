@@ -254,10 +254,29 @@ Machine-readable benchmark artifacts now also land under `.cache/kayak/`:
 - `browsecomp_plus_gold_benchmark.json`
 - `public_real_slice_collection_storage.json`
 - `public_candidate_window_sweep.json`
+- `public_vector_budget_sweep.json`
 - `public_partition_policy_benchmarks.json`
 - `public_search_breakdown.json`
 - `proxy_eval_matrix.json`
 - `workload_matrix.json`
+
+The collection mirror path now persists a search-native `document_proxy` sidecar
+per sealed segment alongside the packed late-interaction index. This is
+deliberately a first non-default stage-1 family, not a claim of a native
+PLAID/WARP/GEM-class engine yet:
+- stage 1 can now use `document_proxy`
+- stage 2 now reranks the shortlisted documents with exact late interaction
+- stage-1 recall is measured against an exact full-corpus oracle in the public
+  candidate-window and vector-budget artifacts
+
+Current epistemic status:
+- `exact_full_scan` remains the correctness anchor
+- `document_proxy` is the first real non-default candidate generator
+- heavier native candidate-generation work should now be driven by the new
+  recall-vs-budget traces instead of by assumption
+
+The next heavier native-index step is documented in
+[docs/architecture/native_candidate_generation_next.md](docs/architecture/native_candidate_generation_next.md).
 
 For the BrowseComp-Plus slices, the raw Python tasks are also materialized once at:
 - `.cache/kayak/browsecomp_plus_real_subset/python_task_evidence.json`

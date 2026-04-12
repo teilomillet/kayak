@@ -12,6 +12,7 @@ from .execution import (
     candidate_recall_at_final_k,
     final_hits_for_plan,
 )
+from .exact_stage import exact_oracle_hits_for_snapshot
 from .score_histogram import build_score_histogram
 from .search_plan import SearchPlan
 from .stage_profile import SearchStageProfile
@@ -57,7 +58,12 @@ def explain_collection_search[Backend: ExactScoringBackend](
     var candidate_set = candidate_generation_for_plan(
         backend, query, snapshot, plan
     )
-    var final_hits = final_hits_for_plan(candidate_set, plan)
+    var exact_stage = final_hits_for_plan(
+        backend, query, snapshot, candidate_set, plan
+    )
+    var oracle_final_hits = exact_oracle_hits_for_snapshot(
+        backend, query, snapshot, plan.candidate_budget.final_k
+    )
 
     return CollectionSearchExplain(
         snapshot.collection.collection_id.value.copy(),
@@ -78,14 +84,14 @@ def explain_collection_search[Backend: ExactScoringBackend](
         SearchStageProfile(
             "exact_late_interaction",
             len(candidate_set.hits),
-            len(final_hits),
-            candidate_set.segment_count,
-            candidate_set.document_count,
-            candidate_set.token_count,
-            candidate_set.vector_count,
-            candidate_set.byte_size,
-            build_score_histogram(final_hits, 8),
+            len(exact_stage.final_hits),
+            exact_stage.segment_count,
+            exact_stage.document_count,
+            exact_stage.token_count,
+            exact_stage.vector_count,
+            exact_stage.byte_size,
+            build_score_histogram(exact_stage.final_hits, 8),
         ),
-        candidate_recall_at_final_k(candidate_set, final_hits),
-        final_hits^,
+        candidate_recall_at_final_k(candidate_set, oracle_final_hits),
+        exact_stage.final_hits.copy(),
     )

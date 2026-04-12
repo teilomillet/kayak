@@ -1,9 +1,14 @@
 from std.pathlib import Path
 
-from kayak.storage import StoredPackedIndex, save_stored_packed_index
+from kayak.storage import (
+    StoredPackedIndex,
+    document_proxy_storage_byte_size,
+    ensure_stored_document_proxy_index,
+    save_stored_packed_index,
+)
 
 from .collection import CollectionManifest
-from .collection_store import collection_manifest_exists, save_collection_manifest
+from .collection_store import save_collection_manifest
 from .ids import CollectionId, NamespaceId, SegmentId, SnapshotId, TenantId
 from .segment import SealedSegmentManifest
 from .segment_store import save_sealed_segment_manifest
@@ -40,10 +45,8 @@ def ensure_one_segment_collection_mirror(
     snapshot_id: SnapshotId,
     generation: Int,
     read stored_index: StoredPackedIndex,
+    document_proxy_vector_budget: Int,
 ) raises -> Path:
-    if collection_manifest_exists(collection_root):
-        return collection_root
-
     var segment_id = SegmentId("segment-0001")
     var segment_root = collection_root / "segments" / segment_id.value
     save_collection_manifest(
@@ -59,12 +62,18 @@ def ensure_one_segment_collection_mirror(
         ),
     )
     save_stored_packed_index(segment_root / "packed_index", stored_index.copy())
+    _ = ensure_stored_document_proxy_index(
+        segment_root / "document_proxy",
+        stored_index,
+        document_proxy_vector_budget,
+    )
 
     var segment_stats = SegmentStats(
         stored_index.index.document_count,
         stored_index.index.total_vector_count,
         stored_index.index.total_vector_count,
-        packed_index_storage_byte_size(segment_root / "packed_index"),
+        packed_index_storage_byte_size(segment_root / "packed_index")
+            + document_proxy_storage_byte_size(segment_root / "document_proxy"),
     )
     save_sealed_segment_manifest(
         segment_root,
@@ -78,6 +87,7 @@ def ensure_one_segment_collection_mirror(
             stored_index.vector_scalar_name.copy(),
             stored_index.index.vector_dim,
             "packed_index",
+            "document_proxy",
             "",
             segment_stats.copy(),
         ),

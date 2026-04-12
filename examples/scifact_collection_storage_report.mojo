@@ -22,6 +22,7 @@ def ensure_scifact_collection_root() raises -> Path:
         SnapshotId("snapshot-0001"),
         1,
         cache.stored_index,
+        0,
     )
 
 

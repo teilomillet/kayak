@@ -1,6 +1,7 @@
 from .candidate_budget import CandidateBudget
 from .candidate_generator import (
     CandidateGenerator,
+    document_proxy_candidate_generator,
     exact_full_scan_candidate_generator,
 )
 from .candidate_set import CandidateSet
@@ -12,11 +13,16 @@ from .execution import (
     final_hits_to_search_hits,
 )
 from .explain import CollectionSearchExplain, explain_collection_search
+from .exact_stage import ExactStageResult
 from .json import collection_search_explain_json
 from .score_histogram import (
     ScoreHistogram,
     build_score_histogram,
     empty_score_histogram,
 )
-from .search_plan import SearchPlan, exact_full_scan_search_plan
+from .search_plan import (
+    SearchPlan,
+    document_proxy_search_plan,
+    exact_full_scan_search_plan,
+)
 from .stage_profile import SearchStageProfile

@@ -115,6 +115,7 @@ The minimum contract set is:
 - `SealedSegmentManifest`
 - `SnapshotManifest`
 - `CompactionPlan`
+- `StoredDocumentProxyIndex`
 - `StoredDocumentTextCorpus`
 
 What this means:
@@ -122,6 +123,7 @@ What this means:
 - `SealedSegmentManifest` describes one immutable search segment
 - `SnapshotManifest` names the set of sealed segments that are searchable together
 - `CompactionPlan` names a future rewrite of multiple sealed segments into one replacement segment
+- `StoredDocumentProxyIndex` makes one search-native candidate-generation sidecar explicit
 - `StoredDocumentTextCorpus` makes the optional text sidecar explicit without pretending every collection must carry raw text
 
 ## Why Sealed Segments Come First
@@ -160,6 +162,10 @@ The important contract is the object model, not the exact directory spelling.
         doc_ids.tsv
         doc_offsets.tsv
         token_vectors.bin
+      document_proxy/        # optional search-native stage-1 sidecar
+        manifest.tsv
+        doc_ids.tsv
+        proxy_vectors.bin
       text_corpus/           # optional
         manifest.tsv
         entries.tsv
@@ -171,6 +177,7 @@ The important contract is the object model, not the exact directory spelling.
 Why this layout is plausible:
 - it extends the repo's existing manifest-plus-binary-payload pattern
 - it keeps search-hot vectors in their own artifact root
+- it allows stage-1 candidate generation artifacts to evolve separately from the exact packed index
 - it makes the text sidecar explicitly optional
 - it preserves exact UTF-8 text in the baseline codec instead of normalizing it into one-line TSV payloads
 
@@ -185,8 +192,9 @@ These are the core storage invariants that should hold across the service.
 2. Every sealed segment must satisfy that same vector contract.
 3. Search operates on snapshots, not on arbitrary half-built segment directories.
 4. Every segment and collection manifest must keep vector counts explicit.
-5. Text sidecars are optional and versioned separately from vector payloads.
-6. Compaction never mutates the source searchable segment in place; it creates a
+5. Search-native sidecars such as `document_proxy` are optional and versioned separately from the exact packed index.
+6. Text sidecars are optional and versioned separately from vector payloads.
+7. Compaction never mutates the source searchable segment in place; it creates a
    replacement output that a later snapshot can adopt.
 
 ## What This Step Does Not Decide Yet
