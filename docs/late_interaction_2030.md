@@ -66,6 +66,14 @@ Inference:
 - Kayak does not need a strategic rewrite
 - it needs a sharper sequence for the next engine milestones
 
+Verified since the first version of this note:
+- the hosted collection loop is now executable
+- non-exact stage-1 generators now sit behind explicit `SearchPlan` contracts
+- hard-recall benchmark output now reports candidate recall against an exact
+  full-scan reference
+
+Those are substrate wins, not proof of the stronger efficiency thesis.
+
 ## What Kayak Should Change
 
 The talk does not change Kayak's north star.
@@ -104,57 +112,33 @@ It does change how the next steps should be justified:
    - but compression should optimize an explicit serving/storage loop, not
      precede it
 
-## Concrete Next Phases
+## What The Repo Still Has Not Proved
 
-The next engine sequence for Kayak should be:
+The strongest claims implied by the talk are still open.
 
-### Phase F: Hosted Collection Loop
+Not yet locally verified:
+- under-`200ms` single-core search at multi-billion-token scale
+- token storage close to `6 bytes/vector`
+- vectors/document pruning laws anywhere near `sqrt(m)` in the regimes we care
+  about
+- asymptotic native-engine scaling substantially beyond naive late interaction
+- a benchmark family clearly harder than today's small public slices
+- a stronger expensive ceiling that is implemented and compared locally
 
-Goal:
-- make the existing service and storage contracts executable end to end
+That gap matters because it is now easy to confuse "the repo has the right
+substrate" with "the repo has already proved the efficiency thesis."
 
-Deliverables:
-- create collection
-- ingest and upsert documents
-- delete documents
-- snapshot and restore
-- search and explain against a hosted collection
+## Parallel Roadmap
 
-Exit criteria:
-- an external user can run one exact late-interaction collection without
-  benchmark-specific fixtures
+The right next step is not another rewrite of the engine sequence.
 
-### Phase G: Native Stage-1 Candidate Generation
+It is to run two tracks in parallel:
+- keep the engine/product substrate moving
+- start an explicit efficiency-and-scaling track that tries to prove or debunk
+  the stronger late-interaction claims
 
-Goal:
-- move from exact-only serving to an explicit stage-1 plus stage-2 engine
-
-Deliverables:
-- exact full-scan candidate generator
-- one pruning or approximate candidate generator
-- candidate-set tracing and stage-level profiling
-- recall reporting against exact final results
-
-Exit criteria:
-- every result set can say which stage produced which candidates and what stage
-  1 recall it achieved against exact
-
-### Phase H: Hard-Recall Evaluation
-
-Goal:
-- benchmark the engine on tasks where weak stage-1 recall is the real problem
-
-Deliverables:
-- one or two harder public or synthetic tasks selected for low-recall pressure
-- ceiling comparisons against a much more expensive path when justified
-- benchmark outputs that distinguish:
-  - stage-1 recall
-  - final retrieval quality
-  - latency and storage tradeoffs
-
-Exit criteria:
-- Kayak can show why its engine design matters on tasks where reranking alone is
-  not enough
+That roadmap is recorded in:
+- [docs/late_interaction_efficiency_roadmap.md](late_interaction_efficiency_roadmap.md)
 
 ## What This Does Not Mean
 
@@ -173,6 +157,7 @@ If a proposed roadmap item helps Kayak become:
 - a clearer hosted late-interaction engine
 - a better stage-aware retrieval system
 - a stronger benchmarked substrate for hard-recall tasks
+- a more measurable testbed for efficiency and scaling claims
 
 then it likely belongs near the top of the roadmap.
 

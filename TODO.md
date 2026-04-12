@@ -477,6 +477,40 @@ These are the best next moves right now.
 - [x] Write one benchmark-selection note for hard-recall tasks before adding
   more benchmark families
 
+These substrate items are complete.
+
+They are not the same thing as proving the stronger late-interaction
+efficiency thesis.
+
+That thesis now moves to a parallel roadmap:
+- [docs/late_interaction_efficiency_roadmap.md](docs/late_interaction_efficiency_roadmap.md)
+
+## Parallel Track: Efficiency And Scaling Thesis
+
+Status key:
+- `Verified substrate`: the repo already has the machinery needed
+- `Instrumented but unproven`: the repo can measure the claim, but has not yet
+  established it
+- `Unverified claim`: the repo does not yet have sufficient evidence
+
+Current status:
+- `Verified substrate`: explicit stage-aware search plans, hosted collection
+  loop, stage-aware benchmark output, storage byte accounting
+- `Instrumented but unproven`: native stage-1 generators, public hard-recall
+  benchmark comparisons, exact-reference candidate recall
+- `Unverified claim`: single-core multi-billion-token latency, `6 bytes/vector`
+  compression, `sqrt(m)` vector-count laws, stronger ceiling comparisons
+
+Parallel TODOs:
+- [ ] Add one single-core scaling benchmark over increasing corpus sizes
+- [ ] Add one compressed-token benchmark that reports bytes/vector explicitly
+- [ ] Add one vectors/document sweep that tests aggressive document-vector
+  reduction
+- [ ] Add one asymptotic scaling benchmark for native candidate engines
+- [ ] Add one benchmark-selection note for a harder-recall family beyond the
+  current default public slices
+- [ ] Add one stronger-ceiling comparison only after that path exists locally
+
 ## What We Should Not Do Next
 
 - [ ] Do not spend the next cycle tuning the BrowseComp clause-text heuristic
@@ -485,6 +519,8 @@ These are the best next moves right now.
 - [ ] Do not make GPU work the next milestone before storage and stage contracts settle
 - [ ] Do not treat "beats dense retrieval" as a sufficient evaluation story by
   itself
+- [ ] Do not claim the Omar-style efficiency story before local scaling numbers
+  exist
 
 ## Success Metrics
 
@@ -496,6 +532,9 @@ Engine metrics:
 - storage bytes per document, per token, and per tenant
 - ingest throughput and compaction overhead
 - snapshot and restore duration
+- single-core scaling curves against document count and token count
+- bytes per vector for compressed token formats
+- retrieval quality versus vectors per document retained
 
 Retrieval metrics:
 - `nDCG@10`
@@ -505,6 +544,7 @@ Retrieval metrics:
 - candidate recall at fixed budgets such as `100` and `1000`
 - final quality versus a more expensive reference path when that comparison is
   justified
+- stage-1 recall and final quality on harder-than-current hard-recall tasks
 
 Product metrics:
 - one-command local service startup
@@ -519,6 +559,7 @@ When choosing between two roadmap items, prefer the one that:
 - improves stage explainability
 - generalizes across datasets and models
 - keeps vector counts and late-interaction semantics explicit
+- turns a qualitative efficiency claim into a measurable benchmark
 
 Avoid work that:
 - only improves one benchmark slice
