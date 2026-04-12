@@ -1,6 +1,10 @@
 from .candidate_budget import CandidateBudget
 from .candidate_generator import (
     CandidateGenerator,
+    CANDIDATE_GENERATOR_FAMILY_CENTROID,
+    CANDIDATE_GENERATOR_FAMILY_EXACT,
+    CANDIDATE_GENERATOR_FAMILY_GRAPH,
+    CANDIDATE_GENERATOR_FAMILY_PROXY,
     centroid_heads_candidate_generator,
     centroid_postings_candidate_generator,
     centroid_postings_flat_candidate_generator,
@@ -11,6 +15,7 @@ from .candidate_generator import (
     centroid_postings_imputed_flat_candidate_generator,
     document_proxy_candidate_generator,
     exact_full_scan_candidate_generator,
+    gem_graph_candidate_generator,
 )
 from .candidate_set import CandidateSet
 from .centroid_primitives import (
@@ -66,5 +71,6 @@ from .search_plan import (
     centroid_postings_search_plan,
     document_proxy_search_plan,
     exact_full_scan_search_plan,
+    gem_graph_search_plan,
 )
 from .stage_profile import SearchStageProfile

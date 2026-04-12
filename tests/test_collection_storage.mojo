@@ -6,6 +6,7 @@ from kayak.collections import (
     CollectionManifest,
     CollectionStats,
     NamespaceId,
+    SearchArtifactManifest,
     SegmentId,
     SegmentStats,
     SealedSegmentManifest,
@@ -13,6 +14,8 @@ from kayak.collections import (
     SnapshotManifest,
     StoredDocumentTextCorpus,
     TenantId,
+    document_proxy_search_artifact,
+    gem_graph_search_artifact,
     load_collection_manifest,
     load_sealed_segment_manifest,
     load_snapshot_manifest,
@@ -133,6 +136,41 @@ def test_snapshot_manifest_rejects_segment_count_mismatch() raises:
         raised = True
 
     assert_equal(raised, True)
+
+
+def test_segment_manifest_roundtrip_preserves_search_artifact_registry() raises:
+    var root = Path("/tmp/kayak-segment-search-artifact-roundtrip")
+
+    save_sealed_segment_manifest(
+        root,
+        SealedSegmentManifest(
+            SegmentId("segment-0004"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            7,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            128,
+            "packed_index",
+            [
+                document_proxy_search_artifact("document_proxy"),
+                gem_graph_search_artifact("gem_graph"),
+            ],
+            "text_corpus",
+            SegmentStats(2, 11, 10, 4096),
+        ),
+    )
+
+    var loaded_segment = load_sealed_segment_manifest(root)
+
+    assert_equal(loaded_segment.packed_index_root, "packed_index")
+    assert_equal(loaded_segment.text_corpus_root, "text_corpus")
+    assert_equal(len(loaded_segment.search_artifacts), 2)
+    assert_equal(loaded_segment.search_artifacts[0].family, "document_proxy")
+    assert_equal(loaded_segment.search_artifacts[0].root, "document_proxy")
+    assert_equal(loaded_segment.search_artifacts[1].family, "gem_graph")
+    assert_equal(loaded_segment.search_artifacts[1].root, "gem_graph")
 
 
 def test_document_text_corpus_rejects_missing_text_file() raises:

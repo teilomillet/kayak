@@ -1,8 +1,10 @@
 from std.pathlib import Path
 
 from kayak.storage import (
+    save_stored_centroid_heads_index,
     save_stored_centroid_posting_index,
     save_stored_document_proxy_index,
+    save_stored_gem_graph_index,
     save_stored_packed_index,
 )
 
@@ -13,9 +15,23 @@ from .collection_store import (
     save_collection_manifest,
 )
 from .paths import collection_segment_root, collection_snapshot_root
-from .resolved_snapshot import LoadedSealedSegment, ResolvedCollectionSnapshot
+from .resolved_snapshot import (
+    LoadedSealedSegment,
+    ResolvedCollectionSnapshot,
+    loaded_segment_has_search_artifact,
+    loaded_segment_stored_centroid_postings_index,
+    loaded_segment_stored_document_proxy_index,
+    loaded_segment_stored_gem_graph_index,
+)
 from .resolver import load_resolved_collection_snapshot
-from .segment import SealedSegmentManifest
+from .search_artifact import (
+    SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
+    SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
+    SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
+    same_search_artifacts,
+)
+from .segment import SealedSegmentManifest, sealed_segment_search_artifact_root
 from .segment_store import (
     load_sealed_segment_manifest,
     save_sealed_segment_manifest,
@@ -163,11 +179,10 @@ def require_segment_manifest_compatible(
     if existing.packed_index_root != imported.packed_index_root:
         raise Error("segment manifest packed_index_root mismatch during import")
 
-    if existing.centroid_postings_root != imported.centroid_postings_root:
-        raise Error("segment manifest centroid_postings_root mismatch during import")
-
-    if existing.document_proxy_root != imported.document_proxy_root:
-        raise Error("segment manifest document_proxy_root mismatch during import")
+    if not same_search_artifacts(
+        existing.search_artifacts, imported.search_artifacts
+    ):
+        raise Error("segment manifest search_artifacts mismatch during import")
 
     if existing.text_corpus_root != imported.text_corpus_root:
         raise Error("segment manifest text_corpus_root mismatch during import")
@@ -244,16 +259,48 @@ def write_loaded_segment_into_collection_root(
         segment.stored_index,
     )
 
-    if segment.has_centroid_postings_index:
+    if loaded_segment_has_search_artifact(
+        segment, SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS
+    ):
         save_stored_centroid_posting_index(
-            segment_root / segment.manifest.centroid_postings_root,
-            segment.stored_centroid_postings_index,
+            segment_root
+                / sealed_segment_search_artifact_root(
+                    segment.manifest, SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS
+                ),
+            loaded_segment_stored_centroid_postings_index(
+                segment, SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS
+            ),
+        )
+    if loaded_segment_has_search_artifact(
+        segment, SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS
+    ):
+        save_stored_centroid_heads_index(
+            segment_root
+                / sealed_segment_search_artifact_root(
+                    segment.manifest, SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS
+                ),
+            loaded_segment_stored_centroid_postings_index(
+                segment, SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS
+            ),
         )
 
-    if segment.has_document_proxy_index:
+    if loaded_segment_has_search_artifact(
+        segment, SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY
+    ):
         save_stored_document_proxy_index(
-            segment_root / segment.manifest.document_proxy_root,
-            segment.stored_document_proxy_index,
+            segment_root
+                / sealed_segment_search_artifact_root(
+                    segment.manifest, SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY
+                ),
+            loaded_segment_stored_document_proxy_index(segment),
+        )
+    if loaded_segment_has_search_artifact(segment, SEARCH_ARTIFACT_FAMILY_GEM_GRAPH):
+        save_stored_gem_graph_index(
+            segment_root
+                / sealed_segment_search_artifact_root(
+                    segment.manifest, SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
+                ),
+            loaded_segment_stored_gem_graph_index(segment),
         )
 
     if segment.has_text_corpus:

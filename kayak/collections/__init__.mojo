@@ -15,14 +15,44 @@ from .report import (
     load_collection_storage_report,
 )
 from .report_json import collection_storage_report_json
-from .resolved_snapshot import LoadedSealedSegment, ResolvedCollectionSnapshot
+from .resolved_snapshot import (
+    LoadedSearchArtifact,
+    LoadedSealedSegment,
+    ResolvedCollectionSnapshot,
+    loaded_segment_has_centroid_heads_index,
+    loaded_segment_has_centroid_postings_index,
+    loaded_segment_has_document_proxy_index,
+    loaded_segment_has_gem_graph_index,
+    loaded_segment_has_search_artifact,
+    loaded_segment_stored_centroid_postings_index,
+    loaded_segment_stored_document_proxy_index,
+    loaded_segment_stored_gem_graph_index,
+)
 from .resolver import load_resolved_collection_snapshot
+from .search_artifact import (
+    SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
+    SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
+    SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
+    SearchArtifactManifest,
+    centroid_heads_search_artifact,
+    centroid_postings_search_artifact,
+    document_proxy_search_artifact,
+    gem_graph_search_artifact,
+    has_search_artifact,
+    search_artifact_root,
+)
 from .segment_report import SegmentStorageReport, build_segment_storage_report
 from .segment import (
     SealedSegmentManifest,
+    sealed_segment_centroid_heads_root,
+    sealed_segment_centroid_postings_root,
+    sealed_segment_document_proxy_root,
     sealed_segment_has_centroid_heads_index,
     sealed_segment_has_centroid_postings_index,
     sealed_segment_has_document_proxy_index,
+    sealed_segment_has_search_artifact,
+    sealed_segment_search_artifact_root,
     sealed_segment_has_text_corpus,
 )
 from .segment_store import (

@@ -35,6 +35,12 @@ from .document_proxy_store import (
     load_stored_document_proxy_index,
     save_stored_document_proxy_index,
 )
+from .gem_graph_store import (
+    gem_graph_index_exists,
+    gem_graph_storage_byte_size,
+    load_stored_gem_graph_index,
+    save_stored_gem_graph_index,
+)
 from .fiqa_cache import FiqaRealSubsetCache, ensure_fiqa_real_subset_cache
 from .hybrid_flat_dim128_store import (
     HybridFlatDim128CacheEntry,
@@ -52,6 +58,7 @@ from .judged_task_store import (
 from .metadata import (
     StoredCentroidPostingIndex,
     StoredDocumentProxyIndex,
+    StoredGemGraphIndex,
     StoredHybridFlatDim128Index,
     StoredJudgedTask,
     StoredPackedIndex,

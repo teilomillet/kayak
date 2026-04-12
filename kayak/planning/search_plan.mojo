@@ -13,6 +13,7 @@ from .candidate_generator import (
     centroid_postings_imputed_flat_candidate_generator,
     document_proxy_candidate_generator,
     exact_full_scan_candidate_generator,
+    gem_graph_candidate_generator,
 )
 from .faithfulness import (
     FaithfulnessPolicy,
@@ -154,6 +155,17 @@ def centroid_postings_imputed_flat_search_plan(
 ) raises -> SearchPlan:
     return SearchPlan(
         centroid_postings_imputed_flat_candidate_generator(),
+        CandidateBudget(final_k, candidate_k),
+        faithfulness_policy,
+        "none",
+    )
+
+
+def gem_graph_search_plan(
+    final_k: Int, candidate_k: Int, faithfulness_policy: FaithfulnessPolicy
+) raises -> SearchPlan:
+    return SearchPlan(
+        gem_graph_candidate_generator(),
         CandidateBudget(final_k, candidate_k),
         faithfulness_policy,
         "none",

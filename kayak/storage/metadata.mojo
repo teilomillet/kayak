@@ -122,6 +122,60 @@ struct StoredDocumentProxyIndex(Copyable):
         self.index = index^
 
 
+struct StoredGemGraphIndex(Copyable):
+    var dataset_id: String
+    var model_name: String
+    var vector_scalar_name: String
+    var document_count: Int
+    var cluster_count: Int
+    var graph_edge_count: Int
+    var shortcut_edge_count: Int
+    var entry_point_count: Int
+    var quantization_centroid_count: Int
+    var artifact_byte_size: Int
+
+    def __init__(
+        out self,
+        var dataset_id: String,
+        var model_name: String,
+        var vector_scalar_name: String,
+        document_count: Int,
+        cluster_count: Int,
+        graph_edge_count: Int,
+        shortcut_edge_count: Int,
+        entry_point_count: Int,
+        quantization_centroid_count: Int,
+        artifact_byte_size: Int,
+    ) raises:
+        if document_count < 0:
+            raise Error("stored gem graph document_count must be non-negative")
+        if cluster_count < 0:
+            raise Error("stored gem graph cluster_count must be non-negative")
+        if graph_edge_count < 0:
+            raise Error("stored gem graph graph_edge_count must be non-negative")
+        if shortcut_edge_count < 0:
+            raise Error("stored gem graph shortcut_edge_count must be non-negative")
+        if entry_point_count < 0:
+            raise Error("stored gem graph entry_point_count must be non-negative")
+        if quantization_centroid_count < 0:
+            raise Error(
+                "stored gem graph quantization_centroid_count must be non-negative"
+            )
+        if artifact_byte_size < 0:
+            raise Error("stored gem graph artifact_byte_size must be non-negative")
+
+        self.dataset_id = dataset_id^
+        self.model_name = model_name^
+        self.vector_scalar_name = vector_scalar_name^
+        self.document_count = document_count
+        self.cluster_count = cluster_count
+        self.graph_edge_count = graph_edge_count
+        self.shortcut_edge_count = shortcut_edge_count
+        self.entry_point_count = entry_point_count
+        self.quantization_centroid_count = quantization_centroid_count
+        self.artifact_byte_size = artifact_byte_size
+
+
 struct StoredHybridFlatDim128Index(Copyable):
     var dataset_id: String
     var model_name: String

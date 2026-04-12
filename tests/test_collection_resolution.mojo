@@ -14,6 +14,9 @@ from kayak.collections import (
     SnapshotManifest,
     StoredDocumentTextCorpus,
     TenantId,
+    gem_graph_search_artifact,
+    loaded_segment_has_gem_graph_index,
+    loaded_segment_stored_gem_graph_index,
     load_collection_storage_report,
     load_resolved_collection_snapshot,
     save_collection_manifest,
@@ -21,7 +24,12 @@ from kayak.collections import (
     save_snapshot_manifest,
     save_stored_document_text_corpus,
 )
-from kayak.storage import StoredPackedIndex, save_stored_packed_index
+from kayak.storage import (
+    StoredGemGraphIndex,
+    StoredPackedIndex,
+    save_stored_gem_graph_index,
+    save_stored_packed_index,
+)
 from kayak.text import DocumentTextCorpus
 
 
@@ -247,6 +255,84 @@ def test_segment_manifest_rejects_non_relative_artifact_roots() raises:
         raised = True
 
     assert_equal(raised, True)
+
+
+def test_resolved_snapshot_loads_gem_graph_artifact_metadata() raises:
+    var collection_root = Path("/tmp/kayak-resolved-collection-gem-graph")
+    save_collection_manifest(
+        collection_root,
+        CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            4,
+        ),
+    )
+
+    var segment_root = collection_root / "segments" / "segment-0001"
+    write_segment_payload(
+        segment_root,
+        "collection://news",
+        "colbertv2",
+        [EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]])],
+    )
+    save_stored_gem_graph_index(
+        segment_root / "gem_graph",
+        StoredGemGraphIndex(
+            "collection://news",
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            1,
+            2,
+            3,
+            1,
+            2,
+            16,
+            0,
+        ),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            4,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            "packed_index",
+            [gem_graph_search_artifact("gem_graph")],
+            "",
+            SegmentStats(1, 2, 2, 512),
+        ),
+    )
+    save_snapshot_manifest(
+        collection_root / "snapshots" / "snapshot-0004",
+        SnapshotManifest(
+            SnapshotId("snapshot-0004"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            4,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 1, 2, 2, 512),
+        ),
+    )
+
+    var resolved = load_resolved_collection_snapshot(
+        collection_root, SnapshotId("snapshot-0004")
+    )
+
+    assert_equal(loaded_segment_has_gem_graph_index(resolved.segments[0]), True)
+    var stored_gem_graph = loaded_segment_stored_gem_graph_index(resolved.segments[0])
+    assert_equal(stored_gem_graph.document_count, 1)
+    assert_equal(stored_gem_graph.cluster_count, 2)
+    assert_equal(stored_gem_graph.graph_edge_count, 3)
 
 
 def main() raises:

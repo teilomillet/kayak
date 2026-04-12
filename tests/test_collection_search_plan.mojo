@@ -42,6 +42,8 @@ from kayak import (
     document_proxy_search_plan,
     exact_full_scan_search_plan,
     explain_collection_search,
+    gem_graph_search_plan,
+    loaded_segment_stored_centroid_postings_index,
     load_resolved_collection_snapshot,
     oracle_full_recall_required_faithfulness_policy,
     save_collection_manifest,
@@ -536,7 +538,9 @@ def test_centroid_postings_flat_stage_matches_plain_stage_scores() raises:
     var root = make_centroid_postings_collection_root()
     var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
     var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
-    var index = resolved.segments[0].stored_centroid_postings_index.index.copy()
+    var index = loaded_segment_stored_centroid_postings_index(
+        resolved.segments[0]
+    ).index.copy()
     var plain_scores = centroid_posting_scores_for_segment(query.token_vectors, index)
     var flat_scores = centroid_posting_flat_scores_for_segment(query, index)
 
@@ -877,7 +881,9 @@ def test_centroid_postings_imputed_flat_stage_matches_imputed_stage_scores() rai
     var root = make_centroid_postings_collection_root()
     var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
     var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
-    var index = resolved.segments[0].stored_centroid_postings_index.index.copy()
+    var index = loaded_segment_stored_centroid_postings_index(
+        resolved.segments[0]
+    ).index.copy()
     var imputed_scores = centroid_posting_imputed_scores_for_segment(
         query.token_vectors,
         index,
@@ -892,6 +898,27 @@ def test_centroid_postings_imputed_flat_stage_matches_imputed_stage_scores() rai
     assert_equal(len(imputed_flat_scores), len(imputed_scores))
     for score_index in range(len(imputed_scores)):
         assert_equal(imputed_flat_scores[score_index], imputed_scores[score_index])
+
+
+def test_gem_graph_search_plan_is_explicitly_registered_but_not_executed() raises:
+    var root = make_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0002"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+
+    var raised = False
+    try:
+        _ = explain_collection_search(
+            ExactCpuBackend(),
+            query,
+            resolved,
+            gem_graph_search_plan(
+                1, 2, oracle_full_recall_required_faithfulness_policy()
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def main() raises:
