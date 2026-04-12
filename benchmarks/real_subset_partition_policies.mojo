@@ -1,12 +1,15 @@
 import std.benchmark as benchmark
 
+from std.collections import List
+from std.os import makedirs
+from std.pathlib import Path
 from std.runtime.asyncrt import parallelism_level
 
-from kayak import (
-    ExactCpuBackend,
-    ExactScoringConfig,
-    JudgedTask,
-    PackedIndex,
+from kayak import ExactCpuBackend, ExactScoringConfig, JudgedTask, PackedIndex
+from kayak.benchmarks import (
+    BackendPolicyBenchmarkSummary,
+    backend_policy_benchmark_summaries_json,
+    build_backend_policy_benchmark_summary,
 )
 from kayak.search import search_exact
 from kayak.storage import (
@@ -53,7 +56,7 @@ def benchmark_task(
     read index: PackedIndex,
     backend_name: String,
     read backend: ExactCpuBackend,
-) raises:
+) raises -> BackendPolicyBenchmarkSummary:
     print("dataset: ", dataset_name)
     print("slice: ", slice_name)
     print("task_source: ", task_source)
@@ -76,9 +79,19 @@ def benchmark_task(
     var report = benchmark.run[score_once]()
     report.print()
     print("")
+    return build_backend_policy_benchmark_summary(
+        dataset_name,
+        task,
+        task_source,
+        index_source,
+        backend_name,
+        Float64(report.mean()),
+    )
 
 
-def benchmark_scifact_real_subset() raises:
+def benchmark_scifact_real_subset(
+    mut summaries: List[BackendPolicyBenchmarkSummary]
+) raises:
     print("loading real BEIR/SciFact subset with storage...")
     print("parallelism_level: ", parallelism_level())
     var cache = ensure_scifact_real_subset_cache()
@@ -91,7 +104,7 @@ def benchmark_scifact_real_subset() raises:
         cache.loaded_index_from_storage, "pack_documents"
     )
 
-    benchmark_task(
+    summaries.append(benchmark_task(
         "SciFact",
         task.slice_name.copy(),
         task_source,
@@ -100,8 +113,8 @@ def benchmark_scifact_real_subset() raises:
         index,
         "default",
         default_backend(),
-    )
-    benchmark_task(
+    ))
+    summaries.append(benchmark_task(
         "SciFact",
         task.slice_name.copy(),
         task_source,
@@ -110,8 +123,8 @@ def benchmark_scifact_real_subset() raises:
         index,
         "serial",
         serial_backend(),
-    )
-    benchmark_task(
+    ))
+    summaries.append(benchmark_task(
         "SciFact",
         task.slice_name.copy(),
         task_source,
@@ -120,8 +133,8 @@ def benchmark_scifact_real_subset() raises:
         index,
         "parallel_oversubscription_disabled",
         conservative_parallel_backend(),
-    )
-    benchmark_task(
+    ))
+    summaries.append(benchmark_task(
         "SciFact",
         task.slice_name.copy(),
         task_source,
@@ -130,8 +143,8 @@ def benchmark_scifact_real_subset() raises:
         index,
         "work_items=" + String(parallelism_level()),
         fixed_work_item_backend(parallelism_level()),
-    )
-    benchmark_task(
+    ))
+    summaries.append(benchmark_task(
         "SciFact",
         task.slice_name.copy(),
         task_source,
@@ -140,10 +153,12 @@ def benchmark_scifact_real_subset() raises:
         index,
         "work_items=" + String(parallelism_level() * 4),
         fixed_work_item_backend(parallelism_level() * 4),
-    )
+    ))
 
 
-def benchmark_fiqa_real_subset() raises:
+def benchmark_fiqa_real_subset(
+    mut summaries: List[BackendPolicyBenchmarkSummary]
+) raises:
     print("loading real BEIR/FIQA subset with storage...")
     print("parallelism_level: ", parallelism_level())
     var cache = ensure_fiqa_real_subset_cache()
@@ -156,7 +171,7 @@ def benchmark_fiqa_real_subset() raises:
         cache.loaded_index_from_storage, "pack_documents"
     )
 
-    benchmark_task(
+    summaries.append(benchmark_task(
         "FIQA",
         task.slice_name.copy(),
         task_source,
@@ -165,8 +180,8 @@ def benchmark_fiqa_real_subset() raises:
         index,
         "default",
         default_backend(),
-    )
-    benchmark_task(
+    ))
+    summaries.append(benchmark_task(
         "FIQA",
         task.slice_name.copy(),
         task_source,
@@ -175,8 +190,8 @@ def benchmark_fiqa_real_subset() raises:
         index,
         "serial",
         serial_backend(),
-    )
-    benchmark_task(
+    ))
+    summaries.append(benchmark_task(
         "FIQA",
         task.slice_name.copy(),
         task_source,
@@ -185,8 +200,8 @@ def benchmark_fiqa_real_subset() raises:
         index,
         "parallel_oversubscription_disabled",
         conservative_parallel_backend(),
-    )
-    benchmark_task(
+    ))
+    summaries.append(benchmark_task(
         "FIQA",
         task.slice_name.copy(),
         task_source,
@@ -195,8 +210,8 @@ def benchmark_fiqa_real_subset() raises:
         index,
         "work_items=" + String(parallelism_level()),
         fixed_work_item_backend(parallelism_level()),
-    )
-    benchmark_task(
+    ))
+    summaries.append(benchmark_task(
         "FIQA",
         task.slice_name.copy(),
         task_source,
@@ -205,9 +220,16 @@ def benchmark_fiqa_real_subset() raises:
         index,
         "work_items=" + String(parallelism_level() * 4),
         fixed_work_item_backend(parallelism_level() * 4),
-    )
+    ))
 
 
 def main() raises:
-    benchmark_scifact_real_subset()
-    benchmark_fiqa_real_subset()
+    var summaries = List[BackendPolicyBenchmarkSummary]()
+    benchmark_scifact_real_subset(summaries)
+    benchmark_fiqa_real_subset(summaries)
+
+    var output_root = Path(".cache/kayak")
+    makedirs(output_root, exist_ok=True)
+    var output_path = output_root / "public_partition_policy_benchmarks.json"
+    output_path.write_text(backend_policy_benchmark_summaries_json(summaries))
+    print("wrote ", String(output_path))

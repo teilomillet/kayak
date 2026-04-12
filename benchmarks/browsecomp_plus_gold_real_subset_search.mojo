@@ -1,5 +1,11 @@
 import std.benchmark as benchmark
+from std.os import makedirs
+from std.pathlib import Path
 
+from kayak.benchmarks import (
+    build_real_slice_benchmark_summary_from_measurement,
+    real_slice_benchmark_summary_json,
+)
 from kayak.eval import evaluate_task
 from kayak.runtime import ExactCpuBackend
 from kayak.search import search_exact
@@ -21,17 +27,17 @@ def main() raises:
     var backend = ExactCpuBackend()
     var evaluation = evaluate_task(backend, task)
     var query_index = 0
+    var task_source = source_label(
+        cache.loaded_task_from_storage, "colbert_cpu_encode"
+    )
+    var index_source = source_label(
+        cache.loaded_index_from_storage, "pack_documents"
+    )
 
     print("family: ", task.family)
     print("slice: ", task.slice_name)
-    print(
-        "task_source: ",
-        source_label(cache.loaded_task_from_storage, "colbert_cpu_encode"),
-    )
-    print(
-        "index_source: ",
-        source_label(cache.loaded_index_from_storage, "pack_documents"),
-    )
+    print("task_source: ", task_source)
+    print("index_source: ", index_source)
     print("queries: ", len(task.queries))
     print("documents: ", len(task.documents))
     print("query_vectors≈ ", task.nominal_query_vector_count)
@@ -51,3 +57,18 @@ def main() raises:
 
     var report = benchmark.run[score_once]()
     report.print()
+
+    var summary = build_real_slice_benchmark_summary_from_measurement(
+        cache.stored_task.dataset_id.copy(),
+        cache.stored_task.model_name.copy(),
+        task,
+        task_source,
+        index_source,
+        evaluation,
+        Float64(report.mean()),
+    )
+    var output_root = Path(".cache/kayak")
+    makedirs(output_root, exist_ok=True)
+    var output_path = output_root / "browsecomp_plus_gold_benchmark.json"
+    output_path.write_text(real_slice_benchmark_summary_json(summary))
+    print("wrote ", String(output_path))

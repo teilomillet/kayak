@@ -1,15 +1,21 @@
 import std.benchmark as benchmark
+from std.collections import List
+from std.os import makedirs
+from std.pathlib import Path
 
 from kayak.benchmarks import (
     WorkloadProfile,
+    WorkloadBenchmarkSummary,
+    build_workload_benchmark_summary,
     default_workload_profiles,
     make_exact_search_fixture_for_profile,
+    workload_benchmark_summaries_json,
 )
 from kayak.runtime import ExactCpuBackend
 from kayak.search import search_exact
 
 
-def benchmark_profile(profile: WorkloadProfile) raises:
+def benchmark_profile(profile: WorkloadProfile) raises -> WorkloadBenchmarkSummary:
     var fixture = make_exact_search_fixture_for_profile(profile)
     var backend = ExactCpuBackend()
 
@@ -34,8 +40,16 @@ def benchmark_profile(profile: WorkloadProfile) raises:
     var report = benchmark.run[score_once]()
     report.print()
     print("")
+    return build_workload_benchmark_summary(profile, Float64(report.mean()))
 
 
 def main() raises:
+    var summaries = List[WorkloadBenchmarkSummary]()
     for profile in default_workload_profiles():
-        benchmark_profile(profile)
+        summaries.append(benchmark_profile(profile))
+
+    var output_root = Path(".cache/kayak")
+    makedirs(output_root, exist_ok=True)
+    var output_path = output_root / "workload_matrix.json"
+    output_path.write_text(workload_benchmark_summaries_json(summaries))
+    print("wrote ", String(output_path))

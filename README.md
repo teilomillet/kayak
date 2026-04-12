@@ -231,6 +231,20 @@ The persisted artifacts live under:
 - `.cache/kayak/limit_small_real_subset/`
 - `.cache/kayak/browsecomp_plus_real_subset/`
 
+Machine-readable benchmark artifacts now also land under `.cache/kayak/`:
+- `public_real_slice_benchmarks.json`
+- `scifact_real_subset_benchmark.json`
+- `fiqa_real_subset_benchmark.json`
+- `limit_small_real_subset_benchmark.json`
+- `browsecomp_plus_evidence_benchmark.json`
+- `browsecomp_plus_gold_benchmark.json`
+- `public_real_slice_collection_storage.json`
+- `public_candidate_window_sweep.json`
+- `public_partition_policy_benchmarks.json`
+- `public_search_breakdown.json`
+- `proxy_eval_matrix.json`
+- `workload_matrix.json`
+
 For the BrowseComp-Plus slices, the raw Python tasks are also materialized once at:
 - `.cache/kayak/browsecomp_plus_real_subset/python_task_evidence.json`
 - `.cache/kayak/browsecomp_plus_real_subset/python_task_gold.json`

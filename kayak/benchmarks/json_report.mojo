@@ -2,10 +2,12 @@ from std.benchmark import run
 import std.benchmark.compiler as bench_compiler
 from std.collections import List
 
-from kayak.eval import evaluate_task
+from kayak.eval import JudgedTask, TaskEvaluation, evaluate_task
 from kayak.runtime import ExactCpuBackend
 from kayak.search import search_exact
 from kayak.storage import StoredJudgedTask, StoredPackedIndex
+
+from .json_common import json_escape
 
 
 struct RealSliceBenchmarkSummary(Copyable):
@@ -79,6 +81,38 @@ def source_label(loaded_from_storage: Bool, fresh_label: String) -> String:
     return fresh_label.copy()
 
 
+def build_real_slice_benchmark_summary_from_measurement(
+    dataset_id: String,
+    model_name: String,
+    read task: JudgedTask,
+    task_source: String,
+    index_source: String,
+    read evaluation: TaskEvaluation,
+    mean_search_seconds: Float64,
+) -> RealSliceBenchmarkSummary:
+    return RealSliceBenchmarkSummary(
+        dataset_id.copy(),
+        model_name.copy(),
+        task.family.copy(),
+        task.slice_name.copy(),
+        task_source.copy(),
+        index_source.copy(),
+        evaluation.primary_metric.copy(),
+        Float64(evaluation.primary_value),
+        Float64(evaluation.mean_ndcg_at_k),
+        Float64(evaluation.mean_reciprocal_rank),
+        Float64(evaluation.mean_recall_at_k),
+        Float64(evaluation.success_rate_at_k),
+        mean_search_seconds,
+        task.k,
+        len(task.queries),
+        len(task.documents),
+        task.nominal_query_vector_count,
+        task.nominal_document_vector_count,
+        task.vector_dim,
+    )
+
+
 def build_real_slice_benchmark_summary(
     read backend: ExactCpuBackend,
     read stored_task: StoredJudgedTask,
@@ -106,36 +140,15 @@ def build_real_slice_benchmark_summary(
 
     var report = run[score_once]()
 
-    return RealSliceBenchmarkSummary(
+    return build_real_slice_benchmark_summary_from_measurement(
         stored_task.dataset_id.copy(),
         stored_task.model_name.copy(),
-        task.family.copy(),
-        task.slice_name.copy(),
+        task,
         source_label(loaded_task_from_storage, "colbert_cpu_encode"),
         source_label(loaded_index_from_storage, "pack_documents"),
-        evaluation.primary_metric.copy(),
-        Float64(evaluation.primary_value),
-        Float64(evaluation.mean_ndcg_at_k),
-        Float64(evaluation.mean_reciprocal_rank),
-        Float64(evaluation.mean_recall_at_k),
-        Float64(evaluation.success_rate_at_k),
+        evaluation,
         Float64(report.mean()),
-        task.k,
-        len(task.queries),
-        len(task.documents),
-        task.nominal_query_vector_count,
-        task.nominal_document_vector_count,
-        task.vector_dim,
     )
-
-
-def json_escape(text: String) -> String:
-    var escaped = text.replace("\\", "\\\\")
-    escaped = escaped.replace("\"", "\\\"")
-    escaped = escaped.replace("\n", "\\n")
-    escaped = escaped.replace("\r", "\\r")
-    escaped = escaped.replace("\t", "\\t")
-    return escaped
 
 
 def append_real_slice_benchmark_summary_json(
@@ -164,6 +177,12 @@ def append_real_slice_benchmark_summary_json(
     buffer += String(summary.nominal_document_vector_count) + ","
     buffer += "\"vector_dim\":" + String(summary.vector_dim)
     buffer += "}"
+
+
+def real_slice_benchmark_summary_json(read summary: RealSliceBenchmarkSummary) -> String:
+    var buffer = String()
+    append_real_slice_benchmark_summary_json(buffer, summary)
+    return buffer^
 
 
 def real_slice_benchmark_summaries_json(

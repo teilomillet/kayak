@@ -240,7 +240,7 @@ Required outputs:
 - per-query trace exports
 
 Immediate TODOs:
-- [ ] Add structured benchmark output JSON for all public benchmark entrypoints
+- [x] Add structured benchmark output JSON for all public benchmark entrypoints
 - [x] Add a query explain/profile command for one query against one collection
 - [x] Add stage-level counters and histograms
 - [x] Add segment-level storage reports

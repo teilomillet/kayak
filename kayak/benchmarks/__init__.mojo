@@ -1,8 +1,23 @@
+from .breakdown_json import (
+    SearchBreakdownBenchmarkSummary,
+    build_search_breakdown_benchmark_summary,
+    search_breakdown_benchmark_summaries_json,
+)
 from .candidate_window_json import (
     CandidateWindowSweepSummary,
     build_candidate_window_sweep_summary,
     candidate_window_sweep_summaries_json,
     standard_candidate_window_sizes,
+)
+from .policy_json import (
+    BackendPolicyBenchmarkSummary,
+    backend_policy_benchmark_summaries_json,
+    build_backend_policy_benchmark_summary,
+)
+from .proxy_eval_json import (
+    ProxyTaskEvaluationSummary,
+    build_proxy_task_evaluation_summary,
+    proxy_task_evaluation_summaries_json,
 )
 from .fixtures import (
     ExactSearchFixture,
@@ -17,7 +32,9 @@ from .filter_fixtures import (
 )
 from .json_report import (
     RealSliceBenchmarkSummary,
+    build_real_slice_benchmark_summary_from_measurement,
     build_real_slice_benchmark_summary,
+    real_slice_benchmark_summary_json,
     real_slice_benchmark_summaries_json,
 )
 from .storage_json_report import (
@@ -42,4 +59,9 @@ from .profile_shapes import (
 )
 from .proxy_tasks import default_proxy_tasks
 from .workload_profile import WorkloadProfile
+from .workload_json import (
+    WorkloadBenchmarkSummary,
+    build_workload_benchmark_summary,
+    workload_benchmark_summaries_json,
+)
 from .workload_registry import default_workload_profiles
