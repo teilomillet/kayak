@@ -5,6 +5,30 @@ from kayak.numeric import VectorScalar, zero_vector_scalar
 from .packed_index import PackedIndex
 
 
+comptime DEFAULT_CENTROID_POSTING_BLOCK_SIZE = 16
+
+
+struct CentroidPostingBlocks(Copyable):
+    var block_size: Int
+    var centroid_block_offsets: List[Int]
+    var block_max_weights: List[Int]
+    var total_block_count: Int
+
+    def __init__(
+        out self,
+        block_size: Int,
+        var centroid_block_offsets: List[Int],
+        var block_max_weights: List[Int],
+    ) raises:
+        if block_size <= 0:
+            raise Error("centroid posting block_size must be positive")
+
+        self.block_size = block_size
+        self.centroid_block_offsets = centroid_block_offsets^
+        self.block_max_weights = block_max_weights^
+        self.total_block_count = len(self.block_max_weights)
+
+
 struct CentroidPostingIndex(Copyable):
     var centroid_dims: List[Int]
     var centroid_vectors: List[List[VectorScalar]]
@@ -13,11 +37,15 @@ struct CentroidPostingIndex(Copyable):
     var posting_weights: List[Int]
     var centroid_document_counts: List[Int]
     var centroid_token_counts: List[Int]
+    var block_size: Int
+    var centroid_block_offsets: List[Int]
+    var block_max_weights: List[Int]
     var vector_dim: Int
     var document_count: Int
     var centroid_count: Int
     var total_posting_count: Int
     var total_centroid_token_count: Int
+    var total_block_count: Int
 
     def __init__(
         out self,
@@ -28,6 +56,9 @@ struct CentroidPostingIndex(Copyable):
         var posting_weights: List[Int],
         var centroid_document_counts: List[Int],
         var centroid_token_counts: List[Int],
+        block_size: Int,
+        var centroid_block_offsets: List[Int],
+        var block_max_weights: List[Int],
         vector_dim: Int,
         document_count: Int,
     ) raises:
@@ -46,6 +77,13 @@ struct CentroidPostingIndex(Copyable):
             centroid_document_counts,
             centroid_token_counts,
         )
+        require_valid_centroid_posting_blocks(
+            posting_offsets,
+            posting_weights,
+            block_size,
+            centroid_block_offsets,
+            block_max_weights,
+        )
 
         self.centroid_dims = centroid_dims^
         self.centroid_vectors = centroid_vectors^
@@ -54,11 +92,15 @@ struct CentroidPostingIndex(Copyable):
         self.posting_weights = posting_weights^
         self.centroid_document_counts = centroid_document_counts^
         self.centroid_token_counts = centroid_token_counts^
+        self.block_size = block_size
+        self.centroid_block_offsets = centroid_block_offsets^
+        self.block_max_weights = block_max_weights^
         self.vector_dim = vector_dim
         self.document_count = document_count
         self.centroid_count = len(self.centroid_dims)
         self.total_posting_count = len(self.posting_doc_indices)
         self.total_centroid_token_count = sum_ints(self.centroid_token_counts)
+        self.total_block_count = len(self.block_max_weights)
 
     def __init__(
         out self,
@@ -67,6 +109,41 @@ struct CentroidPostingIndex(Copyable):
         var posting_offsets: List[Int],
         var posting_doc_indices: List[Int],
         var posting_weights: List[Int],
+        var centroid_document_counts: List[Int],
+        var centroid_token_counts: List[Int],
+        vector_dim: Int,
+        document_count: Int,
+    ) raises:
+        var blocks = derive_centroid_posting_blocks(
+            posting_offsets,
+            posting_weights,
+            DEFAULT_CENTROID_POSTING_BLOCK_SIZE,
+        )
+        self = CentroidPostingIndex(
+            centroid_dims^,
+            centroid_vectors^,
+            posting_offsets^,
+            posting_doc_indices^,
+            posting_weights^,
+            centroid_document_counts^,
+            centroid_token_counts^,
+            blocks.block_size,
+            blocks.centroid_block_offsets.copy(),
+            blocks.block_max_weights.copy(),
+            vector_dim,
+            document_count,
+        )
+
+    def __init__(
+        out self,
+        var centroid_dims: List[Int],
+        var centroid_vectors: List[List[VectorScalar]],
+        var posting_offsets: List[Int],
+        var posting_doc_indices: List[Int],
+        var posting_weights: List[Int],
+        block_size: Int,
+        var centroid_block_offsets: List[Int],
+        var block_max_weights: List[Int],
         vector_dim: Int,
         document_count: Int,
     ) raises:
@@ -82,6 +159,43 @@ struct CentroidPostingIndex(Copyable):
             posting_weights^,
             centroid_document_counts^,
             centroid_token_counts^,
+            block_size,
+            centroid_block_offsets^,
+            block_max_weights^,
+            vector_dim,
+            document_count,
+        )
+
+    def __init__(
+        out self,
+        var centroid_dims: List[Int],
+        var centroid_vectors: List[List[VectorScalar]],
+        var posting_offsets: List[Int],
+        var posting_doc_indices: List[Int],
+        var posting_weights: List[Int],
+        vector_dim: Int,
+        document_count: Int,
+    ) raises:
+        var centroid_document_counts = derive_centroid_document_counts(posting_offsets)
+        var centroid_token_counts = derive_centroid_token_counts(
+            posting_offsets, posting_weights
+        )
+        var blocks = derive_centroid_posting_blocks(
+            posting_offsets,
+            posting_weights,
+            DEFAULT_CENTROID_POSTING_BLOCK_SIZE,
+        )
+        self = CentroidPostingIndex(
+            centroid_dims^,
+            centroid_vectors^,
+            posting_offsets^,
+            posting_doc_indices^,
+            posting_weights^,
+            centroid_document_counts^,
+            centroid_token_counts^,
+            blocks.block_size,
+            blocks.centroid_block_offsets.copy(),
+            blocks.block_max_weights.copy(),
             vector_dim,
             document_count,
         )
@@ -121,6 +235,43 @@ def derive_centroid_token_counts(
         counts.append(total)
 
     return counts^
+
+
+def derive_centroid_posting_blocks(
+    read posting_offsets: List[Int],
+    read posting_weights: List[Int],
+    block_size: Int,
+) raises -> CentroidPostingBlocks:
+    if block_size <= 0:
+        raise Error("centroid posting block_size must be positive")
+
+    var centroid_block_offsets = [0]
+    var block_max_weights = List[Int]()
+
+    for centroid_index in range(len(posting_offsets) - 1):
+        var block_start = posting_offsets[centroid_index]
+        var stop = posting_offsets[centroid_index + 1]
+
+        while block_start < stop:
+            var block_stop = block_start + block_size
+            if block_stop > stop:
+                block_stop = stop
+
+            var block_max_weight = posting_weights[block_start]
+            for posting_index in range(block_start + 1, block_stop):
+                if posting_weights[posting_index] > block_max_weight:
+                    block_max_weight = posting_weights[posting_index]
+
+            block_max_weights.append(block_max_weight)
+            block_start = block_stop
+
+        centroid_block_offsets.append(len(block_max_weights))
+
+    return CentroidPostingBlocks(
+        block_size,
+        centroid_block_offsets^,
+        block_max_weights^,
+    )
 
 
 def require_valid_centroid_posting_index(
@@ -224,6 +375,79 @@ def require_valid_centroid_posting_summaries(
         if centroid_token_counts[centroid_index] != derived_token_count:
             raise Error(
                 "centroid posting index centroid_token_counts must match posting weights"
+            )
+
+
+def require_valid_centroid_posting_blocks(
+    read posting_offsets: List[Int],
+    read posting_weights: List[Int],
+    block_size: Int,
+    read centroid_block_offsets: List[Int],
+    read block_max_weights: List[Int],
+) raises:
+    if block_size <= 0:
+        raise Error("centroid posting block_size must be positive")
+
+    var centroid_count = len(posting_offsets) - 1
+    if len(centroid_block_offsets) != centroid_count + 1:
+        raise Error(
+            "centroid posting index centroid_block_offsets must match centroid count + 1"
+        )
+
+    if centroid_block_offsets[0] != 0:
+        raise Error("centroid posting index centroid_block_offsets must start at 0")
+
+    for offset_index in range(1, len(centroid_block_offsets)):
+        if (
+            centroid_block_offsets[offset_index]
+            < centroid_block_offsets[offset_index - 1]
+        ):
+            raise Error(
+                "centroid posting index centroid_block_offsets must be monotonic"
+            )
+
+    if centroid_block_offsets[len(centroid_block_offsets) - 1] != len(block_max_weights):
+        raise Error(
+            "centroid posting index centroid_block_offsets must terminate at total block count"
+        )
+
+    for centroid_index in range(centroid_count):
+        var start = posting_offsets[centroid_index]
+        var stop = posting_offsets[centroid_index + 1]
+        var block_start = start
+        var block_index = centroid_block_offsets[centroid_index]
+        var derived_block_count = 0
+
+        while block_start < stop:
+            var block_stop = block_start + block_size
+            if block_stop > stop:
+                block_stop = stop
+
+            var derived_max_weight = posting_weights[block_start]
+            for posting_index in range(block_start + 1, block_stop):
+                if posting_weights[posting_index] > derived_max_weight:
+                    derived_max_weight = posting_weights[posting_index]
+
+            if block_index >= len(block_max_weights):
+                raise Error(
+                    "centroid posting index block_max_weights ended before postings coverage"
+                )
+
+            if block_max_weights[block_index] != derived_max_weight:
+                raise Error(
+                    "centroid posting index block_max_weights must match block posting maxima"
+                )
+
+            block_index += 1
+            derived_block_count += 1
+            block_start = block_stop
+
+        if (
+            centroid_block_offsets[centroid_index + 1]
+            - centroid_block_offsets[centroid_index]
+        ) != derived_block_count:
+            raise Error(
+                "centroid posting index centroid_block_offsets must match derived block count"
             )
 
 

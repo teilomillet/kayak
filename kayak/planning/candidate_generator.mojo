@@ -15,6 +15,7 @@ struct CandidateGenerator(Copyable):
             and kind != "centroid_heads"
             and kind != "centroid_postings_head"
             and kind != "centroid_postings_head_auto"
+            and kind != "centroid_postings_blockmax"
             and kind != "centroid_postings_imputed"
         ):
             raise Error("unknown candidate generator kind: " + kind)
@@ -44,6 +45,10 @@ def centroid_postings_head_candidate_generator() raises -> CandidateGenerator:
 
 def centroid_postings_head_auto_candidate_generator() raises -> CandidateGenerator:
     return CandidateGenerator("centroid_postings_head_auto")
+
+
+def centroid_postings_blockmax_candidate_generator() raises -> CandidateGenerator:
+    return CandidateGenerator("centroid_postings_blockmax")
 
 
 def centroid_postings_imputed_candidate_generator() raises -> CandidateGenerator:

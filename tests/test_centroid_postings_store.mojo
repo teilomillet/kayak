@@ -58,6 +58,8 @@ def write_legacy_centroid_postings_root(
         "posting_order_kind\t" + CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC + "\n", ""
     )
     legacy_manifest = legacy_manifest.replace("posting_cap\t0\n", "")
+    legacy_manifest = legacy_manifest.replace("block_size\t16\n", "")
+    legacy_manifest = legacy_manifest.replace("total_block_count\t2\n", "")
     (target_root / "manifest.tsv").write_text(legacy_manifest)
     copy_storage_file(source_root, target_root, "centroid_dims.tsv")
     copy_storage_file(source_root, target_root, "posting_offsets.tsv")
@@ -89,9 +91,18 @@ def test_centroid_postings_roundtrip_preserves_summary_arrays() raises:
     assert_equal(loaded.index.centroid_token_counts[0], 3)
     assert_equal(loaded.index.centroid_token_counts[1], 1)
     assert_equal(loaded.index.total_centroid_token_count, 4)
+    assert_equal(loaded.index.block_size, 16)
+    assert_equal(loaded.index.centroid_block_offsets[0], 0)
+    assert_equal(loaded.index.centroid_block_offsets[1], 1)
+    assert_equal(loaded.index.centroid_block_offsets[2], 2)
+    assert_equal(loaded.index.block_max_weights[0], 2)
+    assert_equal(loaded.index.block_max_weights[1], 1)
+    assert_equal(loaded.index.total_block_count, 2)
     assert_equal(
         loaded.artifact_byte_size, centroid_postings_storage_byte_size(root)
     )
+    assert_equal((root / "centroid_block_offsets.tsv").exists(), True)
+    assert_equal((root / "block_max_weights.tsv").exists(), True)
 
 
 def test_centroid_postings_loads_legacy_layout_without_summary_files() raises:
@@ -112,6 +123,8 @@ def test_centroid_postings_loads_legacy_layout_without_summary_files() raises:
     assert_equal(loaded.index.centroid_token_counts[0], 3)
     assert_equal(loaded.index.centroid_token_counts[1], 1)
     assert_equal(loaded.index.total_centroid_token_count, 4)
+    assert_equal(loaded.index.block_size, 16)
+    assert_equal(loaded.index.total_block_count, 2)
 
 
 def test_centroid_postings_rejects_partial_summary_layout() raises:
@@ -122,6 +135,33 @@ def test_centroid_postings_rejects_partial_summary_layout() raises:
     var stored = build_stored_centroid_posting_index(make_stored_index(), 0)
     save_stored_centroid_posting_index(source_root, stored)
     write_legacy_centroid_postings_root(source_root, root, True)
+
+    var raised = False
+    try:
+        _ = load_stored_centroid_posting_index(root)
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_centroid_postings_rejects_partial_block_layout() raises:
+    var source_root = unique_temp_root(
+        "/tmp/kayak-centroid-postings-store-partial-block-source"
+    )
+    var root = unique_temp_root("/tmp/kayak-centroid-postings-store-partial-block")
+    var stored = build_stored_centroid_posting_index(make_stored_index(), 0)
+    save_stored_centroid_posting_index(source_root, stored)
+    makedirs(root, exist_ok=True)
+    copy_storage_file(source_root, root, "manifest.tsv")
+    copy_storage_file(source_root, root, "centroid_dims.tsv")
+    copy_storage_file(source_root, root, "posting_offsets.tsv")
+    copy_storage_file(source_root, root, "posting_doc_indices.tsv")
+    copy_storage_file(source_root, root, "posting_weights.tsv")
+    copy_storage_file(source_root, root, "centroid_vectors.bin")
+    copy_storage_file(source_root, root, "centroid_document_counts.tsv")
+    copy_storage_file(source_root, root, "centroid_token_counts.tsv")
+    copy_storage_file(source_root, root, "centroid_block_offsets.tsv")
 
     var raised = False
     try:
@@ -153,6 +193,8 @@ def test_ensure_centroid_postings_rewrites_legacy_layout_with_summaries() raises
     )
     assert_equal((root / "centroid_document_counts.tsv").exists(), True)
     assert_equal((root / "centroid_token_counts.tsv").exists(), True)
+    assert_equal((root / "centroid_block_offsets.tsv").exists(), True)
+    assert_equal((root / "block_max_weights.tsv").exists(), True)
 
 
 def main() raises:

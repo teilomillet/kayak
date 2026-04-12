@@ -6,6 +6,7 @@ from .candidate_generator import (
     centroid_heads_candidate_generator,
     centroid_postings_candidate_generator,
     centroid_postings_head_auto_candidate_generator,
+    centroid_postings_blockmax_candidate_generator,
     centroid_postings_head_candidate_generator,
     centroid_postings_imputed_candidate_generator,
     document_proxy_candidate_generator,
@@ -107,6 +108,17 @@ def centroid_postings_head_auto_search_plan(
 ) raises -> SearchPlan:
     return SearchPlan(
         centroid_postings_head_auto_candidate_generator(),
+        CandidateBudget(final_k, candidate_k),
+        faithfulness_policy,
+        "none",
+    )
+
+
+def centroid_postings_blockmax_search_plan(
+    final_k: Int, candidate_k: Int, faithfulness_policy: FaithfulnessPolicy
+) raises -> SearchPlan:
+    return SearchPlan(
+        centroid_postings_blockmax_candidate_generator(),
         CandidateBudget(final_k, candidate_k),
         faithfulness_policy,
         "none",

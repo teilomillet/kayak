@@ -1,6 +1,7 @@
 from .builder import pack_documents
 from .centroid_postings import (
     CentroidPostingIndex,
+    DEFAULT_CENTROID_POSTING_BLOCK_SIZE,
     build_centroid_head_index,
     build_centroid_posting_index,
 )

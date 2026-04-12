@@ -2,7 +2,11 @@ from std.collections import List
 from std.os import makedirs
 from std.pathlib import Path
 
-from kayak.index import CentroidPostingIndex, build_centroid_posting_index
+from kayak.index import (
+    CentroidPostingIndex,
+    DEFAULT_CENTROID_POSTING_BLOCK_SIZE,
+    build_centroid_posting_index,
+)
 from kayak.numeric import STORAGE_FORMAT_VERSION, VECTOR_SCALAR_NAME
 
 from .binary_vector_codec import (
@@ -53,6 +57,14 @@ def centroid_token_counts_path(root: Path) -> Path:
     return root / "centroid_token_counts.tsv"
 
 
+def centroid_block_offsets_path(root: Path) -> Path:
+    return root / "centroid_block_offsets.tsv"
+
+
+def block_max_weights_path(root: Path) -> Path:
+    return root / "block_max_weights.tsv"
+
+
 def centroid_postings_index_exists(root: Path) -> Bool:
     return centroid_postings_manifest_path(root).exists()
 
@@ -75,6 +87,10 @@ def centroid_postings_storage_byte_size(root: Path) raises -> Int:
         total += file_size_bytes(centroid_document_counts_path(root))
     if centroid_token_counts_path(root).exists():
         total += file_size_bytes(centroid_token_counts_path(root))
+    if centroid_block_offsets_path(root).exists():
+        total += file_size_bytes(centroid_block_offsets_path(root))
+    if block_max_weights_path(root).exists():
+        total += file_size_bytes(block_max_weights_path(root))
     return total
 
 
@@ -140,6 +156,8 @@ def write_centroid_postings_manifest(
             ManifestEntry(
                 "total_posting_count", String(stored.index.total_posting_count)
             ),
+            ManifestEntry("block_size", String(stored.index.block_size)),
+            ManifestEntry("total_block_count", String(stored.index.total_block_count)),
             ManifestEntry("artifact_byte_size", String(artifact_byte_size)),
         ],
     )
@@ -181,6 +199,14 @@ def save_stored_centroid_posting_index_with_artifact_kind(
     write_int_lines(
         centroid_token_counts_path(root),
         stored.index.centroid_token_counts,
+    )
+    write_int_lines(
+        centroid_block_offsets_path(root),
+        stored.index.centroid_block_offsets,
+    )
+    write_int_lines(
+        block_max_weights_path(root),
+        stored.index.block_max_weights,
     )
     write_int_lines(root / "posting_offsets.tsv", stored.index.posting_offsets)
     write_int_lines(root / "posting_doc_indices.tsv", stored.index.posting_doc_indices)
@@ -246,6 +272,10 @@ def load_stored_centroid_posting_index_with_artifact_kind(
     var posting_cap = 0
     if posting_cap_text.byte_length() != 0:
         posting_cap = parse_int(posting_cap_text, "posting_cap")
+    var block_size_text = load_optional_manifest_value(manifest, "block_size")
+    var total_block_count_text = load_optional_manifest_value(
+        manifest, "total_block_count"
+    )
     var centroid_dims = read_int_lines(root / "centroid_dims.tsv", "centroid_dim")
     var posting_offsets = read_int_lines(root / "posting_offsets.tsv", "posting_offset")
     var posting_doc_indices = read_int_lines(
@@ -257,13 +287,79 @@ def load_stored_centroid_posting_index_with_artifact_kind(
     )
     var has_centroid_document_counts = centroid_document_counts_path(root).exists()
     var has_centroid_token_counts = centroid_token_counts_path(root).exists()
+    var has_centroid_block_offsets = centroid_block_offsets_path(root).exists()
+    var has_block_max_weights = block_max_weights_path(root).exists()
+    var has_block_manifest = (
+        block_size_text.byte_length() != 0
+        or total_block_count_text.byte_length() != 0
+    )
 
     if has_centroid_document_counts != has_centroid_token_counts:
         raise Error(
             "centroid posting index summary files must either both exist or both be absent"
         )
 
+    if has_centroid_block_offsets != has_block_max_weights:
+        raise Error(
+            "centroid posting index block files must either both exist or both be absent"
+        )
+
+    if has_block_manifest != has_centroid_block_offsets:
+        raise Error(
+            "centroid posting index block manifest values must match block sidecar presence"
+        )
+
     if has_centroid_document_counts:
+        if has_centroid_block_offsets:
+            var block_size = parse_int(block_size_text, "block_size")
+            var total_block_count = parse_int(
+                total_block_count_text, "total_block_count"
+            )
+            var centroid_block_offsets = read_int_lines(
+                centroid_block_offsets_path(root), "centroid_block_offset"
+            )
+            var block_max_weights = read_int_lines(
+                block_max_weights_path(root), "block_max_weight"
+            )
+            if len(block_max_weights) != total_block_count:
+                raise Error(
+                    "centroid posting index total_block_count must match block_max_weights length"
+                )
+
+            return StoredCentroidPostingIndex(
+                require_manifest_value(manifest, "dataset_id"),
+                require_manifest_value(manifest, "model_name"),
+                VECTOR_SCALAR_NAME,
+                posting_order_kind.copy(),
+                parse_int(
+                    require_manifest_value(manifest, "centroid_budget"),
+                    "centroid_budget",
+                ),
+                posting_cap,
+                parse_int(
+                    require_manifest_value(manifest, "artifact_byte_size"),
+                    "artifact_byte_size",
+                ),
+                CentroidPostingIndex(
+                    centroid_dims^,
+                    centroid_vectors^,
+                    posting_offsets^,
+                    posting_doc_indices^,
+                    posting_weights^,
+                    read_int_lines(
+                        centroid_document_counts_path(root), "centroid_document_count"
+                    ),
+                    read_int_lines(
+                        centroid_token_counts_path(root), "centroid_token_count"
+                    ),
+                    block_size,
+                    centroid_block_offsets^,
+                    block_max_weights^,
+                    vector_dim,
+                    document_count,
+                ),
+            )
+
         return StoredCentroidPostingIndex(
             require_manifest_value(manifest, "dataset_id"),
             require_manifest_value(manifest, "model_name"),
@@ -290,6 +386,47 @@ def load_stored_centroid_posting_index_with_artifact_kind(
                 read_int_lines(
                     centroid_token_counts_path(root), "centroid_token_count"
                 ),
+                vector_dim,
+                document_count,
+            ),
+        )
+
+    if has_centroid_block_offsets:
+        var block_size = parse_int(block_size_text, "block_size")
+        var total_block_count = parse_int(total_block_count_text, "total_block_count")
+        var centroid_block_offsets = read_int_lines(
+            centroid_block_offsets_path(root), "centroid_block_offset"
+        )
+        var block_max_weights = read_int_lines(
+            block_max_weights_path(root), "block_max_weight"
+        )
+        if len(block_max_weights) != total_block_count:
+            raise Error(
+                "centroid posting index total_block_count must match block_max_weights length"
+            )
+
+        return StoredCentroidPostingIndex(
+            require_manifest_value(manifest, "dataset_id"),
+            require_manifest_value(manifest, "model_name"),
+            VECTOR_SCALAR_NAME,
+            posting_order_kind,
+            parse_int(
+                require_manifest_value(manifest, "centroid_budget"), "centroid_budget"
+            ),
+            posting_cap,
+            parse_int(
+                require_manifest_value(manifest, "artifact_byte_size"),
+                "artifact_byte_size",
+            ),
+            CentroidPostingIndex(
+                centroid_dims^,
+                centroid_vectors^,
+                posting_offsets^,
+                posting_doc_indices^,
+                posting_weights^,
+                block_size,
+                centroid_block_offsets^,
+                block_max_weights^,
                 vector_dim,
                 document_count,
             ),
@@ -344,6 +481,9 @@ def ensure_stored_centroid_posting_index(
             and loaded.index.vector_dim == stored_packed_index.index.vector_dim
             and centroid_document_counts_path(root).exists()
             and centroid_token_counts_path(root).exists()
+            and centroid_block_offsets_path(root).exists()
+            and block_max_weights_path(root).exists()
+            and loaded.index.block_size == DEFAULT_CENTROID_POSTING_BLOCK_SIZE
         ):
             return CentroidPostingCacheEntry(loaded.copy(), True)
 
