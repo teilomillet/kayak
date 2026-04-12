@@ -112,6 +112,7 @@ Evidence:
 - [docs/traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md](traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md)
 - [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
 - [docs/traces/2026-04-12_synthetic_hard_recall_stage_aware.md](traces/2026-04-12_synthetic_hard_recall_stage_aware.md)
+- [docs/epistemic_status.md](epistemic_status.md)
 
 ## What Kayak Should Change
 
@@ -154,6 +155,10 @@ It does change how the next steps should be justified:
 ## What The Repo Still Has Not Proved
 
 The strongest claims implied by the talk are still open.
+
+For a stricter claim-by-claim verdict, see:
+
+- [docs/epistemic_status.md](epistemic_status.md)
 
 Not yet locally verified:
 - under-`200ms` single-core search at multi-billion-token scale

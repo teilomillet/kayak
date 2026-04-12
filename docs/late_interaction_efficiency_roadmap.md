@@ -19,6 +19,7 @@ The goal is to separate:
 - [TODO.md](../TODO.md)
 - [docs/late_interaction_2030.md](late_interaction_2030.md)
 - [docs/hard_recall_evaluation.md](hard_recall_evaluation.md)
+- [docs/epistemic_status.md](epistemic_status.md)
 - [docs/traces/2026-04-12_limit_browsecomp_public_slices.md](traces/2026-04-12_limit_browsecomp_public_slices.md)
 - user-provided Omar Khattab workshop transcript discussed in repo on
   `2026-04-12`
