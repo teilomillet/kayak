@@ -265,8 +265,8 @@ Minimum service API:
 
 Immediate TODOs:
 - [x] Write the public API contract before implementing transport details
-- [ ] Keep HTTP/JSON simple first
-- [ ] Expose internal stage/profiling data directly in debug mode
+- [x] Keep HTTP/JSON simple first
+- [x] Expose internal stage/profiling data directly in debug mode
 
 ## Priority 6: Compression And Layout Optimization
 
@@ -299,7 +299,7 @@ Decision:
 Immediate TODOs:
 - [x] Keep backend boundaries explicit in `runtime/`
 - [x] Design stage interfaces so GPU kernels can replace CPU kernels cleanly
-- [ ] Delay distributed sharding design until segment and tenancy contracts are settled
+- [x] Delay distributed sharding design until segment and tenancy contracts are settled
 
 ## Execution Plan
 

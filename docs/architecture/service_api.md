@@ -42,6 +42,9 @@ This is the sound order because:
   requests and responses, not the source of truth
 
 The canonical typed boundary lives in [`kayak/service/`](../../kayak/service).
+The repository now also includes a thin JSON projection layer in
+[`kayak/service/json.mojo`](../../kayak/service/json.mojo) so the initial
+HTTP/JSON adapter can stay simple and reuse the typed contracts directly.
 
 ## Scope
 
@@ -171,6 +174,9 @@ Current design choice:
 - ordinary search returns `SearchResponse`
 - debug search returns `DebugSearchResponse`
 - dedicated explain returns `ExplainResponse`
+- the JSON projection now maps `DebugSearchResponse` directly to a payload that
+  contains both `"search"` and `"debug"` objects, with the debug object reusing
+  the existing `CollectionSearchExplain` JSON projection
 
 Why this is sound:
 - it reuses the existing `CollectionSearchExplain` object directly
