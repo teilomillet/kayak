@@ -3,6 +3,12 @@ from .fixtures import (
     make_exact_search_fixture,
     make_exact_search_fixture_for_profile,
 )
+from .filter_fixtures import (
+    FilterSelectivityFixture,
+    default_filter_selectivity_fixtures,
+    high_selectivity_filter_fixture,
+    low_selectivity_filter_fixture,
+)
 from .json_report import (
     RealSliceBenchmarkSummary,
     build_real_slice_benchmark_summary,

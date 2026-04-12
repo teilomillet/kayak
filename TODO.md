@@ -214,9 +214,9 @@ Required properties:
 
 Immediate TODOs:
 - [x] Define tenant and namespace boundaries in storage manifests
-- [ ] Define a filter expression model for search requests
-- [ ] Add per-tenant and cross-tenant segment layout design note
-- [ ] Add benchmark fixtures for low-selectivity and high-selectivity filters
+- [x] Define a filter expression model for search requests
+- [x] Add per-tenant and cross-tenant segment layout design note
+- [x] Add benchmark fixtures for low-selectivity and high-selectivity filters
 
 ## Priority 4: Observability, Profiling, And Explainability
 

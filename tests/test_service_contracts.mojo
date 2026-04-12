@@ -24,6 +24,7 @@ from kayak import (
     VECTOR_SCALAR_NAME,
     default_exact_search_request,
 )
+from kayak.filters import match_all_filter
 from kayak.planning import CandidateSet, exact_full_scan_search_plan
 from kayak.service import (
     CreateSnapshotRequest,
@@ -113,6 +114,7 @@ def test_default_search_request_builds_exact_plan() raises:
     )
 
     assert_equal(request.snapshot_id.value, "snapshot-0001")
+    assert_equal(request.filter_expression.is_match_all(), True)
     assert_equal(request.plan.candidate_generator.kind, "exact_full_scan")
     assert_equal(request.plan.candidate_budget.final_k, 3)
     assert_equal(request.debug_mode, True)
@@ -125,6 +127,7 @@ def test_search_and_debug_responses_match_explain_scope() raises:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        match_all_filter(),
         exact_full_scan_search_plan(2, 2),
         True,
     )

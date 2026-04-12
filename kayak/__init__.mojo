@@ -4,6 +4,15 @@ from .contracts import (
     FlatQueryDim128,
     build_flat_query_dim128,
 )
+from .filters import (
+    FilterClause,
+    FilterExpression,
+    FilterField,
+    FilterTerm,
+    and_filter,
+    match_all_filter,
+    one_of_filter,
+)
 from .eval import (
     JudgedQuery,
     JudgedTask,

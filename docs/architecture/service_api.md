@@ -88,6 +88,11 @@ Search and explain:
 - [`ExplainRequest`](../../kayak/service/search_contracts.mojo)
 - [`ExplainResponse`](../../kayak/service/search_contracts.mojo)
 
+Filter grammar:
+- [`FilterExpression`](../../kayak/filters/expression.mojo)
+- [`FilterClause`](../../kayak/filters/clause.mojo)
+- [`FilterTerm`](../../kayak/filters/term.mojo)
+
 Health and metrics:
 - [`ServiceHealthStatus`](../../kayak/service/service_status.mojo)
 - [`ServiceMetricsSnapshot`](../../kayak/service/service_status.mojo)
@@ -151,6 +156,8 @@ Reason:
 
 Therefore:
 - `SearchRequest` requires `snapshot_id`
+- `SearchRequest` now also carries a typed `FilterExpression`, defaulting to
+  `match_all`
 - `SearchResponse` echoes that same `snapshot_id`
 - `DebugSearchResponse` and `ExplainResponse` attach plan and stage details to
   that exact snapshot
@@ -189,8 +196,8 @@ Inference:
 
 These remain intentionally undecided:
 - auth and per-tenant credentials
-- filter-expression request grammar
 - metadata encoding
+- exact filter-evaluation storage layout
 - write-ahead log or ingest-buffer protocol
 - snapshot archive format
 - wire-level representation for vectors
@@ -200,13 +207,13 @@ These remain intentionally undecided:
 
 The next service-adjacent work should be:
 
-1. define the filter expression model
-2. add a minimal HTTP adapter that translates JSON bodies into
+1. add a minimal HTTP adapter that translates JSON bodies into
    `kayak/service/` typed contracts
-3. route debug mode directly to `CollectionSearchExplain`
-4. reuse collection storage reports and snapshot-bundle export/import in the
+2. route debug mode directly to `CollectionSearchExplain`
+3. reuse collection storage reports and snapshot-bundle export/import in the
    service layer
-5. add an auth and tenant-isolation story once the core request grammar settles
+4. add an auth and tenant-isolation story once the core request grammar settles
+5. wire filter execution into candidate generation and exact-stage pruning
 
 That sequence preserves the current engine contracts and keeps the transport
 thin.

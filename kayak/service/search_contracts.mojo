@@ -5,6 +5,7 @@ from std.collections import List
 from kayak.collections import CollectionId, NamespaceId, SnapshotId, TenantId
 from kayak.collections.validation import require_positive_int
 from kayak.contracts import EncodedQuery
+from kayak.filters import FilterExpression, match_all_filter
 from kayak.planning import (
     CollectionHit,
     CollectionSearchExplain,
@@ -19,6 +20,7 @@ struct SearchRequest(Copyable):
     var namespace_id: NamespaceId
     var snapshot_id: SnapshotId
     var query: EncodedQuery
+    var filter_expression: FilterExpression
     var plan: SearchPlan
     var debug_mode: Bool
 
@@ -29,6 +31,7 @@ struct SearchRequest(Copyable):
         namespace_id: NamespaceId,
         snapshot_id: SnapshotId,
         query: EncodedQuery,
+        filter_expression: FilterExpression,
         plan: SearchPlan,
         debug_mode: Bool,
     ) raises:
@@ -38,6 +41,7 @@ struct SearchRequest(Copyable):
         self.namespace_id = namespace_id.copy()
         self.snapshot_id = snapshot_id.copy()
         self.query = query.copy()
+        self.filter_expression = filter_expression.copy()
         self.plan = plan.copy()
         self.debug_mode = debug_mode
 
@@ -57,6 +61,7 @@ def default_exact_search_request(
         namespace_id,
         snapshot_id,
         query,
+        match_all_filter(),
         exact_full_scan_search_plan(final_k, final_k),
         debug_mode,
     )
