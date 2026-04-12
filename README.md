@@ -34,6 +34,9 @@ The Phase A storage boundary for hosted collections is documented in
 [docs/architecture/segment_storage.md](docs/architecture/segment_storage.md).
 That boundary now includes persisted collection, segment, snapshot, and
 document-text-corpus manifest codecs under `kayak/collections/`.
+It also includes explicit snapshot resolution and collection storage reporting,
+both keyed by an explicit snapshot id rather than a hidden "current snapshot"
+convention.
 
 ## Why This Shape
 

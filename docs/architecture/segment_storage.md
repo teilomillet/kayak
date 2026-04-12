@@ -241,3 +241,13 @@ After this contract step, the next implementation work should be:
 
 That sequence preserves the current repo strengths while moving toward a hosted
 late-interaction engine instead of a benchmark-only scaffold.
+
+## Current Resolver Boundary
+
+The current implementation resolves a collection snapshot only when the caller
+provides an explicit `SnapshotId`.
+
+This is deliberate.
+`CollectionManifest` does not yet record a canonical "active snapshot" pointer,
+so silently guessing the search-visible snapshot from the collection root would
+not be epistemically sound.

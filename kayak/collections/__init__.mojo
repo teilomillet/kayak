@@ -6,6 +6,13 @@ from .collection_store import (
 )
 from .compaction import CompactionPlan
 from .ids import CollectionId, NamespaceId, SegmentId, SnapshotId, TenantId
+from .report import (
+    CollectionStorageReport,
+    build_collection_storage_report,
+    load_collection_storage_report,
+)
+from .resolved_snapshot import LoadedSealedSegment, ResolvedCollectionSnapshot
+from .resolver import load_resolved_collection_snapshot
 from .segment import SealedSegmentManifest, sealed_segment_has_text_corpus
 from .segment_store import (
     load_sealed_segment_manifest,

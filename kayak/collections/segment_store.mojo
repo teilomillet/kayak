@@ -11,7 +11,7 @@ from .artifact_manifest import (
     write_collection_artifact_manifest,
 )
 from .ids import CollectionId, NamespaceId, SegmentId, TenantId
-from .paths import segment_manifest_path
+from .paths import require_relative_artifact_root, segment_manifest_path
 from .segment import SealedSegmentManifest
 from .stats_manifest import (
     load_segment_stats_from_manifest,
@@ -41,6 +41,14 @@ def save_sealed_segment_manifest(
     root: Path, read manifest: SealedSegmentManifest
 ) raises:
     makedirs(root, exist_ok=True)
+    var packed_index_root = require_relative_artifact_root(
+        manifest.packed_index_root, "packed_index_root"
+    )
+    var text_corpus_root = String()
+    if manifest.text_corpus_root.byte_length() != 0:
+        text_corpus_root = require_relative_artifact_root(
+            manifest.text_corpus_root, "text_corpus_root"
+        )
 
     var entries = List[ManifestEntry]()
     entries.append(ManifestEntry("segment_id", manifest.segment_id.value))
@@ -53,11 +61,11 @@ def save_sealed_segment_manifest(
         ManifestEntry("vector_scalar_name", manifest.vector_scalar_name)
     )
     entries.append(ManifestEntry("vector_dim", String(manifest.vector_dim)))
-    entries.append(ManifestEntry("packed_index_root", manifest.packed_index_root))
+    entries.append(ManifestEntry("packed_index_root", packed_index_root))
     entries.append(
         ManifestEntry(
             "text_corpus_root",
-            encode_optional_text_corpus_root(manifest.text_corpus_root),
+            encode_optional_text_corpus_root(text_corpus_root),
         )
     )
 
