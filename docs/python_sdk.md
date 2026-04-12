@@ -46,6 +46,12 @@ What is verified:
   `available_backends()` and `backend_info(...)`
 - candidate-window rescoring can stay explicit through `LateIndex.select(...)`
   plus `maxsim(...)` instead of a hidden rerank primitive
+- the public API now exposes explicit local stage-aware primitives through
+  `CandidateGenerator`, `SearchPlan`, `generate_candidates(...)`, and
+  `search_with_plan(...)`
+- the first public stage-1 generator set is intentionally narrow:
+  - `exact_full_scan`
+  - `document_proxy`
 
 What is not claimed:
 - a published package whose `mojo_exact_cpu` backend works without a local
@@ -54,6 +60,7 @@ What is not claimed:
 - plain `pixi add kayak` through conda channels
 - a runtime without a local Mojo toolchain for `mojo_exact_cpu`
 - a clean open-source split between the Python SDK and the proprietary engine
+- public Python support for every engine-native candidate generator
 
 Those boundaries are based on verified commands run in this repo, not on an
 intended future release shape.
@@ -161,17 +168,27 @@ Application code should import only from `kayak`.
 
 Supported exports today:
 - `BackendInfo`
+- `CandidateGenerator`
+- `CandidateStageResult`
 - `LateQuery`
 - `LateQueryBatch`
 - `LateDocuments`
 - `LateIndex`
 - `LateScores`
 - `SearchHit`
+- `SearchPlan`
+- `SearchPlanResult`
+- `SearchStageProfile`
 - `available_backends`
 - `backend_info`
+- `document_proxy_candidate_generator`
+- `document_proxy_search_plan`
 - `query`
 - `query_batch`
 - `documents`
+- `exact_full_scan_candidate_generator`
+- `exact_full_scan_search_plan`
+- `generate_candidates`
 - `packed_index`
 - `hybrid_flat_dim128_index`
 - `flat_query_dim128`
@@ -179,6 +196,7 @@ Supported exports today:
 - `maxsim_batch`
 - `search`
 - `search_batch`
+- `search_with_plan`
 - `NUMPY_REFERENCE_BACKEND`
 - `MOJO_EXACT_CPU_BACKEND`
 
@@ -240,6 +258,62 @@ Runnable example:
 - [python/examples/quickstart.py](../python/examples/quickstart.py)
 - [python/examples/query_batch.py](../python/examples/query_batch.py)
 - [python/examples/backend_info.py](../python/examples/backend_info.py)
+
+## Stage-Aware Search
+
+The public Python SDK now exposes a narrow local search-plan layer.
+
+Reason:
+- candidate generation is a real late-interaction concern
+- keeping it explicit preserves vector counts and stage boundaries
+- starting with one light non-exact generator avoids pretending the entire
+  engine-native family is already stable as public SDK surface
+
+The supported public stage-1 generators today are:
+- `exact_full_scan`
+- `document_proxy`
+
+Example:
+
+```python
+import numpy as np
+import kayak
+
+def dim128(index: int) -> np.ndarray:
+    vector = np.zeros(128, dtype=np.float32)
+    vector[index] = 1.0
+    return vector
+
+query = kayak.query(np.stack([dim128(0), dim128(1)]))
+index = kayak.documents(
+    ["doc-b", "doc-a", "doc-c"],
+    [
+        np.stack([dim128(0), dim128(0)]),
+        np.stack([dim128(0), dim128(1)]),
+        np.stack([dim128(1), dim128(1)]),
+    ],
+).pack()
+
+plan = kayak.document_proxy_search_plan(final_k=1, candidate_k=2)
+result = kayak.search_with_plan(query, index, plan)
+```
+
+The result keeps the stages inspectable:
+- `result.candidate_stage.hits`
+- `result.candidate_stage.profile`
+- `result.candidate_index`
+- `result.exact_scores`
+- `result.hits`
+- `result.exact_stage`
+
+The stage profiles keep query and document vector counts explicit:
+- `candidate_stage.profile.query_vector_count`
+- `candidate_stage.profile.document_vector_count`
+- `exact_stage.query_vector_count`
+- `exact_stage.document_vector_count`
+
+Runnable example:
+- [python/examples/search_plan.py](../python/examples/search_plan.py)
 
 Mojo exact CPU quickstart:
 

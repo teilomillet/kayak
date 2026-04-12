@@ -197,6 +197,18 @@ class LateIndex:
 
         return maxsim_scores(query, self, backend=backend)
 
+    def generate_candidates(
+        self,
+        query: "LateQuery",
+        generator: "CandidateGenerator",
+        *,
+        k: int,
+        backend: str = NUMPY_REFERENCE_BACKEND,
+    ) -> "CandidateStageResult":
+        from .candidate_stage import generate_candidates
+
+        return generate_candidates(query, self, generator, k=k, backend=backend)
+
     def search(
         self,
         query: "LateQuery",
@@ -205,3 +217,14 @@ class LateIndex:
         backend: str = NUMPY_REFERENCE_BACKEND,
     ) -> tuple["SearchHit", ...]:
         return self.maxsim(query, backend=backend).topk(k)
+
+    def search_with_plan(
+        self,
+        query: "LateQuery",
+        *,
+        plan: "SearchPlan",
+        backend: str = NUMPY_REFERENCE_BACKEND,
+    ) -> "SearchPlanResult":
+        from .planned_search import search_with_plan
+
+        return search_with_plan(query, self, plan, backend=backend)

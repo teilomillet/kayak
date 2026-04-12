@@ -40,6 +40,7 @@ In practical terms, that means `kayak` should be the package people use when
 they want to:
 - build late-interaction queries and document sets
 - pack indexes
+- build explicit local candidate generators and search plans
 - run exact MaxSim scoring and search
 - compare layouts and backends
 - write retrieval code in Python without needing to understand the full engine
@@ -130,6 +131,7 @@ This is the open, developer-facing SDK.
 It should own:
 - explicit late-interaction objects
 - local exact scoring and search
+- explicit local candidate generation and search plans
 - layout conversion
 - NumPy and PyTorch input ergonomics
 - optional Mojo-backed acceleration

@@ -1,0 +1,27 @@
+"""Counts that make Python search-stage behavior inspectable."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, slots=True)
+class SearchStageProfile:
+    stage_name: str
+    input_hit_count: int
+    output_hit_count: int
+    query_vector_count: int
+    document_count: int
+    document_vector_count: int
+
+    def __post_init__(self) -> None:
+        if self.input_hit_count < 0:
+            raise ValueError("stage input_hit_count must be non-negative")
+        if self.output_hit_count < 0:
+            raise ValueError("stage output_hit_count must be non-negative")
+        if self.query_vector_count < 0:
+            raise ValueError("stage query_vector_count must be non-negative")
+        if self.document_count < 0:
+            raise ValueError("stage document_count must be non-negative")
+        if self.document_vector_count < 0:
+            raise ValueError("stage document_vector_count must be non-negative")

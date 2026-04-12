@@ -18,6 +18,7 @@ As of `2026-04-12`, the first SDK pass of this roadmap is complete:
 - Phase 2 ergonomics additions are implemented and tested
 - Phase 3 SDK-versus-engine boundary docs are in place
 - Phase 4 has an initial measured fast path for batched Mojo scoring
+- Phase 5 exposes a first public stage-aware primitive layer for local search
 
 Future work can still deepen the fast path, but the current roadmap items now
 have verified evidence instead of only intent.
@@ -194,6 +195,44 @@ Verified evidence:
   - `pixi run bench_python_batch_maxsim_shared`
 - recorded trace:
   [docs/traces/2026-04-12_python_sdk_batch_fast_path.md](traces/2026-04-12_python_sdk_batch_fast_path.md)
+
+## Phase 5: Public Stage-Aware Primitives
+
+Status:
+- completed on `2026-04-13` for the first local Python pass
+
+Goal:
+- expose explicit candidate generation and search plans publicly in Python
+  without collapsing them into hidden rerank behavior
+
+Scope:
+- `CandidateGenerator`
+- `SearchPlan`
+- `SearchStageProfile`
+- `generate_candidates(...)`
+- `search_with_plan(...)`
+- first public stage-1 generators:
+  - `exact_full_scan`
+  - `document_proxy`
+
+Reason:
+- the engine already had explicit stage-aware contracts
+- the Python SDK was still exact-only at the public surface
+- `document_proxy` is the lightest real non-exact stage-1 primitive already
+  present in the repo, so it is the least speculative first public lift
+
+Exit criteria:
+- the public API exposes an explicit search-plan layer
+- tests verify that `document_proxy` candidate generation is distinct from the
+  exact stage
+- tests verify that exact reranking over the candidate window is explicit and
+  stable
+- docs explain that richer native generators remain engine-side for now
+
+Verified evidence:
+- [python/tests/test_search_plan_api.py](../python/tests/test_search_plan_api.py)
+- [python/examples/search_plan.py](../python/examples/search_plan.py)
+- [docs/python_sdk.md](python_sdk.md)
 
 ## Deferred Until The Service Boundary Is Ready
 

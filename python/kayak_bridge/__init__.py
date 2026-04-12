@@ -11,10 +11,17 @@ from .late_index import LateIndex
 from .late_query_batch import LateQueryBatch
 from .late_ops import (
     BackendInfo,
+    CandidateGenerator,
+    CandidateStageResult,
     available_backends,
     backend_info,
+    document_proxy_candidate_generator,
+    document_proxy_search_plan,
     documents,
+    exact_full_scan_candidate_generator,
+    exact_full_scan_search_plan,
     flat_query_dim128,
+    generate_candidates,
     hybrid_flat_dim128_index,
     maxsim,
     maxsim_batch,
@@ -25,12 +32,18 @@ from .late_ops import (
     query_batch,
     search,
     search_batch,
+    SearchPlan,
+    SearchPlanResult,
+    SearchStageProfile,
+    search_with_plan,
 )
 from .late_query import LateQuery
 from .late_scores import LateScores, SearchHit
 
 __all__ = [
     "BackendInfo",
+    "CandidateGenerator",
+    "CandidateStageResult",
     "LateDocuments",
     "LateIndex",
     "LateQuery",
@@ -41,8 +54,13 @@ __all__ = [
     "NUMPY_REFERENCE_BACKEND",
     "available_backends",
     "backend_info",
+    "document_proxy_candidate_generator",
+    "document_proxy_search_plan",
     "documents",
+    "exact_full_scan_candidate_generator",
+    "exact_full_scan_search_plan",
     "flat_query_dim128",
+    "generate_candidates",
     "hybrid_flat_dim128_index",
     "maxsim",
     "maxsim_batch",
@@ -51,4 +69,8 @@ __all__ = [
     "query_batch",
     "search",
     "search_batch",
+    "SearchPlan",
+    "SearchPlanResult",
+    "SearchStageProfile",
+    "search_with_plan",
 ]

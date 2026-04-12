@@ -10,18 +10,28 @@ class PublicApiContractTests(unittest.TestCase):
     def test_public_api_exports_match_supported_contract(self) -> None:
         expected = {
             "BackendInfo",
+            "CandidateGenerator",
+            "CandidateStageResult",
             "LateDocuments",
             "LateIndex",
             "LateQuery",
             "LateQueryBatch",
             "LateScores",
             "SearchHit",
+            "SearchPlan",
+            "SearchPlanResult",
+            "SearchStageProfile",
             "MOJO_EXACT_CPU_BACKEND",
             "NUMPY_REFERENCE_BACKEND",
             "available_backends",
             "backend_info",
+            "document_proxy_candidate_generator",
+            "document_proxy_search_plan",
             "documents",
+            "exact_full_scan_candidate_generator",
+            "exact_full_scan_search_plan",
             "flat_query_dim128",
+            "generate_candidates",
             "hybrid_flat_dim128_index",
             "maxsim",
             "maxsim_batch",
@@ -30,6 +40,7 @@ class PublicApiContractTests(unittest.TestCase):
             "query_batch",
             "search",
             "search_batch",
+            "search_with_plan",
         }
 
         self.assertEqual(set(kayak.PUBLIC_API), expected)

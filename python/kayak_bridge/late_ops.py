@@ -1,8 +1,14 @@
-"""Exposes the Python-facing late-interaction constructors and exact ops."""
+"""Exposes the Python-facing late-interaction constructors and local ops."""
 
 from __future__ import annotations
 
 from .backend_info import BackendInfo, available_backends, backend_info
+from .candidate_generator import (
+    CandidateGenerator,
+    document_proxy_candidate_generator,
+    exact_full_scan_candidate_generator,
+)
+from .candidate_stage import CandidateStageResult
 from .dtypes import FLAT_DIM128_VECTOR_DIM
 from .late_query_batch import LateQueryBatch
 from .late_documents import LateDocuments
@@ -12,6 +18,13 @@ from .late_scores import LateScores, SearchHit
 from .batch_dispatch import maxsim_scores_batch
 from .layouts import MOJO_EXACT_CPU_BACKEND, NUMPY_REFERENCE_BACKEND
 from .backend_dispatch import maxsim_scores
+from .planned_search import SearchPlanResult
+from .search_plan import (
+    SearchPlan,
+    document_proxy_search_plan,
+    exact_full_scan_search_plan,
+)
+from .search_stage_profile import SearchStageProfile
 
 
 def query(token_vectors: object) -> LateQuery:
@@ -82,4 +95,34 @@ def search_batch(
     return tuple(
         scores.topk(k)
         for scores in maxsim_batch(late_query_batch, late_index, backend=backend)
+    )
+
+
+def generate_candidates(
+    late_query: LateQuery,
+    late_index: LateIndex,
+    generator: CandidateGenerator,
+    *,
+    k: int,
+    backend: str = NUMPY_REFERENCE_BACKEND,
+) -> CandidateStageResult:
+    return late_index.generate_candidates(
+        late_query,
+        generator,
+        k=k,
+        backend=backend,
+    )
+
+
+def search_with_plan(
+    late_query: LateQuery,
+    late_index: LateIndex,
+    plan: SearchPlan,
+    *,
+    backend: str = NUMPY_REFERENCE_BACKEND,
+) -> SearchPlanResult:
+    return late_index.search_with_plan(
+        late_query,
+        plan=plan,
+        backend=backend,
     )

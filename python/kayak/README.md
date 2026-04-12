@@ -14,6 +14,8 @@ It gives you explicit objects for:
 - query batches
 - documents
 - packed indexes
+- candidate generators
+- search plans
 - MaxSim scores
 - top-k search hits
 
@@ -190,6 +192,27 @@ candidate_scores = kayak.maxsim(query, candidate_index)
 That is still late interaction as a primitive: explicit selection plus MaxSim,
 not a hidden rerank mode.
 
+Stage-aware search plans are explicit too:
+
+```python
+plan = kayak.document_proxy_search_plan(final_k=1, candidate_k=2)
+result = kayak.search_with_plan(query, index, plan)
+
+print(result.candidate_stage.hits)
+print(result.hits)
+print(result.candidate_stage.profile.document_vector_count)
+print(result.exact_stage.document_vector_count)
+```
+
+Current public stage-1 generators:
+- `exact_full_scan`
+- `document_proxy`
+
+That is an intentionally narrow first pass.
+It gives Python users a real candidate-generation primitive today without
+pretending the full engine-native generator family is already stable as public
+SDK surface.
+
 ## Layouts
 
 Kayak keeps layout changes explicit.
@@ -265,17 +288,27 @@ Application code should import from `kayak`.
 
 Main exports:
 - `BackendInfo`
+- `CandidateGenerator`
+- `CandidateStageResult`
 - `LateQuery`
 - `LateQueryBatch`
 - `LateDocuments`
 - `LateIndex`
 - `LateScores`
 - `SearchHit`
+- `SearchPlan`
+- `SearchPlanResult`
+- `SearchStageProfile`
 - `available_backends`
 - `backend_info`
+- `document_proxy_candidate_generator`
+- `document_proxy_search_plan`
 - `query`
 - `query_batch`
 - `documents`
+- `exact_full_scan_candidate_generator`
+- `exact_full_scan_search_plan`
+- `generate_candidates`
 - `packed_index`
 - `hybrid_flat_dim128_index`
 - `flat_query_dim128`
@@ -283,6 +316,7 @@ Main exports:
 - `maxsim_batch`
 - `search`
 - `search_batch`
+- `search_with_plan`
 
 ## Mental Model
 

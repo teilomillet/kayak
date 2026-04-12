@@ -1,8 +1,9 @@
 """Public Python SDK for Kayak late-interaction programming.
 
 Import from ``kayak`` when writing application or research code in Python.
-This package owns the stable late-interaction object model, exact operations,
-and explicit backend selection for the SDK surface.
+This package owns the stable late-interaction object model, exact and
+stage-aware local operations, and explicit backend selection for the SDK
+surface.
 
 It is not the hosted engine surface for collections, snapshots, or service
 operations. The sibling ``kayak_bridge`` package remains an internal
@@ -12,6 +13,8 @@ surface.
 
 from kayak_bridge import (
     BackendInfo,
+    CandidateGenerator,
+    CandidateStageResult,
     LateDocuments,
     LateIndex,
     LateQuery,
@@ -20,10 +23,18 @@ from kayak_bridge import (
     MOJO_EXACT_CPU_BACKEND,
     NUMPY_REFERENCE_BACKEND,
     SearchHit,
+    SearchPlan,
+    SearchPlanResult,
+    SearchStageProfile,
     available_backends,
     backend_info,
+    document_proxy_candidate_generator,
+    document_proxy_search_plan,
     documents,
+    exact_full_scan_candidate_generator,
+    exact_full_scan_search_plan,
     flat_query_dim128,
+    generate_candidates,
     hybrid_flat_dim128_index,
     maxsim,
     maxsim_batch,
@@ -32,22 +43,33 @@ from kayak_bridge import (
     query_batch,
     search,
     search_batch,
+    search_with_plan,
 )
 
 PUBLIC_API = (
     "BackendInfo",
+    "CandidateGenerator",
+    "CandidateStageResult",
     "LateDocuments",
     "LateIndex",
     "LateQuery",
     "LateQueryBatch",
     "LateScores",
     "SearchHit",
+    "SearchPlan",
+    "SearchPlanResult",
+    "SearchStageProfile",
     "MOJO_EXACT_CPU_BACKEND",
     "NUMPY_REFERENCE_BACKEND",
     "available_backends",
     "backend_info",
+    "document_proxy_candidate_generator",
+    "document_proxy_search_plan",
     "documents",
+    "exact_full_scan_candidate_generator",
+    "exact_full_scan_search_plan",
     "flat_query_dim128",
+    "generate_candidates",
     "hybrid_flat_dim128_index",
     "maxsim",
     "maxsim_batch",
@@ -56,6 +78,7 @@ PUBLIC_API = (
     "query_batch",
     "search",
     "search_batch",
+    "search_with_plan",
 )
 
 __all__ = [
