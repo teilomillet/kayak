@@ -87,27 +87,25 @@ Inference:
 
 ## Sound Next Native Step
 
-The next heavier engine step should now build on the flatter WARP-inspired
-layout, not on another heuristic sidecar layered over the older posting scan.
+The next heavier step should first generalize the **stage-1 engine boundary**,
+not prematurely collapse WARP and GEM into one candidate-generator family.
 
-The best next candidate is:
-- a WARP or GEM-style native multi-vector engine path built on top of:
-  - the verified stage boundary
-  - the sealed sidecar benchmarks
-  - the now-measured flat centroid execution layout
-  - the now-measured flat imputed execution layout
+Why this is now the sound next step:
+- WARP and GEM are both valid next directions
+- they do not share the same storage or traversal geometry
+- the current repo still hardcodes stage-1 families into segment manifests,
+  loaded snapshots, and one monolithic execution branch
 
-Why this is the sound next step:
-- we already have:
-  - one light proxy baseline
-  - one more native centroid/posting baseline
-  - one tighter semantics-preserving native follow-on
-  - one heavier WARP-inspired follow-on with the same public quality and
-    slightly better average timing
-  - exact stage-2 reranking
-  - oracle-recall and vector-budget traces
-- the remaining uncertainty is now about engine-native layout and pruning
-  quality, not about whether `kayak` can support multiple stage-1 families
+Therefore the next implementation step should be:
+- keep the current regression baselines
+  - `document_proxy`
+  - `centroid_postings`
+  - `centroid_postings_imputed`
+  - `centroid_postings_imputed_flat`
+- introduce a shared stage-1 infrastructure that can host:
+  - a WARP-family centroid/residual engine branch
+  - a GEM-family graph engine branch
+- only then compare the two on common traces
 
 ## What We Should Not Do
 
@@ -122,12 +120,12 @@ That would risk:
 ## Immediate Follow-On
 
 The next implementation milestone should be:
-- keep `document_proxy` and `centroid_postings` as regression baselines
-- keep `centroid_postings_imputed` as the heavier-layout regression baseline
-- build the next tighter WARP/GEM-style engine step on
-  `centroid_postings_imputed_flat`
-- judge it on the same candidate-window, vector-budget, and storage traces
-- only promote it if it improves the current Pareto frontier on those artifacts
+- keep `document_proxy` and centroid-family generators as regression baselines
+- refactor manifests and stage-1 execution around engine families
+- add a GEM-family scaffold without claiming finished graph retrieval
+- keep WARP-family follow-on work anchored on the current flat centroid path
+- judge future WARP and GEM implementations on the same candidate-window,
+  vector-budget, storage, and latency traces
 
 ## Primitive Layer
 
@@ -149,4 +147,4 @@ What that trace justifies:
 Inference:
 
 - the next CPU-native step should target tighter imputed selection traversal
-  and layout, then only move into heavier WARP/GEM-style engine work
+  and layout, then only move into heavier WARP-family or GEM-family engine work
