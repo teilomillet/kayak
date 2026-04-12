@@ -21,8 +21,11 @@ Verified from repo evidence:
 - `BrowseComp-Plus` evidence and gold slices remain materially harder.
 - the current repo can measure stage-1 candidate recall against an exact
   full-scan reference through `CollectionSearchExplain`.
+- the repo now also has one scalable synthetic conjunction-style hard-recall
+  family with explicit vector-count control and exact-reference candidate
+  recall reporting.
 
-## Selected Hard-Recall Slices
+## Selected Hard-Recall Surfaces
 
 The current hard-recall public set is:
 - `BrowseComp-Plus` evidence slice
@@ -33,6 +36,20 @@ Reason:
 - both slices are harder than the current `LIMIT-small` public slice
 - both slices let Kayak test stage-1 recall pressure without inventing a new
   benchmark distribution first
+
+The current synthetic hard-recall family is:
+- `synthetic_hard_recall`
+  - profile `slots6_values3_docs1530`
+  - profile `slots6_values4_docs8288`
+
+Reason:
+- it scales beyond the current tiny public slices
+- it keeps query vectors, document vectors, and candidate budgets explicit
+- it creates measurable candidate-recall collapse before exact reranking
+  recovers
+
+Evidence:
+- [docs/traces/2026-04-12_synthetic_hard_recall_stage_aware.md](traces/2026-04-12_synthetic_hard_recall_stage_aware.md)
 
 ## Explicit Exclusion
 
@@ -79,9 +96,9 @@ The repo now does have one stronger local comparison path:
 For the stage-aware benchmark itself, the verified reference ceiling remains:
 - exact full-scan late interaction on the same collection snapshot
 
-## Current Benchmark Entry Point
+## Current Benchmark Entry Points
 
-The current benchmark command is:
+The current public-slice benchmark command is:
 
 ```bash
 pixi run bench_hard_recall_real_subset
@@ -93,7 +110,7 @@ It writes:
 .cache/kayak/hard_recall_stage_aware_search.json
 ```
 
-The current plan families in that artifact are:
+The current plan families in that public artifact are:
 - `exact_full_scan`
 - `document_proxy`
 - `centroid_heads`
@@ -108,3 +125,28 @@ This output is the current source of truth for:
 - how much stage-1 pruning reduces exact-reference recall
 - how much final quality is recovered after exact rescoring
 - what latency and storage context those comparisons were measured under
+
+The current synthetic-family benchmark command is:
+
+```bash
+pixi run bench_synthetic_hard_recall_stage_aware
+```
+
+It writes:
+
+```text
+.cache/kayak/synthetic_hard_recall_stage_aware_search.json
+```
+
+The current plan families in that synthetic artifact are:
+- `exact_full_scan`
+- `document_proxy`
+- `centroid_postings`
+- `centroid_postings_flat`
+- `centroid_heads`
+
+This output is the current source of truth for:
+- how much candidate budget the tested stage-1 plans need to recover exact
+  recall on a scalable conjunction-style family
+- how those recovery points move as corpus size grows from `1530` to `8288`
+  documents while query width stays fixed

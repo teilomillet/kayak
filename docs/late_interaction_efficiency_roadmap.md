@@ -259,7 +259,7 @@ Current evidence:
 ### Phase I5: Harder-Recall Benchmark Selection
 
 Status:
-- `Closed as a documented deferral with an explicit next-family selection`
+- `Implemented and locally measured on a scalable synthetic hard-recall family`
 
 Claim:
 - current public slices are useful, but they are not yet the strongest stress
@@ -280,12 +280,20 @@ Exit criteria:
 
 Current evidence:
 - [docs/harder_recall_benchmark_selection.md](harder_recall_benchmark_selection.md)
-- the repo now states explicitly that:
-  - current small public slices are informative but not final
-  - `BrowseComp-Plus` gold is currently the strongest verified public slice
-  - the next harder family should be a scalable conjunction-style synthetic
-    family or a larger retrieval-only BrowseComp-style corpus path
-- that phase is closed as an explicit deferral rather than a hidden omission
+- [docs/traces/2026-04-12_synthetic_hard_recall_stage_aware.md](traces/2026-04-12_synthetic_hard_recall_stage_aware.md)
+- the repo now has:
+  - an explicit selection note for the next harder family
+  - a runnable synthetic conjunction-style hard-recall benchmark family
+  - two measured profiles beyond the current tiny public slices
+- measured result:
+  - on the `1530`-document synthetic profile, `document_proxy`,
+    `centroid_postings`, and `centroid_postings_flat` recover full recall only
+    at `candidate_k = 64`
+  - on the `8288`-document synthetic profile, those same plans recover full
+    recall only at `candidate_k = 128`
+  - `centroid_heads` remains far below full recall even at `candidate_k = 128`
+- broader public-benchmark confirmation beyond the small public slices is still
+  pending
 
 ### Phase I6: Stronger Ceiling Comparisons
 
@@ -336,6 +344,8 @@ continues.
 - [x] add one benchmark-selection note for a harder-recall family beyond the
   current default public slices
 - [x] add one stronger-ceiling comparison only after that path exists locally
+- [x] add one scalable conjunction-style synthetic hard-recall family beyond
+  the current small public slices
 
 ## What Not To Claim Yet
 
@@ -350,6 +360,8 @@ continues.
   exact stage 2.
 - Do not generalize from one `90`-document BrowseComp gold slice to broader
   native-engine asymptotics.
+- Do not treat the current synthetic family as a substitute for a larger public
+  hard-recall corpus.
 - Do not oversell the current clause-text ceiling as a cross-encoder or
   long-context benchmark.
 - Do not present current public hard-recall slices as the final benchmark bar.

@@ -207,6 +207,10 @@ roadmap:
 - a stronger local ceiling comparison on `BrowseComp-Plus` gold
   - compares exact MaxSim and `document_proxy` against exact-plus-`clause_text`
     reranking
+- a scalable synthetic hard-recall family
+  - compares exact full scan, `document_proxy`, `centroid_postings`,
+    `centroid_postings_flat`, and `centroid_heads` on shared-slot conjunction
+    workloads with explicit vector counts
 
 The included slices are inspired by public benchmark families that are relevant to late interaction:
 - `LoTTE`: domain-specific forum retrieval in the ColBERT ecosystem
@@ -476,6 +480,7 @@ pixi run bench_real_subset_policies
 pixi run bench_real_subset_breakdown
 pixi run bench_single_core_scale
 pixi run bench_single_core_faithfulness_frontier
+pixi run bench_synthetic_hard_recall_stage_aware
 pixi run bench_browsecomp_plus_gold_faithfulness_frontier
 pixi run bench_browsecomp_plus_gold_storage_encoding
 pixi run bench_browsecomp_plus_gold_vector_pruning

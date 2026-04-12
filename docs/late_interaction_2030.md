@@ -98,6 +98,11 @@ Verified after the first version of this note:
   - exact full scan plus `clause_text` reranking can outperform exact MaxSim
   - it is also much more expensive than the current stage-aware vector-only
     path
+- there is now one scalable synthetic hard-recall family beyond the current
+  small public slices:
+  - it keeps query/document vector counts explicit
+  - it shows that several approximate stage-1 plans need materially larger
+    `candidate_k` windows before exact reranking recovers full recall
 
 Evidence:
 - [docs/traces/2026-04-12_single_core_scale.md](traces/2026-04-12_single_core_scale.md)
@@ -106,6 +111,7 @@ Evidence:
 - [docs/traces/2026-04-12_browsecomp_plus_gold_storage_encoding.md](traces/2026-04-12_browsecomp_plus_gold_storage_encoding.md)
 - [docs/traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md](traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md)
 - [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
+- [docs/traces/2026-04-12_synthetic_hard_recall_stage_aware.md](traces/2026-04-12_synthetic_hard_recall_stage_aware.md)
 
 ## What Kayak Should Change
 
@@ -155,9 +161,9 @@ Not yet locally verified:
 - vectors/document pruning laws anywhere near `sqrt(m)` beyond the current
   naive prefix-pruning falsification
 - asymptotic native-engine scaling on harder or larger benchmark families well
-  beyond the current synthetic sweep and one `90`-document BrowseComp gold
-  mirror
-- a benchmark family clearly harder than today's small public slices
+  beyond the current synthetic sweeps, current synthetic hard-recall family,
+  and one `90`-document BrowseComp gold mirror
+- a larger public hard-recall family beyond today's small public slices
 - a cross-encoder or long-context expensive ceiling that is implemented and
   compared locally
 

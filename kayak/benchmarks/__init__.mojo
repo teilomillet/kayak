@@ -51,6 +51,12 @@ from .single_core_scale_fixture import (
     default_single_core_scale_profiles,
     make_single_core_scale_fixture,
 )
+from .synthetic_hard_recall_fixture import (
+    SyntheticHardRecallFixture,
+    SyntheticHardRecallProfile,
+    default_synthetic_hard_recall_profiles,
+    make_synthetic_hard_recall_fixture,
+)
 from .storage_encoding_json import (
     StorageEncodingSummary,
     build_storage_encoding_summary,

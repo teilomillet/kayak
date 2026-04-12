@@ -544,15 +544,17 @@ Parallel TODOs:
 - [x] Add one single-core scaling benchmark over increasing corpus sizes
   - Evidence:
     [docs/traces/2026-04-12_single_core_scale.md](docs/traces/2026-04-12_single_core_scale.md)
-- [ ] Add one compressed-token benchmark that reports bytes/vector explicitly
-- [ ] Add one vectors/document sweep that tests aggressive document-vector
+- [x] Add one compressed-token benchmark that reports bytes/vector explicitly
+- [x] Add one vectors/document sweep that tests aggressive document-vector
   reduction
 - [x] Add one asymptotic scaling benchmark for native candidate engines
   - Evidence:
     [docs/traces/2026-04-12_single_core_scale.md](docs/traces/2026-04-12_single_core_scale.md)
-- [ ] Add one benchmark-selection note for a harder-recall family beyond the
+- [x] Add one benchmark-selection note for a harder-recall family beyond the
   current default public slices
-- [ ] Add one stronger-ceiling comparison only after that path exists locally
+- [x] Add one stronger-ceiling comparison only after that path exists locally
+- [x] Add one scalable synthetic hard-recall family with explicit vector-count
+  control and exact-reference candidate recall reporting
 
 ## What We Should Not Do Next
 
