@@ -10,6 +10,7 @@ from kayak.collections import (
 from kayak.contracts import EncodedQuery
 from kayak.filters import (
     FilterExpression,
+    filter_expression_requires_document_metadata,
     match_all_filter,
 )
 from kayak.index import build_query_proxy_vector
@@ -22,7 +23,13 @@ from .filter_allowlist import (
     document_filter_allowlist_artifact_byte_size_for_segment,
     document_filter_allowlist_for_segment,
 )
-from .filter_scope import effective_filter_expression_for_segment
+from .filter_application_profile import (
+    filter_application_profile_for_effective_filter,
+)
+from .filter_scope import (
+    effective_filter_expression_for_collection,
+    effective_filter_expression_for_segment,
+)
 from .search_plan import SearchPlan
 from .topk import insert_descending_collection_hit
 
@@ -40,6 +47,14 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
     var query_proxy = build_query_proxy_vector(query, 0)
     var vector_count = 0
     var byte_size = 0
+    var effective_collection_filter = effective_filter_expression_for_collection(
+        snapshot.collection,
+        filter_expression,
+    )
+    var filter_input_document_count = 0
+    var filter_matching_document_count = 0
+    var filter_artifact_byte_size = 0
+    var uses_document_filter_index = False
 
     for segment in snapshot.segments:
         if not loaded_segment_has_search_artifact(
@@ -59,20 +74,30 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
             stored_proxy.index.document_count
             * stored_proxy.proxy_vector_count_per_document
         )
+        filter_input_document_count += stored_proxy.index.document_count
         byte_size += stored_proxy.artifact_byte_size
         var allowed_flags = List[Int]()
         var matching_document_count = stored_proxy.index.document_count
-        if not filter_expression.is_match_all():
-            var effective_filter = effective_filter_expression_for_segment(
-                snapshot.collection,
-                segment,
-                filter_expression,
+        var effective_filter = effective_filter_expression_for_segment(
+            snapshot.collection,
+            segment,
+            filter_expression,
+        )
+        if not effective_filter.is_match_all():
+            var filter_artifact_bytes = (
+                document_filter_allowlist_artifact_byte_size_for_segment(
+                    segment,
+                    effective_filter,
+                )
             )
-            byte_size += document_filter_allowlist_artifact_byte_size_for_segment(
-                segment,
-                effective_filter,
+            filter_artifact_byte_size += filter_artifact_bytes
+            byte_size += filter_artifact_bytes
+            uses_document_filter_index = (
+                uses_document_filter_index
+                or filter_expression_requires_document_metadata(
+                    effective_filter
+                )
             )
-
             var allowlist = document_filter_allowlist_for_segment(
                 segment,
                 effective_filter,
@@ -80,6 +105,7 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
             matching_document_count = allowlist.matching_document_count
             allowed_flags = allowlist.flags.copy()
 
+        filter_matching_document_count += matching_document_count
         if matching_document_count == 0:
             continue
 
@@ -100,7 +126,7 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
                 plan.candidate_budget.candidate_k,
             )
 
-    return CandidateSet(
+    var candidate_set = CandidateSet(
         plan.candidate_generator,
         hits^,
         snapshot.snapshot.stats.segment_count,
@@ -109,3 +135,14 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
         vector_count,
         byte_size,
     )
+    candidate_set.filter_application_profile = (
+        filter_application_profile_for_effective_filter(
+            filter_expression,
+            effective_collection_filter,
+            filter_input_document_count,
+            filter_matching_document_count,
+            filter_artifact_byte_size,
+            uses_document_filter_index,
+        )
+    )
+    return candidate_set^

@@ -2,6 +2,8 @@ from std.pathlib import Path
 from std.testing import TestSuite, assert_equal
 
 from kayak.collections import (
+    COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+    COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     CollectionId,
     CollectionManifest,
     CollectionStats,
@@ -74,6 +76,7 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
             "snapshot-0001",
             2,
             build_policy,
+            COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
         ),
     )
     save_sealed_segment_manifest(
@@ -124,6 +127,10 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
 
     assert_equal(loaded_collection.latest_generation, 4)
     assert_equal(loaded_collection.active_snapshot_id, "snapshot-0001")
+    assert_equal(
+        loaded_collection.collection_layout_family,
+        COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+    )
     assert_equal(loaded_collection.default_keep_latest_inactive_count, 2)
     assert_equal(
         same_search_artifact_build_policy(
@@ -151,6 +158,43 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
     assert_equal(loaded_text_corpus.corpus.doc_ids[0], "doc-a")
     assert_equal(loaded_text_corpus.corpus.texts[0], "alpha\nbeta\tgamma")
     assert_equal(loaded_text_corpus.corpus.texts[1], "delta\r\nepsilon")
+
+
+def test_collection_manifest_loader_defaults_missing_layout_family() raises:
+    var root = Path("/tmp/kayak-collection-layout-backcompat")
+
+    save_collection_manifest(
+        root,
+        CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            128,
+            2,
+            "snapshot-0002",
+            1,
+            SearchArtifactBuildPolicy(
+                [gem_graph_build_spec(2, 3, 1, "gem_sidecar", 4, 5)]
+            ),
+            COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+        ),
+    )
+
+    var manifest_path = root / "collection.manifest.tsv"
+    manifest_path.write_text(
+        manifest_path
+            .read_text()
+            .replace("collection_layout_family\tshared_pool\n", "")
+    )
+
+    var loaded_collection = load_collection_manifest(root)
+
+    assert_equal(
+        loaded_collection.collection_layout_family,
+        COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
+    )
 
 
 def test_snapshot_manifest_rejects_segment_count_mismatch() raises:

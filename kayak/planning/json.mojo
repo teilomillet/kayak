@@ -4,6 +4,7 @@ from .candidate_set import CandidateSet
 from .collection_hit import CollectionHit
 from .explain import CollectionSearchExplain
 from .faithfulness import FaithfulnessAssessment
+from .filter_application_profile import FilterApplicationProfile
 from .graph_search_counters import GraphSearchCounters
 from .score_histogram import ScoreHistogram
 from .selection_decision import SearchPlanSelectionDecision
@@ -139,6 +140,37 @@ def append_json_stage_artifact_materialization_list(
     buffer += "]"
 
 
+def append_json_filter_application_profile(
+    mut buffer: String,
+    read profile: FilterApplicationProfile,
+):
+    buffer += "{"
+    buffer += "\"public_filter_applied\":"
+    if profile.public_filter_applied:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"logical_scope_applied\":"
+    if profile.logical_scope_applied:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"uses_document_filter_index\":"
+    if profile.uses_document_filter_index:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"input_document_count\":"
+    buffer += String(profile.input_document_count) + ","
+    buffer += "\"matching_document_count\":"
+    buffer += String(profile.matching_document_count) + ","
+    buffer += "\"artifact_byte_size\":"
+    buffer += String(profile.artifact_byte_size) + ","
+    buffer += "\"selectivity\":"
+    buffer += String(profile.selectivity())
+    buffer += "}"
+
+
 def append_json_candidate_set(mut buffer: String, read candidate_set: CandidateSet):
     buffer += "{"
     buffer += "\"generator_kind\":\"" + json_escape(candidate_set.generator_kind) + "\","
@@ -162,6 +194,12 @@ def append_json_candidate_set(mut buffer: String, read candidate_set: CandidateS
     append_json_graph_search_counters(
         buffer,
         candidate_set.graph_search_counters,
+    )
+    buffer += ","
+    buffer += "\"filter_application\":"
+    append_json_filter_application_profile(
+        buffer,
+        candidate_set.filter_application_profile,
     )
     buffer += ","
     buffer += "\"hit_count\":" + String(len(candidate_set.hits)) + ","
@@ -220,6 +258,13 @@ def collection_search_explain_json(
     buffer += "{"
     buffer += "\"collection_id\":\"" + json_escape(explain.collection_id) + "\","
     buffer += "\"snapshot_id\":\"" + json_escape(explain.snapshot_id) + "\","
+    buffer += "\"serving_scope_kind\":\""
+    buffer += json_escape(explain.serving_scope.kind) + "\","
+    buffer += "\"serving_scope_requires_logical_pushdown\":"
+    if explain.serving_scope.requires_logical_scope_pushdown:
+        buffer += "true,"
+    else:
+        buffer += "false,"
     buffer += "\"plan\":{"
     buffer += "\"candidate_generator_kind\":\""
     buffer += json_escape(explain.plan.candidate_generator.kind)

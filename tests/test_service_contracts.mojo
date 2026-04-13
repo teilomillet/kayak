@@ -7,6 +7,8 @@ from kayak import (
     CandidateGenerator,
     CollectionHit,
     CollectionId,
+    COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+    COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     CollectionLifecycleRequest,
     CollectionLifecycleResponse,
     CollectionReclaimExecutionResult,
@@ -61,6 +63,7 @@ from kayak import (
     exact_stage1_required_faithfulness_policy,
     exact_late_interaction_reference_scoring_semantics,
     exact_late_interaction_stage2_reference_operator,
+    layout_rooted_search_serving_scope,
     none_stage3_verifier_operator,
     noop_topk_stage2_reference_operator,
     oracle_full_recall_required_faithfulness_policy,
@@ -96,6 +99,7 @@ def make_explain() raises -> CollectionSearchExplain:
     return CollectionSearchExplain(
         "news",
         "snapshot-0001",
+        layout_rooted_search_serving_scope(),
         plan,
         CandidateSet("exact_full_scan", hits.copy(), 1, 1, 1, 1, 16),
         SearchStageProfile(
@@ -230,6 +234,10 @@ def test_create_collection_request_materializes_manifest() raises:
     assert_equal(manifest.tenant_id.value, "tenant-a")
     assert_equal(manifest.latest_generation, 0)
     assert_equal(manifest.active_snapshot_id, "")
+    assert_equal(
+        manifest.collection_layout_family,
+        COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
+    )
     assert_equal(manifest.default_keep_latest_inactive_count, 1)
     assert_equal(len(manifest.search_artifact_build_policy.stage1_artifacts), 1)
     assert_equal(
@@ -253,6 +261,7 @@ def test_lifecycle_and_reclaim_contracts_keep_policy_explicit() raises:
         CollectionId("news"),
         TenantId("tenant-a"),
         NamespaceId("search"),
+        COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
         "colbertv2",
         VECTOR_SCALAR_NAME,
         128,
@@ -314,6 +323,10 @@ def test_lifecycle_and_reclaim_contracts_keep_policy_explicit() raises:
         "snapshot-0001",
     )
     assert_equal(lifecycle_response.default_keep_latest_inactive_count, 1)
+    assert_equal(
+        lifecycle_response.collection_layout_family,
+        COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+    )
     assert_equal(
         lifecycle_response.search_artifact_build_policy.stage1_artifacts[0].family,
         "document_proxy",
@@ -602,6 +615,7 @@ def test_planned_search_contracts_keep_selection_explicit() raises:
         "exact_fallback",
         ["exact_full_scan", "document_proxy"],
         ["document_proxy", "exact_full_scan"],
+        layout_rooted_search_serving_scope(),
         exact_full_scan_search_plan(2, 2),
         SearchPlanSelectionDecision(
             SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,

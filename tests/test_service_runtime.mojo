@@ -6,9 +6,11 @@ from kayak import (
     BuildReclaimPlanRequest,
     CollectionId,
     CollectionLifecycleRequest,
+    COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
     CreateCollectionRequest,
     CreateSnapshotRequest,
     DeleteDocumentsRequest,
+    DocumentFilterPosting,
     DocumentMetadataUpdate,
     EncodedDocument,
     EncodedQuery,
@@ -20,8 +22,11 @@ from kayak import (
     PlannedSearchRequest,
     SearchPlanSelectionRequest,
     SearchArtifactBuildPolicy,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_LOGICAL_SCOPE_PUSHDOWN,
+    SegmentId,
     SnapshotId,
     SnapshotRetentionPolicy,
+    StoredDocumentFilterIndex,
     TenantId,
     UpdateCollectionRetentionPolicyRequest,
     UpsertDocument,
@@ -53,6 +58,7 @@ from kayak import (
     load_collection_manifest,
     match_all_filter,
     one_of_filter,
+    save_stored_document_filter_index,
     SearchRequest,
     update_collection_retention_policy,
     upsert_documents,
@@ -1427,6 +1433,263 @@ def test_hosted_collection_runtime_merges_metadata_and_filters_exactly() raises:
     assert_equal(len(native_proxy_response.hits), 1)
     assert_equal(native_proxy_response.hits[0].doc_id, "doc-a")
     assert_equal(len(removed_field_response.hits), 0)
+
+
+def test_hosted_shared_pool_exact_match_all_loads_scope_filter_index() raises:
+    var service_root = unique_service_root("kayak-service-runtime-shared-pool-exact")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+                    "alpha",
+                ),
+                UpsertDocument(
+                    make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]),
+                    "beta",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish shared_pool exact fixture",
+        ),
+    )
+
+    var request = SearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        make_query(),
+        match_all_filter(),
+        exact_full_scan_search_plan(1, 1),
+        False,
+    )
+    var response = execute_search(
+        ExactCpuBackend(),
+        service_root,
+        request,
+    )
+    var debug = execute_debug_search(
+        ExactCpuBackend(),
+        service_root,
+        request,
+    )
+
+    assert_equal(len(response.hits), 1)
+    assert_equal(response.hits[0].doc_id, "doc-a")
+    assert_equal(
+        debug.explain.serving_scope.requires_logical_scope_pushdown,
+        True,
+    )
+    assert_equal(
+        debug.explain.candidate_set.filter_application_profile.public_filter_applied,
+        False,
+    )
+    assert_equal(
+        debug.explain.candidate_set.filter_application_profile.logical_scope_applied,
+        True,
+    )
+    assert_equal(
+        debug.explain.candidate_set.filter_application_profile.uses_document_filter_index,
+        True,
+    )
+    assert_equal(
+        debug.explain.candidate_set.filter_application_profile.input_document_count,
+        2,
+    )
+    assert_equal(
+        debug.explain.candidate_set.filter_application_profile.matching_document_count,
+        2,
+    )
+    assert_equal(
+        debug.explain.candidate_set.filter_application_profile.artifact_byte_size
+            > 0,
+        True,
+    )
+
+
+def test_hosted_shared_pool_match_all_planning_rejects_gem_graph_stage1() raises:
+    var service_root = unique_service_root(
+        "kayak-service-runtime-shared-pool-gem-graph"
+    )
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            SearchArtifactBuildPolicy(
+                [gem_graph_build_spec(1, 1, 1, "gem_graph", 1, 1)]
+            ),
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+                    "alpha",
+                ),
+                UpsertDocument(
+                    make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]),
+                    "beta",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish shared_pool gem_graph fixture",
+        ),
+    )
+
+    var response = execute_planned_search(
+        ExactCpuBackend(),
+        service_root,
+        PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            match_all_filter(),
+            SearchPlanSelectionRequest(
+                1,
+                2,
+                best_effort_faithfulness_policy(),
+                goal="balanced",
+            ),
+        ),
+    )
+
+    assert_equal(
+        response.selection.plan.candidate_generator.kind,
+        "exact_full_scan",
+    )
+    assert_equal(
+        response.selection.serving_scope.kind,
+        "logical_filter_pushdown",
+    )
+    assert_equal(
+        response.selection.serving_scope.requires_logical_scope_pushdown,
+        True,
+    )
+    assert_equal(
+        response.selection.decision.constraint_kind,
+        SEARCH_PLAN_SELECTION_CONSTRAINT_LOGICAL_SCOPE_PUSHDOWN,
+    )
+    assert_equal(
+        response.search.plan.candidate_generator.kind,
+        "exact_full_scan",
+    )
+
+
+def test_hosted_shared_pool_rejects_scope_unaware_filter_index() raises:
+    var service_root = unique_service_root(
+        "kayak-service-runtime-shared-pool-legacy-filter-index"
+    )
+
+    var collection_root = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]), "alpha")],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish shared_pool legacy filter fixture",
+        ),
+    )
+    save_stored_document_filter_index(
+        collection_root / "segments" / "segment-1" / "document_filter_index",
+        StoredDocumentFilterIndex(
+            CollectionId("news"),
+            SegmentId("segment-1"),
+            1,
+            0,
+            [DocumentFilterPosting("source", "wire", [0])],
+        ),
+    )
+
+    var raised = False
+    try:
+        _ = execute_search(
+            ExactCpuBackend(),
+            service_root,
+            SearchRequest(
+                CollectionId("news"),
+                TenantId("tenant-a"),
+                NamespaceId("search"),
+                SnapshotId("snapshot-0001"),
+                make_query(),
+                match_all_filter(),
+                exact_full_scan_search_plan(1, 1),
+                False,
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def test_hosted_collection_runtime_supports_configured_gem_graph_stage1() raises:

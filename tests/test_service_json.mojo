@@ -5,6 +5,8 @@ from kayak import (
     BuildReclaimPlanResponse,
     CollectionHit,
     CollectionId,
+    COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+    COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     CollectionLifecycleRequest,
     CollectionLifecycleResponse,
     CollectionReclaimExecutionResult,
@@ -64,6 +66,7 @@ from kayak import (
     upsert_documents_request_json,
     update_collection_retention_policy_request_json,
     update_collection_retention_policy_response_json,
+    layout_rooted_search_serving_scope,
 )
 from kayak.filters import match_all_filter
 from kayak.planning import CandidateSet, exact_full_scan_search_plan
@@ -84,6 +87,7 @@ def make_debug_response() raises -> DebugSearchResponse:
     var explain = CollectionSearchExplain(
         "news",
         "snapshot-0001",
+        layout_rooted_search_serving_scope(),
         plan,
         CandidateSet(
             "exact_full_scan",
@@ -189,6 +193,7 @@ def make_planned_search_response() raises -> PlannedSearchResponse:
             "exact_fallback",
             ["exact_full_scan", "document_proxy"],
             ["document_proxy", "exact_full_scan"],
+            layout_rooted_search_serving_scope(),
             plan,
             SearchPlanSelectionDecision(
                 SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
@@ -280,6 +285,14 @@ def test_create_collection_request_json_is_machine_readable() raises:
     )
 
     assert_equal(json.find("\"collection_id\":\"news\"") != -1, True)
+    assert_equal(
+        json.find(
+            "\"collection_layout_family\":\""
+                + COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED
+                + "\""
+        ) != -1,
+        True,
+    )
     assert_equal(json.find("\"vector_dim\":128") != -1, True)
     assert_equal(
         json.find("\"default_keep_latest_inactive_count\":1") != -1,
@@ -317,6 +330,7 @@ def test_lifecycle_and_reclaim_json_are_machine_readable() raises:
             CollectionId("news"),
             TenantId("tenant-a"),
             NamespaceId("search"),
+            COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
             "colbertv2",
             VECTOR_SCALAR_NAME,
             128,
@@ -335,6 +349,14 @@ def test_lifecycle_and_reclaim_json_are_machine_readable() raises:
             1,
             sample_reclaim_plan(),
         )
+    )
+    assert_equal(
+        lifecycle_response_json.find(
+            "\"collection_layout_family\":\""
+                + COLLECTION_LAYOUT_FAMILY_SHARED_POOL
+                + "\""
+        ) != -1,
+        True,
     )
     var build_request_json = build_reclaim_plan_request_json(
         BuildReclaimPlanRequest(
@@ -466,6 +488,9 @@ def test_debug_search_response_json_embeds_explain_payload() raises:
     assert_equal(json.find("\"materialized_artifacts\":[]") != -1, True)
     assert_equal(json.find("\"graph_search_counters\":") != -1, True)
     assert_equal(json.find("\"visited_vertex_count\":3") != -1, True)
+    assert_equal(json.find("\"filter_application\":{") != -1, True)
+    assert_equal(json.find("\"input_document_count\":1") != -1, True)
+    assert_equal(json.find("\"selectivity\":1.0") != -1, True)
 
 
 def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
@@ -510,6 +535,15 @@ def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
             != -1,
         True,
     )
+    assert_equal(
+        response_json.find("\"serving_scope_kind\":\"layout_rooted\"") != -1,
+        True,
+    )
+    assert_equal(
+        response_json.find("\"serving_scope_requires_logical_pushdown\":false")
+            != -1,
+        True,
+    )
     assert_equal(response_json.find("\"decision\":") != -1, True)
     assert_equal(
         response_json.find("\"order_policy_kind\":\"goal_default\"") != -1,
@@ -521,6 +555,10 @@ def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
     )
     assert_equal(debug_json.find("\"selection\":") != -1, True)
     assert_equal(debug_json.find("\"debug\":") != -1, True)
+    assert_equal(
+        debug_json.find("\"serving_scope_kind\":\"layout_rooted\"") != -1,
+        True,
+    )
 
 
 def test_service_health_status_json_contains_counters() raises:

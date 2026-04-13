@@ -664,6 +664,14 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
         len(explain.final_hits),
     )
     assert_equal(json.find("\"collection_id\":\"search-plan\"") != -1, True)
+    assert_equal(json.find("\"serving_scope_kind\":\"layout_rooted\"") != -1, True)
+    assert_equal(
+        json.find("\"serving_scope_requires_logical_pushdown\":false") != -1,
+        True,
+    )
+    assert_equal(json.find("\"filter_application\":{") != -1, True)
+    assert_equal(json.find("\"public_filter_applied\":false") != -1, True)
+    assert_equal(json.find("\"logical_scope_applied\":false") != -1, True)
     assert_equal(json.find("\"candidate_generator_kind\":\"exact_full_scan\"") != -1, True)
     assert_equal(json.find("\"candidate_generator_family\":\"exact\"") != -1, True)
     assert_equal(json.find("\"faithfulness_policy_kind\":\"exact_stage1_required\"") != -1, True)
@@ -875,6 +883,30 @@ def test_document_proxy_search_plan_pushes_exact_doc_id_filter_into_stage1() rai
 
     assert_equal(len(explain.candidate_set.hits), 1)
     assert_equal(explain.candidate_set.hits[0].doc_id, "doc-a")
+    assert_equal(
+        explain.candidate_set.filter_application_profile.public_filter_applied,
+        True,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.logical_scope_applied,
+        False,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.uses_document_filter_index,
+        False,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.input_document_count,
+        2,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.matching_document_count,
+        1,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.selectivity(),
+        MetricScalar(0.5),
+    )
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
     assert_equal(explain.faithfulness.passes, True)
@@ -940,6 +972,30 @@ def test_centroid_postings_search_plan_pushes_exact_doc_id_filter_into_stage1() 
 
     assert_equal(len(explain.candidate_set.hits), 1)
     assert_equal(explain.candidate_set.hits[0].doc_id, "doc-a")
+    assert_equal(
+        explain.candidate_set.filter_application_profile.public_filter_applied,
+        True,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.logical_scope_applied,
+        False,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.uses_document_filter_index,
+        False,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.input_document_count,
+        2,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.matching_document_count,
+        1,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.selectivity(),
+        MetricScalar(0.5),
+    )
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
     assert_equal(explain.faithfulness.passes, True)

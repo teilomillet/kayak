@@ -6,6 +6,7 @@
 
 from kayak.collections import (
     CollectionManifest,
+    collection_layout_family_is_shared_pool,
     LoadedSealedSegment,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
     loaded_segment_has_document_filter_index,
@@ -29,6 +30,14 @@ def logical_filter_scope_for_collection(
     )
 
 
+def collection_requires_logical_scope_pushdown(
+    read collection: CollectionManifest
+) -> Bool:
+    return collection_layout_family_is_shared_pool(
+        collection.collection_layout_family
+    )
+
+
 def segment_supports_scoped_filter_pushdown(
     read segment: LoadedSealedSegment
 ) -> Bool:
@@ -49,20 +58,37 @@ def segment_supports_scoped_filter_pushdown(
     return False
 
 
+def effective_filter_expression_for_collection(
+    read collection: CollectionManifest,
+    read filter_expression: FilterExpression,
+) raises -> FilterExpression:
+    if not collection_requires_logical_scope_pushdown(collection):
+        return filter_expression.copy()
+
+    var scope_filter = logical_scope_filter(
+        logical_filter_scope_for_collection(collection)
+    )
+    if filter_expression.is_match_all():
+        return scope_filter.copy()
+
+    return conjoin_filter_expressions(filter_expression, scope_filter)
+
+
 def effective_filter_expression_for_segment(
     read collection: CollectionManifest,
     read segment: LoadedSealedSegment,
     read filter_expression: FilterExpression,
 ) raises -> FilterExpression:
-    # Keep unfiltered requests on the existing path-rooted isolation model.
-    # Shared-pool match_all scope pushdown is a separate follow-on.
-    if filter_expression.is_match_all():
-        return filter_expression.copy()
+    var effective_filter = effective_filter_expression_for_collection(
+        collection,
+        filter_expression,
+    )
+    if not collection_requires_logical_scope_pushdown(collection):
+        return effective_filter.copy()
 
     if not segment_supports_scoped_filter_pushdown(segment):
-        return filter_expression.copy()
+        raise Error(
+            "shared_pool collections require a scope-aware document_filter_index sidecar on every segment"
+        )
 
-    return conjoin_filter_expressions(
-        filter_expression,
-        logical_scope_filter(logical_filter_scope_for_collection(collection)),
-    )
+    return effective_filter.copy()

@@ -29,10 +29,13 @@ These statements are checked against the current repository.
    - internal logical-scope postings in `document_filter_index` for new
      segments, so filtered search can carry collection, tenant, and namespace
      scope without exposing those fields publicly
+   - explicit `collection_layout_family` contracts so `shared_pool` collections
+     mechanically require scope-aware `document_filter_index` sidecars even for
+     public `match_all` search
 6. The repository still does not have:
    - shared physical segment pools across multiple tenants
-   - explicit `match_all` shared-pool scope pushdown independent of the current
-     tenant-rooted collection layout
+   - compatibility with legacy shared-pool snapshots that lack a scope-aware
+     `document_filter_index` sidecar on every segment
 
 ## Source-Backed Inference
 
@@ -118,10 +121,13 @@ What it enables now:
 - filtered hosted search can now attach internal collection, tenant, and
   namespace scope to the candidate-generation filter path when a segment carries
   scope-aware `document_filter_index` postings
+- shared-pool hosted search can now keep even public `match_all` requests on an
+  explicit scoped serving contract instead of relying on tenant-rooted paths
 
 What it does not yet enable:
-- unfiltered shared-index serving without further work
 - a public caller-visible scope-filter vocabulary
+- compatibility with legacy shared-pool snapshots that lack scope-aware filter
+  sidecars
 
 ## Immediate Follow-On Work
 
@@ -129,8 +135,8 @@ The next tenant-layout work should be:
 
 1. benchmark low-selectivity versus high-selectivity workloads explicitly on the
    scope-aware filter sidecar path
-2. extend logical-scope pushdown from filtered requests to explicit shared-pool
-   `match_all` serving
+2. add selectivity reporting for `shared_pool` `match_all` and filtered scope
+   pushdown so planner/runtime costs stay measurable
 3. only then prototype shared physical segment pools
 
 That order keeps isolation sound while opening a path to higher density later.

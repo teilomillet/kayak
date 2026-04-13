@@ -11,8 +11,10 @@ from kayak.collections import (
     SegmentId,
     SealedSegmentManifest,
     SnapshotExportBundleManifest,
+    SnapshotSearchArtifactAvailability,
     SnapshotManifest,
     SnapshotLoadRequirements,
+    collection_layout_family_is_shared_pool,
     collection_manifest_exists,
     exact_only_snapshot_requirements,
     export_snapshot_bundle,
@@ -40,9 +42,12 @@ from kayak.planning import (
     explain_collection_search,
     SearchPlan,
     SearchPlanSelection,
+    search_plan_selection_request_with_serving_scope,
+    search_serving_scope_for_collection,
     select_search_plan_for_availability,
     search_collection_for_plan,
 )
+from kayak.planning.filter_scope import effective_filter_expression_for_collection
 from kayak.runtime import ExactScoringBackend
 
 from .collection_requests import CreateCollectionRequest
@@ -80,8 +85,15 @@ from .snapshot_requests import (
 )
 
 
-def require_filter_supported_for_request(read request: SearchRequest) raises:
-    if request.filter_expression.is_match_all():
+def require_filter_supported_for_request(
+    read collection: CollectionManifest,
+    read request: SearchRequest,
+) raises:
+    var effective_filter_expression = effective_filter_expression_for_collection(
+        collection,
+        request.filter_expression,
+    )
+    if effective_filter_expression.is_match_all():
         if not request.plan.candidate_generator.supports_match_all_filter:
             raise Error(
                 "candidate generator does not support match_all filters: "
@@ -89,7 +101,7 @@ def require_filter_supported_for_request(read request: SearchRequest) raises:
             )
         return
 
-    if filter_expression_is_exact_doc_id_filter(request.filter_expression):
+    if filter_expression_is_exact_doc_id_filter(effective_filter_expression):
         if request.plan.candidate_generator.supports_exact_doc_id_filter:
             return
         raise Error(
@@ -97,11 +109,11 @@ def require_filter_supported_for_request(read request: SearchRequest) raises:
             + request.plan.candidate_generator.kind
         )
 
-    if filter_expression_requires_document_metadata(request.filter_expression):
+    if filter_expression_requires_document_metadata(effective_filter_expression):
         if request.plan.candidate_generator.supports_structured_filter:
             return
         raise Error(
-            "metadata filters currently require a stage-1 generator with structured-filter support: "
+            "metadata/logical-scope filters currently require a stage-1 generator with structured-filter support: "
             + request.plan.candidate_generator.kind
         )
 
@@ -283,10 +295,15 @@ def parse_file_uri(source_uri: String) raises -> Path:
 
 
 def snapshot_load_requirements_for_request(
-    read request: SearchRequest
+    read collection: CollectionManifest,
+    read request: SearchRequest,
 ) raises -> SnapshotLoadRequirements:
+    var effective_filter_expression = effective_filter_expression_for_collection(
+        collection,
+        request.filter_expression,
+    )
     var needs_document_metadata = filter_expression_requires_document_metadata(
-        request.filter_expression
+        effective_filter_expression
     )
     var needs_document_text = request.plan.stage3_verifier.requires_artifact_family(
         "document_text"
@@ -294,7 +311,11 @@ def snapshot_load_requirements_for_request(
     var required_artifacts = (
         request.plan.candidate_generator.required_search_artifact_families.copy()
     )
-    if needs_document_metadata:
+    if collection_layout_family_is_shared_pool(collection.collection_layout_family):
+        required_artifacts.append(
+            SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX
+        )
+    elif needs_document_metadata:
         if request.plan.candidate_generator.is_exact:
             required_artifacts.append(SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA)
         elif request.plan.candidate_generator.supports_structured_filter:
@@ -311,6 +332,25 @@ def snapshot_load_requirements_for_request(
         False,
         required_artifacts,
         needs_document_text,
+    )
+
+
+def require_shared_pool_snapshot_filter_index_availability(
+    read collection: CollectionManifest,
+    read availability: SnapshotSearchArtifactAvailability,
+) raises:
+    if not collection_layout_family_is_shared_pool(
+        collection.collection_layout_family
+    ):
+        return
+
+    if availability.has_search_artifact_family_on_all_segments(
+        SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX
+    ):
+        return
+
+    raise Error(
+        "shared_pool collections require a document_filter_index sidecar on every segment"
     )
 
 
@@ -435,24 +475,24 @@ def execute_search[Backend: ExactScoringBackend](
     service_root: Path,
     read request: SearchRequest,
 ) raises -> SearchResponse:
-    require_filter_supported_for_request(request)
     var collection_root = service_collection_root(
         service_root,
         request.tenant_id,
         request.namespace_id,
         request.collection_id,
     )
-    _ = load_collection_for_request(
+    var collection = load_collection_for_request(
         service_root,
         request.collection_id.value,
         request.tenant_id.value,
         request.namespace_id.value,
         collection_root,
     )
+    require_filter_supported_for_request(collection, request)
     var snapshot = load_resolved_collection_snapshot(
         collection_root,
         request.snapshot_id,
-        snapshot_load_requirements_for_request(request),
+        snapshot_load_requirements_for_request(collection, request),
     )
     return SearchResponse(
         request.collection_id,
@@ -504,6 +544,7 @@ def selection_for_planned_request(
         selection.selected_candidate_generator_status.copy(),
         selection.available_candidate_generator_kinds,
         selection.effective_candidate_generator_order,
+        selection.serving_scope,
         search_plan_with_planned_search_stage_override(
             selection.plan,
             request.stage_override,
@@ -522,7 +563,7 @@ def select_search_plan_for_request(
         request.namespace_id,
         request.collection_id,
     )
-    _ = load_collection_for_request(
+    var collection = load_collection_for_request(
         service_root,
         request.collection_id.value,
         request.tenant_id.value,
@@ -533,7 +574,17 @@ def select_search_plan_for_request(
         collection_root,
         request.snapshot_id,
     )
-    return select_search_plan_for_availability(availability, request.planning)
+    require_shared_pool_snapshot_filter_index_availability(
+        collection,
+        availability,
+    )
+    return select_search_plan_for_availability(
+        availability,
+        search_plan_selection_request_with_serving_scope(
+            request.planning,
+            search_serving_scope_for_collection(collection),
+        ),
+    )
 
 
 def execute_planned_search[Backend: ExactScoringBackend](
@@ -585,24 +636,24 @@ def execute_explain[Backend: ExactScoringBackend](
     service_root: Path,
     read request: SearchRequest,
 ) raises -> ExplainResponse:
-    require_filter_supported_for_request(request)
     var collection_root = service_collection_root(
         service_root,
         request.tenant_id,
         request.namespace_id,
         request.collection_id,
     )
-    _ = load_collection_for_request(
+    var collection = load_collection_for_request(
         service_root,
         request.collection_id.value,
         request.tenant_id.value,
         request.namespace_id.value,
         collection_root,
     )
+    require_filter_supported_for_request(collection, request)
     var snapshot = load_resolved_collection_snapshot(
         collection_root,
         request.snapshot_id,
-        snapshot_load_requirements_for_request(request),
+        snapshot_load_requirements_for_request(collection, request),
     )
     return ExplainResponse(
         explain_collection_search(

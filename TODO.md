@@ -325,7 +325,7 @@ Immediate TODOs:
 - [x] Keep exact `doc_id` filters on native `document_proxy` and centroid stage-1 paths instead of forcing blanket exact fallback
 - [x] Extend native candidate generation from exact `doc_id` pushdown to broader metadata-aware filter selectivity
 - [x] Extend native filter-aware candidate generation to real tenant-aware selectivity on shared hosted layouts
-- [ ] Extend logical-scope pushdown from filtered searches to explicit shared-pool `match_all` serving without relying on tenant-rooted paths alone
+- [x] Extend logical-scope pushdown from filtered searches to explicit shared-pool `match_all` serving without relying on tenant-rooted paths alone
 
 ## Priority 4: Observability, Profiling, And Explainability
 

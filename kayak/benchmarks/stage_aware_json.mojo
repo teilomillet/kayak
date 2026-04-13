@@ -6,9 +6,11 @@ from kayak.collections import ResolvedCollectionSnapshot
 from kayak.eval import evaluate_query_hits
 from kayak.planning import (
     CollectionSearchExplain,
+    FilterApplicationProfile,
     SearchPlan,
     explain_collection_search,
     final_hits_to_search_hits,
+    identity_filter_application_profile,
     search_collection_for_plan,
 )
 from kayak.runtime import ExactCpuBackend
@@ -73,6 +75,7 @@ struct StageAwareSearchSummary(Copyable):
     var bytes_per_document: Float64
     var bytes_per_vector: Float64
     var candidate_stage: StageDensitySummary
+    var candidate_stage_filter_application: FilterApplicationProfile
     var candidate_stage_tracks_graph_search: Bool
     var mean_candidate_stage_graph_visited_vertex_count: Float64
     var mean_candidate_stage_graph_expanded_edge_count: Float64
@@ -127,7 +130,7 @@ struct StageAwareSearchSummary(Copyable):
         stage3_verifier: StageDensitySummary,
         exact_oracle: StageDensitySummary,
         vector_dim: Int,
-    ):
+    ) raises:
         self.dataset_id = dataset_id^
         self.model_name = model_name^
         self.family = family^
@@ -155,6 +158,11 @@ struct StageAwareSearchSummary(Copyable):
         self.bytes_per_document = bytes_per_document
         self.bytes_per_vector = bytes_per_vector
         self.candidate_stage = candidate_stage.copy()
+        self.candidate_stage_filter_application = (
+            identity_filter_application_profile(
+                candidate_stage.document_count
+            )
+        )
         self.candidate_stage_tracks_graph_search = candidate_stage_tracks_graph_search
         self.mean_candidate_stage_graph_visited_vertex_count = (
             mean_candidate_stage_graph_visited_vertex_count
@@ -230,11 +238,11 @@ def build_stage_aware_search_summary_from_measurement(
     success_rate_at_k: Float64,
     mean_candidate_recall_at_final_k: Float64,
     mean_search_seconds: Float64,
-) -> StageAwareSearchSummary:
+) raises -> StageAwareSearchSummary:
     var task = stored_task.task.copy()
     var stats = snapshot.snapshot.stats.copy()
 
-    return StageAwareSearchSummary(
+    var summary = StageAwareSearchSummary(
         stored_task.dataset_id.copy(),
         stored_task.model_name.copy(),
         task.family.copy(),
@@ -299,6 +307,10 @@ def build_stage_aware_search_summary_from_measurement(
         ),
         snapshot.collection.vector_dim,
     )
+    summary.candidate_stage_filter_application = (
+        representative_explain.candidate_set.filter_application_profile.copy()
+    )
+    return summary^
 def build_stage_aware_search_summary(
     read backend: ExactCpuBackend,
     read stored_task: StoredJudgedTask,
@@ -535,6 +547,37 @@ def append_stage_aware_search_summary_json(
     buffer += String(summary.candidate_stage.bytes_per_document) + ","
     buffer += "\"candidate_stage_bytes_per_vector\":"
     buffer += String(summary.candidate_stage.bytes_per_vector) + ","
+    buffer += "\"candidate_stage_public_filter_applied\":"
+    if summary.candidate_stage_filter_application.public_filter_applied:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"candidate_stage_logical_scope_applied\":"
+    if summary.candidate_stage_filter_application.logical_scope_applied:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"candidate_stage_uses_document_filter_index\":"
+    if summary.candidate_stage_filter_application.uses_document_filter_index:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"candidate_stage_filter_input_document_count\":"
+    buffer += String(
+        summary.candidate_stage_filter_application.input_document_count
+    ) + ","
+    buffer += "\"candidate_stage_filter_matching_document_count\":"
+    buffer += String(
+        summary.candidate_stage_filter_application.matching_document_count
+    ) + ","
+    buffer += "\"candidate_stage_filter_artifact_byte_size\":"
+    buffer += String(
+        summary.candidate_stage_filter_application.artifact_byte_size
+    ) + ","
+    buffer += "\"candidate_stage_filter_selectivity\":"
+    buffer += String(
+        summary.candidate_stage_filter_application.selectivity()
+    ) + ","
     buffer += "\"candidate_stage_tracks_graph_search\":"
     if summary.candidate_stage_tracks_graph_search:
         buffer += "true,"

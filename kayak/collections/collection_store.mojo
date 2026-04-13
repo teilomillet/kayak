@@ -10,6 +10,7 @@ from .artifact_manifest import (
     require_current_vector_scalar_name,
     write_collection_artifact_manifest,
 )
+from .collection_layout import default_collection_layout_family
 from .collection import CollectionManifest
 from .ids import CollectionId, NamespaceId, TenantId
 from .manifest_util import load_optional_manifest_value
@@ -33,6 +34,12 @@ def save_collection_manifest(root: Path, read manifest: CollectionManifest) rais
     entries.append(ManifestEntry("collection_id", manifest.collection_id.value))
     entries.append(ManifestEntry("tenant_id", manifest.tenant_id.value))
     entries.append(ManifestEntry("namespace_id", manifest.namespace_id.value))
+    entries.append(
+        ManifestEntry(
+            "collection_layout_family",
+            manifest.collection_layout_family,
+        )
+    )
     entries.append(ManifestEntry("model_name", manifest.model_name))
     entries.append(
         ManifestEntry("vector_scalar_name", manifest.vector_scalar_name)
@@ -116,6 +123,11 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
     )
     if default_keep_latest_inactive_count.byte_length() == 0:
         default_keep_latest_inactive_count = "1"
+    var collection_layout_family = load_optional_manifest_value(
+        entries, "collection_layout_family"
+    )
+    if collection_layout_family.byte_length() == 0:
+        collection_layout_family = default_collection_layout_family()
     var search_artifact_build_policy = default_search_artifact_build_policy()
     var search_artifact_build_count = load_optional_manifest_value(
         entries, "search_artifact_build_count"
@@ -189,4 +201,5 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
             "default_keep_latest_inactive_count",
         ),
         search_artifact_build_policy,
+        collection_layout_family,
     )

@@ -60,6 +60,8 @@ Key checks covered:
 
 ## Limits
 
-- This change hardens filtered search paths only.
-- Shared-pool `match_all` serving still needs an explicit scope path; it is not
-  solved by this tranche.
+- This note records the first scope-posting tranche.
+- The follow-on shared-layout serving work is now implemented separately via
+  explicit `collection_layout_family` contracts and runtime enforcement that
+  `shared_pool` searches load scope-aware `document_filter_index` sidecars even
+  for public `match_all` requests.

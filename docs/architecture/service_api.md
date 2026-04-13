@@ -170,6 +170,9 @@ Current verified behavior:
 - the planner chooses a concrete `SearchPlan`
 - the chosen plan is returned explicitly in the selection payload and again in
   the executed search/explain response
+- planner selection now also reports the resolved serving-scope contract:
+  - `serving_scope_kind`
+  - `serving_scope_requires_logical_pushdown`
 - planner selection now also carries an explicit typed decision object with:
   - `order_policy_kind`
   - `constraint_kind`
@@ -191,10 +194,16 @@ Current guardrails:
   collection-aware execution when a segment carries a `document_filter_index`
   sidecar
 - exact `doc_id` filters stay native for `document_proxy` and centroid stage 1
+  on layout-rooted collections
 - metadata filters stay native for `document_proxy` and centroid stage 1 when
   every segment has a `document_filter_index` sidecar; older snapshots without
   that sidecar still fall back to exact stage 1
-- `gem_graph` currently supports only `match_all` filters
+- shared-pool collections require a scope-aware `document_filter_index` sidecar
+  on every segment for all search shapes, including public `match_all`
+- when that sidecar is missing under shared-pool serving, the planner now
+  rejects the request instead of pretending an unsafe exact fallback exists
+- `gem_graph` currently supports only layout-rooted `match_all` serving; it
+  does not satisfy logical-scope-pushdown serving contracts
 - `exact_stage1_required` falls back to exact stage 1
 - `oracle_full_recall_required` without `debug_mode` falls back to exact stage 1
 
@@ -346,8 +355,8 @@ The next service-adjacent work should be:
 3. reuse collection storage reports and snapshot-bundle export/import in the
    service layer
 4. add an auth and tenant-isolation story once the core request grammar settles
-5. extend the new filtered logical-scope pushdown into explicit shared-layout
-   `match_all` serving and selectivity reporting
+5. add selectivity reporting for the new shared-layout logical-scope pushdown
+   path so `shared_pool` filter costs are measurable
 
 That sequence preserves the current engine contracts and keeps the transport
 thin.

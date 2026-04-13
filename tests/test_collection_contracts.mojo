@@ -1,6 +1,8 @@
 from std.testing import TestSuite, assert_equal
 
 from kayak.collections import (
+    COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+    COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     CollectionId,
     CollectionManifest,
     CollectionStats,
@@ -98,6 +100,10 @@ def test_collection_contracts_hold_serving_metadata() raises:
     assert_equal(collection.model_name, "colbertv2")
     assert_equal(collection.latest_generation, 3)
     assert_equal(collection.active_snapshot_id, "snapshot-0001")
+    assert_equal(
+        collection.collection_layout_family,
+        COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
+    )
     assert_equal(collection.default_keep_latest_inactive_count, 2)
     assert_equal(
         collection.search_artifact_build_policy.stage1_artifacts[0].root,
@@ -160,6 +166,29 @@ def test_collection_manifest_accepts_configured_gem_graph_build_spec() raises:
     assert_equal(
         collection.search_artifact_build_policy.stage1_artifacts[0].family,
         "gem_graph",
+    )
+
+
+def test_collection_manifest_supports_explicit_shared_pool_layout() raises:
+    var collection = CollectionManifest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        128,
+        3,
+        "snapshot-0003",
+        1,
+        SearchArtifactBuildPolicy(
+            [SearchArtifactBuildSpec("document_proxy", "proxy_sidecar")]
+        ),
+        COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+    )
+
+    assert_equal(
+        collection.collection_layout_family,
+        COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
     )
 
 

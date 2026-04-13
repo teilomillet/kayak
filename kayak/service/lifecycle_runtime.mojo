@@ -98,6 +98,7 @@ def build_collection_lifecycle_report(
         collection.collection_id,
         collection.tenant_id,
         collection.namespace_id,
+        collection.collection_layout_family,
         collection.model_name.copy(),
         collection.vector_scalar_name.copy(),
         collection.vector_dim,
@@ -198,6 +199,7 @@ def update_collection_retention_policy(
         collection.active_snapshot_id.copy(),
         request.default_keep_latest_inactive_count,
         collection.search_artifact_build_policy,
+        collection.collection_layout_family,
     )
     save_collection_manifest(collection_root, updated)
     return UpdateCollectionRetentionPolicyResponse(

@@ -200,12 +200,12 @@ def exact_oracle_hits_for_snapshot[Backend: ExactScoringBackend](
         var scores = backend.score_all(query, segment.stored_index.index)
         var allowed_flags = List[Int]()
         var use_allowlist = False
-        if not filter_expression.is_match_all():
-            var effective_filter = effective_filter_expression_for_segment(
-                snapshot.collection,
-                segment,
-                filter_expression,
-            )
+        var effective_filter = effective_filter_expression_for_segment(
+            snapshot.collection,
+            segment,
+            filter_expression,
+        )
+        if not effective_filter.is_match_all():
             if (
                 not filter_expression_requires_document_metadata(effective_filter)
                 or loaded_segment_has_document_filter_index(segment)
@@ -221,9 +221,9 @@ def exact_oracle_hits_for_snapshot[Backend: ExactScoringBackend](
             if use_allowlist:
                 if allowed_flags[document_index] == 0:
                     continue
-            elif not filter_expression.is_match_all():
+            elif not effective_filter.is_match_all():
                 if not filter_expression_matches_document(
-                    filter_expression,
+                    effective_filter,
                     segment.stored_index.index.doc_ids[document_index],
                     loaded_segment_document_metadata_for_doc_index(
                         segment, document_index

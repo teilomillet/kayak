@@ -21,12 +21,17 @@ from .execution_stage3 import stage3_result_for_plan
 from .faithfulness import FaithfulnessAssessment, assess_faithfulness
 from .score_histogram import build_score_histogram
 from .search_plan import SearchPlan
+from .serving_scope import (
+    SearchServingScope,
+    search_serving_scope_for_collection,
+)
 from .stage_profile import SearchStageProfile
 
 
 struct CollectionSearchExplain(Copyable):
     var collection_id: String
     var snapshot_id: String
+    var serving_scope: SearchServingScope
     var plan: SearchPlan
     var candidate_set: CandidateSet
     var candidate_stage: SearchStageProfile
@@ -41,6 +46,7 @@ struct CollectionSearchExplain(Copyable):
         out self,
         var collection_id: String,
         var snapshot_id: String,
+        serving_scope: SearchServingScope,
         plan: SearchPlan,
         candidate_set: CandidateSet,
         candidate_stage: SearchStageProfile,
@@ -53,6 +59,7 @@ struct CollectionSearchExplain(Copyable):
     ):
         self.collection_id = collection_id^
         self.snapshot_id = snapshot_id^
+        self.serving_scope = serving_scope.copy()
         self.plan = plan.copy()
         self.candidate_set = candidate_set.copy()
         self.candidate_stage = candidate_stage.copy()
@@ -149,6 +156,7 @@ def explain_collection_search[Backend: ExactScoringBackend](
     return CollectionSearchExplain(
         snapshot.collection.collection_id.value.copy(),
         snapshot.snapshot.snapshot_id.value.copy(),
+        search_serving_scope_for_collection(snapshot.collection),
         plan,
         candidate_set.copy(),
         candidate_stage,

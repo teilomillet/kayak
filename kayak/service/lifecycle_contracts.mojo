@@ -9,6 +9,7 @@ from kayak.collections import (
     SnapshotId,
     SnapshotRetentionPolicy,
     TenantId,
+    require_collection_layout_family_supported,
 )
 from kayak.collections.validation import (
     require_non_empty_string,
@@ -71,6 +72,7 @@ struct CollectionLifecycleResponse(Copyable):
     var collection_id: CollectionId
     var tenant_id: TenantId
     var namespace_id: NamespaceId
+    var collection_layout_family: String
     var model_name: String
     var vector_scalar_name: String
     var vector_dim: Int
@@ -89,6 +91,7 @@ struct CollectionLifecycleResponse(Copyable):
         collection_id: CollectionId,
         tenant_id: TenantId,
         namespace_id: NamespaceId,
+        collection_layout_family: String,
         model_name: String,
         vector_scalar_name: String,
         vector_dim: Int,
@@ -105,6 +108,9 @@ struct CollectionLifecycleResponse(Copyable):
         self.collection_id = collection_id.copy()
         self.tenant_id = tenant_id.copy()
         self.namespace_id = namespace_id.copy()
+        self.collection_layout_family = require_collection_layout_family_supported(
+            collection_layout_family
+        )
         self.model_name = require_non_empty_string(model_name, "model_name")
         self.vector_scalar_name = require_non_empty_string(
             vector_scalar_name, "vector_scalar_name"

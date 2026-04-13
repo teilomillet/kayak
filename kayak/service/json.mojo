@@ -279,6 +279,13 @@ def append_json_search_plan_selection(
     append_json_string_list(
         buffer, selection.effective_candidate_generator_order
     )
+    buffer += ",\"serving_scope_kind\":\""
+    buffer += json_escape(selection.serving_scope.kind) + "\","
+    buffer += "\"serving_scope_requires_logical_pushdown\":"
+    if selection.serving_scope.requires_logical_scope_pushdown:
+        buffer += "true"
+    else:
+        buffer += "false"
     buffer += ",\"decision\":"
     append_json_search_plan_selection_decision(
         buffer,
@@ -370,6 +377,8 @@ def create_collection_request_json(read request: CreateCollectionRequest) -> Str
     buffer += "\"collection_id\":\"" + json_escape(request.collection_id.value) + "\","
     buffer += "\"tenant_id\":\"" + json_escape(request.tenant_id.value) + "\","
     buffer += "\"namespace_id\":\"" + json_escape(request.namespace_id.value) + "\","
+    buffer += "\"collection_layout_family\":\""
+    buffer += json_escape(request.collection_layout_family) + "\","
     buffer += "\"model_name\":\"" + json_escape(request.model_name) + "\","
     buffer += "\"vector_scalar_name\":\""
     buffer += json_escape(request.vector_scalar_name) + "\","
@@ -439,6 +448,8 @@ def collection_lifecycle_response_json(
     buffer += "\"collection_id\":\"" + json_escape(response.collection_id.value) + "\","
     buffer += "\"tenant_id\":\"" + json_escape(response.tenant_id.value) + "\","
     buffer += "\"namespace_id\":\"" + json_escape(response.namespace_id.value) + "\","
+    buffer += "\"collection_layout_family\":\""
+    buffer += json_escape(response.collection_layout_family) + "\","
     buffer += "\"model_name\":\"" + json_escape(response.model_name) + "\","
     buffer += "\"vector_scalar_name\":\""
     buffer += json_escape(response.vector_scalar_name) + "\","

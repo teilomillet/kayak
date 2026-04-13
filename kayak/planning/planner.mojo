@@ -1,6 +1,9 @@
 from std.collections import List
 
-from kayak.collections import SnapshotSearchArtifactAvailability
+from kayak.collections import (
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
+    SnapshotSearchArtifactAvailability,
+)
 from kayak.collections.validation import require_non_empty_string
 from kayak.filters import (
     FilterExpression,
@@ -35,6 +38,7 @@ from .selection_decision import (
     SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
     SEARCH_PLAN_ORDER_POLICY_PREFERRED_OVERRIDE,
     SEARCH_PLAN_SELECTION_CONSTRAINT_EXACT_STAGE1_REQUIRED,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_LOGICAL_SCOPE_PUSHDOWN,
     SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
     SEARCH_PLAN_SELECTION_CONSTRAINT_ORACLE_REQUIRES_DEBUG,
     SEARCH_PLAN_SELECTION_CONSTRAINT_UNSUPPORTED_FILTER,
@@ -42,11 +46,12 @@ from .selection_decision import (
     SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
     SearchPlanSelectionDecision,
 )
+from .serving_scope import (
+    SearchServingScope,
+    layout_rooted_search_serving_scope,
+)
 from .stage1_capabilities import (
     stage1_capabilities_for_candidate_generator_kind,
-    stage1_generator_supports_filter_expression,
-    stage1_required_search_artifact_families,
-    stage1_required_search_artifact_families_for_filter_expression,
 )
 
 
@@ -65,13 +70,78 @@ def search_planning_goal_kinds(goal: String) raises -> List[String]:
     return default_candidate_generator_order_for_goal(goal)
 
 
+def append_unique_required_family(
+    mut families: List[String], family: String
+):
+    for existing in families:
+        if existing == family:
+            return
+
+    families.append(family.copy())
+
+
+def selection_request_effective_filter_requires_structured_support(
+    read request: SearchPlanSelectionRequest,
+    read filter_expression: FilterExpression,
+) -> Bool:
+    if request.serving_scope.requires_logical_scope_pushdown:
+        return True
+
+    return filter_expression_requires_document_metadata(filter_expression)
+
+
+def candidate_generator_required_artifact_families_for_selection_request(
+    candidate_generator_kind: String,
+    read request: SearchPlanSelectionRequest,
+    read filter_expression: FilterExpression,
+) raises -> List[String]:
+    var capabilities = stage1_capabilities_for_candidate_generator_kind(
+        candidate_generator_kind
+    )
+    var required_families = capabilities.required_search_artifact_families.copy()
+    if request.serving_scope.requires_logical_scope_pushdown:
+        append_unique_required_family(
+            required_families,
+            SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
+        )
+        return required_families^
+
+    if (
+        filter_expression_requires_document_metadata(filter_expression)
+        and capabilities.supports_structured_filter
+        and not capabilities.stage1_is_exact
+    ):
+        append_unique_required_family(
+            required_families,
+            SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
+        )
+
+    return required_families^
+
+
+def candidate_generator_kind_supports_selection_request_filter_expression(
+    candidate_generator_kind: String,
+    read request: SearchPlanSelectionRequest,
+    read filter_expression: FilterExpression,
+) raises -> Bool:
+    var capabilities = stage1_capabilities_for_candidate_generator_kind(
+        candidate_generator_kind
+    )
+    if request.serving_scope.requires_logical_scope_pushdown:
+        return capabilities.supports_structured_filter
+
+    return capabilities.supports_filter_expression(filter_expression)
+
+
 def candidate_generator_kind_is_available(
     read availability: SnapshotSearchArtifactAvailability,
     candidate_generator_kind: String,
+    read request: SearchPlanSelectionRequest,
     read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> Bool:
-    var required_families = stage1_required_search_artifact_families_for_filter_expression(
+    var required_families = candidate_generator_required_artifact_families_for_selection_request(
         candidate_generator_kind,
+        request,
         filter_expression,
     )
     for family in required_families:
@@ -83,16 +153,19 @@ def candidate_generator_kind_is_available(
 
 def candidate_generator_kind_supports_filter_expression(
     candidate_generator_kind: String,
+    read request: SearchPlanSelectionRequest,
     read filter_expression: FilterExpression,
 ) raises -> Bool:
-    return stage1_generator_supports_filter_expression(
+    return candidate_generator_kind_supports_selection_request_filter_expression(
         candidate_generator_kind,
+        request,
         filter_expression,
     )
 
 
 def available_candidate_generator_kinds(
     read availability: SnapshotSearchArtifactAvailability,
+    read request: SearchPlanSelectionRequest,
     read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> List[String]:
     var kinds = List[String]()
@@ -100,6 +173,7 @@ def available_candidate_generator_kinds(
         if candidate_generator_kind_is_available(
             availability,
             candidate_generator_kind,
+            request,
             filter_expression,
         ):
             append_unique_generator_kind(kinds, candidate_generator_kind)
@@ -113,6 +187,7 @@ struct SearchPlanSelectionRequest(Copyable):
     var faithfulness_policy: FaithfulnessPolicy
     var filter_expression: FilterExpression
     var preferred_candidate_generator_kinds: List[String]
+    var serving_scope: SearchServingScope
     var debug_mode: Bool
     var gem_graph_cluster_top_k_per_query_token: Int
     var gem_graph_beam_width: Int
@@ -138,6 +213,7 @@ struct SearchPlanSelectionRequest(Copyable):
             debug_mode,
             gem_graph_cluster_top_k_per_query_token,
             gem_graph_beam_width,
+            layout_rooted_search_serving_scope(),
         )
 
     def __init__(
@@ -151,6 +227,32 @@ struct SearchPlanSelectionRequest(Copyable):
         debug_mode: Bool = False,
         gem_graph_cluster_top_k_per_query_token: Int = DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
         gem_graph_beam_width: Int = DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
+    ) raises:
+        self = SearchPlanSelectionRequest(
+            final_k,
+            candidate_k,
+            faithfulness_policy,
+            filter_expression,
+            goal,
+            preferred_candidate_generator_kinds,
+            debug_mode,
+            gem_graph_cluster_top_k_per_query_token,
+            gem_graph_beam_width,
+            layout_rooted_search_serving_scope(),
+        )
+
+    def __init__(
+        out self,
+        final_k: Int,
+        candidate_k: Int,
+        faithfulness_policy: FaithfulnessPolicy,
+        filter_expression: FilterExpression,
+        goal: String,
+        read preferred_candidate_generator_kinds: List[String],
+        debug_mode: Bool,
+        gem_graph_cluster_top_k_per_query_token: Int,
+        gem_graph_beam_width: Int,
+        serving_scope: SearchServingScope,
     ) raises:
         if gem_graph_cluster_top_k_per_query_token <= 0:
             raise Error(
@@ -174,6 +276,7 @@ struct SearchPlanSelectionRequest(Copyable):
                 self.preferred_candidate_generator_kinds,
                 candidate_generator_kind,
             )
+        self.serving_scope = serving_scope.copy()
         self.debug_mode = debug_mode
         self.gem_graph_cluster_top_k_per_query_token = (
             gem_graph_cluster_top_k_per_query_token
@@ -181,11 +284,30 @@ struct SearchPlanSelectionRequest(Copyable):
         self.gem_graph_beam_width = gem_graph_beam_width
 
 
+def search_plan_selection_request_with_serving_scope(
+    read request: SearchPlanSelectionRequest,
+    serving_scope: SearchServingScope,
+) raises -> SearchPlanSelectionRequest:
+    return SearchPlanSelectionRequest(
+        request.candidate_budget.final_k,
+        request.candidate_budget.candidate_k,
+        request.faithfulness_policy,
+        request.filter_expression,
+        request.goal,
+        request.preferred_candidate_generator_kinds,
+        request.debug_mode,
+        request.gem_graph_cluster_top_k_per_query_token,
+        request.gem_graph_beam_width,
+        serving_scope,
+    )
+
+
 struct SearchPlanSelection(Copyable):
     var goal: String
     var selected_candidate_generator_status: String
     var available_candidate_generator_kinds: List[String]
     var effective_candidate_generator_order: List[String]
+    var serving_scope: SearchServingScope
     var plan: SearchPlan
     var decision: SearchPlanSelectionDecision
 
@@ -195,6 +317,7 @@ struct SearchPlanSelection(Copyable):
         var selected_candidate_generator_status: String,
         read available_candidate_generator_kinds: List[String],
         read effective_candidate_generator_order: List[String],
+        serving_scope: SearchServingScope,
         plan: SearchPlan,
         decision: SearchPlanSelectionDecision,
     ) raises:
@@ -215,6 +338,7 @@ struct SearchPlanSelection(Copyable):
                 self.effective_candidate_generator_order,
                 candidate_generator_kind,
             )
+        self.serving_scope = serving_scope.copy()
         self.plan = plan.copy()
         self.decision = decision.copy()
 
@@ -285,14 +409,20 @@ def search_plan_for_candidate_generator_kind(
 def effective_candidate_generator_order(
     read request: SearchPlanSelectionRequest
 ) raises -> CandidateGeneratorOrderDecision:
+    return effective_candidate_generator_order_for_filter_expression(
+        request,
+        request.filter_expression,
+    )
+
+
+def effective_candidate_generator_order_for_filter_expression(
+    read request: SearchPlanSelectionRequest,
+    read filter_expression: FilterExpression,
+) raises -> CandidateGeneratorOrderDecision:
     if (
-        not request.filter_expression.is_match_all()
-        and not filter_expression_is_exact_doc_id_filter(
-            request.filter_expression
-        )
-        and not filter_expression_requires_document_metadata(
-            request.filter_expression
-        )
+        not filter_expression.is_match_all()
+        and not filter_expression_is_exact_doc_id_filter(filter_expression)
+        and not filter_expression_requires_document_metadata(filter_expression)
     ):
         return CandidateGeneratorOrderDecision(
             ["exact_full_scan"],
@@ -320,6 +450,21 @@ def effective_candidate_generator_order(
             "oracle_full_recall_required without debug_mode falls back to exact stage-1 candidate generation",
         )
 
+    var default_constraint_kind = SEARCH_PLAN_SELECTION_CONSTRAINT_NONE
+    var default_explanation = (
+        "planner used the default candidate-generator order for goal "
+        + request.goal
+    )
+    if request.serving_scope.requires_logical_scope_pushdown:
+        default_constraint_kind = (
+            SEARCH_PLAN_SELECTION_CONSTRAINT_LOGICAL_SCOPE_PUSHDOWN
+        )
+        default_explanation = (
+            "planner used the default candidate-generator order for goal "
+            + request.goal
+            + " under a logical-filter-pushdown serving scope"
+        )
+
     if len(request.preferred_candidate_generator_kinds) != 0:
         var preferred = List[String]()
         for candidate_generator_kind in request.preferred_candidate_generator_kinds:
@@ -329,16 +474,15 @@ def effective_candidate_generator_order(
         return CandidateGeneratorOrderDecision(
             preferred,
             SEARCH_PLAN_ORDER_POLICY_PREFERRED_OVERRIDE,
-            SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+            default_constraint_kind,
             "planner used explicit preferred_candidate_generator_kinds order",
         )
 
     return CandidateGeneratorOrderDecision(
         search_planning_goal_kinds(request.goal),
         SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
-        SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
-        "planner used the default candidate-generator order for goal "
-        + request.goal,
+        default_constraint_kind,
+        default_explanation,
     )
 
 
@@ -346,22 +490,40 @@ def select_search_plan_for_availability(
     read availability: SnapshotSearchArtifactAvailability,
     read request: SearchPlanSelectionRequest,
 ) raises -> SearchPlanSelection:
-    var available_kinds = available_candidate_generator_kinds(
+    return select_search_plan_for_availability_with_filter_expression(
         availability,
+        request,
         request.filter_expression,
     )
-    var decision = effective_candidate_generator_order(request)
+
+
+def select_search_plan_for_availability_with_filter_expression(
+    read availability: SnapshotSearchArtifactAvailability,
+    read request: SearchPlanSelectionRequest,
+    read filter_expression: FilterExpression,
+) raises -> SearchPlanSelection:
+    var available_kinds = available_candidate_generator_kinds(
+        availability,
+        request,
+        filter_expression,
+    )
+    var decision = effective_candidate_generator_order_for_filter_expression(
+        request,
+        filter_expression,
+    )
 
     for candidate_generator_kind in decision.order:
         if not candidate_generator_kind_is_available(
             availability,
             candidate_generator_kind,
-            request.filter_expression,
+            request,
+            filter_expression,
         ):
             continue
         if not candidate_generator_kind_supports_filter_expression(
             candidate_generator_kind,
-            request.filter_expression,
+            request,
+            filter_expression,
         ):
             continue
 
@@ -370,6 +532,7 @@ def select_search_plan_for_availability(
             search_planner_registry_entry(candidate_generator_kind).planner_status,
             available_kinds,
             decision.order,
+            request.serving_scope,
             selected_plan_for_kind(candidate_generator_kind, request),
             search_plan_selection_decision_for_order_decision(
                 decision,
@@ -378,11 +541,22 @@ def select_search_plan_for_availability(
             ),
         )
 
+    if not candidate_generator_kind_is_available(
+        availability,
+        "exact_full_scan",
+        request,
+        filter_expression,
+    ):
+        raise Error(
+            "no safe candidate generator is available under the current serving scope and filter contract"
+        )
+
     return SearchPlanSelection(
         request.goal,
         search_planner_registry_entry("exact_full_scan").planner_status,
         available_kinds,
         decision.order,
+        request.serving_scope,
         exact_full_scan_search_plan(
             request.candidate_budget.final_k,
             request.candidate_budget.candidate_k,

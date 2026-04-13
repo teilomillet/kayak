@@ -4,6 +4,10 @@ from std.collections import List
 
 from .candidate_generator import CandidateGenerator
 from .collection_hit import CollectionHit
+from .filter_application_profile import (
+    FilterApplicationProfile,
+    identity_filter_application_profile,
+)
 from .graph_search_counters import GraphSearchCounters
 from .stage1_capabilities import (
     stage1_capabilities_for_candidate_generator_kind,
@@ -22,6 +26,7 @@ struct CandidateSet(Copyable):
     var token_count: Int
     var vector_count: Int
     var byte_size: Int
+    var filter_application_profile: FilterApplicationProfile
     var tracks_graph_search: Bool
     var graph_search_counters: GraphSearchCounters
 
@@ -116,6 +121,9 @@ struct CandidateSet(Copyable):
         self.token_count = token_count
         self.vector_count = vector_count
         self.byte_size = byte_size
+        self.filter_application_profile = identity_filter_application_profile(
+            document_count
+        )
         self.tracks_graph_search = False
         self.graph_search_counters = GraphSearchCounters()
 

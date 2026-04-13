@@ -18,6 +18,11 @@ from .candidate_generator import (
     gem_graph_candidate_generator,
 )
 from .candidate_set import CandidateSet
+from .filter_application_profile import (
+    FilterApplicationProfile,
+    filter_application_profile_for_effective_filter,
+    identity_filter_application_profile,
+)
 from .centroid_execution_contract import (
     CENTROID_EXECUTION_SCORE_VARIANT_BLOCKMAX,
     CENTROID_EXECUTION_SCORE_VARIANT_FLAT,
@@ -99,6 +104,14 @@ from .filter_scope import (
     logical_filter_scope_for_collection,
     segment_supports_scoped_filter_pushdown,
 )
+from .serving_scope import (
+    SEARCH_SERVING_SCOPE_KIND_LAYOUT_ROOTED,
+    SEARCH_SERVING_SCOPE_KIND_LOGICAL_FILTER_PUSHDOWN,
+    SearchServingScope,
+    layout_rooted_search_serving_scope,
+    logical_filter_pushdown_search_serving_scope,
+    search_serving_scope_for_collection,
+)
 from .stage2_reference_operator import (
     STAGE2_REFERENCE_OPERATOR_FAMILY_IDENTITY,
     STAGE2_REFERENCE_OPERATOR_FAMILY_LATE_INTERACTION,
@@ -178,14 +191,17 @@ from .planner import (
     available_candidate_generator_kinds,
     candidate_generator_kind_is_available,
     search_plan_for_candidate_generator_kind,
+    search_plan_selection_request_with_serving_scope,
     search_planning_goal_kinds,
     select_search_plan_for_availability,
+    select_search_plan_for_availability_with_filter_expression,
 )
 from .selection_decision import (
     SEARCH_PLAN_ORDER_POLICY_CONSTRAINT_OVERRIDE,
     SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
     SEARCH_PLAN_ORDER_POLICY_PREFERRED_OVERRIDE,
     SEARCH_PLAN_SELECTION_CONSTRAINT_EXACT_STAGE1_REQUIRED,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_LOGICAL_SCOPE_PUSHDOWN,
     SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
     SEARCH_PLAN_SELECTION_CONSTRAINT_ORACLE_REQUIRES_DEBUG,
     SEARCH_PLAN_SELECTION_CONSTRAINT_UNSUPPORTED_FILTER,

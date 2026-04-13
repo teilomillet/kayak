@@ -8,6 +8,9 @@ comptime SEARCH_PLAN_ORDER_POLICY_PREFERRED_OVERRIDE = "preferred_override"
 comptime SEARCH_PLAN_ORDER_POLICY_CONSTRAINT_OVERRIDE = "constraint_override"
 
 comptime SEARCH_PLAN_SELECTION_CONSTRAINT_NONE = "none"
+comptime SEARCH_PLAN_SELECTION_CONSTRAINT_LOGICAL_SCOPE_PUSHDOWN = (
+    "logical_scope_pushdown"
+)
 comptime SEARCH_PLAN_SELECTION_CONSTRAINT_UNSUPPORTED_FILTER = "unsupported_filter"
 comptime SEARCH_PLAN_SELECTION_CONSTRAINT_EXACT_STAGE1_REQUIRED = (
     "exact_stage1_required"

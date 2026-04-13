@@ -77,6 +77,19 @@ Reason:
 - exact selection can mean "chosen by default order", "forced by constraint",
   or "used as a final fallback", and those are materially different semantics
 
+`SearchPlanSelection` and explain payloads now also report serving-scope
+semantics explicitly:
+
+- `serving_scope_kind`
+- `serving_scope_requires_logical_pushdown`
+
+Reason:
+
+- a public `match_all` request can still require scoped candidate generation
+  when the collection is served from a shared pool
+- stage-1 support and safe fallback behavior depend on that serving contract,
+  not only on the user-visible filter expression
+
 ## Guardrails
 
 The repo now enforces this contract mechanically in production source:

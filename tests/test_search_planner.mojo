@@ -7,14 +7,17 @@ from kayak import (
     SEARCH_PLAN_ORDER_POLICY_CONSTRAINT_OVERRIDE,
     SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
     SEARCH_PLAN_ORDER_POLICY_PREFERRED_OVERRIDE,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_LOGICAL_SCOPE_PUSHDOWN,
     SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
     SEARCH_PLAN_SELECTION_CONSTRAINT_ORACLE_REQUIRES_DEBUG,
     SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
     SnapshotSearchArtifactAvailability,
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
+    logical_filter_pushdown_search_serving_scope,
     oracle_full_recall_required_faithfulness_policy,
     search_plan_for_candidate_generator_kind,
+    search_plan_selection_request_with_serving_scope,
     select_search_plan_for_availability,
 )
 from kayak.filters import match_all_filter, one_of_filter
@@ -206,6 +209,65 @@ def test_planner_exact_fallback_preserves_requested_candidate_window() raises:
     assert_equal(selection.plan.candidate_budget.final_k, 5)
     assert_equal(selection.plan.candidate_budget.candidate_k, 20)
     assert_equal(selection.selected_candidate_generator_status, "exact_fallback")
+
+
+def test_shared_pool_serving_scope_keeps_native_stage1_explicit() raises:
+    var selection = select_search_plan_for_availability(
+        SnapshotSearchArtifactAvailability(
+            1,
+            ["document_proxy", "document_filter_index"],
+            ["document_proxy", "document_filter_index"],
+        ),
+        search_plan_selection_request_with_serving_scope(
+            SearchPlanSelectionRequest(
+                5,
+                20,
+                best_effort_faithfulness_policy(),
+                match_all_filter(),
+                SEARCH_PLANNING_GOAL_BALANCED,
+            ),
+            logical_filter_pushdown_search_serving_scope(),
+        ),
+    )
+
+    assert_equal(selection.plan.candidate_generator.kind, "document_proxy")
+    assert_equal(selection.serving_scope.kind, "logical_filter_pushdown")
+    assert_equal(selection.serving_scope.requires_logical_scope_pushdown, True)
+    assert_equal(
+        selection.decision.constraint_kind,
+        SEARCH_PLAN_SELECTION_CONSTRAINT_LOGICAL_SCOPE_PUSHDOWN,
+    )
+    assert_equal(
+        selection.decision.outcome_kind,
+        SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
+    )
+
+
+def test_shared_pool_serving_scope_rejects_scope_unaware_availability() raises:
+    var raised = False
+
+    try:
+        _ = select_search_plan_for_availability(
+            SnapshotSearchArtifactAvailability(
+                1,
+                ["document_proxy"],
+                ["document_proxy"],
+            ),
+            search_plan_selection_request_with_serving_scope(
+                SearchPlanSelectionRequest(
+                    5,
+                    20,
+                    best_effort_faithfulness_policy(),
+                    match_all_filter(),
+                    SEARCH_PLANNING_GOAL_BALANCED,
+                ),
+                logical_filter_pushdown_search_serving_scope(),
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def test_search_plan_for_candidate_generator_kind_uses_default_contracts() raises:

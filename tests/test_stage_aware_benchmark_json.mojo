@@ -6,6 +6,7 @@ from kayak import (
     EncodedDocument,
     EncodedQuery,
     ExactCpuBackend,
+    FilterApplicationProfile,
     JudgedQuery,
     JudgedTask,
     NamespaceId,
@@ -156,6 +157,18 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
         True,
     )
     assert_equal(
+        json.find("\"candidate_stage_public_filter_applied\":false") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_stage_filter_input_document_count\":100") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_stage_filter_selectivity\":1.0") != -1,
+        True,
+    )
+    assert_equal(
         json.find("\"candidate_stage_tracks_graph_search\":true") != -1,
         True,
     )
@@ -271,6 +284,18 @@ def test_build_stage_aware_search_summary_reports_proxy_recall_gap() raises:
     assert_equal(summary.nominal_document_vector_count, 2)
     assert_equal(summary.candidate_stage.document_count, 3)
     assert_equal(summary.candidate_stage.vector_count, 3)
+    assert_equal(
+        summary.candidate_stage_filter_application.public_filter_applied,
+        False,
+    )
+    assert_equal(
+        summary.candidate_stage_filter_application.logical_scope_applied,
+        False,
+    )
+    assert_equal(
+        summary.candidate_stage_filter_application.matching_document_count,
+        3,
+    )
     assert_equal(summary.candidate_stage_tracks_graph_search, False)
     assert_equal(summary.mean_candidate_stage_graph_visited_vertex_count, 0.0)
     assert_equal(len(summary.stage2_reference_materialized_artifact_families), 1)
@@ -346,6 +371,113 @@ def test_build_stage_aware_search_summary_propagates_materialized_artifact_famil
 
     assert_equal(len(summary.stage2_reference_materialized_artifact_families), 1)
     assert_equal(summary.stage2_reference_materialized_artifact_families[0], "late_interaction")
+
+
+def test_stage_aware_search_summary_json_surfaces_filter_selectivity() raises:
+    var summary = StageAwareSearchSummary(
+        "mock://dataset",
+        "mock-model",
+        "browsecomp",
+        "gold",
+        "mock_collection",
+        "snapshot-0001",
+        document_proxy_search_plan(
+            10,
+            100,
+            best_effort_faithfulness_policy(),
+        ),
+        "ndcg",
+        0.4,
+        0.4,
+        0.5,
+        0.5,
+        1.0,
+        0.25,
+        0.012,
+        10,
+        100,
+        4,
+        3,
+        5,
+        128,
+        512,
+        512,
+        4096,
+        32.0,
+        8.0,
+        StageDensitySummary(
+            100,
+            400,
+            400,
+            3200,
+            32.0,
+            8.0,
+        ),
+        False,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        ["late_interaction"],
+        StageDensitySummary(
+            10,
+            80,
+            80,
+            640,
+            64.0,
+            8.0,
+        ),
+        [],
+        StageDensitySummary(
+            10,
+            10,
+            10,
+            80,
+            8.0,
+            8.0,
+        ),
+        StageDensitySummary(
+            128,
+            512,
+            512,
+            4096,
+            32.0,
+            8.0,
+        ),
+        128,
+    )
+    summary.candidate_stage_filter_application = FilterApplicationProfile(
+        False,
+        True,
+        True,
+        100,
+        25,
+        400,
+    )
+
+    var json = stage_aware_search_summary_json(summary)
+
+    assert_equal(
+        json.find("\"candidate_stage_logical_scope_applied\":true") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_stage_uses_document_filter_index\":true") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_stage_filter_matching_document_count\":25") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_stage_filter_artifact_byte_size\":400") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_stage_filter_selectivity\":0.25") != -1,
+        True,
+    )
 
 
 def main() raises:

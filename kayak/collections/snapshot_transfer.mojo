@@ -106,6 +106,11 @@ def require_collection_manifest_compatible(
     if existing.vector_dim != imported.vector_dim:
         raise Error("collection manifest vector_dim mismatch during import")
 
+    if existing.collection_layout_family != imported.collection_layout_family:
+        raise Error(
+            "collection manifest collection_layout_family mismatch during import"
+        )
+
     if not same_search_artifact_build_policy(
         existing.search_artifact_build_policy,
         imported.search_artifact_build_policy,
@@ -142,6 +147,7 @@ def merged_collection_manifest_for_import(
         active_snapshot_id,
         existing.default_keep_latest_inactive_count,
         existing.search_artifact_build_policy,
+        existing.collection_layout_family,
     )
 
 
@@ -230,6 +236,7 @@ def collection_manifest_for_snapshot_bundle(
         resolved.snapshot.snapshot_id.value.copy(),
         resolved.collection.default_keep_latest_inactive_count,
         resolved.collection.search_artifact_build_policy,
+        resolved.collection.collection_layout_family,
     )
 
 

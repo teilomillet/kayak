@@ -299,9 +299,15 @@ What Kayak should do:
   snapshots should also carry internal collection/tenant/namespace scope on that
   same sidecar path and older snapshots without scope postings should still
   degrade cleanly to the pre-scope behavior
-- keep the remaining gap explicit:
-  unfiltered shared-pool `match_all` serving still needs a first-class scope
-  path instead of relying on tenant-rooted layout alone
+- make shared hosted layout explicit instead of heuristic:
+  `collection_layout_family` now distinguishes `tenant_isolated` from
+  `shared_pool`, and `shared_pool` search paths mechanically require
+  scope-aware `document_filter_index` sidecars even for public `match_all`
+  requests
+- keep serving-scope semantics visible in planner/debug output:
+  the system should report when logical filter pushdown, rather than layout
+  alone, is enforcing collection identity, because that changes which stage-1
+  engines are valid and whether exact fallback is still safe
 
 ## Additional Decision Rules
 

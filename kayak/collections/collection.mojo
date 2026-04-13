@@ -1,5 +1,9 @@
 # Collection-level manifest for hosted late-interaction data.
 
+from .collection_layout import (
+    default_collection_layout_family,
+    require_collection_layout_family_supported,
+)
 from .ids import CollectionId, NamespaceId, TenantId
 from .search_artifact_builders import (
     require_search_artifact_build_policy_supported_for_segment_sealing,
@@ -16,6 +20,7 @@ struct CollectionManifest(Copyable):
     var collection_id: CollectionId
     var tenant_id: TenantId
     var namespace_id: NamespaceId
+    var collection_layout_family: String
     var model_name: String
     var vector_scalar_name: String
     var vector_dim: Int
@@ -45,6 +50,7 @@ struct CollectionManifest(Copyable):
             "",
             1,
             default_search_artifact_build_policy(),
+            default_collection_layout_family(),
         )
 
     def __init__(
@@ -69,6 +75,7 @@ struct CollectionManifest(Copyable):
             "",
             default_keep_latest_inactive_count,
             default_search_artifact_build_policy(),
+            default_collection_layout_family(),
         )
 
     def __init__(
@@ -93,6 +100,7 @@ struct CollectionManifest(Copyable):
             active_snapshot_id,
             1,
             default_search_artifact_build_policy(),
+            default_collection_layout_family(),
         )
 
     def __init__(
@@ -117,6 +125,7 @@ struct CollectionManifest(Copyable):
             "",
             1,
             search_artifact_build_policy,
+            default_collection_layout_family(),
         )
 
     def __init__(
@@ -142,6 +151,7 @@ struct CollectionManifest(Copyable):
             "",
             default_keep_latest_inactive_count,
             search_artifact_build_policy,
+            default_collection_layout_family(),
         )
 
     def __init__(
@@ -167,6 +177,7 @@ struct CollectionManifest(Copyable):
             active_snapshot_id,
             default_keep_latest_inactive_count,
             default_search_artifact_build_policy(),
+            default_collection_layout_family(),
         )
 
     def __init__(
@@ -192,6 +203,7 @@ struct CollectionManifest(Copyable):
             active_snapshot_id,
             1,
             search_artifact_build_policy,
+            default_collection_layout_family(),
         )
 
     def __init__(
@@ -206,10 +218,14 @@ struct CollectionManifest(Copyable):
         active_snapshot_id: String,
         default_keep_latest_inactive_count: Int,
         read search_artifact_build_policy: SearchArtifactBuildPolicy,
+        collection_layout_family: String,
     ) raises:
         self.collection_id = collection_id.copy()
         self.tenant_id = tenant_id.copy()
         self.namespace_id = namespace_id.copy()
+        self.collection_layout_family = require_collection_layout_family_supported(
+            collection_layout_family
+        )
         self.model_name = require_non_empty_string(model_name, "model_name")
         self.vector_scalar_name = require_non_empty_string(
             vector_scalar_name, "vector_scalar_name"
@@ -234,6 +250,33 @@ struct CollectionManifest(Copyable):
             raise Error(
                 "active_snapshot_id requires a positive latest_generation"
             )
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        latest_generation: Int,
+        active_snapshot_id: String,
+        default_keep_latest_inactive_count: Int,
+        read search_artifact_build_policy: SearchArtifactBuildPolicy,
+    ) raises:
+        self = CollectionManifest(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            latest_generation,
+            active_snapshot_id,
+            default_keep_latest_inactive_count,
+            search_artifact_build_policy,
+            default_collection_layout_family(),
+        )
 
     def has_active_snapshot(self) -> Bool:
         return self.active_snapshot_id.byte_length() != 0
