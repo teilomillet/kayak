@@ -7,6 +7,7 @@ from kayak import (
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
     oracle_full_recall_required_faithfulness_policy,
+    search_plan_for_candidate_generator_kind,
     select_search_plan_for_availability,
 )
 from kayak.filters import match_all_filter, one_of_filter
@@ -142,6 +143,44 @@ def test_planner_exact_fallback_preserves_requested_candidate_window() raises:
     assert_equal(selection.plan.candidate_budget.final_k, 5)
     assert_equal(selection.plan.candidate_budget.candidate_k, 20)
     assert_equal(selection.selected_candidate_generator_status, "exact_fallback")
+
+
+def test_search_plan_for_candidate_generator_kind_uses_default_contracts() raises:
+    var exact_plan = search_plan_for_candidate_generator_kind(
+        "exact_full_scan",
+        SearchPlanSelectionRequest(
+            5,
+            20,
+            best_effort_faithfulness_policy(),
+            match_all_filter(),
+            SEARCH_PLANNING_GOAL_BALANCED,
+        ),
+    )
+    var gem_plan = search_plan_for_candidate_generator_kind(
+        "gem_graph",
+        SearchPlanSelectionRequest(
+            5,
+            20,
+            best_effort_faithfulness_policy(),
+            match_all_filter(),
+            SEARCH_PLANNING_GOAL_BALANCED,
+            False,
+            7,
+            9,
+        ),
+    )
+
+    assert_equal(exact_plan.candidate_generator.is_exact, True)
+    assert_equal(exact_plan.stage2_operator.kind, "noop_topk")
+    assert_equal(exact_plan.faithfulness_policy.kind, "exact_stage1_required")
+    assert_equal(gem_plan.candidate_generator.kind, "gem_graph")
+    assert_equal(
+        gem_plan.candidate_generator.cluster_top_k_per_query_token,
+        7,
+    )
+    assert_equal(gem_plan.candidate_generator.beam_width, 9)
+    assert_equal(gem_plan.stage2_operator.kind, "exact_late_interaction")
+    assert_equal(gem_plan.faithfulness_policy.kind, "best_effort")
 
 
 def main() raises:

@@ -62,13 +62,13 @@ def stage2_result_for_plan[Backend: ExactScoringBackend](
     read candidate_set: CandidateSet,
     read plan: SearchPlan,
 ) raises -> Stage2Result:
-    if plan.stage2_operator.kind == "noop_topk":
+    if plan.stage2_operator.execution_kind == "noop_topk":
         return noop_topk_stage2_result(
             candidate_set.hits,
             plan.candidate_budget.final_k,
         )
 
-    if plan.stage2_operator.kind == "exact_late_interaction":
+    if plan.stage2_operator.execution_kind == "exact_late_interaction":
         return exact_rerank_candidates_for_plan(
             backend,
             query,
@@ -77,7 +77,10 @@ def stage2_result_for_plan[Backend: ExactScoringBackend](
             plan.candidate_budget.final_k,
         )
 
-    if plan.stage2_operator.kind == "exact_late_interaction_clause_text":
+    if (
+        plan.stage2_operator.execution_kind
+        == "exact_late_interaction_clause_text"
+    ):
         return exact_late_interaction_clause_text_rerank_candidates_for_plan(
             backend,
             query,
@@ -87,7 +90,7 @@ def stage2_result_for_plan[Backend: ExactScoringBackend](
             plan.candidate_budget.final_k,
         )
 
-    if plan.stage2_operator.kind == "clause_text":
+    if plan.stage2_operator.execution_kind == "clause_text":
         return clause_text_rerank_candidates_for_plan(
             query_text,
             snapshot,
@@ -96,6 +99,6 @@ def stage2_result_for_plan[Backend: ExactScoringBackend](
         )
 
     raise Error(
-        "unsupported stage2 operator kind: "
-        + plan.stage2_operator.kind
+        "unsupported stage2 execution kind: "
+        + plan.stage2_operator.execution_kind
     )

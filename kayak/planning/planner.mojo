@@ -22,20 +22,8 @@ from .planner_registry import (
 )
 from .candidate_budget import CandidateBudget
 from .faithfulness import FaithfulnessPolicy
-from .search_plan import (
-    SearchPlan,
-    centroid_heads_search_plan,
-    centroid_postings_flat_search_plan,
-    centroid_postings_head_auto_search_plan,
-    centroid_postings_blockmax_search_plan,
-    centroid_postings_head_search_plan,
-    centroid_postings_imputed_search_plan,
-    centroid_postings_imputed_flat_search_plan,
-    centroid_postings_search_plan,
-    document_proxy_search_plan,
-    exact_full_scan_search_plan,
-    gem_graph_search_plan,
-)
+from .planner_plan_factory import planner_default_search_plan_for_kind
+from .search_plan import SearchPlan, exact_full_scan_search_plan
 from .stage1_capabilities import (
     stage1_capabilities_for_candidate_generator_kind,
     stage1_required_search_artifact_families,
@@ -207,85 +195,13 @@ def selected_plan_for_kind(
     candidate_generator_kind: String,
     read request: SearchPlanSelectionRequest,
 ) raises -> SearchPlan:
-    if candidate_generator_kind == "exact_full_scan":
-        return exact_full_scan_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-        )
-
-    if candidate_generator_kind == "document_proxy":
-        return document_proxy_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-            request.faithfulness_policy,
-        )
-
-    if candidate_generator_kind == "centroid_heads":
-        return centroid_heads_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-            request.faithfulness_policy,
-        )
-
-    if candidate_generator_kind == "centroid_postings":
-        return centroid_postings_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-            request.faithfulness_policy,
-        )
-
-    if candidate_generator_kind == "centroid_postings_flat":
-        return centroid_postings_flat_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-            request.faithfulness_policy,
-        )
-
-    if candidate_generator_kind == "centroid_postings_head":
-        return centroid_postings_head_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-            request.faithfulness_policy,
-        )
-
-    if candidate_generator_kind == "centroid_postings_head_auto":
-        return centroid_postings_head_auto_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-            request.faithfulness_policy,
-        )
-
-    if candidate_generator_kind == "centroid_postings_blockmax":
-        return centroid_postings_blockmax_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-            request.faithfulness_policy,
-        )
-
-    if candidate_generator_kind == "centroid_postings_imputed":
-        return centroid_postings_imputed_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-            request.faithfulness_policy,
-        )
-
-    if candidate_generator_kind == "centroid_postings_imputed_flat":
-        return centroid_postings_imputed_flat_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-            request.faithfulness_policy,
-        )
-
-    if candidate_generator_kind == "gem_graph":
-        return gem_graph_search_plan(
-            request.candidate_budget.final_k,
-            request.candidate_budget.candidate_k,
-            request.faithfulness_policy,
-            request.gem_graph_cluster_top_k_per_query_token,
-            request.gem_graph_beam_width,
-        )
-
-    raise Error("unknown search planning candidate generator kind: " + candidate_generator_kind)
+    return planner_default_search_plan_for_kind(
+        candidate_generator_kind,
+        request.candidate_budget,
+        request.faithfulness_policy,
+        request.gem_graph_cluster_top_k_per_query_token,
+        request.gem_graph_beam_width,
+    )
 
 
 def search_plan_for_candidate_generator_kind(

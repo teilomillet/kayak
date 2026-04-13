@@ -22,8 +22,6 @@ from .faithfulness import (
 from .stage2_operator import (
     Stage2Operator,
     clause_text_stage2_operator,
-    compatibility_exact_stage_kind_for_stage2_operator,
-    compatibility_reranker_kind_for_stage2_operator,
     exact_late_interaction_stage2_operator,
     noop_topk_stage2_operator,
 )
@@ -56,14 +54,10 @@ struct SearchPlan(Copyable):
         self.candidate_budget = candidate_budget.copy()
         self.stage2_operator = stage2_operator.copy()
         self.exact_stage_kind = (
-            compatibility_exact_stage_kind_for_stage2_operator(
-                self.stage2_operator.kind
-            )
+            self.stage2_operator.compatibility_exact_stage_kind.copy()
         )
         self.reranker_kind = (
-            compatibility_reranker_kind_for_stage2_operator(
-                self.stage2_operator.kind
-            )
+            self.stage2_operator.compatibility_reranker_kind.copy()
         )
         self.faithfulness_policy = faithfulness_policy.copy()
 
