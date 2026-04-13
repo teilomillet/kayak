@@ -2,6 +2,7 @@ from std.collections import List
 from std.os import makedirs
 from std.pathlib import Path
 
+from kayak.storage.atomic_write import write_text_atomic
 from kayak.storage.manifest import ManifestEntry, require_manifest_value
 from kayak.storage.text_codec import append_line, parse_int, read_non_empty_lines, split_tab_fields
 from kayak.text import DocumentTextCorpus
@@ -47,9 +48,9 @@ def save_stored_document_text_corpus(
     for index in range(len(stored.corpus.doc_ids)):
         var file_name = String(index) + ".txt"
         append_line(entry_lines, stored.corpus.doc_ids[index] + "\t" + file_name)
-        (payload_root / file_name).write_text(stored.corpus.texts[index])
+        write_text_atomic(payload_root / file_name, stored.corpus.texts[index])
 
-    text_corpus_entries_path(root).write_text(entry_lines)
+    write_text_atomic(text_corpus_entries_path(root), entry_lines)
 
 
 def load_stored_document_text_corpus(

@@ -2,6 +2,7 @@ from std.collections import List
 from std.os import makedirs
 from std.pathlib import Path
 
+from kayak.storage.atomic_write import write_text_atomic
 from kayak.storage.manifest import ManifestEntry, require_manifest_value
 from kayak.storage.text_codec import append_line, parse_int, read_non_empty_lines
 
@@ -42,7 +43,7 @@ def save_snapshot_manifest(root: Path, read manifest: SnapshotManifest) raises:
     var segment_id_lines = String()
     for segment_id in manifest.segment_ids:
         append_line(segment_id_lines, segment_id.value)
-    snapshot_segment_ids_path(root).write_text(segment_id_lines)
+    write_text_atomic(snapshot_segment_ids_path(root), segment_id_lines)
 
 
 def load_snapshot_manifest(root: Path) raises -> SnapshotManifest:

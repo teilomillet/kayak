@@ -169,6 +169,7 @@ def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() 
     assert_equal(document_count_after_delete, 1)
     assert_equal(snapshot.generation, 1)
     assert_equal(collection_manifest.latest_generation, 1)
+    assert_equal(collection_manifest.active_snapshot_id, "snapshot-0001")
     assert_equal(search_response.hits[0].doc_id, "doc-a")
     assert_equal(debug_response.explain.final_hits[0].doc_id, "doc-a")
     assert_equal(debug_response.explain.snapshot_id, "snapshot-0001")
@@ -177,8 +178,8 @@ def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() 
     assert_equal(imported_search.hits[0].doc_id, "doc-a")
 
 
-def test_hosted_collection_runtime_persists_append_only_draft_mutations() raises:
-    var service_root = unique_service_root("kayak-service-runtime-draft-log")
+def test_hosted_collection_runtime_compacts_draft_after_snapshot() raises:
+    var service_root = unique_service_root("kayak-service-runtime-draft-compact")
 
     var create_request = CreateCollectionRequest(
         CollectionId("news"),
@@ -230,26 +231,53 @@ def test_hosted_collection_runtime_persists_append_only_draft_mutations() raises
 
     var draft_manifest = (collection_root / "draft" / "manifest.tsv").read_text()
     assert_equal(draft_manifest.find("storage_kind\tmutation_log") >= 0, True)
-    assert_equal(draft_manifest.find("mutation_count\t3") >= 0, True)
+    assert_equal(draft_manifest.find("mutation_count\t0") >= 0, True)
     assert_equal(
-        (collection_root / "draft" / "mutations" / "mutation-1" / "manifest.tsv").exists(),
-        True,
-    )
-    assert_equal(
-        (collection_root / "draft" / "mutations" / "mutation-2" / "manifest.tsv").exists(),
-        True,
-    )
-    assert_equal(
-        (collection_root / "draft" / "mutations" / "mutation-3" / "manifest.tsv").exists(),
-        True,
+        (collection_root / "draft" / "mutations").exists(),
+        False,
     )
     assert_equal(
         (collection_root / "draft" / "packed_index" / "manifest.tsv").exists(),
-        False,
+        True,
+    )
+    assert_equal(
+        (collection_root / "draft" / "text_corpus" / "manifest.tsv").exists(),
+        True,
+    )
+    assert_equal(
+        load_collection_manifest(collection_root).active_snapshot_id,
+        "snapshot-0001",
+    )
+    assert_equal(
+        (collection_root / "draft" / "document_metadata" / "manifest.tsv").exists(),
+        True,
     )
     assert_equal(document_count_after_delete, 1)
     assert_equal(snapshot.stats.document_count, 1)
     assert_equal(snapshot.segment_ids[0].value, "segment-1")
+
+    var post_compaction_count = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-c", [[1.0, 0.0], [1.0, 0.0]]), "gamma")],
+        ),
+    )
+    var snapshot_two = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0002"),
+            "seal compacted baseline plus one mutation",
+        ),
+    )
+
+    assert_equal(post_compaction_count, 2)
+    assert_equal(snapshot_two.stats.document_count, 2)
 
 
 def test_hosted_service_metrics_aggregate_visible_snapshots() raises:

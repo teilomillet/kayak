@@ -109,8 +109,15 @@ def merged_collection_manifest_for_import(
     require_collection_manifest_compatible(existing, imported)
 
     var latest_generation = existing.latest_generation
+    var active_snapshot_id = existing.active_snapshot_id.copy()
     if imported.latest_generation > latest_generation:
         latest_generation = imported.latest_generation
+        active_snapshot_id = imported.active_snapshot_id.copy()
+    elif (
+        imported.latest_generation == latest_generation
+        and active_snapshot_id.byte_length() == 0
+    ):
+        active_snapshot_id = imported.active_snapshot_id.copy()
 
     return CollectionManifest(
         existing.collection_id,
@@ -120,6 +127,7 @@ def merged_collection_manifest_for_import(
         existing.vector_scalar_name,
         existing.vector_dim,
         latest_generation,
+        active_snapshot_id,
     )
 
 
@@ -205,6 +213,7 @@ def collection_manifest_for_snapshot_bundle(
         resolved.collection.vector_scalar_name,
         resolved.collection.vector_dim,
         resolved.snapshot.generation,
+        resolved.snapshot.snapshot_id.value.copy(),
     )
 
 

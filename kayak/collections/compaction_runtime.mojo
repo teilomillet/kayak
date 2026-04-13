@@ -8,7 +8,7 @@ from .collection_store import load_collection_manifest
 from .compaction import CompactionPlan
 from .document_metadata import DocumentMetadataMap
 from .ids import SegmentId, SnapshotId
-from .publish import publish_snapshot_manifest, promote_collection_generation
+from .publish import publish_collection_snapshot
 from .resolution_requirements import load_all_snapshot_requirements
 from .resolved_snapshot import (
     LoadedSealedSegment,
@@ -39,6 +39,12 @@ def require_live_snapshot_compaction_target(
 ) raises -> SnapshotManifest:
     var collection = load_collection_manifest(collection_root)
     var snapshot = load_snapshot_manifest(collection_root / "snapshots" / snapshot_id.value)
+    if collection.active_snapshot_id.byte_length() != 0:
+        if snapshot.snapshot_id.value != collection.active_snapshot_id:
+            raise Error(
+                "compaction currently supports only the active published snapshot"
+            )
+
     if snapshot.generation != collection.latest_generation:
         raise Error(
             "compaction currently supports only the live published snapshot generation"
@@ -222,10 +228,9 @@ def execute_compaction_plan(
         aggregate_snapshot_stats(kept_segments, compacted_segment),
     )
 
-    publish_snapshot_manifest(collection_root, replacement_snapshot)
-    _ = promote_collection_generation(
+    _ = publish_collection_snapshot(
         collection_root,
         resolved.collection,
-        next_generation,
+        replacement_snapshot,
     )
     return replacement_snapshot^

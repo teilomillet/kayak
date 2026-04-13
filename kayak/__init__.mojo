@@ -261,6 +261,7 @@ from .collections import (
     loaded_segment_stored_document_proxy_index,
     loaded_segment_stored_gem_graph_index,
     merge_document_metadata,
+    publish_collection_snapshot,
     promote_collection_generation,
     publish_snapshot_manifest,
     search_artifact_snapshot_requirements,

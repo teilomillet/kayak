@@ -151,6 +151,7 @@ def test_snapshot_bundle_export_import_roundtrip() raises:
     assert_equal(bundle.snapshot_id.value, "snapshot-0004")
     assert_equal(bundle.segment_count, 1)
     assert_equal(exported_collection.latest_generation, 4)
+    assert_equal(exported_collection.active_snapshot_id, "snapshot-0004")
 
     _ = import_snapshot_bundle(bundle_root, target_root)
 
@@ -160,6 +161,7 @@ def test_snapshot_bundle_export_import_roundtrip() raises:
     )
 
     assert_equal(imported_collection.latest_generation, 4)
+    assert_equal(imported_collection.active_snapshot_id, "snapshot-0004")
     assert_equal(len(resolved.segments), 1)
     assert_equal(resolved.segments[0].stored_index.index.document_count, 2)
     assert_equal(resolved.segments[0].has_text_corpus, True)

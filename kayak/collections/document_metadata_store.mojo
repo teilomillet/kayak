@@ -2,6 +2,7 @@ from std.collections import List
 from std.os import makedirs
 from std.pathlib import Path
 
+from kayak.storage.atomic_write import write_text_atomic
 from kayak.storage.manifest import ManifestEntry, require_manifest_value
 from kayak.storage.text_codec import append_line, parse_int, read_non_empty_lines, split_tab_fields
 
@@ -53,9 +54,9 @@ def save_stored_document_metadata_corpus(
         for entry in stored.metadata_maps[index].entries:
             append_line(payload, entry.key + "\t" + entry.value)
 
-        (payload_root / file_name).write_text(payload)
+        write_text_atomic(payload_root / file_name, payload)
 
-    document_metadata_entries_path(root).write_text(entry_lines)
+    write_text_atomic(document_metadata_entries_path(root), entry_lines)
 
 
 def load_stored_document_metadata_corpus(

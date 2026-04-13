@@ -37,6 +37,10 @@ def draft_state_text_corpus_root(draft_root: Path) -> Path:
     return draft_root / "text_corpus"
 
 
+def draft_state_document_metadata_root(draft_root: Path) -> Path:
+    return draft_root / "document_metadata"
+
+
 def draft_state_mutations_root(draft_root: Path) -> Path:
     return draft_root / "mutations"
 

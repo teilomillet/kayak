@@ -57,6 +57,20 @@ def require_snapshot_matches_collection(
 def live_snapshot_root_for_collection(
     collection_root: Path, read collection: CollectionManifest
 ) raises -> Path:
+    if collection.active_snapshot_id.byte_length() != 0:
+        var active_root = collection_root / "snapshots" / collection.active_snapshot_id
+        if not snapshot_manifest_exists(active_root):
+            raise Error("collection active_snapshot_id does not resolve to a snapshot")
+
+        var active_snapshot = load_snapshot_manifest(active_root)
+        require_snapshot_matches_collection(collection, active_root)
+        if active_snapshot.generation != collection.latest_generation:
+            raise Error(
+                "collection active_snapshot_id generation does not match latest_generation"
+            )
+
+        return active_root
+
     if collection.latest_generation == 0:
         raise Error("collection does not have a live snapshot generation")
 

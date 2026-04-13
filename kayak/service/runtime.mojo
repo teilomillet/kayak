@@ -18,8 +18,7 @@ from kayak.collections import (
     import_snapshot_bundle,
     load_collection_manifest,
     load_resolved_collection_snapshot,
-    promote_collection_generation,
-    publish_snapshot_manifest,
+    publish_collection_snapshot,
     save_collection_manifest,
     seal_single_segment,
     snapshot_manifest_exists,
@@ -45,6 +44,7 @@ from .document_requests import DeleteDocumentsRequest, UpsertDocumentsRequest
 from .draft_state import (
     append_draft_delete_batch,
     append_draft_upsert_batch,
+    compact_draft_collection_state,
     empty_draft_collection_state,
     load_draft_collection_state,
     save_draft_collection_state,
@@ -343,8 +343,11 @@ def create_snapshot(
         generation,
         sealed_segment,
     )
-    publish_snapshot_manifest(collection_root, snapshot)
-    _ = promote_collection_generation(collection_root, collection, generation)
+    _ = publish_collection_snapshot(collection_root, collection, snapshot)
+    _ = compact_draft_collection_state(
+        draft_state_root(collection_root),
+        collection,
+    )
     return snapshot^
 
 

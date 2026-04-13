@@ -3,6 +3,7 @@ from std.pathlib import Path
 
 from kayak.numeric import STORAGE_FORMAT_VERSION, VECTOR_SCALAR_NAME
 
+from .atomic_write import write_text_atomic
 from .text_codec import append_line, parse_int, read_non_empty_lines, split_tab_fields
 
 
@@ -21,7 +22,7 @@ def write_manifest(path: Path, entries: List[ManifestEntry]) raises:
     for entry in entries:
         append_line(buffer, entry.key + "\t" + entry.value)
 
-    path.write_text(buffer)
+    write_text_atomic(path, buffer)
 
 
 def read_manifest(path: Path) raises -> List[ManifestEntry]:

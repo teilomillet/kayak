@@ -44,6 +44,7 @@ def test_collection_contracts_hold_serving_metadata() raises:
         VECTOR_SCALAR_NAME,
         128,
         3,
+        "snapshot-0001",
     )
     var segment_stats = SegmentStats(2, 12, 10, 2048)
     var segment = SealedSegmentManifest(
@@ -86,6 +87,7 @@ def test_collection_contracts_hold_serving_metadata() raises:
 
     assert_equal(collection.model_name, "colbertv2")
     assert_equal(collection.latest_generation, 3)
+    assert_equal(collection.active_snapshot_id, "snapshot-0001")
     assert_equal(segment.vector_dim, 128)
     assert_equal(sealed_segment_has_text_corpus(segment), True)
     assert_equal(len(snapshot.segment_ids), 1)

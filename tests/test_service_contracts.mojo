@@ -112,6 +112,7 @@ def test_create_collection_request_materializes_manifest() raises:
     assert_equal(manifest.collection_id.value, "news")
     assert_equal(manifest.tenant_id.value, "tenant-a")
     assert_equal(manifest.latest_generation, 0)
+    assert_equal(manifest.active_snapshot_id, "")
 
 
 def test_document_mutation_requests_keep_text_sidecar_explicit() raises:

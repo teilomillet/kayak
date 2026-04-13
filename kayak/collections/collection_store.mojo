@@ -12,6 +12,7 @@ from .artifact_manifest import (
 )
 from .collection import CollectionManifest
 from .ids import CollectionId, NamespaceId, TenantId
+from .manifest_util import load_optional_manifest_value
 from .paths import collection_manifest_path
 
 
@@ -34,6 +35,10 @@ def save_collection_manifest(root: Path, read manifest: CollectionManifest) rais
     entries.append(
         ManifestEntry("latest_generation", String(manifest.latest_generation))
     )
+    if manifest.active_snapshot_id.byte_length() != 0:
+        entries.append(
+            ManifestEntry("active_snapshot_id", manifest.active_snapshot_id)
+        )
 
     write_collection_artifact_manifest(
         collection_manifest_path(root), "collection_manifest", entries
@@ -56,4 +61,5 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
             require_manifest_value(entries, "latest_generation"),
             "latest_generation",
         ),
+        load_optional_manifest_value(entries, "active_snapshot_id"),
     )

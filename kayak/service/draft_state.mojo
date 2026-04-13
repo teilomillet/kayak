@@ -1,7 +1,7 @@
 # Mutable draft state used by the hosted collection loop.
 
 from std.collections import List
-from std.os import makedirs
+from std.os import makedirs, remove, rmdir
 from std.pathlib import Path
 
 from kayak.collections import (
@@ -28,11 +28,13 @@ from kayak.storage import (
     load_stored_packed_index,
     save_stored_packed_index,
 )
+from kayak.storage.atomic_write import write_text_atomic
 from kayak.storage.manifest import ManifestEntry, require_manifest_value
 from kayak.storage.text_codec import append_line, parse_int, read_non_empty_lines
 from kayak.text import DocumentTextCorpus
 
 from .paths import (
+    draft_state_document_metadata_root,
     draft_state_manifest_path,
     draft_state_mutation_doc_ids_path,
     draft_state_mutation_document_metadata_root,
@@ -40,6 +42,7 @@ from .paths import (
     draft_state_mutation_packed_index_root,
     draft_state_mutation_root,
     draft_state_mutation_text_corpus_root,
+    draft_state_mutations_root,
     draft_state_packed_index_root,
     draft_state_text_corpus_root,
 )
@@ -111,6 +114,10 @@ def empty_draft_collection_state() raises -> DraftCollectionState:
 
 def draft_state_exists(draft_root: Path) -> Bool:
     return draft_state_manifest_path(draft_root).exists()
+
+
+def draft_state_has_compacted_baseline(draft_root: Path) -> Bool:
+    return draft_state_packed_index_root(draft_root).exists()
 
 
 def find_document_index(
@@ -342,13 +349,145 @@ def append_draft_delete_batch(
             ManifestEntry("document_count", String(len(unique_doc_ids))),
         ],
     )
-    draft_state_mutation_doc_ids_path(mutation_root).write_text(doc_id_lines)
+    write_text_atomic(draft_state_mutation_doc_ids_path(mutation_root), doc_id_lines)
     write_draft_state_manifest(
         draft_root,
         collection,
         document_count_after_batch,
         next_mutation_index,
     )
+
+
+def load_compacted_draft_baseline(
+    draft_root: Path,
+    read collection: CollectionManifest,
+) raises -> DraftCollectionState:
+    var stored_index = load_stored_packed_index(
+        draft_state_packed_index_root(draft_root)
+    )
+    var documents = unpack_documents(stored_index.index)
+
+    var texts = List[String]()
+    if draft_state_text_corpus_root(draft_root).exists():
+        var stored_text = load_stored_document_text_corpus(
+            draft_state_text_corpus_root(draft_root)
+        )
+        if len(stored_text.corpus.doc_ids) != len(documents):
+            raise Error(
+                "draft baseline document_count does not match stored text corpus"
+            )
+        for index in range(len(documents)):
+            if documents[index].doc_id != stored_text.corpus.doc_ids[index]:
+                raise Error(
+                    "draft baseline document ids do not align with stored text corpus"
+                )
+            texts.append(stored_text.corpus.texts[index].copy())
+    else:
+        for _ in range(len(documents)):
+            texts.append(String())
+
+    var metadata_maps = List[DocumentMetadataMap]()
+    if draft_state_document_metadata_root(draft_root).exists():
+        var stored_document_metadata = load_stored_document_metadata_corpus(
+            draft_state_document_metadata_root(draft_root)
+        )
+        if len(stored_document_metadata.doc_ids) != len(documents):
+            raise Error(
+                "draft baseline document_count does not match stored metadata corpus"
+            )
+        for index in range(len(documents)):
+            if documents[index].doc_id != stored_document_metadata.doc_ids[index]:
+                raise Error(
+                    "draft baseline document ids do not align with stored metadata corpus"
+                )
+            metadata_maps.append(
+                stored_document_metadata.metadata_maps[index].copy()
+            )
+    else:
+        for _ in range(len(documents)):
+            metadata_maps.append(DocumentMetadataMap())
+
+    _ = collection
+    return DraftCollectionState(documents^, texts^, metadata_maps)
+
+
+def remove_tree(path: Path) raises:
+    if not path.exists():
+        return
+
+    if path.is_dir():
+        for child in path.listdir():
+            remove_tree(path / child)
+        rmdir(path)
+        return
+
+    remove(path)
+
+
+def compact_draft_collection_state(
+    draft_root: Path,
+    read collection: CollectionManifest,
+) raises -> DraftCollectionState:
+    var state = load_draft_collection_state(draft_root, collection)
+    save_compacted_draft_collection_state(
+        draft_root,
+        collection,
+        state,
+    )
+    return state^
+
+def save_compacted_draft_collection_state(
+    draft_root: Path,
+    read collection: CollectionManifest,
+    read state: DraftCollectionState,
+) raises:
+    if state.is_empty():
+        write_draft_state_manifest(draft_root, collection, 0, 0)
+        remove_tree(draft_state_packed_index_root(draft_root))
+        remove_tree(draft_state_text_corpus_root(draft_root))
+        remove_tree(draft_state_document_metadata_root(draft_root))
+        remove_tree(draft_state_mutations_root(draft_root))
+        return
+
+    save_stored_packed_index(
+        draft_state_packed_index_root(draft_root),
+        StoredPackedIndex(
+            "collection://draft/" + collection.collection_id.value,
+            collection.model_name.copy(),
+            collection.vector_scalar_name.copy(),
+            pack_documents(state.documents),
+        ),
+    )
+
+    var doc_ids = List[String]()
+    for document in state.documents:
+        doc_ids.append(document.doc_id.copy())
+
+    save_stored_document_text_corpus(
+        draft_state_text_corpus_root(draft_root),
+        StoredDocumentTextCorpus(
+            collection.collection_id,
+            SegmentId("draft-baseline"),
+            DocumentTextCorpus(doc_ids.copy(), state.texts.copy()),
+        ),
+    )
+    save_stored_document_metadata_corpus(
+        draft_state_document_metadata_root(draft_root),
+        StoredDocumentMetadataCorpus(
+            collection.collection_id,
+            SegmentId("draft-baseline"),
+            doc_ids,
+            state.metadata_maps,
+        ),
+    )
+
+    write_draft_state_manifest(
+        draft_root,
+        collection,
+        state.document_count(),
+        0,
+    )
+    remove_tree(draft_state_mutations_root(draft_root))
 
 
 def load_legacy_draft_collection_state(
@@ -393,11 +532,19 @@ def load_mutation_log_draft_collection_state(
     metadata: DraftStateMetadata,
 ) raises -> DraftCollectionState:
     if metadata.mutation_count == 0:
+        if draft_state_has_compacted_baseline(draft_root):
+            return load_compacted_draft_baseline(draft_root, collection)
         return empty_draft_collection_state()
 
     var documents = List[EncodedDocument]()
     var texts = List[String]()
     var metadata_maps = List[DocumentMetadataMap]()
+
+    if draft_state_has_compacted_baseline(draft_root):
+        var baseline = load_compacted_draft_baseline(draft_root, collection)
+        documents = baseline.documents.copy()
+        texts = baseline.texts.copy()
+        metadata_maps = baseline.metadata_maps.copy()
 
     for mutation_index in range(1, metadata.mutation_count + 1):
         var mutation_root = draft_state_mutation_root(draft_root, mutation_index)
@@ -514,15 +661,16 @@ def save_draft_collection_state(
 ) raises:
     write_draft_state_manifest(draft_root, collection, 0, 0)
     if state.is_empty():
+        remove_tree(draft_state_packed_index_root(draft_root))
+        remove_tree(draft_state_text_corpus_root(draft_root))
+        remove_tree(draft_state_document_metadata_root(draft_root))
+        remove_tree(draft_state_mutations_root(draft_root))
         return
 
-    append_draft_upsert_batch(
+    save_compacted_draft_collection_state(
         draft_root,
         collection,
-        state.documents,
-        state.texts,
-        state.metadata_maps,
-        state.document_count(),
+        state,
     )
 
 

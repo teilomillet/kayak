@@ -114,6 +114,7 @@ def test_execute_compaction_plan_publishes_replacement_snapshot() raises:
     assert_equal(plan.expected_output_stats.token_count, 4)
     assert_equal(plan.expected_output_stats.total_vector_count, 4)
     assert_equal(published_collection.latest_generation, 3)
+    assert_equal(published_collection.active_snapshot_id, "snapshot-0003")
     assert_equal(replacement.generation, 3)
     assert_equal(len(preserved_snapshot.segment_ids), 2)
     assert_equal(len(published_snapshot.segment_ids), 1)

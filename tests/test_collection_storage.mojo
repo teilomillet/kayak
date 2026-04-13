@@ -56,6 +56,7 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
             VECTOR_SCALAR_NAME,
             128,
             4,
+            "snapshot-0001",
         ),
     )
     save_sealed_segment_manifest(
@@ -105,6 +106,7 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
     var loaded_text_corpus = load_stored_document_text_corpus(text_corpus_root)
 
     assert_equal(loaded_collection.latest_generation, 4)
+    assert_equal(loaded_collection.active_snapshot_id, "snapshot-0001")
     assert_equal(loaded_segment.packed_index_root, "packed_index")
     assert_equal(loaded_segment.text_corpus_root, "text_corpus")
     assert_equal(loaded_snapshot.stats.segment_count, 1)
