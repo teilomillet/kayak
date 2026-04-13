@@ -278,6 +278,9 @@ def snapshot_load_requirements_for_request(
     var needs_document_metadata = filter_expression_requires_document_metadata(
         request.filter_expression
     )
+    var needs_document_text = request.plan.stage2_operator.requires_artifact_family(
+        "document_text"
+    )
     var required_artifacts = stage1_required_search_artifact_families(
         request.plan.candidate_generator.kind
     )
@@ -285,12 +288,12 @@ def snapshot_load_requirements_for_request(
         required_artifacts.append(SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA)
 
     if len(required_artifacts) == 0:
-        return exact_only_snapshot_requirements()
+        return exact_only_snapshot_requirements(needs_document_text)
 
     return SnapshotLoadRequirements(
         False,
         required_artifacts,
-        False,
+        needs_document_text,
     )
 
 
@@ -446,6 +449,7 @@ def execute_search[Backend: ExactScoringBackend](
             snapshot,
             request.plan,
             request.filter_expression,
+            request.query_text,
         ),
     )
 
@@ -558,6 +562,7 @@ def execute_explain[Backend: ExactScoringBackend](
             snapshot,
             request.plan,
             request.filter_expression,
+            request.query_text,
         )
     )
 

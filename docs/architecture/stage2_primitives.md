@@ -4,11 +4,11 @@ Status: `architecture note`
 Date: `2026-04-13`
 
 This note records the current repository state after a fresh code scan and
-states the next stable boundary that should be defined from first principles:
-stage 2.
+captures the stage-2 boundary that has now been implemented from first
+principles.
 
-The purpose is not to replace the current exact rerank path immediately.
-The purpose is to make the stage-2 contract explicit enough that:
+The purpose was not to replace the current exact rerank path immediately.
+The implemented goal was to make the stage-2 contract explicit enough that:
 
 - exact late interaction remains the default correctness anchor
 - richer rerankers can attach without becoming side paths
@@ -62,35 +62,48 @@ These statements are checked against the current codebase.
    - [kayak/planning/candidate_generator.mojo](../../kayak/planning/candidate_generator.mojo)
    - [kayak/planning/execution.mojo](../../kayak/planning/execution.mojo)
 
-2. `SearchPlan` does **not** yet own a general stage-2 contract.
+2. `SearchPlan` now owns an explicit stage-2 contract.
    Evidence:
    - [kayak/planning/search_plan.mojo](../../kayak/planning/search_plan.mojo)
-   - `exact_stage_kind` is hardcoded to `"exact_late_interaction"`
-   - `reranker_kind` only accepts `"none"`
+   - [kayak/planning/stage2_operator.mojo](../../kayak/planning/stage2_operator.mojo)
+   - [kayak/planning/execution_stage2.mojo](../../kayak/planning/execution_stage2.mojo)
+   - compatibility fields still exist, but they are now derived from
+     `stage2_operator`
 
-3. The real stage-2 implementation today is one concrete operator:
-   exact late-interaction reranking over a materialized candidate index.
+3. The implemented stage-2 boundary already supports multiple explicit
+   operators.
    Evidence:
    - [kayak/planning/exact_stage.mojo](../../kayak/planning/exact_stage.mojo)
-   - [kayak/planning/execution.mojo](../../kayak/planning/execution.mojo)
+   - [kayak/planning/clause_text_stage.mojo](../../kayak/planning/clause_text_stage.mojo)
+   - [kayak/planning/stage2_operator.mojo](../../kayak/planning/stage2_operator.mojo)
+   - current built-ins are:
+     - `noop_topk`
+     - `exact_late_interaction`
+     - `clause_text`
 
-4. Richer reranking already exists in repo, but it lives outside the main
-   `SearchPlan` contract.
+4. The current clause-text refinement path is now routed through the same
+   `SearchPlan` contract instead of living only in a side verifier path.
    Evidence:
-   - [kayak/verifier/pipeline.mojo](../../kayak/verifier/pipeline.mojo)
    - [kayak/verifier/clause_text.mojo](../../kayak/verifier/clause_text.mojo)
-   - [docs/hosted_engine_grand_plan.md](../hosted_engine_grand_plan.md)
+   - [kayak/planning/clause_text_stage.mojo](../../kayak/planning/clause_text_stage.mojo)
+   - [kayak/service/runtime.mojo](../../kayak/service/runtime.mojo)
 
 5. The Python SDK mirrors the same narrowing.
    Evidence:
    - [python/kayak_bridge/planned_search.py](../../python/kayak_bridge/planned_search.py)
-   - stage 2 there is always `"exact_late_interaction"` over the shortlisted
-     index
+   - [python/kayak_bridge/stage2_operator.py](../../python/kayak_bridge/stage2_operator.py)
+   - [python/kayak_bridge/clause_text.py](../../python/kayak_bridge/clause_text.py)
+   - Python `SearchPlan` now carries `stage2_operator`
+   - Python `LateQuery` and `LateIndex` can carry `query.text` and
+     `doc_texts` for text-family stage 2
 
 6. The service boundary depends on `SearchPlan`, so this is not only a local
    SDK concern.
    Evidence:
    - [kayak/service/search_contracts.mojo](../../kayak/service/search_contracts.mojo)
+   - [kayak/service/runtime.mojo](../../kayak/service/runtime.mojo)
+   - hosted requests now validate `query_text` when the chosen stage-2
+     operator requires it
 
 ## Problem Statement
 

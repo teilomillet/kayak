@@ -22,6 +22,7 @@ struct SearchRequest(Copyable):
     var namespace_id: NamespaceId
     var snapshot_id: SnapshotId
     var query: EncodedQuery
+    var query_text: String
     var filter_expression: FilterExpression
     var plan: SearchPlan
     var debug_mode: Bool
@@ -33,6 +34,7 @@ struct SearchRequest(Copyable):
         namespace_id: NamespaceId,
         snapshot_id: SnapshotId,
         query: EncodedQuery,
+        var query_text: String,
         filter_expression: FilterExpression,
         plan: SearchPlan,
         debug_mode: Bool,
@@ -43,6 +45,7 @@ struct SearchRequest(Copyable):
         self.namespace_id = namespace_id.copy()
         self.snapshot_id = snapshot_id.copy()
         self.query = query.copy()
+        self.query_text = query_text^
         self.filter_expression = filter_expression.copy()
         self.plan = plan.copy()
         self.debug_mode = debug_mode
@@ -56,6 +59,37 @@ struct SearchRequest(Copyable):
                 "oracle_full_recall_required faithfulness policy requires debug_mode for non-exact stage-1 search"
             )
 
+        if self.plan.stage2_operator.requires_query_text and self.query_text.byte_length() == 0:
+            raise Error(
+                "stage2 operator "
+                + self.plan.stage2_operator.kind
+                + " requires non-empty query_text"
+            )
+
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        snapshot_id: SnapshotId,
+        query: EncodedQuery,
+        filter_expression: FilterExpression,
+        plan: SearchPlan,
+        debug_mode: Bool,
+    ) raises:
+        self = SearchRequest(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            snapshot_id,
+            query,
+            "",
+            filter_expression,
+            plan,
+            debug_mode,
+        )
+
 
 def default_exact_search_request(
     collection_id: CollectionId,
@@ -65,6 +99,7 @@ def default_exact_search_request(
     query: EncodedQuery,
     final_k: Int,
     debug_mode: Bool = False,
+    query_text: String = "",
 ) raises -> SearchRequest:
     return SearchRequest(
         collection_id,
@@ -72,6 +107,7 @@ def default_exact_search_request(
         namespace_id,
         snapshot_id,
         query,
+        query_text,
         match_all_filter(),
         exact_full_scan_search_plan(final_k, final_k),
         debug_mode,

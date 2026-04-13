@@ -9,6 +9,7 @@ import numpy as np
 from .array_conversions import (
     flatten_vector_matrix,
     reshape_flat_values,
+    to_optional_text,
     to_flat_vector_values,
     to_vector_matrix,
 )
@@ -21,22 +22,30 @@ class LateQuery:
     layout: str
     vector_dim: int
     vector_count: int
+    text: str | None = None
     token_vectors: np.ndarray | None = None
     token_values: np.ndarray | None = None
 
     @classmethod
-    def from_vectors(cls, token_vectors: object) -> "LateQuery":
+    def from_vectors(
+        cls, token_vectors: object, *, text: object | None = None
+    ) -> "LateQuery":
         matrix = to_vector_matrix(token_vectors, "query")
         return cls(
             layout=QUERY_LAYOUT_NESTED,
             vector_dim=int(matrix.shape[1]),
             vector_count=int(matrix.shape[0]),
+            text=to_optional_text(text, "query"),
             token_vectors=matrix,
         )
 
     @classmethod
     def from_flat_values(
-        cls, token_values: object, *, vector_dim: int
+        cls,
+        token_values: object,
+        *,
+        vector_dim: int,
+        text: object | None = None,
     ) -> "LateQuery":
         values = to_flat_vector_values(token_values, "flat query")
         if vector_dim != FLAT_DIM128_VECTOR_DIM:
@@ -50,6 +59,7 @@ class LateQuery:
             layout=QUERY_LAYOUT_FLAT_DIM128,
             vector_dim=vector_dim,
             vector_count=int(values.size // vector_dim),
+            text=to_optional_text(text, "query"),
             token_values=values,
         )
 
@@ -85,12 +95,23 @@ class LateQuery:
         if layout == self.layout:
             return self
         if layout == QUERY_LAYOUT_NESTED:
-            return LateQuery.from_vectors(self.as_vector_matrix())
+            return LateQuery.from_vectors(self.as_vector_matrix(), text=self.text)
         if layout == QUERY_LAYOUT_FLAT_DIM128:
             return LateQuery.from_flat_values(
-                self.as_flat_values(), vector_dim=self.vector_dim
+                self.as_flat_values(),
+                vector_dim=self.vector_dim,
+                text=self.text,
             )
         raise ValueError(f"unsupported query layout: {layout}")
+
+    def with_text(self, text: object | None) -> "LateQuery":
+        if self.layout == QUERY_LAYOUT_NESTED:
+            return LateQuery.from_vectors(self.as_vector_matrix(), text=text)
+        return LateQuery.from_flat_values(
+            self.as_flat_values(),
+            vector_dim=self.vector_dim,
+            text=text,
+        )
 
     def as_vector_matrix(self) -> np.ndarray:
         if self.layout == QUERY_LAYOUT_NESTED:

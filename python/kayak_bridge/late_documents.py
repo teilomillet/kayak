@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .array_conversions import to_doc_ids, to_document_matrices
+from .array_conversions import to_doc_ids, to_document_matrices, to_optional_doc_texts
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,10 +16,15 @@ class LateDocuments:
     vector_dim: int
     document_count: int
     total_vector_count: int
+    texts: tuple[str, ...] | None = None
 
     @classmethod
     def from_inputs(
-        cls, doc_ids: object, token_vectors: object
+        cls,
+        doc_ids: object,
+        token_vectors: object,
+        *,
+        texts: object | None = None,
     ) -> "LateDocuments":
         normalized_doc_ids = to_doc_ids(doc_ids, "documents")
         matrices = to_document_matrices(token_vectors, "documents")
@@ -41,6 +46,11 @@ class LateDocuments:
             vector_dim=vector_dim,
             document_count=len(normalized_doc_ids),
             total_vector_count=total_vector_count,
+            texts=to_optional_doc_texts(
+                texts,
+                "documents",
+                expected_length=len(normalized_doc_ids),
+            ),
         )
 
     def __post_init__(self) -> None:
@@ -50,6 +60,8 @@ class LateDocuments:
             raise ValueError("document_count must match doc_ids")
         if self.document_count != len(self.token_matrices):
             raise ValueError("document_count must match token matrices")
+        if self.texts is not None and self.document_count != len(self.texts):
+            raise ValueError("document_count must match document texts")
         if self.vector_dim <= 0:
             raise ValueError("documents vector_dim must be positive")
         if self.total_vector_count <= 0:
@@ -69,7 +81,19 @@ class LateDocuments:
             doc_offsets.append(running_offset)
 
         token_vectors = np.concatenate(self.token_matrices, axis=0)
-        return LateIndex.from_packed(self.doc_ids, doc_offsets, token_vectors)
+        return LateIndex.from_packed(
+            self.doc_ids,
+            doc_offsets,
+            token_vectors,
+            doc_texts=self.texts,
+        )
 
     def to_layout(self, layout: str) -> "LateIndex":
         return self.pack().to_layout(layout)
+
+    def with_texts(self, texts: object | None) -> "LateDocuments":
+        return LateDocuments.from_inputs(
+            self.doc_ids,
+            self.token_matrices,
+            texts=texts,
+        )

@@ -35,6 +35,17 @@ def append_json_hit_list(mut buffer: String, read hits: List[CollectionHit]):
     buffer += "]"
 
 
+def append_json_string_list(mut buffer: String, read values: List[String]):
+    buffer += "["
+    for index in range(len(values)):
+        if index > 0:
+            buffer += ","
+        buffer += "\""
+        buffer += json_escape(values[index])
+        buffer += "\""
+    buffer += "]"
+
+
 def append_json_stage_profile(
     mut buffer: String, read profile: SearchStageProfile
 ):
@@ -157,6 +168,21 @@ def collection_search_explain_json(
     buffer += String(explain.plan.candidate_generator.beam_width) + ","
     buffer += "\"candidate_k\":" + String(explain.plan.candidate_budget.candidate_k) + ","
     buffer += "\"final_k\":" + String(explain.plan.candidate_budget.final_k) + ","
+    buffer += "\"stage2_kind\":\""
+    buffer += json_escape(explain.plan.stage2_operator.kind) + "\","
+    buffer += "\"stage2_family\":\""
+    buffer += json_escape(explain.plan.stage2_operator.family) + "\","
+    buffer += "\"stage2_requires_query_text\":"
+    if explain.plan.stage2_operator.requires_query_text:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"stage2_required_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        explain.plan.stage2_operator.required_artifact_families,
+    )
+    buffer += ","
     buffer += "\"exact_stage_kind\":\"" + json_escape(explain.plan.exact_stage_kind) + "\","
     buffer += "\"reranker_kind\":\"" + json_escape(explain.plan.reranker_kind) + "\""
     buffer += "},"

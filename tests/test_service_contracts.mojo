@@ -52,6 +52,7 @@ from kayak import (
 )
 from kayak.filters import match_all_filter
 from kayak.planning import CandidateSet, exact_full_scan_search_plan
+from kayak.planning import exact_full_scan_clause_text_search_plan
 from kayak.service import (
     CreateSnapshotRequest,
     ExportSnapshotRequest,
@@ -346,9 +347,47 @@ def test_default_search_request_builds_exact_plan() raises:
     assert_equal(request.snapshot_id.value, "snapshot-0001")
     assert_equal(request.filter_expression.is_match_all(), True)
     assert_equal(request.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(request.plan.stage2_operator.kind, "noop_topk")
     assert_equal(request.plan.faithfulness_policy.kind, "exact_stage1_required")
     assert_equal(request.plan.candidate_budget.final_k, 3)
     assert_equal(request.debug_mode, True)
+
+
+def test_search_request_requires_query_text_for_text_family_stage2() raises:
+    var raised = False
+
+    try:
+        _ = SearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            match_all_filter(),
+            exact_full_scan_clause_text_search_plan(1, 1),
+            False,
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_search_request_accepts_explicit_query_text_for_text_family_stage2() raises:
+    var request = SearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        make_query(),
+        "founding church artistic director",
+        match_all_filter(),
+        exact_full_scan_clause_text_search_plan(1, 1),
+        False,
+    )
+
+    assert_equal(request.query_text, "founding church artistic director")
+    assert_equal(request.plan.stage2_operator.kind, "clause_text")
 
 
 def test_search_request_rejects_unverifiable_oracle_guardrail_without_debug() raises:

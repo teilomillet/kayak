@@ -15,47 +15,8 @@ from kayak.numeric import VectorScalar
 from kayak.runtime import ExactScoringBackend
 
 from .collection_hit import CollectionHit
+from .stage2_result import Stage2Result
 from .topk import insert_descending_collection_hit
-
-
-struct ExactStageResult(Copyable):
-    var final_hits: List[CollectionHit]
-    var segment_count: Int
-    var document_count: Int
-    var token_count: Int
-    var vector_count: Int
-    var byte_size: Int
-
-    def __init__(
-        out self,
-        var final_hits: List[CollectionHit],
-        segment_count: Int,
-        document_count: Int,
-        token_count: Int,
-        vector_count: Int,
-        byte_size: Int,
-    ) raises:
-        if segment_count < 0:
-            raise Error("exact stage segment_count must be non-negative")
-
-        if document_count < 0:
-            raise Error("exact stage document_count must be non-negative")
-
-        if token_count < 0:
-            raise Error("exact stage token_count must be non-negative")
-
-        if vector_count < 0:
-            raise Error("exact stage vector_count must be non-negative")
-
-        if byte_size < 0:
-            raise Error("exact stage byte_size must be non-negative")
-
-        self.final_hits = final_hits^
-        self.segment_count = segment_count
-        self.document_count = document_count
-        self.token_count = token_count
-        self.vector_count = vector_count
-        self.byte_size = byte_size
 
 
 struct MaterializedCandidateIndex(Copyable):
@@ -173,9 +134,9 @@ def exact_rerank_candidates_for_plan[Backend: ExactScoringBackend](
     read snapshot: ResolvedCollectionSnapshot,
     read hits: List[CollectionHit],
     final_k: Int,
-) raises -> ExactStageResult:
+) raises -> Stage2Result:
     if len(hits) == 0:
-        return ExactStageResult([], 0, 0, 0, 0, 0)
+        return Stage2Result([], 0, 0, 0, 0, 0)
 
     var materialized = materialize_candidate_index(snapshot, hits)
     var scores = backend.score_all(query, materialized.index)
@@ -192,7 +153,7 @@ def exact_rerank_candidates_for_plan[Backend: ExactScoringBackend](
             final_k,
         )
 
-    return ExactStageResult(
+    return Stage2Result(
         final_hits^,
         materialized.segment_count,
         materialized.index.document_count,

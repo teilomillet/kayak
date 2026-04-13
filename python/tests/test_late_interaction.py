@@ -67,6 +67,18 @@ class LateInteractionApiTests(unittest.TestCase):
         self.assertEqual(late_query.shape, (2, 128))
         self.assertEqual(late_query.vector_count, 2)
         self.assertEqual(late_query.vector_dim, 128)
+        self.assertIsNone(late_query.text)
+
+    def test_query_text_survives_layout_conversion(self) -> None:
+        late_query = kayak.query(
+            np.stack([_dim128_vector((0, 1.0)), _dim128_vector((1, 1.0))]),
+            text="late interaction primitives",
+        )
+
+        flat_query = late_query.to_layout("flat_dim128")
+
+        self.assertEqual(flat_query.text, "late interaction primitives")
+        self.assertEqual(flat_query.with_text("updated").text, "updated")
 
     def test_documents_pack_preserves_offsets_and_vector_counts(self) -> None:
         _, late_documents = self._build_fixture()
@@ -77,6 +89,23 @@ class LateInteractionApiTests(unittest.TestCase):
         self.assertEqual(tuple(int(offset) for offset in packed.doc_offsets), (0, 2, 4, 6))
         self.assertEqual(packed.vector_counts, (2, 2, 2))
         self.assertEqual(packed.total_vector_count, 6)
+
+    def test_documents_pack_preserves_optional_document_texts(self) -> None:
+        late_documents = kayak.documents(
+            ["doc-a", "doc-b"],
+            [
+                np.stack([_dim128_vector((0, 1.0)), _dim128_vector((1, 1.0))]),
+                np.stack([_dim128_vector((1, 1.0)), _dim128_vector((0, 1.0))]),
+            ],
+            texts=["alpha evidence", "beta evidence"],
+        )
+
+        packed = late_documents.pack()
+        selected = packed.select(["doc-b"])
+
+        self.assertEqual(packed.doc_texts, ("alpha evidence", "beta evidence"))
+        self.assertEqual(selected.doc_texts, ("beta evidence",))
+        self.assertEqual(packed.to_layout("hybrid_flat_dim128").doc_texts, packed.doc_texts)
 
     def test_flat_query_requires_dim128(self) -> None:
         narrow_query = kayak.query(np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32))

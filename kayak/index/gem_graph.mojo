@@ -721,6 +721,62 @@ def exact_quantized_emd_distance(
     return min_cost_transport_distance(left_masses, right_masses, pair_costs)
 
 
+def greedy_quantized_emd_distance(
+    read left_histogram: QuantizedCodeHistogram,
+    left_total_count: Int,
+    read right_histogram: QuantizedCodeHistogram,
+    right_total_count: Int,
+    read distance_matrix: List[MetricScalar],
+    centroid_count: Int,
+) raises -> MetricScalar:
+    if left_total_count <= 0 or right_total_count <= 0:
+        raise Error("greedy qEMD requires positive token counts")
+
+    var left_remaining = List[MetricScalar]()
+    var right_remaining = List[MetricScalar]()
+    for count in left_histogram.counts:
+        left_remaining.append(MetricScalar(count) / MetricScalar(left_total_count))
+    for count in right_histogram.counts:
+        right_remaining.append(MetricScalar(count) / MetricScalar(right_total_count))
+
+    var pair_ids = List[Int]()
+    var pair_distances = List[MetricScalar]()
+    var right_count = len(right_histogram.code_ids)
+    var pair_count = len(left_histogram.code_ids) * right_count
+    for left_index in range(len(left_histogram.code_ids)):
+        for right_index in range(right_count):
+            insert_ascending_metric(
+                pair_ids,
+                pair_distances,
+                left_index * right_count + right_index,
+                centroid_distance_at(
+                    distance_matrix,
+                    centroid_count,
+                    left_histogram.code_ids[left_index],
+                    right_histogram.code_ids[right_index],
+                ),
+                pair_count,
+            )
+
+    var total = zero_metric_scalar()
+    for pair_index in range(len(pair_ids)):
+        var pair_id = pair_ids[pair_index]
+        var left_index = pair_id // right_count
+        var right_index = pair_id % right_count
+
+        var flow = left_remaining[left_index]
+        if right_remaining[right_index] < flow:
+            flow = right_remaining[right_index]
+        if flow <= zero_metric_scalar():
+            continue
+
+        total += flow * pair_distances[pair_index]
+        left_remaining[left_index] -= flow
+        right_remaining[right_index] -= flow
+
+    return total
+
+
 def quantized_chamfer_distance_for_document(
     read query_codes: List[Int],
     read index: GemGraphIndex,

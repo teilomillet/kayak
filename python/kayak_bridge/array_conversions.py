@@ -38,6 +38,35 @@ def to_doc_ids(doc_ids: Sequence[object], owner: str) -> tuple[str, ...]:
     return normalized
 
 
+def to_optional_text(value: object | None, owner: str) -> str | None:
+    if value is None:
+        return None
+
+    normalized = str(value)
+    if normalized == "":
+        raise ValueError(f"{owner} text must be non-empty when provided")
+    return normalized
+
+
+def to_optional_doc_texts(
+    doc_texts: Sequence[object] | None,
+    owner: str,
+    *,
+    expected_length: int,
+) -> tuple[str, ...] | None:
+    if doc_texts is None:
+        return None
+    if isinstance(doc_texts, (str, bytes)):
+        raise ValueError(f"{owner} texts must be a sequence, not one string")
+
+    normalized = tuple(str(text) for text in doc_texts)
+    if len(normalized) != expected_length:
+        raise ValueError(f"{owner} texts must align with document ids")
+    if any(text == "" for text in normalized):
+        raise ValueError(f"{owner} texts must be non-empty when provided")
+    return normalized
+
+
 def to_vector_matrix(value: Any, owner: str) -> np.ndarray:
     array = _numpy_from_input(value)
     if array.ndim != 2:

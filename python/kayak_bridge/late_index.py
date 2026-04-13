@@ -12,6 +12,7 @@ from .array_conversions import (
     to_doc_ids,
     to_flat_vector_values,
     to_index_offsets,
+    to_optional_doc_texts,
     to_vector_matrix,
 )
 from .dtypes import FLAT_DIM128_VECTOR_DIM
@@ -31,12 +32,18 @@ class LateIndex:
     vector_dim: int
     document_count: int
     total_vector_count: int
+    doc_texts: tuple[str, ...] | None = None
     token_vectors: np.ndarray | None = None
     token_values: np.ndarray | None = None
 
     @classmethod
     def from_packed(
-        cls, doc_ids: object, doc_offsets: object, token_vectors: object
+        cls,
+        doc_ids: object,
+        doc_offsets: object,
+        token_vectors: object,
+        *,
+        doc_texts: object | None = None,
     ) -> "LateIndex":
         normalized_doc_ids = to_doc_ids(doc_ids, "packed index")
         offsets = to_index_offsets(
@@ -52,12 +59,22 @@ class LateIndex:
             vector_dim=int(matrix.shape[1]),
             document_count=len(normalized_doc_ids),
             total_vector_count=int(matrix.shape[0]),
+            doc_texts=to_optional_doc_texts(
+                doc_texts,
+                "packed index",
+                expected_length=len(normalized_doc_ids),
+            ),
             token_vectors=matrix,
         )
 
     @classmethod
     def from_hybrid_flat_dim128(
-        cls, doc_ids: object, doc_offsets: object, token_values: object
+        cls,
+        doc_ids: object,
+        doc_offsets: object,
+        token_values: object,
+        *,
+        doc_texts: object | None = None,
     ) -> "LateIndex":
         normalized_doc_ids = to_doc_ids(doc_ids, "hybrid flat index")
         offsets = to_index_offsets(
@@ -78,6 +95,11 @@ class LateIndex:
             vector_dim=FLAT_DIM128_VECTOR_DIM,
             document_count=len(normalized_doc_ids),
             total_vector_count=int(values.size // FLAT_DIM128_VECTOR_DIM),
+            doc_texts=to_optional_doc_texts(
+                doc_texts,
+                "hybrid flat index",
+                expected_length=len(normalized_doc_ids),
+            ),
             token_values=values,
         )
 
@@ -86,6 +108,8 @@ class LateIndex:
             raise ValueError("index must contain at least one document")
         if self.document_count != len(self.doc_ids):
             raise ValueError("index document_count must match doc_ids")
+        if self.doc_texts is not None and self.document_count != len(self.doc_texts):
+            raise ValueError("index document_count must match document texts")
         if self.doc_offsets.shape != (self.document_count + 1,):
             raise ValueError("index doc_offsets length must equal doc_ids + 1")
         if int(self.doc_offsets[0]) != 0:
@@ -150,11 +174,17 @@ class LateIndex:
             return self
         if layout == INDEX_LAYOUT_PACKED:
             return LateIndex.from_packed(
-                self.doc_ids, self.doc_offsets, self.as_packed_token_matrix()
+                self.doc_ids,
+                self.doc_offsets,
+                self.as_packed_token_matrix(),
+                doc_texts=self.doc_texts,
             )
         if layout == INDEX_LAYOUT_HYBRID_FLAT_DIM128:
             return LateIndex.from_hybrid_flat_dim128(
-                self.doc_ids, self.doc_offsets, self.as_flat_token_values()
+                self.doc_ids,
+                self.doc_offsets,
+                self.as_flat_token_values(),
+                doc_texts=self.doc_texts,
             )
         raise ValueError(f"unsupported index layout: {layout}")
 
@@ -172,13 +202,18 @@ class LateIndex:
 
         selected_offsets = [0]
         selected_matrices = []
+        selected_texts = [] if self.doc_texts is not None else None
         running_offset = 0
         for doc_id in selected_doc_ids:
             if doc_id not in positions:
                 raise ValueError(f"document id not found in index: {doc_id}")
 
-            matrix = self.document_token_matrix(positions[doc_id])
+            position = positions[doc_id]
+            matrix = self.document_token_matrix(position)
             selected_matrices.append(matrix)
+            if selected_texts is not None:
+                assert self.doc_texts is not None
+                selected_texts.append(self.doc_texts[position])
             running_offset += int(matrix.shape[0])
             selected_offsets.append(running_offset)
 
@@ -187,8 +222,24 @@ class LateIndex:
             selected_doc_ids,
             selected_offsets,
             selected_vectors,
+            doc_texts=selected_texts,
         )
         return selected_index.to_layout(self.layout)
+
+    def with_texts(self, doc_texts: object | None) -> "LateIndex":
+        if self.layout == INDEX_LAYOUT_PACKED:
+            return LateIndex.from_packed(
+                self.doc_ids,
+                self.doc_offsets,
+                self.as_packed_token_matrix(),
+                doc_texts=doc_texts,
+            )
+        return LateIndex.from_hybrid_flat_dim128(
+            self.doc_ids,
+            self.doc_offsets,
+            self.as_flat_token_values(),
+            doc_texts=doc_texts,
+        )
 
     def maxsim(
         self, query: "LateQuery", *, backend: str = NUMPY_REFERENCE_BACKEND

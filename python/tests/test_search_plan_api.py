@@ -49,6 +49,45 @@ class SearchPlanApiTests(unittest.TestCase):
         ).pack()
         return query, index
 
+    def _build_clause_text_fixture(self) -> tuple[kayak.LateQuery, kayak.LateIndex]:
+        query = kayak.query(
+            np.stack(
+                [
+                    _dim128_vector((0, 1.0)),
+                    _dim128_vector((0, 1.0)),
+                ]
+            ),
+            text=(
+                "Gugulethu township logo. founded in 1984 in a church "
+                "longest serving employee artistic director"
+            ),
+        )
+        index = kayak.documents(
+            ["doc-context", "doc-answer"],
+            [
+                np.stack(
+                    [
+                        _dim128_vector((0, 1.0)),
+                        _dim128_vector((0, 1.0)),
+                    ]
+                ),
+                np.stack(
+                    [
+                        _dim128_vector((0, 1.0)),
+                        _dim128_vector((0, 0.8), (1, 0.2)),
+                    ]
+                ),
+            ],
+            texts=[
+                "Gugulethu township logo emblem heritage schools history",
+                (
+                    "Zama Dance School was founded in 1984 in a church and "
+                    "the longest serving employee is the artistic director."
+                ),
+            ],
+        ).pack()
+        return query, index
+
     def test_exact_full_scan_candidate_generation_matches_exact_scores(self) -> None:
         query, index = self._build_fixture()
 
@@ -110,6 +149,48 @@ class SearchPlanApiTests(unittest.TestCase):
         self.assertEqual(result.exact_stage.query_vector_count, 2)
         self.assertEqual(result.exact_stage.document_count, 2)
         self.assertEqual(result.exact_stage.document_vector_count, 4)
+        self.assertEqual(result.stage2.stage_name, "exact_late_interaction")
+        self.assertIs(result.exact_stage, result.stage2)
+        self.assertIs(result.exact_scores, result.stage2_scores)
+
+    def test_exact_full_scan_plan_defaults_to_noop_stage2(self) -> None:
+        query, index = self._build_fixture()
+        plan = kayak.exact_full_scan_search_plan(final_k=2, candidate_k=3)
+
+        result = kayak.search_with_plan(query, index, plan)
+
+        self.assertEqual(result.plan.stage2_operator.kind, "noop_topk")
+        self.assertEqual(result.hits, result.candidate_stage.hits[:2])
+        self.assertIsNone(result.candidate_index)
+        self.assertEqual(result.stage2.stage_name, "noop_topk")
+        self.assertEqual(result.stage2.query_vector_count, 0)
+        self.assertEqual(result.stage2.document_vector_count, 0)
+
+    def test_clause_text_stage2_can_refine_exact_candidate_window(self) -> None:
+        query, index = self._build_clause_text_fixture()
+        plan = kayak.exact_full_scan_clause_text_search_plan(final_k=1, candidate_k=2)
+
+        result = kayak.search_with_plan(query, index, plan)
+
+        self.assertEqual(result.candidate_stage.candidate_doc_ids, ("doc-context", "doc-answer"))
+        self.assertEqual([hit.doc_id for hit in result.hits], ["doc-answer"])
+        self.assertIsNotNone(result.candidate_index)
+        assert result.candidate_index is not None
+        self.assertEqual(result.candidate_index.doc_texts, index.doc_texts)
+        self.assertEqual(result.stage2.stage_name, "clause_text")
+        self.assertEqual(result.stage2.query_vector_count, 0)
+        self.assertEqual(result.stage2.document_vector_count, 0)
+        self.assertEqual(result.stage2.document_text_count, 2)
+
+    def test_clause_text_stage2_requires_query_text_and_document_texts(self) -> None:
+        query, index = self._build_clause_text_fixture()
+        plan = kayak.exact_full_scan_clause_text_search_plan(final_k=1, candidate_k=2)
+
+        with self.assertRaisesRegex(ValueError, "requires query.text"):
+            kayak.search_with_plan(query.with_text(None), index, plan)
+
+        with self.assertRaisesRegex(ValueError, "requires document texts"):
+            kayak.search_with_plan(query, index.with_texts(None), plan)
 
     def test_index_search_with_plan_matches_top_level_helper(self) -> None:
         query, index = self._build_fixture()
@@ -143,6 +224,9 @@ class SearchPlanApiTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "does not accept"):
             kayak.CandidateGenerator("exact_full_scan", query_vector_budget=1)
+
+        with self.assertRaisesRegex(ValueError, "unsupported stage-2 operator"):
+            kayak.Stage2Operator("dense_mlp")
 
 
 if __name__ == "__main__":

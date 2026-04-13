@@ -14,6 +14,7 @@ from kayak import (
     CollectionId,
     CollectionManifest,
     CollectionStats,
+    StoredDocumentTextCorpus,
     SegmentId,
     SegmentStats,
     SealedSegmentManifest,
@@ -40,6 +41,7 @@ from kayak import (
     centroid_postings_search_plan,
     collection_search_explain_json,
     document_proxy_search_plan,
+    exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
     explain_collection_search,
     gem_graph_search_artifact,
@@ -51,12 +53,14 @@ from kayak import (
     save_collection_manifest,
     save_stored_centroid_heads_index,
     save_stored_centroid_posting_index,
+    save_stored_document_text_corpus,
     save_sealed_segment_manifest,
     save_snapshot_manifest,
     save_stored_document_proxy_index,
     save_stored_gem_graph_index,
     save_stored_packed_index,
 )
+from kayak.text import DocumentTextCorpus
 
 
 def write_segment(
@@ -145,6 +149,90 @@ def make_collection_root() raises -> Path:
             2,
             [SegmentId("segment-0001"), SegmentId("segment-0002")],
             CollectionStats(2, 4, 8, 8, 1024),
+        ),
+    )
+    return root^
+
+
+def make_clause_text_collection_root() raises -> Path:
+    var root = Path("/tmp/kayak-collection-clause-text")
+    save_collection_manifest(
+        root,
+        CollectionManifest(
+            CollectionId("search-plan"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            1,
+        ),
+    )
+
+    var segment_root = root / "segments" / "segment-0001"
+    var documents = [
+        EncodedDocument("doc-context", [[1.0, 0.0], [1.0, 0.0]]),
+        EncodedDocument("doc-answer", [[1.0, 0.0], [0.8, 0.2]]),
+    ]
+    var packed_index = pack_documents(documents)
+
+    save_stored_packed_index(
+        segment_root / "packed_index",
+        StoredPackedIndex(
+            "collection://clause-text",
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            packed_index.copy(),
+        ),
+    )
+    save_stored_document_text_corpus(
+        segment_root / "text_corpus",
+        StoredDocumentTextCorpus(
+            CollectionId("search-plan"),
+            SegmentId("segment-0001"),
+            DocumentTextCorpus(
+                ["doc-context", "doc-answer"],
+                [
+                    "Gugulethu township logo emblem heritage schools history",
+                    "Zama Dance School was founded in 1984 in a church and the longest serving employee is the artistic director.",
+                ],
+            ),
+        ),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("search-plan"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            "packed_index",
+            "",
+            "",
+            "",
+            "text_corpus",
+            SegmentStats(
+                packed_index.document_count,
+                packed_index.total_vector_count,
+                packed_index.total_vector_count,
+                512,
+            ),
+        ),
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0001",
+        SnapshotManifest(
+            SnapshotId("snapshot-0001"),
+            CollectionId("search-plan"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 2, 4, 4, 512),
         ),
     )
     return root^
@@ -467,6 +555,36 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
     assert_equal(json.find("\"candidate_generator_kind\":\"exact_full_scan\"") != -1, True)
     assert_equal(json.find("\"faithfulness_policy_kind\":\"exact_stage1_required\"") != -1, True)
     assert_equal(json.find("\"faithfulness\":") != -1, True)
+    assert_equal(json.find("\"stage2_kind\":\"noop_topk\"") != -1, True)
+    assert_equal(json.find("\"stage2_family\":\"identity\"") != -1, True)
+
+
+def test_exact_full_scan_clause_text_stage2_can_refine_exact_candidates() raises:
+    var root = make_clause_text_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [1.0, 0.0]])
+    var plan = exact_full_scan_clause_text_search_plan(1, 2)
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        plan,
+        query_text=
+            "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
+    )
+    var json = collection_search_explain_json(explain)
+
+    assert_equal(explain.candidate_set.hits[0].doc_id, "doc-context")
+    assert_equal(explain.final_hits[0].doc_id, "doc-answer")
+    assert_equal(explain.plan.stage2_operator.kind, "clause_text")
+    assert_equal(explain.plan.stage2_operator.family, "text")
+    assert_equal(explain.plan.stage2_operator.requires_query_text, True)
+    assert_equal(explain.exact_stage.stage_name, "clause_text")
+    assert_equal(explain.exact_stage.document_count, 2)
+    assert_equal(explain.exact_stage.token_count > 0, True)
+    assert_equal(explain.exact_stage.byte_size > 0, True)
+    assert_equal(json.find("\"stage2_kind\":\"clause_text\"") != -1, True)
+    assert_equal(json.find("\"stage2_requires_query_text\":true") != -1, True)
 
 
 def test_candidate_budget_rejects_candidate_k_below_final_k() raises:

@@ -9,6 +9,12 @@ from .candidate_generator import (
     document_proxy_candidate_generator,
     exact_full_scan_candidate_generator,
 )
+from .stage2_operator import (
+    Stage2Operator,
+    clause_text_stage2_operator,
+    exact_late_interaction_stage2_operator,
+    noop_topk_stage2_operator,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +22,7 @@ class SearchPlan:
     candidate_generator: CandidateGenerator
     final_k: int
     candidate_k: int
+    stage2_operator: Stage2Operator
 
     def __post_init__(self) -> None:
         if self.final_k < 0:
@@ -27,13 +34,31 @@ class SearchPlan:
 
 
 def exact_full_scan_search_plan(
-    final_k: int, *, candidate_k: int | None = None
+    final_k: int,
+    *,
+    candidate_k: int | None = None,
+    stage2_operator: Stage2Operator | None = None,
 ) -> SearchPlan:
     effective_candidate_k = final_k if candidate_k is None else candidate_k
     return SearchPlan(
         exact_full_scan_candidate_generator(),
         final_k=final_k,
         candidate_k=effective_candidate_k,
+        stage2_operator=(
+            noop_topk_stage2_operator()
+            if stage2_operator is None
+            else stage2_operator
+        ),
+    )
+
+
+def exact_full_scan_clause_text_search_plan(
+    final_k: int, *, candidate_k: int | None = None
+) -> SearchPlan:
+    return exact_full_scan_search_plan(
+        final_k,
+        candidate_k=candidate_k,
+        stage2_operator=clause_text_stage2_operator(),
     )
 
 
@@ -43,6 +68,7 @@ def document_proxy_search_plan(
     *,
     query_vector_budget: int = 0,
     document_vector_budget: int = 0,
+    stage2_operator: Stage2Operator | None = None,
 ) -> SearchPlan:
     return SearchPlan(
         document_proxy_candidate_generator(
@@ -51,4 +77,9 @@ def document_proxy_search_plan(
         ),
         final_k=final_k,
         candidate_k=candidate_k,
+        stage2_operator=(
+            exact_late_interaction_stage2_operator()
+            if stage2_operator is None
+            else stage2_operator
+        ),
     )

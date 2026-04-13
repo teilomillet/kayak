@@ -27,4 +27,32 @@ result = kayak.search_with_plan(query, index, plan)
 print("candidate hits:", result.candidate_stage.hits)
 print("final hits:", result.hits)
 print("candidate stage:", result.candidate_stage.profile)
-print("exact stage:", result.exact_stage)
+print("stage2:", result.stage2)
+
+text_query = kayak.query(
+    np.stack([dim128(0), dim128(0)]),
+    text=(
+        "Gugulethu township logo. founded in 1984 in a church "
+        "longest serving employee artistic director"
+    ),
+)
+text_index = kayak.documents(
+    ["doc-context", "doc-answer"],
+    [
+        np.stack([dim128(0), dim128(0)]),
+        np.stack([dim128(0), dim128(0) * np.float32(0.8) + dim128(1) * np.float32(0.2)]),
+    ],
+    texts=[
+        "Gugulethu township logo emblem heritage schools history",
+        (
+            "Zama Dance School was founded in 1984 in a church and "
+            "the longest serving employee is the artistic director."
+        ),
+    ],
+).pack()
+text_plan = kayak.exact_full_scan_clause_text_search_plan(final_k=1, candidate_k=2)
+text_result = kayak.search_with_plan(text_query, text_index, text_plan)
+
+print("text candidate hits:", text_result.candidate_stage.hits)
+print("text stage2:", text_result.stage2)
+print("text final hits:", text_result.hits)

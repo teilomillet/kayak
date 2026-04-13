@@ -42,6 +42,7 @@ from kayak import (
     execute_planned_debug_search,
     execute_planned_search,
     execute_search,
+    exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
     export_snapshot,
     gem_graph_build_spec,
@@ -269,6 +270,70 @@ def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() 
     assert_equal(exported.snapshot_id.value, "snapshot-0001")
     assert_equal(imported.snapshot_id.value, "snapshot-0001")
     assert_equal(imported_search.hits[0].doc_id, "doc-a")
+
+
+def test_hosted_collection_runtime_supports_text_family_stage2() raises:
+    var service_root = unique_service_root("kayak-service-runtime-clause-text")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-context", [[1.0, 0.0], [1.0, 0.0]]),
+                    "Gugulethu township logo emblem heritage schools history",
+                ),
+                UpsertDocument(
+                    make_document("doc-answer", [[1.0, 0.0], [0.8, 0.2]]),
+                    "Zama Dance School was founded in 1984 in a church and the longest serving employee is the artistic director.",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish clause text fixture",
+        ),
+    )
+
+    var request = SearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        EncodedQuery([[1.0, 0.0], [1.0, 0.0]]),
+        "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
+        one_of_filter("doc_id", ["doc-context", "doc-answer"]),
+        exact_full_scan_clause_text_search_plan(1, 2),
+        True,
+    )
+    var response = execute_search(ExactCpuBackend(), service_root, request)
+    var debug = execute_debug_search(ExactCpuBackend(), service_root, request)
+
+    assert_equal(response.hits[0].doc_id, "doc-answer")
+    assert_equal(debug.explain.candidate_set.hits[0].doc_id, "doc-context")
+    assert_equal(debug.explain.final_hits[0].doc_id, "doc-answer")
+    assert_equal(debug.explain.exact_stage.stage_name, "clause_text")
+    assert_equal(debug.explain.exact_stage.token_count > 0, True)
 
 
 def test_hosted_collection_runtime_compacts_draft_after_snapshot() raises:

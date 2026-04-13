@@ -47,11 +47,17 @@ What is verified:
 - candidate-window rescoring can stay explicit through `LateIndex.select(...)`
   plus `maxsim(...)` instead of a hidden rerank primitive
 - the public API now exposes explicit local stage-aware primitives through
-  `CandidateGenerator`, `SearchPlan`, `generate_candidates(...)`, and
-  `search_with_plan(...)`
+  `CandidateGenerator`, `Stage2Operator`, `SearchPlan`,
+  `generate_candidates(...)`, and `search_with_plan(...)`
 - the first public stage-1 generator set is intentionally narrow:
   - `exact_full_scan`
   - `document_proxy`
+- the public stage-2 operator set is intentionally narrow too:
+  - `noop_topk`
+  - `exact_late_interaction`
+  - `clause_text`
+- the Python object model can carry optional query text and document texts for
+  text-family stage 2 without hiding that evidence behind generic tensors
 
 What is not claimed:
 - a published package whose `mojo_exact_cpu` backend works without a local
@@ -179,15 +185,19 @@ Supported exports today:
 - `SearchPlan`
 - `SearchPlanResult`
 - `SearchStageProfile`
+- `Stage2Operator`
 - `available_backends`
 - `backend_info`
+- `clause_text_stage2_operator`
 - `document_proxy_candidate_generator`
 - `document_proxy_search_plan`
 - `query`
 - `query_batch`
 - `documents`
+- `exact_full_scan_clause_text_search_plan`
 - `exact_full_scan_candidate_generator`
 - `exact_full_scan_search_plan`
+- `exact_late_interaction_stage2_operator`
 - `generate_candidates`
 - `packed_index`
 - `hybrid_flat_dim128_index`
@@ -197,6 +207,7 @@ Supported exports today:
 - `search`
 - `search_batch`
 - `search_with_plan`
+- `noop_topk_stage2_operator`
 - `NUMPY_REFERENCE_BACKEND`
 - `MOJO_EXACT_CPU_BACKEND`
 
@@ -250,14 +261,20 @@ candidate_scores = kayak.maxsim(
 )
 ```
 
-That is the intended candidate-window story for the SDK: explicit selection
-plus exact MaxSim, not a separate primitive that hides the late-interaction
-structure.
+That is still a useful low-level pattern, but it is no longer the whole
+stage-2 story.
+
+The stable public boundary is now:
+- stage 1 chooses a candidate window explicitly
+- stage 2 refines that window explicitly
+- query text and document texts are attached only when a text-family operator
+  needs them
 
 Runnable example:
 - [python/examples/quickstart.py](../python/examples/quickstart.py)
 - [python/examples/query_batch.py](../python/examples/query_batch.py)
 - [python/examples/backend_info.py](../python/examples/backend_info.py)
+- [python/examples/search_plan.py](../python/examples/search_plan.py)
 
 ## Stage-Aware Search
 
@@ -272,6 +289,11 @@ Reason:
 The supported public stage-1 generators today are:
 - `exact_full_scan`
 - `document_proxy`
+
+The supported public stage-2 operators today are:
+- `noop_topk`
+- `exact_late_interaction`
+- `clause_text`
 
 Example:
 
@@ -302,15 +324,22 @@ The result keeps the stages inspectable:
 - `result.candidate_stage.hits`
 - `result.candidate_stage.profile`
 - `result.candidate_index`
-- `result.exact_scores`
+- `result.stage2_scores`
 - `result.hits`
-- `result.exact_stage`
+- `result.stage2`
 
-The stage profiles keep query and document vector counts explicit:
+Compatibility note:
+- `result.exact_scores` still aliases `result.stage2_scores`
+- `result.exact_stage` still aliases `result.stage2`
+
+The stage profiles keep query and document vector counts explicit when the
+operator is vector-based, and document-text counts explicit when the operator
+is text-based:
 - `candidate_stage.profile.query_vector_count`
 - `candidate_stage.profile.document_vector_count`
-- `exact_stage.query_vector_count`
-- `exact_stage.document_vector_count`
+- `stage2.query_vector_count`
+- `stage2.document_vector_count`
+- `stage2.document_text_count`
 
 Runnable example:
 - [python/examples/search_plan.py](../python/examples/search_plan.py)

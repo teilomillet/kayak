@@ -15,6 +15,7 @@ It gives you explicit objects for:
 - documents
 - packed indexes
 - candidate generators
+- stage-2 operators
 - search plans
 - MaxSim scores
 - top-k search hits
@@ -125,6 +126,21 @@ query = kayak.query(
 )
 ```
 
+Attach query text only when a text-family stage-2 operator needs it:
+
+```python
+query = kayak.query(
+    np.array(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+        ],
+        dtype=np.float32,
+    ),
+    text="founded in 1984 in a church artistic director",
+)
+```
+
 Create a document collection:
 
 ```python
@@ -133,6 +149,22 @@ documents = kayak.documents(
     [
         np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
         np.array([[1.0, 0.0], [0.5, 0.5]], dtype=np.float32),
+    ],
+)
+```
+
+If you want a text-family stage 2, attach document texts explicitly:
+
+```python
+documents = kayak.documents(
+    ["doc-context", "doc-answer"],
+    [
+        np.array([[1.0, 0.0], [1.0, 0.0]], dtype=np.float32),
+        np.array([[1.0, 0.0], [0.8, 0.2]], dtype=np.float32),
+    ],
+    texts=[
+        "Gugulethu township logo emblem heritage schools history",
+        "Zama Dance School was founded in 1984 in a church and the longest serving employee is the artistic director.",
     ],
 )
 ```
@@ -181,16 +213,38 @@ index = kayak.documents(
 scores_batch = kayak.maxsim_batch(batch, index)
 ```
 
-Candidate-window rescoring stays explicit:
+Stage 2 is explicit too. Exact full scan now defaults to a no-op stage 2 because
+stage 1 is already exact:
 
 ```python
-hits = kayak.search(query, index, k=10)
-candidate_index = index.select([hit.doc_id for hit in hits])
-candidate_scores = kayak.maxsim(query, candidate_index)
+plan = kayak.exact_full_scan_search_plan(final_k=2, candidate_k=3)
+result = kayak.search_with_plan(query, index, plan)
+
+print(result.stage2.stage_name)  # noop_topk
+print(result.hits)
 ```
 
-That is still late interaction as a primitive: explicit selection plus MaxSim,
-not a hidden rerank mode.
+Approximate stage 1 plus exact late interaction is still explicit:
+
+```python
+plan = kayak.document_proxy_search_plan(final_k=1, candidate_k=2)
+result = kayak.search_with_plan(query, index, plan)
+
+print(result.candidate_stage.hits)
+print(result.stage2.stage_name)  # exact_late_interaction
+print(result.hits)
+```
+
+Text-family refinement is also explicit and requires both `query.text` and
+document texts:
+
+```python
+plan = kayak.exact_full_scan_clause_text_search_plan(final_k=1, candidate_k=2)
+result = kayak.search_with_plan(query, index, plan)
+
+print(result.stage2.stage_name)  # clause_text
+print(result.hits)
+```
 
 Stage-aware search plans are explicit too:
 
@@ -201,17 +255,22 @@ result = kayak.search_with_plan(query, index, plan)
 print(result.candidate_stage.hits)
 print(result.hits)
 print(result.candidate_stage.profile.document_vector_count)
-print(result.exact_stage.document_vector_count)
+print(result.stage2.document_vector_count)
 ```
 
 Current public stage-1 generators:
 - `exact_full_scan`
 - `document_proxy`
 
+Current public stage-2 operators:
+- `noop_topk`
+- `exact_late_interaction`
+- `clause_text`
+
 That is an intentionally narrow first pass.
-It gives Python users a real candidate-generation primitive today without
-pretending the full engine-native generator family is already stable as public
-SDK surface.
+It gives Python users a real stage-aware primitive today without pretending the
+full engine-native generator family or every future refinement operator is
+already stable as public SDK surface.
 
 ## Layouts
 

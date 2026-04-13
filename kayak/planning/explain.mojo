@@ -27,6 +27,7 @@ struct CollectionSearchExplain(Copyable):
     var plan: SearchPlan
     var candidate_set: CandidateSet
     var candidate_stage: SearchStageProfile
+    var stage2: SearchStageProfile
     var exact_stage: SearchStageProfile
     var candidate_recall_at_final_k: MetricScalar
     var faithfulness: FaithfulnessAssessment
@@ -39,7 +40,7 @@ struct CollectionSearchExplain(Copyable):
         plan: SearchPlan,
         candidate_set: CandidateSet,
         candidate_stage: SearchStageProfile,
-        exact_stage: SearchStageProfile,
+        stage2: SearchStageProfile,
         candidate_recall_at_final_k: MetricScalar,
         faithfulness: FaithfulnessAssessment,
         var final_hits: List[CollectionHit],
@@ -49,7 +50,8 @@ struct CollectionSearchExplain(Copyable):
         self.plan = plan.copy()
         self.candidate_set = candidate_set.copy()
         self.candidate_stage = candidate_stage.copy()
-        self.exact_stage = exact_stage.copy()
+        self.stage2 = stage2.copy()
+        self.exact_stage = stage2.copy()
         self.candidate_recall_at_final_k = candidate_recall_at_final_k
         self.faithfulness = faithfulness.copy()
         self.final_hits = final_hits^
@@ -61,12 +63,13 @@ def explain_collection_search[Backend: ExactScoringBackend](
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
     read filter_expression: FilterExpression = match_all_filter(),
+    query_text: String = "",
 ) raises -> CollectionSearchExplain:
     var candidate_set = candidate_generation_for_plan(
         backend, query, snapshot, plan, filter_expression
     )
-    var exact_stage = final_hits_for_plan(
-        backend, query, snapshot, candidate_set, plan
+    var stage2_result = final_hits_for_plan(
+        backend, query, query_text, snapshot, candidate_set, plan
     )
     var oracle_final_hits = exact_oracle_hits_for_snapshot(
         backend,
@@ -97,16 +100,16 @@ def explain_collection_search[Backend: ExactScoringBackend](
             build_score_histogram(candidate_set.hits, 8),
         ),
         SearchStageProfile(
-            "exact_late_interaction",
+            plan.stage2_operator.kind.copy(),
             len(candidate_set.hits),
-            len(exact_stage.final_hits),
-            exact_stage.segment_count,
-            exact_stage.document_count,
-            exact_stage.token_count,
-            exact_stage.vector_count,
-            exact_stage.byte_size,
+            len(stage2_result.final_hits),
+            stage2_result.segment_count,
+            stage2_result.document_count,
+            stage2_result.token_count,
+            stage2_result.vector_count,
+            stage2_result.byte_size,
             GraphSearchCounters(),
-            build_score_histogram(exact_stage.final_hits, 8),
+            build_score_histogram(stage2_result.final_hits, 8),
         ),
         observed_candidate_recall_at_final_k,
         assess_faithfulness(
@@ -114,5 +117,5 @@ def explain_collection_search[Backend: ExactScoringBackend](
             plan.candidate_generator.kind,
             observed_candidate_recall_at_final_k,
         ),
-        exact_stage.final_hits.copy(),
+        stage2_result.final_hits.copy(),
     )

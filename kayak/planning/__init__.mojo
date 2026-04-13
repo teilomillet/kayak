@@ -26,6 +26,7 @@ from .stage1_capabilities import (
     stage1_generator_supports_structured_filter,
     stage1_required_search_artifact_families,
 )
+from .clause_text_stage import clause_text_rerank_candidates_for_plan
 from .centroid_primitives import (
     ScoredCentroidSelection,
     accumulate_selected_centroid_scores,
@@ -38,6 +39,7 @@ from .execution import (
     final_hits_to_search_hits,
     search_collection_for_plan,
 )
+from .execution_stage2 import stage2_result_for_plan
 from .explain import CollectionSearchExplain, explain_collection_search
 from .faithfulness import (
     FaithfulnessAssessment,
@@ -48,7 +50,18 @@ from .faithfulness import (
     oracle_full_recall_required_faithfulness_policy,
     stage1_generator_is_exact,
 )
-from .exact_stage import ExactStageResult
+from .stage2_operator import (
+    STAGE2_OPERATOR_FAMILY_IDENTITY,
+    STAGE2_OPERATOR_FAMILY_LATE_INTERACTION,
+    STAGE2_OPERATOR_FAMILY_TEXT,
+    STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
+    STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
+    Stage2Operator,
+    clause_text_stage2_operator,
+    exact_late_interaction_stage2_operator,
+    noop_topk_stage2_operator,
+)
+from .stage2_result import Stage2Result
 from .json import collection_search_explain_json
 from .score_histogram import (
     ScoreHistogram,
@@ -78,6 +91,7 @@ from .search_plan import (
     centroid_postings_head_search_plan,
     centroid_postings_search_plan,
     document_proxy_search_plan,
+    exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
     gem_graph_search_plan,
 )

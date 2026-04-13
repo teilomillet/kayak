@@ -15,12 +15,13 @@ from .candidate_generator import (
 )
 from .candidate_set import CandidateSet
 from .collection_hit import CollectionHit, to_search_hit
-from .exact_stage import ExactStageResult, exact_rerank_candidates_for_plan
 from .execution_centroid_family import candidate_generation_for_centroid_family
 from .execution_exact_family import candidate_generation_for_exact_family
 from .execution_graph_family import candidate_generation_for_graph_family
 from .execution_proxy_family import candidate_generation_for_proxy_family
+from .execution_stage2 import stage2_result_for_plan
 from .search_plan import SearchPlan
+from .stage2_result import Stage2Result
 
 
 def candidate_generation_for_plan[Backend: ExactScoringBackend](
@@ -98,16 +99,18 @@ def candidate_recall_at_final_k(
 def final_hits_for_plan[Backend: ExactScoringBackend](
     read backend: Backend,
     read query: EncodedQuery,
+    query_text: String,
     read snapshot: ResolvedCollectionSnapshot,
     read candidate_set: CandidateSet,
     read plan: SearchPlan,
-) raises -> ExactStageResult:
-    return exact_rerank_candidates_for_plan(
+) raises -> Stage2Result:
+    return stage2_result_for_plan(
         backend,
         query,
+        query_text,
         snapshot,
-        candidate_set.hits,
-        plan.candidate_budget.final_k,
+        candidate_set,
+        plan,
     )
 
 
@@ -117,6 +120,7 @@ def search_collection_for_plan[Backend: ExactScoringBackend](
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
     read filter_expression: FilterExpression = match_all_filter(),
+    query_text: String = "",
 ) raises -> List[CollectionHit]:
     var candidate_set = candidate_generation_for_plan(
         backend,
@@ -128,6 +132,7 @@ def search_collection_for_plan[Backend: ExactScoringBackend](
     return final_hits_for_plan(
         backend,
         query,
+        query_text,
         snapshot,
         candidate_set,
         plan,

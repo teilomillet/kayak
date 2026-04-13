@@ -203,6 +203,21 @@ def append_json_search_plan_only(mut buffer: String, read plan: SearchPlan):
     buffer += String(plan.candidate_budget.final_k) + ","
     buffer += "\"candidate_k\":"
     buffer += String(plan.candidate_budget.candidate_k) + ","
+    buffer += "\"stage2_kind\":\""
+    buffer += json_escape(plan.stage2_operator.kind) + "\","
+    buffer += "\"stage2_family\":\""
+    buffer += json_escape(plan.stage2_operator.family) + "\","
+    buffer += "\"stage2_requires_query_text\":"
+    if plan.stage2_operator.requires_query_text:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"stage2_required_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        plan.stage2_operator.required_artifact_families,
+    )
+    buffer += ","
     buffer += "\"exact_stage_kind\":\""
     buffer += json_escape(plan.exact_stage_kind) + "\","
     buffer += "\"reranker_kind\":\""
@@ -567,6 +582,8 @@ def search_request_json(read request: SearchRequest) -> String:
     buffer += "\"snapshot_id\":\"" + json_escape(request.snapshot_id.value) + "\","
     buffer += "\"query\":"
     append_json_vector_list(buffer, request.query.token_vectors)
+    buffer += ",\"query_text\":\""
+    buffer += json_escape(request.query_text) + "\""
     buffer += ",\"filter_expression\":"
     append_json_filter_expression(buffer, request.filter_expression)
     buffer += ",\"plan\":"
