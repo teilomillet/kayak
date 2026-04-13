@@ -13,6 +13,7 @@ struct SearchStageProfile(Copyable):
     var token_count: Int
     var vector_count: Int
     var byte_size: Int
+    var tracks_graph_search: Bool
     var graph_search_counters: GraphSearchCounters
     var score_histogram: ScoreHistogram
 
@@ -57,6 +58,7 @@ struct SearchStageProfile(Copyable):
         self.token_count = token_count
         self.vector_count = vector_count
         self.byte_size = byte_size
+        self.tracks_graph_search = False
         self.graph_search_counters = GraphSearchCounters()
         self.score_histogram = score_histogram.copy()
 
@@ -84,4 +86,5 @@ struct SearchStageProfile(Copyable):
             byte_size,
             score_histogram,
         )
+        self.tracks_graph_search = True
         self.graph_search_counters = graph_search_counters.copy()

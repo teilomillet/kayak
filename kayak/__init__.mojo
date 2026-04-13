@@ -101,6 +101,8 @@ from .planning import (
     FaithfulnessAssessment,
     FaithfulnessPolicy,
     GraphSearchCounters,
+    accumulate_graph_search_counters,
+    graph_search_counters_have_activity,
     ScoreHistogram,
     SearchPlan,
     SearchPlanSelection,

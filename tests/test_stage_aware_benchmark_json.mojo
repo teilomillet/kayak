@@ -80,6 +80,12 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
             3200,
             32.0,
             8.0,
+            True,
+            12.0,
+            24.0,
+            3.0,
+            2.0,
+            6.0,
             10,
             80,
             80,
@@ -117,6 +123,14 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
     )
     assert_equal(
         json.find("\"candidate_stage_bytes_per_vector\":8.0") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_stage_tracks_graph_search\":true") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"mean_candidate_stage_graph_visited_vertex_count\":12.0") != -1,
         True,
     )
     assert_equal(
@@ -206,6 +220,12 @@ def test_build_stage_aware_search_summary_reports_proxy_recall_gap() raises:
         explain.candidate_stage.token_count,
         explain.candidate_stage.vector_count,
         explain.candidate_stage.byte_size,
+        explain.candidate_stage.tracks_graph_search,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
         explain.stage2.document_count,
         explain.stage2.token_count,
         explain.stage2.vector_count,
@@ -229,6 +249,8 @@ def test_build_stage_aware_search_summary_reports_proxy_recall_gap() raises:
     assert_equal(summary.nominal_document_vector_count, 2)
     assert_equal(summary.candidate_stage_document_count, 3)
     assert_equal(summary.candidate_stage_vector_count, 3)
+    assert_equal(summary.candidate_stage_tracks_graph_search, False)
+    assert_equal(summary.mean_candidate_stage_graph_visited_vertex_count, 0.0)
     assert_equal(summary.stage2_document_count, 1)
     assert_equal(summary.stage2_vector_count, 2)
 

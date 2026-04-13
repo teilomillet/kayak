@@ -54,6 +54,12 @@ struct StageAwareSearchSummary(Copyable):
     var candidate_stage_byte_size: Int
     var candidate_stage_bytes_per_document: Float64
     var candidate_stage_bytes_per_vector: Float64
+    var candidate_stage_tracks_graph_search: Bool
+    var mean_candidate_stage_graph_visited_vertex_count: Float64
+    var mean_candidate_stage_graph_expanded_edge_count: Float64
+    var mean_candidate_stage_graph_visited_cluster_count: Float64
+    var mean_candidate_stage_graph_entry_point_count: Float64
+    var mean_candidate_stage_graph_max_frontier_size: Float64
     var stage2_document_count: Int
     var stage2_token_count: Int
     var stage2_vector_count: Int
@@ -100,6 +106,12 @@ struct StageAwareSearchSummary(Copyable):
         candidate_stage_byte_size: Int,
         candidate_stage_bytes_per_document: Float64,
         candidate_stage_bytes_per_vector: Float64,
+        candidate_stage_tracks_graph_search: Bool,
+        mean_candidate_stage_graph_visited_vertex_count: Float64,
+        mean_candidate_stage_graph_expanded_edge_count: Float64,
+        mean_candidate_stage_graph_visited_cluster_count: Float64,
+        mean_candidate_stage_graph_entry_point_count: Float64,
+        mean_candidate_stage_graph_max_frontier_size: Float64,
         stage2_document_count: Int,
         stage2_token_count: Int,
         stage2_vector_count: Int,
@@ -146,6 +158,22 @@ struct StageAwareSearchSummary(Copyable):
             candidate_stage_bytes_per_document
         )
         self.candidate_stage_bytes_per_vector = candidate_stage_bytes_per_vector
+        self.candidate_stage_tracks_graph_search = candidate_stage_tracks_graph_search
+        self.mean_candidate_stage_graph_visited_vertex_count = (
+            mean_candidate_stage_graph_visited_vertex_count
+        )
+        self.mean_candidate_stage_graph_expanded_edge_count = (
+            mean_candidate_stage_graph_expanded_edge_count
+        )
+        self.mean_candidate_stage_graph_visited_cluster_count = (
+            mean_candidate_stage_graph_visited_cluster_count
+        )
+        self.mean_candidate_stage_graph_entry_point_count = (
+            mean_candidate_stage_graph_entry_point_count
+        )
+        self.mean_candidate_stage_graph_max_frontier_size = (
+            mean_candidate_stage_graph_max_frontier_size
+        )
         self.stage2_document_count = stage2_document_count
         self.stage2_token_count = stage2_token_count
         self.stage2_vector_count = stage2_vector_count
@@ -177,6 +205,12 @@ def build_stage_aware_search_summary_from_measurement(
     candidate_stage_token_count: Int,
     candidate_stage_vector_count: Int,
     candidate_stage_byte_size: Int,
+    candidate_stage_tracks_graph_search: Bool,
+    mean_candidate_stage_graph_visited_vertex_count: Float64,
+    mean_candidate_stage_graph_expanded_edge_count: Float64,
+    mean_candidate_stage_graph_visited_cluster_count: Float64,
+    mean_candidate_stage_graph_entry_point_count: Float64,
+    mean_candidate_stage_graph_max_frontier_size: Float64,
     stage2_document_count: Int,
     stage2_token_count: Int,
     stage2_vector_count: Int,
@@ -233,6 +267,12 @@ def build_stage_aware_search_summary_from_measurement(
         density_bytes_per_vector(
             candidate_stage_byte_size, candidate_stage_vector_count
         ),
+        candidate_stage_tracks_graph_search,
+        mean_candidate_stage_graph_visited_vertex_count,
+        mean_candidate_stage_graph_expanded_edge_count,
+        mean_candidate_stage_graph_visited_cluster_count,
+        mean_candidate_stage_graph_entry_point_count,
+        mean_candidate_stage_graph_max_frontier_size,
         stage2_document_count,
         stage2_token_count,
         stage2_vector_count,
@@ -289,6 +329,21 @@ def build_stage_aware_search_summary(
     var candidate_recall_total = Float64(
         representative_explain.candidate_recall_at_final_k
     )
+    var candidate_stage_graph_visited_vertex_total = Float64(
+        representative_explain.candidate_stage.graph_search_counters.visited_vertex_count
+    )
+    var candidate_stage_graph_expanded_edge_total = Float64(
+        representative_explain.candidate_stage.graph_search_counters.expanded_edge_count
+    )
+    var candidate_stage_graph_visited_cluster_total = Float64(
+        representative_explain.candidate_stage.graph_search_counters.visited_cluster_count
+    )
+    var candidate_stage_graph_entry_point_total = Float64(
+        representative_explain.candidate_stage.graph_search_counters.entry_point_count
+    )
+    var candidate_stage_graph_max_frontier_total = Float64(
+        representative_explain.candidate_stage.graph_search_counters.max_frontier_size
+    )
 
     for query_index in range(1, len(task.queries)):
         var judged_query = task.queries[query_index].copy()
@@ -325,6 +380,21 @@ def build_stage_aware_search_summary(
             query_text=query_text,
         )
         candidate_recall_total += Float64(explain.candidate_recall_at_final_k)
+        candidate_stage_graph_visited_vertex_total += Float64(
+            explain.candidate_stage.graph_search_counters.visited_vertex_count
+        )
+        candidate_stage_graph_expanded_edge_total += Float64(
+            explain.candidate_stage.graph_search_counters.expanded_edge_count
+        )
+        candidate_stage_graph_visited_cluster_total += Float64(
+            explain.candidate_stage.graph_search_counters.visited_cluster_count
+        )
+        candidate_stage_graph_entry_point_total += Float64(
+            explain.candidate_stage.graph_search_counters.entry_point_count
+        )
+        candidate_stage_graph_max_frontier_total += Float64(
+            explain.candidate_stage.graph_search_counters.max_frontier_size
+        )
 
     var query_count = len(task.queries)
     var query_index = 0
@@ -360,6 +430,12 @@ def build_stage_aware_search_summary(
         representative_explain.candidate_stage.token_count,
         representative_explain.candidate_stage.vector_count,
         representative_explain.candidate_stage.byte_size,
+        representative_explain.candidate_stage.tracks_graph_search,
+        candidate_stage_graph_visited_vertex_total / Float64(query_count),
+        candidate_stage_graph_expanded_edge_total / Float64(query_count),
+        candidate_stage_graph_visited_cluster_total / Float64(query_count),
+        candidate_stage_graph_entry_point_total / Float64(query_count),
+        candidate_stage_graph_max_frontier_total / Float64(query_count),
         representative_explain.stage2.document_count,
         representative_explain.stage2.token_count,
         representative_explain.stage2.vector_count,
@@ -452,6 +528,21 @@ def append_stage_aware_search_summary_json(
     buffer += String(summary.candidate_stage_bytes_per_document) + ","
     buffer += "\"candidate_stage_bytes_per_vector\":"
     buffer += String(summary.candidate_stage_bytes_per_vector) + ","
+    buffer += "\"candidate_stage_tracks_graph_search\":"
+    if summary.candidate_stage_tracks_graph_search:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"mean_candidate_stage_graph_visited_vertex_count\":"
+    buffer += String(summary.mean_candidate_stage_graph_visited_vertex_count) + ","
+    buffer += "\"mean_candidate_stage_graph_expanded_edge_count\":"
+    buffer += String(summary.mean_candidate_stage_graph_expanded_edge_count) + ","
+    buffer += "\"mean_candidate_stage_graph_visited_cluster_count\":"
+    buffer += String(summary.mean_candidate_stage_graph_visited_cluster_count) + ","
+    buffer += "\"mean_candidate_stage_graph_entry_point_count\":"
+    buffer += String(summary.mean_candidate_stage_graph_entry_point_count) + ","
+    buffer += "\"mean_candidate_stage_graph_max_frontier_size\":"
+    buffer += String(summary.mean_candidate_stage_graph_max_frontier_size) + ","
     buffer += "\"stage2_document_count\":"
     buffer += String(summary.stage2_document_count) + ","
     buffer += "\"stage2_token_count\":"

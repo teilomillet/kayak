@@ -58,6 +58,11 @@ def append_json_stage_profile(
     buffer += "\"token_count\":" + String(profile.token_count) + ","
     buffer += "\"vector_count\":" + String(profile.vector_count) + ","
     buffer += "\"byte_size\":" + String(profile.byte_size) + ","
+    buffer += "\"tracks_graph_search\":"
+    if profile.tracks_graph_search:
+        buffer += "true,"
+    else:
+        buffer += "false,"
     buffer += "\"graph_search_counters\":"
     append_json_graph_search_counters(buffer, profile.graph_search_counters)
     buffer += ","
@@ -107,6 +112,11 @@ def append_json_candidate_set(mut buffer: String, read candidate_set: CandidateS
     buffer += "\"token_count\":" + String(candidate_set.token_count) + ","
     buffer += "\"vector_count\":" + String(candidate_set.vector_count) + ","
     buffer += "\"byte_size\":" + String(candidate_set.byte_size) + ","
+    buffer += "\"tracks_graph_search\":"
+    if candidate_set.tracks_graph_search:
+        buffer += "true,"
+    else:
+        buffer += "false,"
     buffer += "\"graph_search_counters\":"
     append_json_graph_search_counters(
         buffer,

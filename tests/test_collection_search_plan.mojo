@@ -1159,6 +1159,9 @@ def test_gem_graph_search_plan_executes_with_exact_rerank() raises:
 
     assert_equal(len(explain.candidate_set.hits) > 0, True)
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
+    assert_equal(explain.candidate_set.tracks_graph_search, True)
+    assert_equal(explain.candidate_stage.tracks_graph_search, True)
+    assert_equal(explain.stage2.tracks_graph_search, False)
     assert_equal(
         explain.candidate_set.graph_search_counters.visited_vertex_count > 0,
         True,
@@ -1179,6 +1182,7 @@ def test_gem_graph_search_plan_executes_with_exact_rerank() raises:
         explain.candidate_stage.graph_search_counters.max_frontier_size > 0,
         True,
     )
+    assert_equal(json.find("\"tracks_graph_search\":true") != -1, True)
     assert_equal(json.find("\"graph_search_counters\":") != -1, True)
 
 

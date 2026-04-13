@@ -32,7 +32,11 @@ from .centroid_execution_contract import (
     CentroidExecutionContract,
     centroid_execution_contract,
 )
-from .graph_search_counters import GraphSearchCounters
+from .graph_search_counters import (
+    GraphSearchCounters,
+    accumulate_graph_search_counters,
+    graph_search_counters_have_activity,
+)
 from .stage1_capabilities import (
     Stage1Capabilities,
     stage1_capabilities_for_candidate_generator_kind,

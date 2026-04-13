@@ -48,3 +48,29 @@ struct GraphSearchCounters(Copyable):
         self.entry_point_count = entry_point_count
         self.max_frontier_size = max_frontier_size
 
+
+def graph_search_counters_have_activity(read counters: GraphSearchCounters) -> Bool:
+    return (
+        counters.visited_vertex_count > 0
+        or counters.expanded_edge_count > 0
+        or counters.visited_cluster_count > 0
+        or counters.entry_point_count > 0
+        or counters.max_frontier_size > 0
+    )
+
+
+def accumulate_graph_search_counters(
+    read total: GraphSearchCounters,
+    read addition: GraphSearchCounters,
+) raises -> GraphSearchCounters:
+    var max_frontier_size = total.max_frontier_size
+    if addition.max_frontier_size > max_frontier_size:
+        max_frontier_size = addition.max_frontier_size
+
+    return GraphSearchCounters(
+        total.visited_vertex_count + addition.visited_vertex_count,
+        total.expanded_edge_count + addition.expanded_edge_count,
+        total.visited_cluster_count + addition.visited_cluster_count,
+        total.entry_point_count + addition.entry_point_count,
+        max_frontier_size,
+    )

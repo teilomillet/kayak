@@ -23,7 +23,10 @@ from kayak.storage import StoredGemGraphIndex
 
 from .candidate_set import CandidateSet
 from .collection_hit import CollectionHit
-from .graph_search_counters import GraphSearchCounters
+from .graph_search_counters import (
+    GraphSearchCounters,
+    accumulate_graph_search_counters,
+)
 from .search_plan import SearchPlan
 from .topk import insert_descending_collection_hit
 
@@ -306,11 +309,7 @@ def candidate_generation_for_graph_family[Backend: ExactScoringBackend](
     var token_count = 0
     var vector_count = 0
     var byte_size = 0
-    var visited_vertex_count = 0
-    var expanded_edge_count = 0
-    var visited_cluster_count = 0
-    var entry_point_count = 0
-    var max_frontier_size = 0
+    var graph_search_counters = GraphSearchCounters()
 
     for segment in snapshot.segments:
         if not loaded_segment_has_search_artifact(
@@ -342,20 +341,10 @@ def candidate_generation_for_graph_family[Backend: ExactScoringBackend](
             plan.candidate_generator.cluster_top_k_per_query_token,
             plan.candidate_generator.beam_width,
         )
-        visited_vertex_count += (
-            segment_result.graph_search_counters.visited_vertex_count
+        graph_search_counters = accumulate_graph_search_counters(
+            graph_search_counters,
+            segment_result.graph_search_counters,
         )
-        expanded_edge_count += (
-            segment_result.graph_search_counters.expanded_edge_count
-        )
-        visited_cluster_count += (
-            segment_result.graph_search_counters.visited_cluster_count
-        )
-        entry_point_count += segment_result.graph_search_counters.entry_point_count
-        if segment_result.graph_search_counters.max_frontier_size > max_frontier_size:
-            max_frontier_size = (
-                segment_result.graph_search_counters.max_frontier_size
-            )
 
         for hit in segment_result.hits:
             insert_descending_collection_hit(
@@ -372,11 +361,5 @@ def candidate_generation_for_graph_family[Backend: ExactScoringBackend](
         token_count,
         vector_count,
         byte_size,
-        GraphSearchCounters(
-            visited_vertex_count,
-            expanded_edge_count,
-            visited_cluster_count,
-            entry_point_count,
-            max_frontier_size,
-        ),
+        graph_search_counters,
     )
