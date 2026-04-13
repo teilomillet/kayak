@@ -222,11 +222,14 @@ from .collections import (
     StoredDocumentTextCorpus,
     TenantId,
     build_collection_storage_report,
+    build_collection_reclaim_plan,
     build_compaction_plan_for_snapshot,
     build_segment_storage_report,
     centroid_heads_search_artifact,
     centroid_postings_search_artifact,
+    CollectionReclaimPlan,
     collection_manifest_exists,
+    collection_reclaim_plan_json,
     collection_storage_report_json,
     copy_document_metadata_maps,
     document_metadata_has_key,
@@ -282,6 +285,8 @@ from .collections import (
     save_snapshot_manifest,
     save_stored_document_metadata_corpus,
     save_stored_document_text_corpus,
+    SnapshotRetentionDecision,
+    SnapshotRetentionPolicy,
     snapshot_export_bundle_manifest_exists,
 )
 from .storage import (

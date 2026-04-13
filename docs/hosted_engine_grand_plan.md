@@ -52,13 +52,17 @@ That combination implies a clear next move:
 - compacted draft baselines plus mutation replay after snapshot publication
 - exact metadata filtering on the hosted exact path
 - operational counters for inactive snapshots and pending draft mutations
+- non-destructive reclaim planning for inactive snapshots and unique inactive
+  segments
 
 ### What is still weak
 
 - publication is only file-atomic, not a transactional multi-file commit across
   segment sealing and snapshot promotion
 - superseded snapshots and inactive segments are measured, but no reclaim or
-  retention policy exists yet
+  retention execution exists yet
+- retention policy metadata is still explicit only at planning time, not yet
+  stored with snapshots
 - search-native sidecars still need policy-driven build selection beyond
   today's baseline registry
 - hosted execution supports exact metadata filtering, but candidate-pushdown and

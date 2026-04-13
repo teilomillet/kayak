@@ -26,6 +26,13 @@ from .compaction_runtime import (
     build_compaction_plan_for_snapshot,
     execute_compaction_plan,
 )
+from .reclaim import (
+    CollectionReclaimPlan,
+    SnapshotRetentionDecision,
+    SnapshotRetentionPolicy,
+)
+from .reclaim_json import collection_reclaim_plan_json
+from .reclaim_runtime import build_collection_reclaim_plan
 from .publish import (
     publish_collection_snapshot,
     publish_snapshot_manifest,
