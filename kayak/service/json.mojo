@@ -9,7 +9,12 @@ from kayak.collections import SearchArtifactBuildPolicy
 from kayak.collections.document_metadata import DocumentMetadataUpdate
 from kayak.filters import FilterClause, FilterExpression, FilterTerm
 from kayak.numeric import VectorScalar
-from kayak.planning import CollectionHit, collection_search_explain_json
+from kayak.planning import (
+    CollectionHit,
+    SearchPlan,
+    SearchPlanSelection,
+    collection_search_explain_json,
+)
 
 from .collection_requests import (
     CreateCollectionRequest,
@@ -29,6 +34,10 @@ from .search_contracts import (
     DebugSearchResponse,
     ExplainRequest,
     ExplainResponse,
+    PlannedDebugSearchResponse,
+    PlannedExplainResponse,
+    PlannedSearchRequest,
+    PlannedSearchResponse,
     SearchRequest,
     SearchResponse,
 )
@@ -178,28 +187,78 @@ def append_json_search_artifact_build_policy(
     buffer += "]"
 
 
-def append_json_search_plan(mut buffer: String, read request: SearchRequest):
+def append_json_search_plan_only(mut buffer: String, read plan: SearchPlan):
     buffer += "{"
     buffer += "\"candidate_generator_kind\":\""
-    buffer += json_escape(request.plan.candidate_generator.kind)
+    buffer += json_escape(plan.candidate_generator.kind)
     buffer += "\","
     buffer += "\"faithfulness_policy_kind\":\""
-    buffer += json_escape(request.plan.faithfulness_policy.kind)
+    buffer += json_escape(plan.faithfulness_policy.kind)
     buffer += "\","
     buffer += "\"graph_cluster_top_k_per_query_token\":"
+    buffer += String(plan.candidate_generator.cluster_top_k_per_query_token) + ","
+    buffer += "\"graph_beam_width\":"
+    buffer += String(plan.candidate_generator.beam_width) + ","
+    buffer += "\"final_k\":"
+    buffer += String(plan.candidate_budget.final_k) + ","
+    buffer += "\"candidate_k\":"
+    buffer += String(plan.candidate_budget.candidate_k) + ","
+    buffer += "\"exact_stage_kind\":\""
+    buffer += json_escape(plan.exact_stage_kind) + "\","
+    buffer += "\"reranker_kind\":\""
+    buffer += json_escape(plan.reranker_kind) + "\""
+    buffer += "}"
+
+
+def append_json_search_plan(mut buffer: String, read request: SearchRequest):
+    append_json_search_plan_only(buffer, request.plan)
+
+
+def append_json_search_plan_selection(
+    mut buffer: String, read selection: SearchPlanSelection
+):
+    buffer += "{"
+    buffer += "\"goal\":\"" + json_escape(selection.goal) + "\","
+    buffer += "\"available_candidate_generator_kinds\":"
+    append_json_string_list(
+        buffer, selection.available_candidate_generator_kinds
+    )
+    buffer += ",\"effective_candidate_generator_order\":"
+    append_json_string_list(
+        buffer, selection.effective_candidate_generator_order
+    )
+    buffer += ",\"reason\":\"" + json_escape(selection.reason) + "\","
+    buffer += "\"plan\":"
+    append_json_search_plan_only(buffer, selection.plan)
+    buffer += "}"
+
+
+def append_json_search_planning_request(
+    mut buffer: String, read request: PlannedSearchRequest
+):
+    buffer += "{"
+    buffer += "\"goal\":\"" + json_escape(request.planning.goal) + "\","
+    buffer += "\"preferred_candidate_generator_kinds\":"
+    append_json_string_list(
+        buffer, request.planning.preferred_candidate_generator_kinds
+    )
+    buffer += ",\"faithfulness_policy_kind\":\""
+    buffer += json_escape(request.planning.faithfulness_policy.kind) + "\","
+    buffer += "\"final_k\":"
+    buffer += String(request.planning.candidate_budget.final_k) + ","
+    buffer += "\"candidate_k\":"
+    buffer += String(request.planning.candidate_budget.candidate_k) + ","
+    buffer += "\"debug_mode\":"
+    if request.planning.debug_mode:
+        buffer += "true"
+    else:
+        buffer += "false"
+    buffer += ",\"graph_cluster_top_k_per_query_token\":"
     buffer += String(
-        request.plan.candidate_generator.cluster_top_k_per_query_token
+        request.planning.gem_graph_cluster_top_k_per_query_token
     ) + ","
     buffer += "\"graph_beam_width\":"
-    buffer += String(request.plan.candidate_generator.beam_width) + ","
-    buffer += "\"final_k\":"
-    buffer += String(request.plan.candidate_budget.final_k) + ","
-    buffer += "\"candidate_k\":"
-    buffer += String(request.plan.candidate_budget.candidate_k) + ","
-    buffer += "\"exact_stage_kind\":\""
-    buffer += json_escape(request.plan.exact_stage_kind) + "\","
-    buffer += "\"reranker_kind\":\""
-    buffer += json_escape(request.plan.reranker_kind) + "\""
+    buffer += String(request.planning.gem_graph_beam_width)
     buffer += "}"
 
 
@@ -522,6 +581,23 @@ def search_request_json(read request: SearchRequest) -> String:
     return buffer^
 
 
+def planned_search_request_json(read request: PlannedSearchRequest) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"collection_id\":\"" + json_escape(request.collection_id.value) + "\","
+    buffer += "\"tenant_id\":\"" + json_escape(request.tenant_id.value) + "\","
+    buffer += "\"namespace_id\":\"" + json_escape(request.namespace_id.value) + "\","
+    buffer += "\"snapshot_id\":\"" + json_escape(request.snapshot_id.value) + "\","
+    buffer += "\"query\":"
+    append_json_vector_list(buffer, request.query.token_vectors)
+    buffer += ",\"filter_expression\":"
+    append_json_filter_expression(buffer, request.filter_expression)
+    buffer += ",\"planning\":"
+    append_json_search_planning_request(buffer, request)
+    buffer += "}"
+    return buffer^
+
+
 def search_response_json(read response: SearchResponse) -> String:
     var buffer = String()
     buffer += "{"
@@ -552,6 +628,30 @@ def debug_search_response_json(read response: DebugSearchResponse) -> String:
     return buffer^
 
 
+def planned_search_response_json(read response: PlannedSearchResponse) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"selection\":"
+    append_json_search_plan_selection(buffer, response.selection)
+    buffer += ",\"search\":"
+    buffer += search_response_json(response.search)
+    buffer += "}"
+    return buffer^
+
+
+def planned_debug_search_response_json(
+    read response: PlannedDebugSearchResponse
+) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"selection\":"
+    append_json_search_plan_selection(buffer, response.selection)
+    buffer += ",\"debug\":"
+    buffer += debug_search_response_json(response.debug)
+    buffer += "}"
+    return buffer^
+
+
 def explain_request_json(read request: ExplainRequest) -> String:
     return search_request_json(request.search)
 
@@ -561,6 +661,19 @@ def explain_response_json(read response: ExplainResponse) -> String:
     buffer += "{"
     buffer += "\"explain\":"
     buffer += collection_search_explain_json(response.explain)
+    buffer += "}"
+    return buffer^
+
+
+def planned_explain_response_json(
+    read response: PlannedExplainResponse
+) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"selection\":"
+    append_json_search_plan_selection(buffer, response.selection)
+    buffer += ",\"explain\":"
+    buffer += collection_search_explain_json(response.explain.explain)
     buffer += "}"
     return buffer^
 

@@ -21,8 +21,14 @@ from kayak import (
     ExplainResponse,
     DocumentMetadataUpdate,
     NamespaceId,
+    PlannedDebugSearchResponse,
+    PlannedExplainResponse,
+    PlannedSearchRequest,
+    PlannedSearchResponse,
     ScoreScalar,
     SearchRequest,
+    SearchPlanSelection,
+    SearchPlanSelectionRequest,
     SearchArtifactBuildPolicy,
     document_proxy_build_spec,
     SearchResponse,
@@ -413,6 +419,65 @@ def test_search_and_debug_responses_match_explain_scope() raises:
     assert_equal(debug_response.explain.snapshot_id, "snapshot-0001")
     assert_equal(explain_request.search.collection_id.value, "news")
     assert_equal(explain_response.explain.collection_id, "news")
+
+
+def test_planned_search_contracts_keep_selection_explicit() raises:
+    var request = PlannedSearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        make_query(),
+        match_all_filter(),
+        SearchPlanSelectionRequest(
+            2,
+            8,
+            best_effort_faithfulness_policy(),
+            match_all_filter(),
+            "balanced",
+            ["document_proxy", "exact_full_scan"],
+            True,
+        ),
+    )
+    var selection = SearchPlanSelection(
+        "balanced",
+        ["exact_full_scan", "document_proxy"],
+        ["document_proxy", "exact_full_scan"],
+        exact_full_scan_search_plan(2, 2),
+        "planner fell back to exact_full_scan for verification",
+    )
+    var hits = [CollectionHit("segment-0001", "doc-a", ScoreScalar(1.0))]
+    var planned_search = PlannedSearchResponse(
+        selection,
+        SearchResponse(
+            request.collection_id,
+            request.tenant_id,
+            request.namespace_id,
+            request.snapshot_id,
+            selection.plan,
+            hits.copy(),
+        ),
+    )
+    var planned_debug = PlannedDebugSearchResponse(
+        selection,
+        DebugSearchResponse(planned_search.search, make_explain()),
+    )
+    var planned_explain = PlannedExplainResponse(
+        selection,
+        ExplainResponse(make_explain()),
+    )
+
+    assert_equal(request.planning.goal, "balanced")
+    assert_equal(
+        request.planning.preferred_candidate_generator_kinds[0],
+        "document_proxy",
+    )
+    assert_equal(planned_search.selection.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(planned_debug.debug.search.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(
+        planned_explain.explain.explain.plan.candidate_generator.kind,
+        "exact_full_scan",
+    )
 
 
 def test_snapshot_and_status_contracts_hold_service_metadata() raises:

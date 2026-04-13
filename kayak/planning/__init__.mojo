@@ -81,4 +81,18 @@ from .search_plan import (
     exact_full_scan_search_plan,
     gem_graph_search_plan,
 )
+from .planner import (
+    CandidateGeneratorOrderDecision,
+    SEARCH_PLANNING_GOAL_BALANCED,
+    SEARCH_PLANNING_GOAL_EXACT_ONLY,
+    SEARCH_PLANNING_GOAL_LATENCY_FIRST,
+    SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
+    SearchPlanSelection,
+    SearchPlanSelectionRequest,
+    available_candidate_generator_kinds,
+    candidate_generator_kind_is_available,
+    require_search_planning_goal,
+    search_planning_goal_kinds,
+    select_search_plan_for_availability,
+)
 from .stage_profile import SearchStageProfile

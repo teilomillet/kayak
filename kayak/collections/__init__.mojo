@@ -86,6 +86,10 @@ from .resolution_requirements import (
     load_all_snapshot_requirements,
     search_artifact_snapshot_requirements,
 )
+from .snapshot_inventory import (
+    SnapshotSearchArtifactAvailability,
+    load_snapshot_search_artifact_availability,
+)
 from .resolved_snapshot import (
     LoadedSearchArtifact,
     LoadedSealedSegment,

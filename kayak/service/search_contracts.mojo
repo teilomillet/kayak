@@ -10,6 +10,8 @@ from kayak.planning import (
     CollectionHit,
     CollectionSearchExplain,
     SearchPlan,
+    SearchPlanSelection,
+    SearchPlanSelectionRequest,
     exact_full_scan_search_plan,
 )
 
@@ -104,6 +106,21 @@ struct SearchResponse(Copyable):
         self.hits = hits^
 
 
+def same_search_plan(read left: SearchPlan, read right: SearchPlan) -> Bool:
+    return (
+        left.candidate_generator.kind == right.candidate_generator.kind
+        and left.candidate_generator.cluster_top_k_per_query_token
+        == right.candidate_generator.cluster_top_k_per_query_token
+        and left.candidate_generator.beam_width
+        == right.candidate_generator.beam_width
+        and left.candidate_budget.final_k == right.candidate_budget.final_k
+        and left.candidate_budget.candidate_k == right.candidate_budget.candidate_k
+        and left.exact_stage_kind == right.exact_stage_kind
+        and left.reranker_kind == right.reranker_kind
+        and left.faithfulness_policy.kind == right.faithfulness_policy.kind
+    )
+
+
 struct DebugSearchResponse(Copyable):
     var search: SearchResponse
     var explain: CollectionSearchExplain
@@ -132,4 +149,78 @@ struct ExplainResponse(Copyable):
     var explain: CollectionSearchExplain
 
     def __init__(out self, explain: CollectionSearchExplain):
+        self.explain = explain.copy()
+
+
+struct PlannedSearchRequest(Copyable):
+    var collection_id: CollectionId
+    var tenant_id: TenantId
+    var namespace_id: NamespaceId
+    var snapshot_id: SnapshotId
+    var query: EncodedQuery
+    var filter_expression: FilterExpression
+    var planning: SearchPlanSelectionRequest
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        snapshot_id: SnapshotId,
+        query: EncodedQuery,
+        filter_expression: FilterExpression,
+        planning: SearchPlanSelectionRequest,
+    ) raises:
+        self.collection_id = collection_id.copy()
+        self.tenant_id = tenant_id.copy()
+        self.namespace_id = namespace_id.copy()
+        self.snapshot_id = snapshot_id.copy()
+        self.query = query.copy()
+        self.filter_expression = filter_expression.copy()
+        self.planning = planning.copy()
+
+
+struct PlannedSearchResponse(Copyable):
+    var selection: SearchPlanSelection
+    var search: SearchResponse
+
+    def __init__(
+        out self, selection: SearchPlanSelection, search: SearchResponse
+    ) raises:
+        if not same_search_plan(selection.plan, search.plan):
+            raise Error("planned search selection does not match search response plan")
+
+        self.selection = selection.copy()
+        self.search = search.copy()
+
+
+struct PlannedDebugSearchResponse(Copyable):
+    var selection: SearchPlanSelection
+    var debug: DebugSearchResponse
+
+    def __init__(
+        out self, selection: SearchPlanSelection, debug: DebugSearchResponse
+    ) raises:
+        if not same_search_plan(selection.plan, debug.search.plan):
+            raise Error(
+                "planned search selection does not match debug search response plan"
+            )
+
+        self.selection = selection.copy()
+        self.debug = debug.copy()
+
+
+struct PlannedExplainResponse(Copyable):
+    var selection: SearchPlanSelection
+    var explain: ExplainResponse
+
+    def __init__(
+        out self, selection: SearchPlanSelection, explain: ExplainResponse
+    ) raises:
+        if not same_search_plan(selection.plan, explain.explain.plan):
+            raise Error(
+                "planned search selection does not match explain response plan"
+            )
+
+        self.selection = selection.copy()
         self.explain = explain.copy()

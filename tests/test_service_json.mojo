@@ -14,9 +14,15 @@ from kayak import (
     DebugSearchResponse,
     DocumentMetadataUpdate,
     EncodedDocument,
+    EncodedQuery,
     ExecuteReclaimRequest,
     ExecuteReclaimResponse,
     ExplainResponse,
+    PlannedDebugSearchResponse,
+    PlannedSearchRequest,
+    PlannedSearchResponse,
+    SearchPlanSelection,
+    SearchPlanSelectionRequest,
     document_proxy_build_spec,
     gem_graph_build_spec,
     FaithfulnessAssessment,
@@ -40,12 +46,16 @@ from kayak import (
     UpsertDocumentsRequest,
     build_reclaim_plan_request_json,
     build_reclaim_plan_response_json,
+    best_effort_faithfulness_policy,
     collection_lifecycle_request_json,
     collection_lifecycle_response_json,
     create_collection_request_json,
     debug_search_response_json,
     execute_reclaim_request_json,
     execute_reclaim_response_json,
+    planned_debug_search_response_json,
+    planned_search_request_json,
+    planned_search_response_json,
     service_health_status_json,
     upsert_documents_request_json,
     update_collection_retention_policy_request_json,
@@ -117,6 +127,50 @@ def make_debug_response() raises -> DebugSearchResponse:
         hits^,
     )
     return DebugSearchResponse(search, explain)
+
+
+def make_planned_search_request() raises -> PlannedSearchRequest:
+    return PlannedSearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
+        match_all_filter(),
+        SearchPlanSelectionRequest(
+            2,
+            10,
+            best_effort_faithfulness_policy(),
+            match_all_filter(),
+            "native_multivector",
+            ["centroid_postings_imputed_flat", "document_proxy"],
+            True,
+            3,
+            9,
+        ),
+    )
+
+
+def make_planned_search_response() raises -> PlannedSearchResponse:
+    var plan = exact_full_scan_search_plan(2, 2)
+    var hits = [CollectionHit("segment-0001", "doc-a", ScoreScalar(1.0))]
+    return PlannedSearchResponse(
+        SearchPlanSelection(
+            "balanced",
+            ["exact_full_scan", "document_proxy"],
+            ["document_proxy", "exact_full_scan"],
+            plan,
+            "planner fell back to exact full scan for verification",
+        ),
+        SearchResponse(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            plan,
+            hits.copy(),
+        ),
+    )
 
 
 def sample_reclaim_plan() raises -> CollectionReclaimPlan:
@@ -368,6 +422,40 @@ def test_debug_search_response_json_embeds_explain_payload() raises:
     assert_equal(json.find("\"candidate_stage\":") != -1, True)
     assert_equal(json.find("\"graph_search_counters\":") != -1, True)
     assert_equal(json.find("\"visited_vertex_count\":3") != -1, True)
+
+
+def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
+    var request_json = planned_search_request_json(make_planned_search_request())
+    var response_json = planned_search_response_json(make_planned_search_response())
+    var debug_json = planned_debug_search_response_json(
+        PlannedDebugSearchResponse(
+            make_planned_search_response().selection,
+            make_debug_response(),
+        )
+    )
+
+    assert_equal(request_json.find("\"planning\":") != -1, True)
+    assert_equal(request_json.find("\"goal\":\"native_multivector\"") != -1, True)
+    assert_equal(
+        request_json.find("\"preferred_candidate_generator_kinds\":[\"centroid_postings_imputed_flat\",\"document_proxy\"]")
+            != -1,
+        True,
+    )
+    assert_equal(request_json.find("\"graph_cluster_top_k_per_query_token\":3") != -1, True)
+    assert_equal(request_json.find("\"graph_beam_width\":9") != -1, True)
+    assert_equal(response_json.find("\"selection\":") != -1, True)
+    assert_equal(
+        response_json.find("\"available_candidate_generator_kinds\":[\"exact_full_scan\",\"document_proxy\"]")
+            != -1,
+        True,
+    )
+    assert_equal(
+        response_json.find("\"effective_candidate_generator_order\":[\"document_proxy\",\"exact_full_scan\"]")
+            != -1,
+        True,
+    )
+    assert_equal(debug_json.find("\"selection\":") != -1, True)
+    assert_equal(debug_json.find("\"debug\":") != -1, True)
 
 
 def test_service_health_status_json_contains_counters() raises:

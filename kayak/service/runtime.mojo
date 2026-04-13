@@ -16,6 +16,7 @@ from kayak.collections import (
     exact_only_snapshot_requirements,
     export_snapshot_bundle,
     import_snapshot_bundle,
+    load_snapshot_search_artifact_availability,
     load_collection_manifest,
     load_resolved_collection_snapshot,
     publish_collection_snapshot,
@@ -35,6 +36,9 @@ from kayak.filters import (
 )
 from kayak.planning import (
     explain_collection_search,
+    SearchPlan,
+    SearchPlanSelection,
+    select_search_plan_for_availability,
     search_collection_for_plan,
     stage1_required_search_artifact_families,
     stage1_generator_supports_match_all_filter,
@@ -59,6 +63,10 @@ from .paths import (
 from .search_contracts import (
     DebugSearchResponse,
     ExplainResponse,
+    PlannedDebugSearchResponse,
+    PlannedExplainResponse,
+    PlannedSearchRequest,
+    PlannedSearchResponse,
     SearchRequest,
     SearchResponse,
 )
@@ -442,6 +450,59 @@ def execute_search[Backend: ExactScoringBackend](
     )
 
 
+def search_request_for_planned_request(
+    read request: PlannedSearchRequest, plan: SearchPlan
+) raises -> SearchRequest:
+    return SearchRequest(
+        request.collection_id,
+        request.tenant_id,
+        request.namespace_id,
+        request.snapshot_id,
+        request.query,
+        request.filter_expression,
+        plan,
+        request.planning.debug_mode,
+    )
+
+
+def select_search_plan_for_request(
+    service_root: Path,
+    read request: PlannedSearchRequest,
+) raises -> SearchPlanSelection:
+    var collection_root = service_collection_root(
+        service_root,
+        request.tenant_id,
+        request.namespace_id,
+        request.collection_id,
+    )
+    _ = load_collection_for_request(
+        service_root,
+        request.collection_id.value,
+        request.tenant_id.value,
+        request.namespace_id.value,
+        collection_root,
+    )
+    var availability = load_snapshot_search_artifact_availability(
+        collection_root,
+        request.snapshot_id,
+    )
+    return select_search_plan_for_availability(availability, request.planning)
+
+
+def execute_planned_search[Backend: ExactScoringBackend](
+    read backend: Backend,
+    service_root: Path,
+    read request: PlannedSearchRequest,
+) raises -> PlannedSearchResponse:
+    var selection = select_search_plan_for_request(service_root, request)
+    var search = execute_search(
+        backend,
+        service_root,
+        search_request_for_planned_request(request, selection.plan),
+    )
+    return PlannedSearchResponse(selection, search)
+
+
 def execute_debug_search[Backend: ExactScoringBackend](
     read backend: Backend,
     service_root: Path,
@@ -450,6 +511,20 @@ def execute_debug_search[Backend: ExactScoringBackend](
     var search = execute_search(backend, service_root, request)
     var explain = execute_explain(backend, service_root, request)
     return DebugSearchResponse(search, explain.explain)
+
+
+def execute_planned_debug_search[Backend: ExactScoringBackend](
+    read backend: Backend,
+    service_root: Path,
+    read request: PlannedSearchRequest,
+) raises -> PlannedDebugSearchResponse:
+    var selection = select_search_plan_for_request(service_root, request)
+    var debug = execute_debug_search(
+        backend,
+        service_root,
+        search_request_for_planned_request(request, selection.plan),
+    )
+    return PlannedDebugSearchResponse(selection, debug)
 
 
 def execute_explain[Backend: ExactScoringBackend](
@@ -485,3 +560,17 @@ def execute_explain[Backend: ExactScoringBackend](
             request.filter_expression,
         )
     )
+
+
+def execute_planned_explain[Backend: ExactScoringBackend](
+    read backend: Backend,
+    service_root: Path,
+    read request: PlannedSearchRequest,
+) raises -> PlannedExplainResponse:
+    var selection = select_search_plan_for_request(service_root, request)
+    var explain = execute_explain(
+        backend,
+        service_root,
+        search_request_for_planned_request(request, selection.plan),
+    )
+    return PlannedExplainResponse(selection, explain)

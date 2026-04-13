@@ -17,6 +17,8 @@ from kayak import (
     ExportSnapshotRequest,
     ImportSnapshotRequest,
     NamespaceId,
+    PlannedSearchRequest,
+    SearchPlanSelectionRequest,
     SearchArtifactBuildPolicy,
     SnapshotId,
     SnapshotRetentionPolicy,
@@ -37,6 +39,8 @@ from kayak import (
     document_proxy_search_plan,
     execute_debug_search,
     execute_reclaim,
+    execute_planned_debug_search,
+    execute_planned_search,
     execute_search,
     exact_full_scan_search_plan,
     export_snapshot,
@@ -627,6 +631,214 @@ def test_hosted_collection_runtime_supports_exact_doc_id_filters() raises:
 
     assert_equal(exact_filtered.hits[0].doc_id, "doc-a")
     assert_equal(raised, True)
+
+
+def test_hosted_collection_runtime_executes_planned_search_with_balanced_goal() raises:
+    var service_root = unique_service_root("kayak-service-runtime-planned-balanced")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+                    "alpha",
+                ),
+                UpsertDocument(
+                    make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]),
+                    "beta",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish planned balanced fixture",
+        ),
+    )
+
+    var response = execute_planned_search(
+        ExactCpuBackend(),
+        service_root,
+        PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            match_all_filter(),
+            SearchPlanSelectionRequest(
+                1,
+                2,
+                best_effort_faithfulness_policy(),
+            ),
+        ),
+    )
+
+    assert_equal(response.selection.plan.candidate_generator.kind, "document_proxy")
+    assert_equal(response.search.plan.candidate_generator.kind, "document_proxy")
+    assert_equal(response.search.hits[0].doc_id, "doc-a")
+
+
+def test_hosted_collection_runtime_executes_planned_search_with_native_goal() raises:
+    var service_root = unique_service_root("kayak-service-runtime-planned-native")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+                    "alpha",
+                ),
+                UpsertDocument(
+                    make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]),
+                    "beta",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish planned native fixture",
+        ),
+    )
+
+    var response = execute_planned_search(
+        ExactCpuBackend(),
+        service_root,
+        PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            match_all_filter(),
+            SearchPlanSelectionRequest(
+                1,
+                2,
+                best_effort_faithfulness_policy(),
+                match_all_filter(),
+                "native_multivector",
+            ),
+        ),
+    )
+
+    assert_equal(
+        response.selection.plan.candidate_generator.kind,
+        "centroid_postings_imputed_flat",
+    )
+    assert_equal(response.search.hits[0].doc_id, "doc-a")
+
+
+def test_hosted_collection_runtime_planned_debug_search_keeps_exact_filter_guardrail() raises:
+    var service_root = unique_service_root("kayak-service-runtime-planned-filter")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+                    "alpha",
+                ),
+                UpsertDocument(
+                    make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]),
+                    "beta",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish planned filter fixture",
+        ),
+    )
+
+    var response = execute_planned_debug_search(
+        ExactCpuBackend(),
+        service_root,
+        PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            one_of_filter("doc_id", ["doc-a"]),
+            SearchPlanSelectionRequest(
+                1,
+                2,
+                best_effort_faithfulness_policy(),
+                one_of_filter("doc_id", ["doc-a"]),
+                "native_multivector",
+                True,
+            ),
+        ),
+    )
+
+    assert_equal(response.selection.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(response.debug.search.hits[0].doc_id, "doc-a")
+    assert_equal(
+        response.debug.explain.plan.candidate_generator.kind,
+        "exact_full_scan",
+    )
 
 
 def test_hosted_collection_runtime_merges_metadata_and_filters_exactly() raises:

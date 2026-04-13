@@ -93,6 +93,10 @@ Search and explain:
 - [`SearchRequest`](../../kayak/service/search_contracts.mojo)
 - [`SearchResponse`](../../kayak/service/search_contracts.mojo)
 - [`DebugSearchResponse`](../../kayak/service/search_contracts.mojo)
+- [`PlannedSearchRequest`](../../kayak/service/search_contracts.mojo)
+- [`PlannedSearchResponse`](../../kayak/service/search_contracts.mojo)
+- [`PlannedDebugSearchResponse`](../../kayak/service/search_contracts.mojo)
+- [`PlannedExplainResponse`](../../kayak/service/search_contracts.mojo)
 - [`ExplainRequest`](../../kayak/service/search_contracts.mojo)
 - [`ExplainResponse`](../../kayak/service/search_contracts.mojo)
 
@@ -142,6 +146,42 @@ Inference:
   and translate it into `default_exact_search_request(...)`
 - but the service implementation itself should operate on the explicit typed
   contract, not on loosely structured JSON dictionaries
+
+## Explicit Planner Layer
+
+The repository now also has an explicit planner-facing search contract:
+
+- [`SearchPlanSelectionRequest`](../../kayak/planning/planner.mojo)
+- [`SearchPlanSelection`](../../kayak/planning/planner.mojo)
+- [`PlannedSearchRequest`](../../kayak/service/search_contracts.mojo)
+
+This layer is intentionally **above** `SearchPlan`, not a mutation of it.
+
+Reason:
+- the repo already treats hidden backend auto-selection as a product risk
+- benchmark and debug surfaces need to show which stage-1 path was actually
+  chosen
+- stage-1 architecture is still evolving, so silent dispatch would freeze
+  today's heuristics too early
+
+Current verified behavior:
+- the planner inspects a snapshot-scoped artifact inventory derived from sealed
+  segment manifests
+- the planner chooses a concrete `SearchPlan`
+- the chosen plan is returned explicitly in the selection payload and again in
+  the executed search/explain response
+
+Current guardrails:
+- non-`match_all` filters fall back to exact stage 1
+- `exact_stage1_required` falls back to exact stage 1
+- `oracle_full_recall_required` without `debug_mode` falls back to exact stage 1
+
+Current default-order claim is intentionally narrow:
+- the planner exposes goal-shaped default orders
+- callers can override that with explicit preferred generator kinds
+- the default order does **not** silently promote `gem_graph`,
+  `centroid_postings_head_auto`, or `centroid_postings_blockmax`
+  as universal winners, because the current local traces do not justify that
 
 ## Proposed HTTP/JSON Projection
 
