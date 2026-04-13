@@ -13,7 +13,8 @@ from kayak.planning import (
 from kayak.runtime import ExactCpuBackend
 from kayak.storage import StoredJudgedTask
 
-from .json_common import json_escape
+from .json_common import append_json_string_list, json_escape
+from .materialized_artifact_families import materialized_artifact_families
 from .query_text_support import judged_query_text_for_plan
 
 
@@ -28,6 +29,7 @@ struct StageAwareSearchSummary(Copyable):
     var stage2_kind: String
     var stage2_family: String
     var stage2_requires_query_text: Bool
+    var stage2_materialized_artifact_families: List[String]
     var faithfulness_policy_kind: String
     var primary_metric: String
     var primary_value: Float64
@@ -80,6 +82,7 @@ struct StageAwareSearchSummary(Copyable):
         var stage2_kind: String,
         var stage2_family: String,
         stage2_requires_query_text: Bool,
+        var stage2_materialized_artifact_families: List[String],
         var faithfulness_policy_kind: String,
         var primary_metric: String,
         primary_value: Float64,
@@ -130,6 +133,9 @@ struct StageAwareSearchSummary(Copyable):
         self.stage2_kind = stage2_kind^
         self.stage2_family = stage2_family^
         self.stage2_requires_query_text = stage2_requires_query_text
+        self.stage2_materialized_artifact_families = (
+            stage2_materialized_artifact_families^
+        )
         self.faithfulness_policy_kind = faithfulness_policy_kind^
         self.primary_metric = primary_metric^
         self.primary_value = primary_value
@@ -201,6 +207,7 @@ def build_stage_aware_search_summary_from_measurement(
     read stored_task: StoredJudgedTask,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
+    var stage2_materialized_artifact_families: List[String],
     candidate_stage_document_count: Int,
     candidate_stage_token_count: Int,
     candidate_stage_vector_count: Int,
@@ -237,6 +244,7 @@ def build_stage_aware_search_summary_from_measurement(
         plan.stage2_operator.kind.copy(),
         plan.stage2_operator.family.copy(),
         plan.stage2_operator.requires_query_text,
+        stage2_materialized_artifact_families^,
         plan.faithfulness_policy.kind.copy(),
         task.primary_metric.copy(),
         primary_value,
@@ -426,6 +434,9 @@ def build_stage_aware_search_summary(
         stored_task,
         snapshot,
         plan,
+        materialized_artifact_families(
+            representative_explain.stage2.materialized_artifacts
+        ),
         representative_explain.candidate_stage.document_count,
         representative_explain.candidate_stage.token_count,
         representative_explain.candidate_stage.vector_count,
@@ -491,6 +502,12 @@ def append_stage_aware_search_summary_json(
         buffer += "true,"
     else:
         buffer += "false,"
+    buffer += "\"stage2_materialized_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        summary.stage2_materialized_artifact_families,
+    )
+    buffer += ","
     buffer += "\"faithfulness_policy_kind\":\""
     buffer += json_escape(summary.faithfulness_policy_kind) + "\","
     buffer += "\"primary_metric\":\"" + json_escape(summary.primary_metric) + "\","

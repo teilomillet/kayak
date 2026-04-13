@@ -17,7 +17,8 @@ from kayak.storage import StoredJudgedTask, StoredPackedIndex
 from kayak.text import DocumentTextCorpus
 from kayak.verifier import default_clause_text_rerank_config, rerank_hits_clause_text
 
-from .json_common import json_escape
+from .json_common import append_json_string_list, json_escape
+from .materialized_artifact_families import materialized_artifact_families
 from .query_text_support import judged_query_text_for_plan
 
 
@@ -36,6 +37,7 @@ struct CeilingComparisonSummary(Copyable):
     var stage2_kind: String
     var stage2_family: String
     var stage2_requires_query_text: Bool
+    var stage2_materialized_artifact_families: List[String]
     var candidate_k: Int
     var final_k: Int
     var primary_metric: String
@@ -58,6 +60,7 @@ struct CeilingComparisonSummary(Copyable):
         var stage2_kind: String,
         var stage2_family: String,
         stage2_requires_query_text: Bool,
+        var stage2_materialized_artifact_families: List[String],
         candidate_k: Int,
         final_k: Int,
         var primary_metric: String,
@@ -78,6 +81,9 @@ struct CeilingComparisonSummary(Copyable):
         self.stage2_kind = stage2_kind^
         self.stage2_family = stage2_family^
         self.stage2_requires_query_text = stage2_requires_query_text
+        self.stage2_materialized_artifact_families = (
+            stage2_materialized_artifact_families^
+        )
         self.candidate_k = candidate_k
         self.final_k = final_k
         self.primary_metric = primary_metric^
@@ -206,6 +212,7 @@ def build_exact_full_scan_ceiling_summary(
         "noop_topk",
         "identity",
         False,
+        [],
         task.k,
         task.k,
         evaluation.primary_metric.copy(),
@@ -301,6 +308,7 @@ def build_exact_clause_text_ceiling_summary(
         "clause_text",
         "text",
         True,
+        ["document_text"],
         candidate_k,
         task.k,
         evaluation.primary_metric.copy(),
@@ -327,6 +335,7 @@ def build_stage_aware_ceiling_summary_for_plan(
     var recall_total = zero_metric_scalar()
     var success_total = zero_metric_scalar()
     var candidate_recall_total = 0.0
+    var representative_stage2_materialized_artifact_families = List[String]()
 
     for judged_query in task.queries:
         var query_text = judged_query_text_for_plan(
@@ -340,6 +349,12 @@ def build_stage_aware_ceiling_summary_for_plan(
             plan,
             query_text=query_text,
         )
+        if len(representative_stage2_materialized_artifact_families) == 0:
+            representative_stage2_materialized_artifact_families = (
+                materialized_artifact_families(
+                    explain.stage2.materialized_artifacts
+                )
+            )
         var query_evaluation = evaluate_query_hits(
             judged_query,
             final_hits_to_search_hits(explain.final_hits),
@@ -394,6 +409,7 @@ def build_stage_aware_ceiling_summary_for_plan(
         plan.stage2_operator.kind.copy(),
         plan.stage2_operator.family.copy(),
         plan.stage2_operator.requires_query_text,
+        representative_stage2_materialized_artifact_families^,
         plan.candidate_budget.candidate_k,
         task.k,
         evaluation.primary_metric.copy(),
@@ -425,6 +441,12 @@ def append_ceiling_comparison_summary_json(
         buffer += "true,"
     else:
         buffer += "false,"
+    buffer += "\"stage2_materialized_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        summary.stage2_materialized_artifact_families,
+    )
+    buffer += ","
     buffer += "\"reranker_kind\":\"" + json_escape(summary.stage2_kind) + "\","
     buffer += "\"candidate_k\":" + String(summary.candidate_k) + ","
     buffer += "\"final_k\":" + String(summary.final_k) + ","

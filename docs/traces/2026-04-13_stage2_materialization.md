@@ -75,10 +75,13 @@ The local Python SDK now mirrors the same stage-2 concept through:
 This is verified by direct tests:
 
 - `pixi run mojo -I . tests/test_stage_artifact_materialization.mojo`
+- `pixi run mojo -I . tests/test_benchmark_materialized_artifact_families.mojo`
 - `pixi run mojo -I . tests/test_service_json.mojo`
 - `pixi run mojo -I . tests/test_collection_search_plan.mojo`
 - `pixi run mojo -I . tests/test_service_contracts.mojo`
 - `pixi run mojo -I . tests/test_service_runtime.mojo`
+- `pixi run mojo -I . tests/test_stage_aware_benchmark_json.mojo`
+- `pixi run mojo -I . tests/test_ceiling_comparison_json.mojo`
 - `PYTHONPATH=python pixi run python python/tests/test_search_plan_api.py`
 - `PYTHONPATH=python pixi run python python/tests/test_public_api_contract.py`
 - `PYTHONPATH=python pixi run python python/tests/test_python_sdk_docs.py`
@@ -96,6 +99,8 @@ The chosen shape keeps the facts separate:
 
 - the plan says what stage 2 requires
 - the result/profile says what stage 2 actually materialized
+- benchmark summaries now report the deduplicated materialized artifact
+  families without pretending that per-query artifact windows are fixed-size
 
 ## What remains open
 
@@ -103,7 +108,8 @@ This step does **not** yet prove everything about the stage-2 primitive.
 
 Still open:
 
-- benchmark summaries do not yet emit stage-2 materialization families
+- planner-evidence and other auxiliary reporting surfaces do not yet emit
+  stage-2 materialization families
 - future multi-artifact stage-2 operators have not been implemented yet
 
 So the contract is now explicit in the engine and the local Python SDK, but not

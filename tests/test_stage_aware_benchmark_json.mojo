@@ -26,6 +26,7 @@ from kayak import (
 )
 from kayak.benchmarks import (
     StageAwareSearchSummary,
+    build_stage_aware_search_summary,
     build_stage_aware_search_summary_from_measurement,
     stage_aware_search_summary_json,
 )
@@ -54,6 +55,7 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
             "exact_late_interaction",
             "late_interaction",
             False,
+            ["late_interaction"],
             "best_effort",
             "ndcg",
             0.4,
@@ -106,6 +108,11 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
     )
     assert_equal(
         json.find("\"stage2_family\":\"late_interaction\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage2_materialized_artifact_families\":[\"late_interaction\"]")
+            != -1,
         True,
     )
     assert_equal(
@@ -216,6 +223,7 @@ def test_build_stage_aware_search_summary_reports_proxy_recall_gap() raises:
         task,
         snapshot,
         plan,
+        ["late_interaction"],
         explain.candidate_stage.document_count,
         explain.candidate_stage.token_count,
         explain.candidate_stage.vector_count,
@@ -251,8 +259,77 @@ def test_build_stage_aware_search_summary_reports_proxy_recall_gap() raises:
     assert_equal(summary.candidate_stage_vector_count, 3)
     assert_equal(summary.candidate_stage_tracks_graph_search, False)
     assert_equal(summary.mean_candidate_stage_graph_visited_vertex_count, 0.0)
+    assert_equal(len(summary.stage2_materialized_artifact_families), 1)
+    assert_equal(summary.stage2_materialized_artifact_families[0], "late_interaction")
     assert_equal(summary.stage2_document_count, 1)
     assert_equal(summary.stage2_vector_count, 2)
+
+
+def test_build_stage_aware_search_summary_propagates_materialized_artifact_families() raises:
+    var documents = [
+        EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+        EncodedDocument("doc-b", [[0.6, 0.6], [0.6, 0.6]]),
+        EncodedDocument("doc-c", [[0.0, 1.0], [0.0, 1.0]]),
+    ]
+    var task = StoredJudgedTask(
+        "mock://hard-recall",
+        "mock-model",
+        VECTOR_SCALAR_NAME,
+        JudgedTask(
+            "browsecomp",
+            "proxy-hard-recall",
+            "proxy first stage misses the exact winner at candidate_k=1",
+            "ndcg",
+            1,
+            2,
+            2,
+            2,
+            documents.copy(),
+            [
+                JudgedQuery(
+                    "q-1",
+                    "find the exact two-token match",
+                    EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
+                    ["doc-a"],
+                )
+            ],
+        ),
+    )
+    var collection_root = ensure_one_segment_collection_mirror(
+        unique_collection_root("kayak-stage-aware-summary-live"),
+        CollectionId("stage-aware-summary-live"),
+        TenantId("public"),
+        NamespaceId("benchmark"),
+        SnapshotId("snapshot-0001"),
+        1,
+        StoredPackedIndex(
+            "mock://hard-recall",
+            "mock-model",
+            VECTOR_SCALAR_NAME,
+            pack_documents(documents),
+        ),
+        0,
+        0,
+    )
+    var snapshot = load_resolved_collection_snapshot(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+    )
+    var plan = document_proxy_search_plan(
+        1,
+        1,
+        best_effort_faithfulness_policy(),
+    )
+
+    var summary = build_stage_aware_search_summary(
+        ExactCpuBackend(),
+        task,
+        snapshot,
+        plan,
+    )
+
+    assert_equal(len(summary.stage2_materialized_artifact_families), 1)
+    assert_equal(summary.stage2_materialized_artifact_families[0], "late_interaction")
 
 
 def main() raises:
