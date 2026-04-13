@@ -68,6 +68,18 @@ struct SearchPlan(Copyable):
         self.faithfulness_policy = faithfulness_policy.copy()
 
 
+def search_plan_with_stage2_operator(
+    read plan: SearchPlan,
+    stage2_operator: Stage2Operator,
+) raises -> SearchPlan:
+    return SearchPlan(
+        plan.candidate_generator,
+        plan.candidate_budget,
+        plan.faithfulness_policy,
+        stage2_operator,
+    )
+
+
 def exact_full_scan_search_plan(final_k: Int, candidate_k: Int) raises -> SearchPlan:
     return SearchPlan(
         exact_full_scan_candidate_generator(),

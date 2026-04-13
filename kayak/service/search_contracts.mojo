@@ -12,6 +12,7 @@ from kayak.planning import (
     SearchPlan,
     SearchPlanSelection,
     SearchPlanSelectionRequest,
+    Stage2Operator,
     exact_full_scan_search_plan,
 )
 
@@ -151,6 +152,7 @@ def same_search_plan(read left: SearchPlan, read right: SearchPlan) -> Bool:
         == right.candidate_generator.beam_width
         and left.candidate_budget.final_k == right.candidate_budget.final_k
         and left.candidate_budget.candidate_k == right.candidate_budget.candidate_k
+        and left.stage2_operator.kind == right.stage2_operator.kind
         and left.exact_stage_kind == right.exact_stage_kind
         and left.reranker_kind == right.reranker_kind
         and left.faithfulness_policy.kind == right.faithfulness_policy.kind
@@ -194,8 +196,46 @@ struct PlannedSearchRequest(Copyable):
     var namespace_id: NamespaceId
     var snapshot_id: SnapshotId
     var query: EncodedQuery
+    var query_text: String
+    var stage2_operator_kind: String
     var filter_expression: FilterExpression
     var planning: SearchPlanSelectionRequest
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        snapshot_id: SnapshotId,
+        query: EncodedQuery,
+        var query_text: String,
+        var stage2_operator_kind: String,
+        filter_expression: FilterExpression,
+        planning: SearchPlanSelectionRequest,
+    ) raises:
+        self.collection_id = collection_id.copy()
+        self.tenant_id = tenant_id.copy()
+        self.namespace_id = namespace_id.copy()
+        self.snapshot_id = snapshot_id.copy()
+        self.query = query.copy()
+        self.query_text = query_text^
+        self.stage2_operator_kind = stage2_operator_kind^
+        self.filter_expression = filter_expression.copy()
+        self.planning = planning.copy()
+
+        if self.stage2_operator_kind.byte_length() > 0:
+            var stage2_operator = Stage2Operator(
+                self.stage2_operator_kind.copy()
+            )
+            if (
+                stage2_operator.requires_query_text
+                and self.query_text.byte_length() == 0
+            ):
+                raise Error(
+                    "planned stage2 operator "
+                    + stage2_operator.kind
+                    + " requires non-empty query_text"
+                )
 
     def __init__(
         out self,
@@ -207,13 +247,17 @@ struct PlannedSearchRequest(Copyable):
         filter_expression: FilterExpression,
         planning: SearchPlanSelectionRequest,
     ) raises:
-        self.collection_id = collection_id.copy()
-        self.tenant_id = tenant_id.copy()
-        self.namespace_id = namespace_id.copy()
-        self.snapshot_id = snapshot_id.copy()
-        self.query = query.copy()
-        self.filter_expression = filter_expression.copy()
-        self.planning = planning.copy()
+        self = PlannedSearchRequest(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            snapshot_id,
+            query,
+            "",
+            "",
+            filter_expression,
+            planning,
+        )
 
 
 struct PlannedSearchResponse(Copyable):

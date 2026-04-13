@@ -159,6 +159,8 @@ from .planning import (
     registered_search_planner_candidate_generator_kinds,
     registered_search_planner_entries,
     search_collection_for_plan,
+    search_plan_for_candidate_generator_kind,
+    search_plan_with_stage2_operator,
     search_planner_registry_entry,
     search_planning_goal_kinds,
     select_search_plan_for_availability,

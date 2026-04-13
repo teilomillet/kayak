@@ -13,6 +13,8 @@ from kayak.planning import (
 )
 from kayak.runtime import ExactCpuBackend
 
+from .query_text_support import judged_query_text_for_plan
+
 
 struct CandidateWindowSweepSummary(Copyable):
     var dataset_id: String
@@ -153,6 +155,10 @@ def build_candidate_window_sweep_summary_for_plan(
             judged_query.query,
             snapshot,
             plan,
+            query_text=judged_query_text_for_plan(
+                plan,
+                judged_query.description,
+            ),
         )
         candidate_hit_total += Float64(len(explain.candidate_set.hits))
         recall_total += Float64(explain.candidate_recall_at_final_k)

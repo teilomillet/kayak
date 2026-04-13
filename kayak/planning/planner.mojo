@@ -213,7 +213,7 @@ def selected_plan_for_kind(
     if candidate_generator_kind == "exact_full_scan":
         return exact_full_scan_search_plan(
             request.candidate_budget.final_k,
-            request.candidate_budget.final_k,
+            request.candidate_budget.candidate_k,
         )
 
     if candidate_generator_kind == "document_proxy":
@@ -289,6 +289,13 @@ def selected_plan_for_kind(
         )
 
     raise Error("unknown search planning candidate generator kind: " + candidate_generator_kind)
+
+
+def search_plan_for_candidate_generator_kind(
+    candidate_generator_kind: String,
+    read request: SearchPlanSelectionRequest,
+) raises -> SearchPlan:
+    return selected_plan_for_kind(candidate_generator_kind, request)
 
 
 def effective_candidate_generator_order(

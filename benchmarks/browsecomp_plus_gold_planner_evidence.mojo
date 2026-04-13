@@ -1,0 +1,156 @@
+from std.collections import List
+from std.os import makedirs
+from std.pathlib import Path
+
+from kayak.benchmarks import (
+    PlannerEvidenceSummary,
+    build_planner_evidence_summary,
+    planner_evidence_summaries_json,
+    standard_candidate_window_sizes,
+)
+from kayak.collections import (
+    CollectionId,
+    NamespaceId,
+    SnapshotId,
+    TenantId,
+    ensure_one_segment_collection_mirror,
+    load_resolved_collection_snapshot,
+    load_snapshot_search_artifact_availability,
+)
+from kayak.eval import JudgedTask
+from kayak.planning import (
+    SEARCH_PLANNING_GOAL_BALANCED,
+    SEARCH_PLANNING_GOAL_EXACT_ONLY,
+    SEARCH_PLANNING_GOAL_LATENCY_FIRST,
+    SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
+    SearchPlanSelectionRequest,
+    best_effort_faithfulness_policy,
+    exact_late_interaction_stage2_operator,
+)
+from kayak.runtime import ExactCpuBackend
+from kayak.storage import ensure_browsecomp_plus_gold_real_subset_cache
+
+
+comptime CENTROID_HEAD_POSTING_CAP = 16
+
+
+def max_query_vector_budget(read task: JudgedTask) -> Int:
+    var max_budget = 0
+    for judged_query in task.queries:
+        if judged_query.query.vector_count > max_budget:
+            max_budget = judged_query.query.vector_count
+
+    if max_budget <= 0:
+        return 1
+    return max_budget
+
+
+def main() raises:
+    var cache = ensure_browsecomp_plus_gold_real_subset_cache()
+    var task = cache.stored_task.task.copy()
+    var collection_root = ensure_one_segment_collection_mirror(
+        Path(".cache/kayak/browsecomp_plus_gold_planner_evidence_collection"),
+        CollectionId("browsecomp_plus_gold_real_subset"),
+        TenantId("public"),
+        NamespaceId("benchmark"),
+        SnapshotId("snapshot-0001"),
+        1,
+        cache.stored_index,
+        0,
+        0,
+        CENTROID_HEAD_POSTING_CAP,
+    )
+    var snapshot = load_resolved_collection_snapshot(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+    )
+    var availability = load_snapshot_search_artifact_availability(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+    )
+    var summaries = List[PlannerEvidenceSummary]()
+    var backend = ExactCpuBackend()
+    var query_budget = max_query_vector_budget(task)
+
+    for candidate_k in standard_candidate_window_sizes(
+        task.k,
+        snapshot.snapshot.stats.document_count,
+    ):
+        summaries.append(
+            build_planner_evidence_summary(
+                backend,
+                cache.stored_task,
+                snapshot,
+                availability,
+                SearchPlanSelectionRequest(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                    goal=SEARCH_PLANNING_GOAL_BALANCED,
+                ),
+                exact_late_interaction_stage2_operator(),
+                query_budget,
+                0,
+                CENTROID_HEAD_POSTING_CAP,
+            )
+        )
+        summaries.append(
+            build_planner_evidence_summary(
+                backend,
+                cache.stored_task,
+                snapshot,
+                availability,
+                SearchPlanSelectionRequest(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                    goal=SEARCH_PLANNING_GOAL_LATENCY_FIRST,
+                ),
+                exact_late_interaction_stage2_operator(),
+                query_budget,
+                0,
+                CENTROID_HEAD_POSTING_CAP,
+            )
+        )
+        summaries.append(
+            build_planner_evidence_summary(
+                backend,
+                cache.stored_task,
+                snapshot,
+                availability,
+                SearchPlanSelectionRequest(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                    goal=SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
+                ),
+                exact_late_interaction_stage2_operator(),
+                query_budget,
+                0,
+                CENTROID_HEAD_POSTING_CAP,
+            )
+        )
+        summaries.append(
+            build_planner_evidence_summary(
+                backend,
+                cache.stored_task,
+                snapshot,
+                availability,
+                SearchPlanSelectionRequest(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                    goal=SEARCH_PLANNING_GOAL_EXACT_ONLY,
+                ),
+                exact_late_interaction_stage2_operator(),
+                query_budget,
+                0,
+                CENTROID_HEAD_POSTING_CAP,
+            )
+        )
+
+    var output_root = Path(".cache/kayak")
+    makedirs(output_root, exist_ok=True)
+    var output_path = output_root / "browsecomp_plus_gold_planner_evidence.json"
+    output_path.write_text(planner_evidence_summaries_json(summaries))
+    print("wrote ", String(output_path))

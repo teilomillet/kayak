@@ -609,6 +609,10 @@ def planned_search_request_json(read request: PlannedSearchRequest) -> String:
     buffer += "\"snapshot_id\":\"" + json_escape(request.snapshot_id.value) + "\","
     buffer += "\"query\":"
     append_json_vector_list(buffer, request.query.token_vectors)
+    buffer += ",\"query_text\":\""
+    buffer += json_escape(request.query_text) + "\""
+    buffer += ",\"stage2_operator_kind\":\""
+    buffer += json_escape(request.stage2_operator_kind) + "\""
     buffer += ",\"filter_expression\":"
     append_json_filter_expression(buffer, request.filter_expression)
     buffer += ",\"planning\":"

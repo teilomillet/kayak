@@ -38,11 +38,13 @@ from kayak.planning import (
     explain_collection_search,
     SearchPlan,
     SearchPlanSelection,
+    search_plan_with_stage2_operator,
     select_search_plan_for_availability,
     search_collection_for_plan,
     stage1_required_search_artifact_families,
     stage1_generator_supports_match_all_filter,
     stage1_generator_supports_structured_filter,
+    Stage2Operator,
 )
 from kayak.runtime import ExactScoringBackend
 
@@ -457,15 +459,43 @@ def execute_search[Backend: ExactScoringBackend](
 def search_request_for_planned_request(
     read request: PlannedSearchRequest, plan: SearchPlan
 ) raises -> SearchRequest:
+    var effective_plan = plan.copy()
+    if request.stage2_operator_kind.byte_length() > 0:
+        effective_plan = search_plan_with_stage2_operator(
+            plan,
+            Stage2Operator(request.stage2_operator_kind.copy()),
+        )
+
     return SearchRequest(
         request.collection_id,
         request.tenant_id,
         request.namespace_id,
         request.snapshot_id,
         request.query,
+        request.query_text,
         request.filter_expression,
-        plan,
+        effective_plan,
         request.planning.debug_mode,
+    )
+
+
+def selection_for_planned_request(
+    read request: PlannedSearchRequest,
+    read selection: SearchPlanSelection,
+) raises -> SearchPlanSelection:
+    if request.stage2_operator_kind.byte_length() == 0:
+        return selection.copy()
+
+    return SearchPlanSelection(
+        selection.goal,
+        selection.selected_candidate_generator_status.copy(),
+        selection.available_candidate_generator_kinds,
+        selection.effective_candidate_generator_order,
+        search_plan_with_stage2_operator(
+            selection.plan,
+            Stage2Operator(request.stage2_operator_kind.copy()),
+        ),
+        selection.reason.copy(),
     )
 
 
@@ -498,7 +528,10 @@ def execute_planned_search[Backend: ExactScoringBackend](
     service_root: Path,
     read request: PlannedSearchRequest,
 ) raises -> PlannedSearchResponse:
-    var selection = select_search_plan_for_request(service_root, request)
+    var selection = selection_for_planned_request(
+        request,
+        select_search_plan_for_request(service_root, request),
+    )
     var search = execute_search(
         backend,
         service_root,
@@ -522,7 +555,10 @@ def execute_planned_debug_search[Backend: ExactScoringBackend](
     service_root: Path,
     read request: PlannedSearchRequest,
 ) raises -> PlannedDebugSearchResponse:
-    var selection = select_search_plan_for_request(service_root, request)
+    var selection = selection_for_planned_request(
+        request,
+        select_search_plan_for_request(service_root, request),
+    )
     var debug = execute_debug_search(
         backend,
         service_root,
@@ -572,7 +608,10 @@ def execute_planned_explain[Backend: ExactScoringBackend](
     service_root: Path,
     read request: PlannedSearchRequest,
 ) raises -> PlannedExplainResponse:
-    var selection = select_search_plan_for_request(service_root, request)
+    var selection = selection_for_planned_request(
+        request,
+        select_search_plan_for_request(service_root, request),
+    )
     var explain = execute_explain(
         backend,
         service_root,

@@ -14,6 +14,7 @@ from kayak.runtime import ExactCpuBackend
 from kayak.storage import StoredJudgedTask
 
 from .json_common import json_escape
+from .query_text_support import judged_query_text_for_plan
 
 
 struct StageAwareSearchSummary(Copyable):
@@ -242,14 +243,6 @@ def build_stage_aware_search_summary_from_measurement(
         density_bytes_per_vector(stage2_byte_size, stage2_vector_count),
         snapshot.collection.vector_dim,
     )
-
-
-def judged_query_text_for_plan(read plan: SearchPlan, description: String) -> String:
-    if plan.stage2_operator.requires_query_text:
-        return description.copy()
-    return String()
-
-
 def build_stage_aware_search_summary(
     read backend: ExactCpuBackend,
     read stored_task: StoredJudgedTask,

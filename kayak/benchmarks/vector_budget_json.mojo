@@ -14,6 +14,7 @@ from kayak.planning import (
 from kayak.runtime import ExactCpuBackend
 
 from .json_common import json_escape
+from .query_text_support import judged_query_text_for_plan
 
 
 struct VectorBudgetSweepSummary(Copyable):
@@ -166,7 +167,14 @@ def build_vector_budget_sweep_summary_for_plan(
             judged_query.query, query_vector_budget
         )
         var explain = explain_collection_search(
-            backend, budgeted_query, snapshot, plan
+            backend,
+            budgeted_query,
+            snapshot,
+            plan,
+            query_text=judged_query_text_for_plan(
+                plan,
+                judged_query.description,
+            ),
         )
         var query_evaluation = evaluate_query_hits(
             judged_query,

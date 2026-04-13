@@ -853,6 +853,80 @@ def test_hosted_collection_runtime_executes_planned_search_with_balanced_goal() 
     assert_equal(response.search.hits[0].doc_id, "doc-a")
 
 
+def test_hosted_collection_runtime_executes_planned_search_with_clause_text_stage2() raises:
+    var service_root = unique_service_root(
+        "kayak-service-runtime-planned-clause-text"
+    )
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-context", [[1.0, 0.0], [1.0, 0.0]]),
+                    "Gugulethu township logo emblem heritage schools history",
+                ),
+                UpsertDocument(
+                    make_document("doc-answer", [[1.0, 0.0], [0.8, 0.2]]),
+                    "Zama Dance School was founded in 1984 in a church and the longest serving employee is the artistic director.",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish planned clause-text fixture",
+        ),
+    )
+
+    var response = execute_planned_search(
+        ExactCpuBackend(),
+        service_root,
+        PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            EncodedQuery([[1.0, 0.0], [1.0, 0.0]]),
+            "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
+            "clause_text",
+            one_of_filter("doc_id", ["doc-context", "doc-answer"]),
+            SearchPlanSelectionRequest(
+                1,
+                2,
+                best_effort_faithfulness_policy(),
+                one_of_filter("doc_id", ["doc-context", "doc-answer"]),
+                "exact_only",
+                [],
+                True,
+            ),
+        ),
+    )
+
+    assert_equal(response.selection.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(response.search.plan.stage2_operator.kind, "clause_text")
+    assert_equal(response.search.hits[0].doc_id, "doc-answer")
+
+
 def test_hosted_collection_runtime_executes_planned_search_with_native_goal() raises:
     var service_root = unique_service_root("kayak-service-runtime-planned-native")
 

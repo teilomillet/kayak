@@ -110,6 +110,8 @@ def test_planner_falls_back_to_exact_for_filters_and_oracle_guardrails() raises:
 
     assert_equal(filtered_selection.plan.candidate_generator.kind, "exact_full_scan")
     assert_equal(oracle_selection.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(filtered_selection.plan.candidate_budget.candidate_k, 20)
+    assert_equal(oracle_selection.plan.candidate_budget.candidate_k, 20)
     assert_equal(
         filtered_selection.reason.find("require exact stage-1") != -1,
         True,

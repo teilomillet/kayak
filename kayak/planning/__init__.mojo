@@ -94,6 +94,7 @@ from .search_plan import (
     exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
     gem_graph_search_plan,
+    search_plan_with_stage2_operator,
 )
 from .planning_goal import (
     SEARCH_PLANNING_GOAL_BALANCED,
@@ -121,6 +122,7 @@ from .planner import (
     SearchPlanSelectionRequest,
     available_candidate_generator_kinds,
     candidate_generator_kind_is_available,
+    search_plan_for_candidate_generator_kind,
     search_planning_goal_kinds,
     select_search_plan_for_availability,
 )

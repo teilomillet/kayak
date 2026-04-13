@@ -18,6 +18,7 @@ from kayak.runtime import ExactCpuBackend
 from kayak.storage import StoredJudgedTask
 
 from .json_common import json_escape
+from .query_text_support import judged_query_text_for_plan
 from .vector_budget_json import truncate_query_to_vector_budget
 
 
@@ -220,6 +221,10 @@ def build_faithfulness_frontier_summary_for_plan(
                 ),
                 snapshot,
                 plan,
+                query_text=judged_query_text_for_plan(
+                    plan,
+                    task.queries[query_index].description,
+                ),
             )
         )
         query_index += 1
@@ -243,6 +248,10 @@ def build_faithfulness_frontier_summary_for_plan(
             budgeted_query,
             snapshot,
             plan,
+            query_text=judged_query_text_for_plan(
+                plan,
+                judged_query.description,
+            ),
         )
         var query_evaluation = evaluate_query_hits(
             judged_query,

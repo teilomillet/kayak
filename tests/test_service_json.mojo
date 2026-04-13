@@ -136,6 +136,8 @@ def make_planned_search_request() raises -> PlannedSearchRequest:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
+        "find the clause evidence",
+        "clause_text",
         match_all_filter(),
         SearchPlanSelectionRequest(
             2,
@@ -440,6 +442,14 @@ def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
 
     assert_equal(request_json.find("\"planning\":") != -1, True)
     assert_equal(request_json.find("\"goal\":\"native_multivector\"") != -1, True)
+    assert_equal(
+        request_json.find("\"query_text\":\"find the clause evidence\"") != -1,
+        True,
+    )
+    assert_equal(
+        request_json.find("\"stage2_operator_kind\":\"clause_text\"") != -1,
+        True,
+    )
     assert_equal(
         request_json.find("\"preferred_candidate_generator_kinds\":[\"centroid_postings_imputed_flat\",\"document_proxy\"]")
             != -1,

@@ -18,6 +18,7 @@ from kayak.text import DocumentTextCorpus
 from kayak.verifier import default_clause_text_rerank_config, rerank_hits_clause_text
 
 from .json_common import json_escape
+from .query_text_support import judged_query_text_for_plan
 
 
 comptime CEILING_BENCH_MIN_SECONDS = 0.05
@@ -145,14 +146,6 @@ def build_task_evaluation(
         mean_recall_at_k,
         success_rate_at_k,
     )
-
-
-def judged_query_text_for_stage2(read plan: SearchPlan, description: String) -> String:
-    if plan.stage2_operator.requires_query_text:
-        return description.copy()
-    return String()
-
-
 def build_exact_full_scan_ceiling_summary(
     read backend: ExactCpuBackend,
     read stored_task: StoredJudgedTask,
@@ -336,7 +329,7 @@ def build_stage_aware_ceiling_summary_for_plan(
     var candidate_recall_total = 0.0
 
     for judged_query in task.queries:
-        var query_text = judged_query_text_for_stage2(
+        var query_text = judged_query_text_for_plan(
             plan,
             judged_query.description,
         )
@@ -366,7 +359,7 @@ def build_stage_aware_ceiling_summary_for_plan(
                 task.queries[query_index].query,
                 snapshot,
                 plan,
-                query_text=judged_query_text_for_stage2(
+                query_text=judged_query_text_for_plan(
                     plan,
                     task.queries[query_index].description,
                 ),

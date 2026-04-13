@@ -508,6 +508,8 @@ def test_planned_search_contracts_keep_selection_explicit() raises:
     )
 
     assert_equal(request.planning.goal, "balanced")
+    assert_equal(request.query_text, "")
+    assert_equal(request.stage2_operator_kind, "")
     assert_equal(
         request.planning.preferred_candidate_generator_kinds[0],
         "document_proxy",
@@ -518,6 +520,51 @@ def test_planned_search_contracts_keep_selection_explicit() raises:
         planned_explain.explain.explain.plan.candidate_generator.kind,
         "exact_full_scan",
     )
+
+
+def test_planned_search_request_accepts_explicit_stage2_override() raises:
+    var request = PlannedSearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        make_query(),
+        "founded in 1984 longest serving employee",
+        "clause_text",
+        match_all_filter(),
+        SearchPlanSelectionRequest(
+            2,
+            8,
+            best_effort_faithfulness_policy(),
+        ),
+    )
+
+    assert_equal(request.query_text, "founded in 1984 longest serving employee")
+    assert_equal(request.stage2_operator_kind, "clause_text")
+
+
+def test_planned_search_request_rejects_text_stage2_without_query_text() raises:
+    var raised = False
+    try:
+        _ = PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            "",
+            "clause_text",
+            match_all_filter(),
+            SearchPlanSelectionRequest(
+                2,
+                8,
+                best_effort_faithfulness_policy(),
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def test_snapshot_and_status_contracts_hold_service_metadata() raises:
