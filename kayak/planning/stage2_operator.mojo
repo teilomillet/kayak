@@ -1,12 +1,34 @@
-# Stage-2 refinement operator contract.
+# Compatibility view over the legacy combined stage-2 operator surface.
 
 from std.collections import List
 
+from .reference_scoring_semantics import (
+    ReferenceScoringSemantics,
+    exact_late_interaction_reference_scoring_semantics,
+)
+from .stage2_reference_operator import (
+    STAGE2_REFERENCE_OPERATOR_FAMILY_IDENTITY,
+    STAGE2_REFERENCE_OPERATOR_FAMILY_LATE_INTERACTION,
+    STAGE2_REFERENCE_REQUIRED_ARTIFACT_LATE_INTERACTION,
+    Stage2ReferenceOperator,
+    exact_late_interaction_stage2_reference_operator,
+    noop_topk_stage2_reference_operator,
+)
+from .stage3_verifier_operator import (
+    STAGE3_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
+    STAGE3_VERIFIER_FAMILY_TEXT,
+    Stage3VerifierOperator,
+    clause_text_stage3_verifier_operator,
+    none_stage3_verifier_operator,
+)
 
-comptime STAGE2_OPERATOR_FAMILY_IDENTITY = "identity"
+
+comptime STAGE2_OPERATOR_FAMILY_IDENTITY = STAGE2_REFERENCE_OPERATOR_FAMILY_IDENTITY
 comptime STAGE2_OPERATOR_FAMILY_HYBRID = "hybrid"
-comptime STAGE2_OPERATOR_FAMILY_LATE_INTERACTION = "late_interaction"
-comptime STAGE2_OPERATOR_FAMILY_TEXT = "text"
+comptime STAGE2_OPERATOR_FAMILY_LATE_INTERACTION = (
+    STAGE2_REFERENCE_OPERATOR_FAMILY_LATE_INTERACTION
+)
+comptime STAGE2_OPERATOR_FAMILY_TEXT = STAGE3_VERIFIER_FAMILY_TEXT
 
 comptime STAGE2_EXECUTION_KIND_NOOP_TOPK = "noop_topk"
 comptime STAGE2_EXECUTION_KIND_EXACT_LATE_INTERACTION = "exact_late_interaction"
@@ -15,8 +37,12 @@ comptime STAGE2_EXECUTION_KIND_EXACT_LATE_INTERACTION_CLAUSE_TEXT = (
 )
 comptime STAGE2_EXECUTION_KIND_CLAUSE_TEXT = "clause_text"
 
-comptime STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT = "document_text"
-comptime STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION = "late_interaction"
+comptime STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT = (
+    STAGE3_REQUIRED_ARTIFACT_DOCUMENT_TEXT
+)
+comptime STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION = (
+    STAGE2_REFERENCE_REQUIRED_ARTIFACT_LATE_INTERACTION
+)
 
 
 def stage2_family_for_kind(kind: String) raises -> String:
@@ -51,9 +77,7 @@ def required_artifact_families_for_stage2_kind(
 
 
 def stage2_operator_requires_query_text(kind: String) raises -> Bool:
-    if kind == "exact_late_interaction_clause_text":
-        return True
-    if kind == "clause_text":
+    if kind == "exact_late_interaction_clause_text" or kind == "clause_text":
         return True
     if kind == "noop_topk" or kind == "exact_late_interaction":
         return False
@@ -87,15 +111,63 @@ def stage2_execution_kind_for_operator(kind: String) raises -> String:
     raise Error("unknown stage2 operator kind: " + kind)
 
 
+def reference_scoring_semantics_for_stage2_operator_kind(
+    kind: String
+) raises -> ReferenceScoringSemantics:
+    _ = stage2_family_for_kind(kind)
+    return exact_late_interaction_reference_scoring_semantics()
+
+
+def stage2_reference_operator_for_stage2_operator_kind(
+    kind: String
+) raises -> Stage2ReferenceOperator:
+    if kind == "noop_topk" or kind == "clause_text":
+        return noop_topk_stage2_reference_operator()
+    if kind == "exact_late_interaction" or kind == "exact_late_interaction_clause_text":
+        return exact_late_interaction_stage2_reference_operator()
+
+    raise Error("unknown stage2 operator kind: " + kind)
+
+
+def stage3_verifier_for_stage2_operator_kind(
+    kind: String
+) raises -> Stage3VerifierOperator:
+    if kind == "noop_topk" or kind == "exact_late_interaction":
+        return none_stage3_verifier_operator()
+    if kind == "clause_text" or kind == "exact_late_interaction_clause_text":
+        return clause_text_stage3_verifier_operator()
+
+    raise Error("unknown stage2 operator kind: " + kind)
+
+
+def combined_stage2_operator_kind(
+    read stage2_reference_operator: Stage2ReferenceOperator,
+    read stage3_verifier: Stage3VerifierOperator,
+) raises -> String:
+    if stage2_reference_operator.kind == "noop_topk":
+        if stage3_verifier.kind == "none":
+            return "noop_topk"
+        if stage3_verifier.kind == "clause_text":
+            return "clause_text"
+    elif stage2_reference_operator.kind == "exact_late_interaction":
+        if stage3_verifier.kind == "none":
+            return "exact_late_interaction"
+        if stage3_verifier.kind == "clause_text":
+            return "exact_late_interaction_clause_text"
+
+    raise Error(
+        "unsupported compatibility stage-2 composition: "
+        + stage2_reference_operator.kind
+        + " + "
+        + stage3_verifier.kind
+    )
+
+
 def compatibility_exact_stage_kind_for_stage2_operator(
     kind: String
 ) raises -> String:
     if kind == "exact_late_interaction":
-        return kind
-    # Hybrid stage-2 operators may execute an exact sub-step internally, but
-    # this compatibility field names the whole stage-2 operator, not internal
-    # sub-steps. Returning exact_late_interaction here would overstate what the
-    # final stage profile represents.
+        return "exact_late_interaction"
     if (
         kind == "noop_topk"
         or kind == "clause_text"
@@ -177,3 +249,12 @@ def exact_late_interaction_clause_text_stage2_operator() raises -> Stage2Operato
 
 def clause_text_stage2_operator() raises -> Stage2Operator:
     return Stage2Operator("clause_text")
+
+
+def stage2_operator_for_components(
+    read stage2_reference_operator: Stage2ReferenceOperator,
+    read stage3_verifier: Stage3VerifierOperator,
+) raises -> Stage2Operator:
+    return Stage2Operator(
+        combined_stage2_operator_kind(stage2_reference_operator, stage3_verifier)
+    )

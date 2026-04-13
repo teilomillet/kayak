@@ -192,6 +192,18 @@ def append_json_search_plan_only(mut buffer: String, read plan: SearchPlan):
     buffer += "\"candidate_generator_kind\":\""
     buffer += json_escape(plan.candidate_generator.kind)
     buffer += "\","
+    buffer += "\"candidate_generator_family\":\""
+    buffer += json_escape(plan.candidate_generator.family)
+    buffer += "\","
+    buffer += "\"stage1_interaction_semantics\":\""
+    buffer += json_escape(plan.candidate_generator.interaction_semantics)
+    buffer += "\","
+    buffer += "\"stage1_alignment_granularity\":\""
+    buffer += json_escape(plan.candidate_generator.alignment_granularity)
+    buffer += "\","
+    buffer += "\"stage1_score_kind\":\""
+    buffer += json_escape(plan.candidate_generator.score_kind)
+    buffer += "\","
     buffer += "\"faithfulness_policy_kind\":\""
     buffer += json_escape(plan.faithfulness_policy.kind)
     buffer += "\","
@@ -203,6 +215,48 @@ def append_json_search_plan_only(mut buffer: String, read plan: SearchPlan):
     buffer += String(plan.candidate_budget.final_k) + ","
     buffer += "\"candidate_k\":"
     buffer += String(plan.candidate_budget.candidate_k) + ","
+    buffer += "\"reference_scoring_semantics_kind\":\""
+    buffer += json_escape(plan.reference_scoring_semantics.kind) + "\","
+    buffer += "\"reference_scoring_semantics_family\":\""
+    buffer += json_escape(plan.reference_scoring_semantics.family) + "\","
+    buffer += "\"reference_scoring_score_kind\":\""
+    buffer += json_escape(plan.reference_scoring_semantics.score_kind) + "\","
+    buffer += "\"reference_scoring_required_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        plan.reference_scoring_semantics.required_artifact_families,
+    )
+    buffer += ","
+    buffer += "\"stage2_reference_kind\":\""
+    buffer += json_escape(plan.stage2_reference_operator.kind) + "\","
+    buffer += "\"stage2_reference_family\":\""
+    buffer += json_escape(plan.stage2_reference_operator.family) + "\","
+    buffer += "\"stage2_reference_executes_reference_scoring\":"
+    if plan.stage2_reference_operator.executes_reference_scoring:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"stage2_reference_required_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        plan.stage2_reference_operator.required_artifact_families,
+    )
+    buffer += ","
+    buffer += "\"stage3_verifier_kind\":\""
+    buffer += json_escape(plan.stage3_verifier.kind) + "\","
+    buffer += "\"stage3_verifier_family\":\""
+    buffer += json_escape(plan.stage3_verifier.family) + "\","
+    buffer += "\"stage3_verifier_requires_query_text\":"
+    if plan.stage3_verifier.requires_query_text:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"stage3_verifier_required_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        plan.stage3_verifier.required_artifact_families,
+    )
+    buffer += ","
     buffer += "\"stage2_kind\":\""
     buffer += json_escape(plan.stage2_operator.kind) + "\","
     buffer += "\"stage2_family\":\""

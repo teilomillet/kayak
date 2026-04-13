@@ -20,6 +20,7 @@ from .execution_exact_family import candidate_generation_for_exact_family
 from .execution_graph_family import candidate_generation_for_graph_family
 from .execution_proxy_family import candidate_generation_for_proxy_family
 from .execution_stage2 import stage2_result_for_plan
+from .execution_stage3 import stage3_result_for_plan
 from .search_plan import SearchPlan
 from .stage2_result import Stage2Result
 
@@ -104,12 +105,18 @@ def final_hits_for_plan[Backend: ExactScoringBackend](
     read candidate_set: CandidateSet,
     read plan: SearchPlan,
 ) raises -> Stage2Result:
-    return stage2_result_for_plan(
+    var reference_result = stage2_result_for_plan(
         backend,
         query,
         query_text,
         snapshot,
         candidate_set,
+        plan,
+    )
+    return stage3_result_for_plan(
+        query_text,
+        snapshot,
+        reference_result,
         plan,
     )
 

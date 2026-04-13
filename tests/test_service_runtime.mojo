@@ -332,8 +332,9 @@ def test_hosted_collection_runtime_supports_text_family_stage2() raises:
     assert_equal(response.hits[0].doc_id, "doc-answer")
     assert_equal(debug.explain.candidate_set.hits[0].doc_id, "doc-context")
     assert_equal(debug.explain.final_hits[0].doc_id, "doc-answer")
-    assert_equal(debug.explain.stage2.stage_name, "clause_text")
-    assert_equal(debug.explain.stage2.token_count > 0, True)
+    assert_equal(debug.explain.stage2.stage_name, "noop_topk")
+    assert_equal(debug.explain.stage3_verifier.stage_name, "clause_text")
+    assert_equal(debug.explain.stage3_verifier.token_count > 0, True)
 
 
 def test_hosted_collection_runtime_supports_hybrid_stage2() raises:
@@ -405,11 +406,10 @@ def test_hosted_collection_runtime_supports_hybrid_stage2() raises:
     assert_equal(response.hits[0].doc_id, "doc-answer")
     assert_equal(debug.explain.candidate_set.hits[0].doc_id, "doc-context")
     assert_equal(debug.explain.final_hits[0].doc_id, "doc-answer")
-    assert_equal(
-        debug.explain.stage2.stage_name,
-        "exact_late_interaction_clause_text",
-    )
-    assert_equal(len(debug.explain.stage2.materialized_artifacts), 2)
+    assert_equal(debug.explain.stage2.stage_name, "exact_late_interaction")
+    assert_equal(debug.explain.stage3_verifier.stage_name, "clause_text")
+    assert_equal(len(debug.explain.stage2.materialized_artifacts), 1)
+    assert_equal(len(debug.explain.stage3_verifier.materialized_artifacts), 1)
 
 
 def test_hosted_collection_runtime_supports_planned_search_after_import() raises:
@@ -498,7 +498,10 @@ def test_hosted_collection_runtime_supports_planned_search_after_import() raises
         ),
     )
 
-    assert_equal(response.selection.plan.candidate_generator.kind, "document_proxy")
+    assert_equal(
+        response.selection.plan.candidate_generator.kind,
+        "centroid_postings_imputed_flat",
+    )
     assert_equal(response.search.hits[0].doc_id, "doc-a")
 
 
@@ -925,8 +928,14 @@ def test_hosted_collection_runtime_executes_planned_search_with_balanced_goal() 
         ),
     )
 
-    assert_equal(response.selection.plan.candidate_generator.kind, "document_proxy")
-    assert_equal(response.search.plan.candidate_generator.kind, "document_proxy")
+    assert_equal(
+        response.selection.plan.candidate_generator.kind,
+        "centroid_postings_imputed_flat",
+    )
+    assert_equal(
+        response.search.plan.candidate_generator.kind,
+        "centroid_postings_imputed_flat",
+    )
     assert_equal(response.search.hits[0].doc_id, "doc-a")
 
 
@@ -1070,7 +1079,10 @@ def test_hosted_collection_runtime_executes_planned_search_with_hybrid_stage2() 
         ),
     )
 
-    assert_equal(response.selection.plan.candidate_generator.kind, "document_proxy")
+    assert_equal(
+        response.selection.plan.candidate_generator.kind,
+        "centroid_postings_imputed_flat",
+    )
     assert_equal(
         response.search.plan.stage2_operator.kind,
         "exact_late_interaction_clause_text",

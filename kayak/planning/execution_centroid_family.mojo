@@ -185,7 +185,7 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
         )
 
     return CandidateSet(
-        plan.candidate_generator.kind.copy(),
+        plan.candidate_generator,
         hits^,
         snapshot.snapshot.stats.segment_count,
         snapshot.snapshot.stats.document_count,

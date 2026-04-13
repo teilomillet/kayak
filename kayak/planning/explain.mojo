@@ -11,9 +11,13 @@ from .collection_hit import CollectionHit
 from .execution import (
     candidate_generation_for_plan,
     candidate_recall_at_final_k,
-    final_hits_for_plan,
 )
-from .exact_stage import exact_oracle_hits_for_snapshot
+from .exact_stage import (
+    exact_oracle_hits_for_snapshot,
+    exact_oracle_stage_profile_for_snapshot,
+)
+from .execution_stage2 import stage2_result_for_plan
+from .execution_stage3 import stage3_result_for_plan
 from .faithfulness import FaithfulnessAssessment, assess_faithfulness
 from .score_histogram import build_score_histogram
 from .search_plan import SearchPlan
@@ -27,6 +31,7 @@ struct CollectionSearchExplain(Copyable):
     var candidate_set: CandidateSet
     var candidate_stage: SearchStageProfile
     var stage2: SearchStageProfile
+    var stage3_verifier: SearchStageProfile
     var exact_stage: SearchStageProfile
     var candidate_recall_at_final_k: MetricScalar
     var faithfulness: FaithfulnessAssessment
@@ -40,6 +45,8 @@ struct CollectionSearchExplain(Copyable):
         candidate_set: CandidateSet,
         candidate_stage: SearchStageProfile,
         stage2: SearchStageProfile,
+        stage3_verifier: SearchStageProfile,
+        exact_stage: SearchStageProfile,
         candidate_recall_at_final_k: MetricScalar,
         faithfulness: FaithfulnessAssessment,
         var final_hits: List[CollectionHit],
@@ -50,7 +57,8 @@ struct CollectionSearchExplain(Copyable):
         self.candidate_set = candidate_set.copy()
         self.candidate_stage = candidate_stage.copy()
         self.stage2 = stage2.copy()
-        self.exact_stage = stage2.copy()
+        self.stage3_verifier = stage3_verifier.copy()
+        self.exact_stage = exact_stage.copy()
         self.candidate_recall_at_final_k = candidate_recall_at_final_k
         self.faithfulness = faithfulness.copy()
         self.final_hits = final_hits^
@@ -67,8 +75,14 @@ def explain_collection_search[Backend: ExactScoringBackend](
     var candidate_set = candidate_generation_for_plan(
         backend, query, snapshot, plan, filter_expression
     )
-    var stage2_result = final_hits_for_plan(
+    var stage2_result = stage2_result_for_plan(
         backend, query, query_text, snapshot, candidate_set, plan
+    )
+    var stage3_result = stage3_result_for_plan(
+        query_text,
+        snapshot,
+        stage2_result,
+        plan,
     )
     var oracle_final_hits = exact_oracle_hits_for_snapshot(
         backend,
@@ -82,6 +96,7 @@ def explain_collection_search[Backend: ExactScoringBackend](
     )
     var candidate_stage_score_histogram = build_score_histogram(candidate_set.hits, 8)
     var stage2_score_histogram = build_score_histogram(stage2_result.final_hits, 8)
+    var stage3_score_histogram = build_score_histogram(stage3_result.final_hits, 8)
     var candidate_stage = SearchStageProfile(
         "candidate_generation",
         snapshot.snapshot.stats.document_count,
@@ -107,7 +122,7 @@ def explain_collection_search[Backend: ExactScoringBackend](
             candidate_stage_score_histogram,
         )
     var stage2 = SearchStageProfile(
-        plan.stage2_operator.kind.copy(),
+        plan.stage2_reference_operator.kind.copy(),
         len(candidate_set.hits),
         len(stage2_result.final_hits),
         stage2_result.segment_count,
@@ -118,6 +133,18 @@ def explain_collection_search[Backend: ExactScoringBackend](
         stage2_score_histogram,
         stage2_result.materialized_artifacts.copy(),
     )
+    var stage3 = SearchStageProfile(
+        plan.stage3_verifier.kind.copy(),
+        len(stage2_result.final_hits),
+        len(stage3_result.final_hits),
+        stage3_result.segment_count,
+        stage3_result.document_count,
+        stage3_result.token_count,
+        stage3_result.vector_count,
+        stage3_result.byte_size,
+        stage3_score_histogram,
+        stage3_result.materialized_artifacts.copy(),
+    )
 
     return CollectionSearchExplain(
         snapshot.collection.collection_id.value.copy(),
@@ -126,11 +153,13 @@ def explain_collection_search[Backend: ExactScoringBackend](
         candidate_set.copy(),
         candidate_stage,
         stage2,
+        stage3,
+        exact_oracle_stage_profile_for_snapshot(snapshot, oracle_final_hits),
         observed_candidate_recall_at_final_k,
         assess_faithfulness(
             plan.faithfulness_policy,
             plan.candidate_generator.kind,
             observed_candidate_recall_at_final_k,
         ),
-        stage2_result.final_hits.copy(),
+        stage3_result.final_hits.copy(),
     )

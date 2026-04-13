@@ -186,8 +186,9 @@ class SearchPlanApiTests(unittest.TestCase):
         self.assertEqual(result.exact_stage.input_hit_count, 2)
         self.assertEqual(result.exact_stage.output_hit_count, 1)
         self.assertEqual(result.exact_stage.query_vector_count, 2)
-        self.assertEqual(result.exact_stage.document_count, 2)
-        self.assertEqual(result.exact_stage.document_vector_count, 4)
+        self.assertEqual(result.exact_stage.document_count, 1)
+        self.assertEqual(result.exact_stage.document_vector_count, 2)
+        self.assertEqual(result.stage3_verifier.stage_name, "none")
         self.assertEqual(result.stage2.stage_name, "exact_late_interaction")
         self.assertEqual(len(result.stage2.materialized_artifacts), 1)
         self.assertEqual(
@@ -196,7 +197,7 @@ class SearchPlanApiTests(unittest.TestCase):
         )
         self.assertEqual(
             result.stage2.materialized_artifacts[0].document_vector_count,
-            4,
+            2,
         )
         self.assertIs(result.exact_stage, result.stage2)
         self.assertIs(result.exact_scores, result.stage2_scores)
@@ -211,6 +212,7 @@ class SearchPlanApiTests(unittest.TestCase):
         self.assertEqual(result.hits, result.candidate_stage.hits[:2])
         self.assertIsNone(result.candidate_index)
         self.assertEqual(result.stage2.stage_name, "noop_topk")
+        self.assertEqual(result.stage3_verifier.stage_name, "none")
         self.assertEqual(result.stage2.query_vector_count, 0)
         self.assertEqual(result.stage2.document_vector_count, 0)
         self.assertEqual(result.stage2.materialized_artifacts, ())
@@ -226,17 +228,20 @@ class SearchPlanApiTests(unittest.TestCase):
         self.assertIsNotNone(result.candidate_index)
         assert result.candidate_index is not None
         self.assertEqual(result.candidate_index.doc_texts, index.doc_texts)
-        self.assertEqual(result.stage2.stage_name, "clause_text")
+        self.assertEqual(result.stage2.stage_name, "noop_topk")
+        self.assertEqual(result.stage3_verifier.stage_name, "clause_text")
         self.assertEqual(result.stage2.query_vector_count, 0)
         self.assertEqual(result.stage2.document_vector_count, 0)
-        self.assertEqual(result.stage2.document_text_count, 2)
-        self.assertEqual(len(result.stage2.materialized_artifacts), 1)
+        self.assertEqual(result.stage2.document_text_count, 0)
+        self.assertEqual(len(result.stage2.materialized_artifacts), 0)
+        self.assertEqual(result.stage3_verifier.document_text_count, 2)
+        self.assertEqual(len(result.stage3_verifier.materialized_artifacts), 1)
         self.assertEqual(
-            result.stage2.materialized_artifacts[0].family,
+            result.stage3_verifier.materialized_artifacts[0].family,
             "document_text",
         )
         self.assertEqual(
-            result.stage2.materialized_artifacts[0].document_text_count,
+            result.stage3_verifier.materialized_artifacts[0].document_text_count,
             2,
         )
 
@@ -269,19 +274,31 @@ class SearchPlanApiTests(unittest.TestCase):
             ("late_interaction", "document_text"),
         )
         self.assertFalse(result.plan.stage2_operator.is_exact_reference)
+        self.assertEqual(result.plan.reference_scoring_semantics.kind, "exact_late_interaction")
+        self.assertEqual(result.plan.stage2_reference_operator.kind, "exact_late_interaction")
+        self.assertEqual(result.plan.stage3_verifier.kind, "clause_text")
         self.assertEqual(result.candidate_stage.candidate_doc_ids, ("doc-context", "doc-answer"))
         self.assertEqual([hit.doc_id for hit in result.hits], ["doc-answer"])
-        self.assertEqual(result.stage2.stage_name, "exact_late_interaction_clause_text")
+        self.assertEqual(result.stage2.stage_name, "exact_late_interaction")
+        self.assertEqual(result.stage3_verifier.stage_name, "clause_text")
         self.assertEqual(result.stage2.query_vector_count, 2)
         self.assertEqual(result.stage2.document_vector_count, 4)
-        self.assertEqual(result.stage2.document_text_count, 2)
-        self.assertEqual(len(result.stage2.materialized_artifacts), 2)
+        self.assertEqual(result.stage2.document_text_count, 0)
+        self.assertEqual(len(result.stage2.materialized_artifacts), 1)
         self.assertEqual(
             tuple(
                 artifact.family
                 for artifact in result.stage2.materialized_artifacts
             ),
-            ("late_interaction", "document_text"),
+            ("late_interaction",),
+        )
+        self.assertEqual(result.stage3_verifier.document_text_count, 2)
+        self.assertEqual(
+            tuple(
+                artifact.family
+                for artifact in result.stage3_verifier.materialized_artifacts
+            ),
+            ("document_text",),
         )
 
     def test_hybrid_stage2_requires_query_text_and_document_texts(self) -> None:

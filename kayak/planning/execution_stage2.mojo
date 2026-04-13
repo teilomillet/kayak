@@ -1,4 +1,4 @@
-# Stage-2 refinement dispatch over one candidate window.
+# Stage-2 reference scoring dispatch over one candidate window.
 
 from std.collections import List
 
@@ -7,12 +7,8 @@ from kayak.contracts import EncodedQuery
 from kayak.runtime import ExactScoringBackend
 
 from .candidate_set import CandidateSet
-from .clause_text_stage import clause_text_rerank_candidates_for_plan
 from .collection_hit import CollectionHit
 from .exact_stage import exact_rerank_candidates_for_plan
-from .exact_late_interaction_clause_text_stage import (
-    exact_late_interaction_clause_text_rerank_candidates_for_plan,
-)
 from .search_plan import SearchPlan
 from .stage2_result import Stage2Result
 
@@ -34,10 +30,10 @@ def count_unique_segment_ids(read hits: List[CollectionHit]) -> Int:
 
 
 def noop_topk_stage2_result(
-    read hits: List[CollectionHit], final_k: Int
+    read hits: List[CollectionHit], output_k: Int
 ) raises -> Stage2Result:
     var final_hits = List[CollectionHit]()
-    var limit = final_k
+    var limit = output_k
     if limit > len(hits):
         limit = len(hits)
 
@@ -54,6 +50,19 @@ def noop_topk_stage2_result(
     )
 
 
+def reference_stage_output_k(
+    read candidate_set: CandidateSet,
+    read plan: SearchPlan,
+) -> Int:
+    if plan.stage3_verifier.kind == "none":
+        return plan.candidate_budget.final_k
+
+    var limit = plan.candidate_budget.candidate_k
+    if limit > len(candidate_set.hits):
+        limit = len(candidate_set.hits)
+    return limit
+
+
 def stage2_result_for_plan[Backend: ExactScoringBackend](
     read backend: Backend,
     read query: EncodedQuery,
@@ -62,43 +71,25 @@ def stage2_result_for_plan[Backend: ExactScoringBackend](
     read candidate_set: CandidateSet,
     read plan: SearchPlan,
 ) raises -> Stage2Result:
-    if plan.stage2_operator.execution_kind == "noop_topk":
+    _ = query_text
+    var output_k = reference_stage_output_k(candidate_set, plan)
+
+    if plan.stage2_reference_operator.kind == "noop_topk":
         return noop_topk_stage2_result(
             candidate_set.hits,
-            plan.candidate_budget.final_k,
+            output_k,
         )
 
-    if plan.stage2_operator.execution_kind == "exact_late_interaction":
+    if plan.stage2_reference_operator.kind == "exact_late_interaction":
         return exact_rerank_candidates_for_plan(
             backend,
             query,
             snapshot,
             candidate_set.hits,
-            plan.candidate_budget.final_k,
-        )
-
-    if (
-        plan.stage2_operator.execution_kind
-        == "exact_late_interaction_clause_text"
-    ):
-        return exact_late_interaction_clause_text_rerank_candidates_for_plan(
-            backend,
-            query,
-            query_text,
-            snapshot,
-            candidate_set.hits,
-            plan.candidate_budget.final_k,
-        )
-
-    if plan.stage2_operator.execution_kind == "clause_text":
-        return clause_text_rerank_candidates_for_plan(
-            query_text,
-            snapshot,
-            candidate_set.hits,
-            plan.candidate_budget.final_k,
+            output_k,
         )
 
     raise Error(
-        "unsupported stage2 execution kind: "
-        + plan.stage2_operator.execution_kind
+        "unsupported stage2 reference operator kind: "
+        + plan.stage2_reference_operator.kind
     )

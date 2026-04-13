@@ -641,11 +641,11 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
     assert_equal(explain.final_hits[1].doc_id, "doc-c")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
-    assert_equal(explain.exact_stage.stage_name, "noop_topk")
-    assert_equal(explain.exact_stage.document_count, 3)
+    assert_equal(explain.exact_stage.stage_name, "exact_oracle")
+    assert_equal(explain.exact_stage.document_count, 4)
     assert_equal(explain.exact_stage.output_hit_count, 2)
-    assert_equal(explain.exact_stage.vector_count, 0)
-    assert_equal(explain.exact_stage.byte_size, 0)
+    assert_equal(explain.exact_stage.vector_count, 8)
+    assert_equal(explain.exact_stage.byte_size, 64)
     assert_equal(explain.candidate_stage.score_histogram.bin_count, 8)
     assert_equal(len(explain.stage2.materialized_artifacts), 0)
     assert_equal(
@@ -724,13 +724,17 @@ def test_exact_full_scan_clause_text_stage2_can_refine_exact_candidates() raises
     assert_equal(explain.plan.stage2_operator.kind, "clause_text")
     assert_equal(explain.plan.stage2_operator.family, "text")
     assert_equal(explain.plan.stage2_operator.requires_query_text, True)
-    assert_equal(explain.stage2.stage_name, "clause_text")
+    assert_equal(explain.stage2.stage_name, "noop_topk")
+    assert_equal(explain.stage3_verifier.stage_name, "clause_text")
     assert_equal(explain.stage2.document_count, 2)
-    assert_equal(explain.stage2.token_count > 0, True)
-    assert_equal(explain.stage2.byte_size > 0, True)
-    assert_equal(len(explain.stage2.materialized_artifacts), 1)
+    assert_equal(explain.stage2.token_count, 0)
+    assert_equal(explain.stage2.byte_size, 0)
+    assert_equal(len(explain.stage2.materialized_artifacts), 0)
+    assert_equal(explain.stage3_verifier.token_count > 0, True)
+    assert_equal(explain.stage3_verifier.byte_size > 0, True)
+    assert_equal(len(explain.stage3_verifier.materialized_artifacts), 1)
     assert_equal(
-        explain.stage2.materialized_artifacts[0].family,
+        explain.stage3_verifier.materialized_artifacts[0].family,
         "document_text",
     )
     assert_equal(json.find("\"stage2_kind\":\"clause_text\"") != -1, True)
@@ -776,20 +780,24 @@ def test_hybrid_stage2_materializes_vectors_and_texts() raises:
         explain.plan.stage2_operator.required_artifact_families[1],
         "document_text",
     )
-    assert_equal(explain.plan.exact_stage_kind, "none")
+    assert_equal(explain.plan.exact_stage_kind, "exact_late_interaction")
     assert_equal(explain.plan.reranker_kind, "clause_text")
-    assert_equal(explain.stage2.stage_name, "exact_late_interaction_clause_text")
+    assert_equal(explain.stage2.stage_name, "exact_late_interaction")
+    assert_equal(explain.stage3_verifier.stage_name, "clause_text")
     assert_equal(explain.stage2.document_count, 2)
     assert_equal(explain.stage2.vector_count, 4)
-    assert_equal(explain.stage2.token_count > 4, True)
+    assert_equal(explain.stage2.token_count, 4)
     assert_equal(explain.stage2.byte_size > 16, True)
-    assert_equal(len(explain.stage2.materialized_artifacts), 2)
+    assert_equal(len(explain.stage2.materialized_artifacts), 1)
     assert_equal(
         explain.stage2.materialized_artifacts[0].family,
         "late_interaction",
     )
+    assert_equal(explain.stage3_verifier.token_count > 0, True)
+    assert_equal(explain.stage3_verifier.byte_size > 0, True)
+    assert_equal(len(explain.stage3_verifier.materialized_artifacts), 1)
     assert_equal(
-        explain.stage2.materialized_artifacts[1].family,
+        explain.stage3_verifier.materialized_artifacts[0].family,
         "document_text",
     )
     assert_equal(

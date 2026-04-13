@@ -15,7 +15,7 @@ def test_default_candidate_generator_orders_are_registry_driven() raises:
     var latency_first = default_candidate_generator_order_for_goal("latency_first")
     var native = default_candidate_generator_order_for_goal("native_multivector")
 
-    assert_equal(balanced[0], "document_proxy")
+    assert_equal(balanced[0], "centroid_postings_imputed_flat")
     assert_equal(latency_first[0], "document_proxy")
     assert_equal(native[0], "centroid_postings_imputed_flat")
     assert_equal(balanced[len(balanced) - 1], "exact_full_scan")

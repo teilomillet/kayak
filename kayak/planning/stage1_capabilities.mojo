@@ -7,9 +7,32 @@ from kayak.collections import (
 from kayak.collections.validation import require_non_empty_string
 
 
+comptime STAGE1_INTERACTION_SEMANTICS_NONE = "none"
+comptime STAGE1_INTERACTION_SEMANTICS_APPROXIMATE_LATE_INTERACTION = (
+    "approximate_late_interaction"
+)
+comptime STAGE1_INTERACTION_SEMANTICS_EXACT_LATE_INTERACTION = (
+    "exact_late_interaction"
+)
+
+comptime STAGE1_ALIGNMENT_GRANULARITY_DOCUMENT = "document"
+comptime STAGE1_ALIGNMENT_GRANULARITY_DOCUMENT_TOKENS = "document_tokens"
+comptime STAGE1_ALIGNMENT_GRANULARITY_CENTROID = "centroid"
+comptime STAGE1_ALIGNMENT_GRANULARITY_GRAPH_NODE = "graph_node"
+
+comptime STAGE1_SCORE_KIND_PROXY_SCORE = "proxy_score"
+comptime STAGE1_SCORE_KIND_APPROXIMATE_INTERACTION_SCORE = (
+    "approximate_interaction_score"
+)
+comptime STAGE1_SCORE_KIND_EXACT_SCORE = "exact_score"
+
+
 struct Stage1Capabilities(Copyable):
     var generator_kind: String
     var generator_family: String
+    var interaction_semantics: String
+    var alignment_granularity: String
+    var score_kind: String
     var required_search_artifact_families: List[String]
     var stage1_is_exact: Bool
     var supports_match_all_filter: Bool
@@ -19,6 +42,9 @@ struct Stage1Capabilities(Copyable):
         out self,
         var generator_kind: String,
         var generator_family: String,
+        var interaction_semantics: String,
+        var alignment_granularity: String,
+        var score_kind: String,
         read required_search_artifact_families: List[String],
         stage1_is_exact: Bool,
         supports_match_all_filter: Bool,
@@ -30,6 +56,13 @@ struct Stage1Capabilities(Copyable):
         self.generator_family = require_non_empty_string(
             generator_family, "generator_family"
         )
+        self.interaction_semantics = require_non_empty_string(
+            interaction_semantics, "interaction_semantics"
+        )
+        self.alignment_granularity = require_non_empty_string(
+            alignment_granularity, "alignment_granularity"
+        )
+        self.score_kind = require_non_empty_string(score_kind, "score_kind")
         var normalized_required_families = List[String]()
         for family in required_search_artifact_families:
             var normalized = require_non_empty_string(
@@ -50,6 +83,14 @@ struct Stage1Capabilities(Copyable):
         self.supports_structured_filter = supports_structured_filter
         if self.stage1_is_exact and not self.supports_structured_filter:
             raise Error("exact stage-1 must support structured filters")
+        if (
+            self.stage1_is_exact
+            and self.interaction_semantics
+                != STAGE1_INTERACTION_SEMANTICS_EXACT_LATE_INTERACTION
+        ):
+            raise Error(
+                "exact stage-1 must declare exact_late_interaction semantics"
+            )
 
     def requires_search_artifact_family(self, family: String) -> Bool:
         for required_family in self.required_search_artifact_families:
@@ -76,6 +117,9 @@ def exact_stage1_capabilities() raises -> Stage1Capabilities:
     return Stage1Capabilities(
         "exact_full_scan",
         "exact",
+        STAGE1_INTERACTION_SEMANTICS_EXACT_LATE_INTERACTION,
+        STAGE1_ALIGNMENT_GRANULARITY_DOCUMENT_TOKENS,
+        STAGE1_SCORE_KIND_EXACT_SCORE,
         [],
         True,
         True,
@@ -87,6 +131,9 @@ def document_proxy_stage1_capabilities() raises -> Stage1Capabilities:
     return Stage1Capabilities(
         "document_proxy",
         "proxy",
+        STAGE1_INTERACTION_SEMANTICS_NONE,
+        STAGE1_ALIGNMENT_GRANULARITY_DOCUMENT,
+        STAGE1_SCORE_KIND_PROXY_SCORE,
         ["document_proxy"],
         False,
         True,
@@ -98,6 +145,9 @@ def centroid_heads_stage1_capabilities() raises -> Stage1Capabilities:
     return Stage1Capabilities(
         "centroid_heads",
         "centroid",
+        STAGE1_INTERACTION_SEMANTICS_APPROXIMATE_LATE_INTERACTION,
+        STAGE1_ALIGNMENT_GRANULARITY_CENTROID,
+        STAGE1_SCORE_KIND_APPROXIMATE_INTERACTION_SCORE,
         ["centroid_heads"],
         False,
         True,
@@ -109,6 +159,9 @@ def centroid_postings_stage1_capabilities(kind: String) raises -> Stage1Capabili
     return Stage1Capabilities(
         kind,
         "centroid",
+        STAGE1_INTERACTION_SEMANTICS_APPROXIMATE_LATE_INTERACTION,
+        STAGE1_ALIGNMENT_GRANULARITY_CENTROID,
+        STAGE1_SCORE_KIND_APPROXIMATE_INTERACTION_SCORE,
         ["centroid_postings"],
         False,
         True,
@@ -120,6 +173,9 @@ def gem_graph_stage1_capabilities() raises -> Stage1Capabilities:
     return Stage1Capabilities(
         "gem_graph",
         "graph",
+        STAGE1_INTERACTION_SEMANTICS_APPROXIMATE_LATE_INTERACTION,
+        STAGE1_ALIGNMENT_GRANULARITY_GRAPH_NODE,
+        STAGE1_SCORE_KIND_APPROXIMATE_INTERACTION_SCORE,
         ["gem_graph"],
         False,
         True,

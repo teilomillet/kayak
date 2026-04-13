@@ -18,6 +18,9 @@ def test_exact_stage1_capabilities_require_no_sidecars() raises:
     )
 
     assert_equal(capabilities.generator_family, "exact")
+    assert_equal(capabilities.interaction_semantics, "exact_late_interaction")
+    assert_equal(capabilities.alignment_granularity, "document_tokens")
+    assert_equal(capabilities.score_kind, "exact_score")
     assert_equal(capabilities.stage1_is_exact, True)
     assert_equal(capabilities.supports_match_all_filter, True)
     assert_equal(capabilities.supports_structured_filter, True)
@@ -33,6 +36,15 @@ def test_centroid_and_graph_stage1_capabilities_remain_generic() raises:
     )
 
     assert_equal(centroid_capabilities.generator_family, "centroid")
+    assert_equal(
+        centroid_capabilities.interaction_semantics,
+        "approximate_late_interaction",
+    )
+    assert_equal(centroid_capabilities.alignment_granularity, "centroid")
+    assert_equal(
+        centroid_capabilities.score_kind,
+        "approximate_interaction_score",
+    )
     assert_equal(centroid_capabilities.stage1_is_exact, False)
     assert_equal(centroid_capabilities.supports_structured_filter, False)
     assert_equal(
@@ -40,6 +52,11 @@ def test_centroid_and_graph_stage1_capabilities_remain_generic() raises:
         "centroid_postings",
     )
     assert_equal(graph_capabilities.generator_family, "graph")
+    assert_equal(
+        graph_capabilities.interaction_semantics,
+        "approximate_late_interaction",
+    )
+    assert_equal(graph_capabilities.alignment_granularity, "graph_node")
     assert_equal(
         stage1_required_search_artifact_families("gem_graph")[0],
         "gem_graph",
@@ -60,6 +77,9 @@ def test_candidate_generator_carries_stage1_contract_metadata() raises:
     var generator = CandidateGenerator("document_proxy")
 
     assert_equal(generator.family, "proxy")
+    assert_equal(generator.interaction_semantics, "none")
+    assert_equal(generator.alignment_granularity, "document")
+    assert_equal(generator.score_kind, "proxy_score")
     assert_equal(generator.artifact_family, "document_proxy")
     assert_equal(generator.required_search_artifact_families[0], "document_proxy")
     assert_equal(generator.is_exact, False)

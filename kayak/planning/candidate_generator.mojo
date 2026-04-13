@@ -32,6 +32,9 @@ struct CandidateGenerator(Copyable):
     var kind: String
     var family: String
     var artifact_family: String
+    var interaction_semantics: String
+    var alignment_granularity: String
+    var score_kind: String
     var required_search_artifact_families: List[String]
     var is_exact: Bool
     var supports_match_all_filter: Bool
@@ -43,6 +46,9 @@ struct CandidateGenerator(Copyable):
         self.kind = "exact_full_scan"
         self.family = CANDIDATE_GENERATOR_FAMILY_EXACT
         self.artifact_family = ""
+        self.interaction_semantics = "exact_late_interaction"
+        self.alignment_granularity = "document_tokens"
+        self.score_kind = "exact_score"
         self.required_search_artifact_families = List[String]()
         self.is_exact = True
         self.supports_match_all_filter = True
@@ -66,6 +72,9 @@ struct CandidateGenerator(Copyable):
         self.kind = kind^
         self.family = capabilities.generator_family.copy()
         self.artifact_family = capabilities.single_required_search_artifact_family()
+        self.interaction_semantics = capabilities.interaction_semantics.copy()
+        self.alignment_granularity = capabilities.alignment_granularity.copy()
+        self.score_kind = capabilities.score_kind.copy()
         self.required_search_artifact_families = (
             capabilities.required_search_artifact_families.copy()
         )

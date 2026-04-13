@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 EXACT_FULL_SCAN_CANDIDATE_GENERATOR = "exact_full_scan"
@@ -19,6 +19,10 @@ class CandidateGenerator:
     kind: str
     query_vector_budget: int = 0
     document_vector_budget: int = 0
+    family: str = field(init=False)
+    interaction_semantics: str = field(init=False)
+    alignment_granularity: str = field(init=False)
+    score_kind: str = field(init=False)
 
     def __post_init__(self) -> None:
         if self.kind not in SUPPORTED_CANDIDATE_GENERATORS:
@@ -33,6 +37,23 @@ class CandidateGenerator:
             raise ValueError(
                 "exact_full_scan does not accept query or document vector budgets"
             )
+        if self.kind == EXACT_FULL_SCAN_CANDIDATE_GENERATOR:
+            family = "exact"
+            interaction_semantics = "exact_late_interaction"
+            alignment_granularity = "document_tokens"
+            score_kind = "exact_score"
+        else:
+            family = "proxy"
+            interaction_semantics = "none"
+            alignment_granularity = "document"
+            score_kind = "proxy_score"
+
+        object.__setattr__(self, "family", family)
+        object.__setattr__(
+            self, "interaction_semantics", interaction_semantics
+        )
+        object.__setattr__(self, "alignment_granularity", alignment_granularity)
+        object.__setattr__(self, "score_kind", score_kind)
 
 
 def exact_full_scan_candidate_generator() -> CandidateGenerator:

@@ -195,7 +195,10 @@ def test_build_planner_evidence_summary_reports_selected_candidate_and_stage2() 
     assert_equal(summary.stage2_requires_query_text, False)
     assert_equal(len(summary.stage2_materialized_artifact_families), 1)
     assert_equal(summary.stage2_materialized_artifact_families[0], "late_interaction")
-    assert_equal(summary.selected_candidate_generator_kind, "document_proxy")
+    assert_equal(
+        summary.selected_candidate_generator_kind,
+        "centroid_postings_imputed_flat",
+    )
     assert_equal(summary.selected_candidate_generator_status, "promoted")
     assert_equal(len(summary.candidates) > 0, True)
     assert_equal(summary.candidates[0].measured.stage1_byte_size > 0, True)

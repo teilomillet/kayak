@@ -141,6 +141,12 @@ def append_json_stage_artifact_materialization_list(
 def append_json_candidate_set(mut buffer: String, read candidate_set: CandidateSet):
     buffer += "{"
     buffer += "\"generator_kind\":\"" + json_escape(candidate_set.generator_kind) + "\","
+    buffer += "\"generator_family\":\"" + json_escape(candidate_set.generator_family) + "\","
+    buffer += "\"interaction_semantics\":\""
+    buffer += json_escape(candidate_set.interaction_semantics) + "\","
+    buffer += "\"alignment_granularity\":\""
+    buffer += json_escape(candidate_set.alignment_granularity) + "\","
+    buffer += "\"score_kind\":\"" + json_escape(candidate_set.score_kind) + "\","
     buffer += "\"segment_count\":" + String(candidate_set.segment_count) + ","
     buffer += "\"document_count\":" + String(candidate_set.document_count) + ","
     buffer += "\"token_count\":" + String(candidate_set.token_count) + ","
@@ -204,6 +210,15 @@ def collection_search_explain_json(
     buffer += "\"candidate_generator_family\":\""
     buffer += json_escape(explain.plan.candidate_generator.family)
     buffer += "\","
+    buffer += "\"stage1_interaction_semantics\":\""
+    buffer += json_escape(explain.plan.candidate_generator.interaction_semantics)
+    buffer += "\","
+    buffer += "\"stage1_alignment_granularity\":\""
+    buffer += json_escape(explain.plan.candidate_generator.alignment_granularity)
+    buffer += "\","
+    buffer += "\"stage1_score_kind\":\""
+    buffer += json_escape(explain.plan.candidate_generator.score_kind)
+    buffer += "\","
     buffer += "\"stage1_required_artifact_families\":"
     append_json_string_list(
         buffer,
@@ -221,6 +236,48 @@ def collection_search_explain_json(
     buffer += String(explain.plan.candidate_generator.beam_width) + ","
     buffer += "\"candidate_k\":" + String(explain.plan.candidate_budget.candidate_k) + ","
     buffer += "\"final_k\":" + String(explain.plan.candidate_budget.final_k) + ","
+    buffer += "\"reference_scoring_semantics_kind\":\""
+    buffer += json_escape(explain.plan.reference_scoring_semantics.kind) + "\","
+    buffer += "\"reference_scoring_semantics_family\":\""
+    buffer += json_escape(explain.plan.reference_scoring_semantics.family) + "\","
+    buffer += "\"reference_scoring_score_kind\":\""
+    buffer += json_escape(explain.plan.reference_scoring_semantics.score_kind) + "\","
+    buffer += "\"reference_scoring_required_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        explain.plan.reference_scoring_semantics.required_artifact_families,
+    )
+    buffer += ","
+    buffer += "\"stage2_reference_kind\":\""
+    buffer += json_escape(explain.plan.stage2_reference_operator.kind) + "\","
+    buffer += "\"stage2_reference_family\":\""
+    buffer += json_escape(explain.plan.stage2_reference_operator.family) + "\","
+    buffer += "\"stage2_reference_executes_reference_scoring\":"
+    if explain.plan.stage2_reference_operator.executes_reference_scoring:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"stage2_reference_required_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        explain.plan.stage2_reference_operator.required_artifact_families,
+    )
+    buffer += ","
+    buffer += "\"stage3_verifier_kind\":\""
+    buffer += json_escape(explain.plan.stage3_verifier.kind) + "\","
+    buffer += "\"stage3_verifier_family\":\""
+    buffer += json_escape(explain.plan.stage3_verifier.family) + "\","
+    buffer += "\"stage3_verifier_requires_query_text\":"
+    if explain.plan.stage3_verifier.requires_query_text:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"stage3_verifier_required_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        explain.plan.stage3_verifier.required_artifact_families,
+    )
+    buffer += ","
     buffer += "\"stage2_kind\":\""
     buffer += json_escape(explain.plan.stage2_operator.kind) + "\","
     buffer += "\"stage2_family\":\""
@@ -247,6 +304,9 @@ def collection_search_explain_json(
     buffer += ","
     buffer += "\"stage2\":"
     append_json_stage_profile(buffer, explain.stage2)
+    buffer += ","
+    buffer += "\"stage3_verifier\":"
+    append_json_stage_profile(buffer, explain.stage3_verifier)
     buffer += ","
     buffer += "\"exact_stage\":"
     append_json_stage_profile(buffer, explain.exact_stage)

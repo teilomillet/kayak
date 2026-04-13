@@ -60,10 +60,10 @@ struct SearchRequest(Copyable):
                 "oracle_full_recall_required faithfulness policy requires debug_mode for non-exact stage-1 search"
             )
 
-        if self.plan.stage2_operator.requires_query_text and self.query_text.byte_length() == 0:
+        if self.plan.stage3_verifier.requires_query_text and self.query_text.byte_length() == 0:
             raise Error(
-                "stage2 operator "
-                + self.plan.stage2_operator.kind
+                "stage3 verifier "
+                + self.plan.stage3_verifier.kind
                 + " requires non-empty query_text"
             )
 
@@ -152,6 +152,11 @@ def same_search_plan(read left: SearchPlan, read right: SearchPlan) -> Bool:
         == right.candidate_generator.beam_width
         and left.candidate_budget.final_k == right.candidate_budget.final_k
         and left.candidate_budget.candidate_k == right.candidate_budget.candidate_k
+        and left.reference_scoring_semantics.kind
+        == right.reference_scoring_semantics.kind
+        and left.stage2_reference_operator.kind
+        == right.stage2_reference_operator.kind
+        and left.stage3_verifier.kind == right.stage3_verifier.kind
         and left.stage2_operator.kind == right.stage2_operator.kind
         and left.exact_stage_kind == right.exact_stage_kind
         and left.reranker_kind == right.reranker_kind

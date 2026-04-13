@@ -19,21 +19,67 @@ from .faithfulness import (
     FaithfulnessPolicy,
     exact_stage1_required_faithfulness_policy,
 )
+from .reference_scoring_semantics import (
+    ReferenceScoringSemantics,
+    exact_late_interaction_reference_scoring_semantics,
+)
 from .stage2_operator import (
     Stage2Operator,
     clause_text_stage2_operator,
+    reference_scoring_semantics_for_stage2_operator_kind,
+    stage2_operator_for_components,
+    stage2_reference_operator_for_stage2_operator_kind,
+    stage3_verifier_for_stage2_operator_kind,
     exact_late_interaction_stage2_operator,
     noop_topk_stage2_operator,
+)
+from .stage2_reference_operator import Stage2ReferenceOperator
+from .stage3_verifier_operator import (
+    Stage3VerifierOperator,
+    none_stage3_verifier_operator,
 )
 
 
 struct SearchPlan(Copyable):
     var candidate_generator: CandidateGenerator
     var candidate_budget: CandidateBudget
+    var reference_scoring_semantics: ReferenceScoringSemantics
+    var stage2_reference_operator: Stage2ReferenceOperator
+    var stage3_verifier: Stage3VerifierOperator
     var stage2_operator: Stage2Operator
     var exact_stage_kind: String
     var reranker_kind: String
     var faithfulness_policy: FaithfulnessPolicy
+
+    def __init__(
+        out self,
+        candidate_generator: CandidateGenerator,
+        candidate_budget: CandidateBudget,
+        faithfulness_policy: FaithfulnessPolicy,
+        reference_scoring_semantics: ReferenceScoringSemantics,
+        stage2_reference_operator: Stage2ReferenceOperator,
+        stage3_verifier: Stage3VerifierOperator,
+    ) raises:
+        if (
+            faithfulness_policy.kind == "exact_stage1_required"
+            and not candidate_generator.is_exact
+        ):
+            raise Error(
+                "exact_stage1_required faithfulness policy is incompatible with non-exact candidate generation"
+            )
+
+        self.candidate_generator = candidate_generator.copy()
+        self.candidate_budget = candidate_budget.copy()
+        self.reference_scoring_semantics = reference_scoring_semantics.copy()
+        self.stage2_reference_operator = stage2_reference_operator.copy()
+        self.stage3_verifier = stage3_verifier.copy()
+        self.stage2_operator = stage2_operator_for_components(
+            self.stage2_reference_operator,
+            self.stage3_verifier,
+        )
+        self.exact_stage_kind = self.reference_scoring_semantics.kind.copy()
+        self.reranker_kind = self.stage3_verifier.kind.copy()
+        self.faithfulness_policy = faithfulness_policy.copy()
 
     def __init__(
         out self,
@@ -52,13 +98,22 @@ struct SearchPlan(Copyable):
 
         self.candidate_generator = candidate_generator.copy()
         self.candidate_budget = candidate_budget.copy()
+        self.reference_scoring_semantics = (
+            reference_scoring_semantics_for_stage2_operator_kind(
+                stage2_operator.kind
+            )
+        )
+        self.stage2_reference_operator = (
+            stage2_reference_operator_for_stage2_operator_kind(
+                stage2_operator.kind
+            )
+        )
+        self.stage3_verifier = stage3_verifier_for_stage2_operator_kind(
+            stage2_operator.kind
+        )
         self.stage2_operator = stage2_operator.copy()
-        self.exact_stage_kind = (
-            self.stage2_operator.compatibility_exact_stage_kind.copy()
-        )
-        self.reranker_kind = (
-            self.stage2_operator.compatibility_reranker_kind.copy()
-        )
+        self.exact_stage_kind = self.reference_scoring_semantics.kind.copy()
+        self.reranker_kind = self.stage3_verifier.kind.copy()
         self.faithfulness_policy = faithfulness_policy.copy()
 
 

@@ -9,12 +9,27 @@ from .candidate_generator import (
     exact_full_scan_candidate_generator,
 )
 from .candidate_stage import CandidateStageResult
+from .reference_scoring_semantics import (
+    ReferenceScoringSemantics,
+    exact_late_interaction_reference_scoring_semantics,
+)
 from .stage2_operator import (
     Stage2Operator,
     clause_text_stage2_operator,
     exact_late_interaction_clause_text_stage2_operator,
     exact_late_interaction_stage2_operator,
     noop_topk_stage2_operator,
+    stage2_operator_for_components,
+)
+from .stage2_reference_operator import (
+    Stage2ReferenceOperator,
+    exact_late_interaction_stage2_reference_operator,
+    noop_topk_stage2_reference_operator,
+)
+from .stage3_verifier_operator import (
+    Stage3VerifierOperator,
+    clause_text_stage3_verifier_operator,
+    none_stage3_verifier_operator,
 )
 from .dtypes import FLAT_DIM128_VECTOR_DIM
 from .late_query_batch import LateQueryBatch

@@ -39,6 +39,16 @@ from .graph_search_counters import (
 )
 from .stage1_capabilities import (
     Stage1Capabilities,
+    STAGE1_ALIGNMENT_GRANULARITY_CENTROID,
+    STAGE1_ALIGNMENT_GRANULARITY_DOCUMENT,
+    STAGE1_ALIGNMENT_GRANULARITY_DOCUMENT_TOKENS,
+    STAGE1_ALIGNMENT_GRANULARITY_GRAPH_NODE,
+    STAGE1_INTERACTION_SEMANTICS_APPROXIMATE_LATE_INTERACTION,
+    STAGE1_INTERACTION_SEMANTICS_EXACT_LATE_INTERACTION,
+    STAGE1_INTERACTION_SEMANTICS_NONE,
+    STAGE1_SCORE_KIND_APPROXIMATE_INTERACTION_SCORE,
+    STAGE1_SCORE_KIND_EXACT_SCORE,
+    STAGE1_SCORE_KIND_PROXY_SCORE,
     stage1_capabilities_for_candidate_generator_kind,
     stage1_generator_supports_match_all_filter,
     stage1_generator_supports_structured_filter,
@@ -50,6 +60,13 @@ from .stage1_capabilities import (
 from .clause_text_stage import clause_text_rerank_candidates_for_plan
 from .exact_late_interaction_clause_text_stage import (
     exact_late_interaction_clause_text_rerank_candidates_for_plan,
+)
+from .reference_scoring_semantics import (
+    REFERENCE_SCORING_REQUIRED_ARTIFACT_LATE_INTERACTION,
+    REFERENCE_SCORING_SCORE_KIND_EXACT,
+    REFERENCE_SCORING_SEMANTICS_FAMILY_LATE_INTERACTION,
+    ReferenceScoringSemantics,
+    exact_late_interaction_reference_scoring_semantics,
 )
 from .centroid_primitives import (
     ScoredCentroidSelection,
@@ -64,6 +81,7 @@ from .execution import (
     search_collection_for_plan,
 )
 from .execution_stage2 import stage2_result_for_plan
+from .execution_stage3 import stage3_result_for_plan
 from .explain import CollectionSearchExplain, explain_collection_search
 from .faithfulness import (
     FaithfulnessAssessment,
@@ -86,6 +104,23 @@ from .stage2_operator import (
     exact_late_interaction_clause_text_stage2_operator,
     exact_late_interaction_stage2_operator,
     noop_topk_stage2_operator,
+    stage2_operator_for_components,
+)
+from .stage2_reference_operator import (
+    STAGE2_REFERENCE_OPERATOR_FAMILY_IDENTITY,
+    STAGE2_REFERENCE_OPERATOR_FAMILY_LATE_INTERACTION,
+    STAGE2_REFERENCE_REQUIRED_ARTIFACT_LATE_INTERACTION,
+    Stage2ReferenceOperator,
+    exact_late_interaction_stage2_reference_operator,
+    noop_topk_stage2_reference_operator,
+)
+from .stage3_verifier_operator import (
+    STAGE3_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
+    STAGE3_VERIFIER_FAMILY_IDENTITY,
+    STAGE3_VERIFIER_FAMILY_TEXT,
+    Stage3VerifierOperator,
+    clause_text_stage3_verifier_operator,
+    none_stage3_verifier_operator,
 )
 from .stage_artifact_materialization import StageArtifactMaterialization
 from .stage2_result import Stage2Result
