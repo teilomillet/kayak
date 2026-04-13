@@ -190,6 +190,8 @@ Why this layout is plausible:
 - it allows collection-scoped build policy to choose which search-native
   sidecars each newly sealed segment should materialize, instead of treating
   today's sidecar pair as a permanent storage law
+- it also allows config-rich families such as `centroid_heads` or `gem_graph`
+  to carry their own build knobs behind the same registry seam
 
 ## Required Invariants
 
@@ -209,6 +211,9 @@ These are the core storage invariants that should hold across the service.
 8. Collection manifests may carry a default search-artifact build policy, and
    each sealed segment should record only the artifacts that were actually
    materialized for that segment.
+9. Family-specific build knobs should travel inside the artifact policy entry
+   for that family, not as ad hoc top-level fields on the segment or collection
+   manifest.
 
 ## What This Step Does Not Decide Yet
 

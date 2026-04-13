@@ -5,6 +5,7 @@ from kayak.collections import (
     CollectionManifest,
     CollectionStats,
     CompactionPlan,
+    gem_graph_build_spec,
     NamespaceId,
     SearchArtifactBuildPolicy,
     SearchArtifactBuildSpec,
@@ -120,7 +121,7 @@ def test_collection_ids_reject_empty_strings() raises:
     assert_equal(raised, True)
 
 
-def test_collection_manifest_rejects_unsupported_stage1_build_family() raises:
+def test_collection_manifest_rejects_invalid_stage1_build_config() raises:
     var raised = False
 
     try:
@@ -140,6 +141,26 @@ def test_collection_manifest_rejects_unsupported_stage1_build_family() raises:
         raised = True
 
     assert_equal(raised, True)
+
+
+def test_collection_manifest_accepts_configured_gem_graph_build_spec() raises:
+    var collection = CollectionManifest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        128,
+        0,
+        SearchArtifactBuildPolicy(
+            [gem_graph_build_spec(2, 3, 1, "gem_graph", 4, 5)]
+        ),
+    )
+
+    assert_equal(
+        collection.search_artifact_build_policy.stage1_artifacts[0].family,
+        "gem_graph",
+    )
 
 
 def main() raises:

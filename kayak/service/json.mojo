@@ -156,7 +156,23 @@ def append_json_search_artifact_build_policy(
         buffer += "\"family\":\""
         buffer += json_escape(policy.stage1_artifacts[index].family) + "\","
         buffer += "\"root\":\""
-        buffer += json_escape(policy.stage1_artifacts[index].root) + "\""
+        buffer += json_escape(policy.stage1_artifacts[index].root) + "\","
+        buffer += "\"config\":["
+        for config_index in range(len(policy.stage1_artifacts[index].config)):
+            if config_index > 0:
+                buffer += ","
+
+            buffer += "{"
+            buffer += "\"key\":\""
+            buffer += json_escape(
+                policy.stage1_artifacts[index].config[config_index].key
+            ) + "\","
+            buffer += "\"value\":\""
+            buffer += json_escape(
+                policy.stage1_artifacts[index].config[config_index].value
+            ) + "\""
+            buffer += "}"
+        buffer += "]"
         buffer += "}"
 
     buffer += "]"

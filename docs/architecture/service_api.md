@@ -233,6 +233,9 @@ Verified behavior:
 - collection manifests persist `default_keep_latest_inactive_count`
 - collection manifests also persist a collection-scoped
   `search_artifact_build_policy` for default stage-1 sidecar construction
+- each build spec may now carry a generic per-family `config` payload; the
+  service contract persists that payload without promoting any single family's
+  schema into the collection core
 - the stored default is collection-scoped, not snapshot-scoped
 - lifecycle-report and reclaim-plan requests can optionally carry an ephemeral
   `SnapshotRetentionPolicy` override
@@ -250,6 +253,8 @@ This choice is intentional:
 - default stage-1 sidecar selection belongs there too, because sealed segments
   should inherit stable build intent from the collection rather than from
   whatever the current seal helper happens to hard-code
+- richer family-specific knobs should remain payloads behind that registry
+  boundary, not become new top-level collection fields
 - pinned-snapshot overrides remain request-scoped until there is a stronger
   reason to persist them
 - plan-then-execute remains the sound default because it keeps deletion

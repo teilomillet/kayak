@@ -67,8 +67,8 @@ That combination implies a clear next move:
   but snapshot-scoped retention metadata and background retention automation do
   not exist yet
 - collection manifests now carry an explicit search-artifact build policy for
-  new sealed segments, but richer family-specific build configuration is still
-  intentionally out of the mainline core
+  new sealed segments, and richer family-specific build configuration now lives
+  behind per-family config payloads instead of new collection fields
 - hosted execution supports exact metadata filtering, but candidate-pushdown and
   approximate filter-aware stage-1 generation still do not exist
 - service metrics now expose operational counters, but those counters do not

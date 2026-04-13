@@ -6,6 +6,10 @@ from kayak import (
     CollectionId,
     CollectionManifest,
     EncodedDocument,
+    centroid_heads_build_spec,
+    gem_graph_build_spec,
+    load_stored_centroid_heads_index,
+    load_stored_gem_graph_index,
     NamespaceId,
     SearchArtifactBuildPolicy,
     SearchArtifactBuildSpec,
@@ -98,12 +102,79 @@ def test_seal_single_segment_uses_configured_stage1_sidecar_roots() raises:
         ).exists(),
         True,
     )
+
+
+def test_seal_single_segment_builds_configured_centroid_heads_sidecar() raises:
+    var collection_root = Path("/tmp/kayak-segment-builder-centroid-heads-policy")
+    var collection = CollectionManifest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        2,
+        0,
+        SearchArtifactBuildPolicy(
+            [centroid_heads_build_spec(1, "heads_sidecar", 1)]
+        ),
+    )
+
+    var sealed = seal_single_segment(
+        collection_root,
+        collection,
+        SegmentId("segment-0001"),
+        1,
+        make_documents(),
+        ["alpha", "beta"],
+    )
+    var stored = load_stored_centroid_heads_index(
+        collection_root / "segments" / "segment-0001" / "heads_sidecar"
+    )
+
+    assert_equal(len(sealed.search_artifacts), 1)
+    assert_equal(sealed.search_artifacts[0].family, "centroid_heads")
+    assert_equal(stored.centroid_budget, 1)
+    assert_equal(stored.posting_cap, 1)
+
+
+def test_seal_single_segment_builds_configured_gem_graph_sidecar() raises:
+    var collection_root = Path("/tmp/kayak-segment-builder-gem-graph-policy")
+    var collection = CollectionManifest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        2,
+        0,
+        SearchArtifactBuildPolicy(
+            [gem_graph_build_spec(1, 1, 1, "gem_sidecar", 1, 1)]
+        ),
+    )
+
+    var sealed = seal_single_segment(
+        collection_root,
+        collection,
+        SegmentId("segment-0001"),
+        1,
+        make_documents(),
+        ["alpha", "beta"],
+    )
+    var stored = load_stored_gem_graph_index(
+        collection_root / "segments" / "segment-0001" / "gem_sidecar"
+    )
+
+    assert_equal(len(sealed.search_artifacts), 1)
+    assert_equal(sealed.search_artifacts[0].family, "gem_graph")
+    assert_equal(stored.cluster_cutoff, 1)
+    assert_equal(stored.construction_neighbor_count, 1)
+    assert_equal(stored.degree_limit, 1)
     assert_equal(
         (
             collection_root
             / "segments"
             / "segment-0001"
-            / "postings_sidecar"
+            / "gem_sidecar"
             / "manifest.tsv"
         ).exists(),
         True,

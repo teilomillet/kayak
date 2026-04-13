@@ -24,7 +24,7 @@ from kayak import (
     ScoreScalar,
     SearchRequest,
     SearchArtifactBuildPolicy,
-    SearchArtifactBuildSpec,
+    document_proxy_build_spec,
     SearchResponse,
     ScoreHistogram,
     SearchStageProfile,
@@ -177,7 +177,7 @@ def test_create_collection_request_materializes_manifest() raises:
         VECTOR_SCALAR_NAME,
         128,
         SearchArtifactBuildPolicy(
-            [SearchArtifactBuildSpec("document_proxy", "proxy_sidecar")]
+            [document_proxy_build_spec("proxy_sidecar", 2)]
         ),
     )
     var manifest = request.to_manifest()
@@ -216,7 +216,7 @@ def test_lifecycle_and_reclaim_contracts_keep_policy_explicit() raises:
         "snapshot-0003",
         1,
         SearchArtifactBuildPolicy(
-            [SearchArtifactBuildSpec("document_proxy", "document_proxy")]
+            [document_proxy_build_spec("document_proxy", 2)]
         ),
         0,
         [SnapshotId("snapshot-0001")],
@@ -273,6 +273,12 @@ def test_lifecycle_and_reclaim_contracts_keep_policy_explicit() raises:
     assert_equal(
         lifecycle_response.search_artifact_build_policy.stage1_artifacts[0].family,
         "document_proxy",
+    )
+    assert_equal(
+        lifecycle_response.search_artifact_build_policy.stage1_artifacts[0]
+            .config[0]
+            .key,
+        "document_vector_budget",
     )
     assert_equal(lifecycle_response.effective_keep_latest_inactive_count, 0)
     assert_equal(

@@ -1,11 +1,13 @@
 # Collection-level manifest for hosted late-interaction data.
 
 from .ids import CollectionId, NamespaceId, TenantId
+from .search_artifact_builders import (
+    require_search_artifact_build_policy_supported_for_segment_sealing,
+)
 from .search_artifact_policy import (
     SearchArtifactBuildPolicy,
     default_search_artifact_build_policy,
     require_search_artifact_build_policy_layout_safe,
-    require_search_artifact_build_policy_supported_for_segment_sealing,
 )
 from .validation import require_non_empty_string, require_non_negative_int, require_positive_int
 

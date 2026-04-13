@@ -7,10 +7,10 @@ from kayak.collections import (
     CollectionStats,
     DocumentMetadataEntry,
     DocumentMetadataMap,
+    gem_graph_build_spec,
     NamespaceId,
     SearchArtifactManifest,
     SearchArtifactBuildPolicy,
-    SearchArtifactBuildSpec,
     SegmentId,
     SegmentStats,
     SealedSegmentManifest,
@@ -50,8 +50,7 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
     var segment_id = SegmentId("segment-0001")
     var build_policy = SearchArtifactBuildPolicy(
         [
-            SearchArtifactBuildSpec("document_proxy", "proxy_sidecar"),
-            SearchArtifactBuildSpec("centroid_postings", "postings_sidecar"),
+            gem_graph_build_spec(2, 3, 1, "gem_sidecar", 4, 5),
         ]
     )
 
@@ -125,6 +124,18 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
             build_policy,
         ),
         True,
+    )
+    assert_equal(
+        loaded_collection.search_artifact_build_policy.stage1_artifacts[0]
+            .config[0]
+            .key,
+        "fine_cluster_count",
+    )
+    assert_equal(
+        loaded_collection.search_artifact_build_policy.stage1_artifacts[0]
+            .config[0]
+            .value,
+        "2",
     )
     assert_equal(loaded_segment.packed_index_root, "packed_index")
     assert_equal(loaded_segment.text_corpus_root, "text_corpus")

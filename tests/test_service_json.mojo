@@ -17,6 +17,8 @@ from kayak import (
     ExecuteReclaimRequest,
     ExecuteReclaimResponse,
     ExplainResponse,
+    document_proxy_build_spec,
+    gem_graph_build_spec,
     FaithfulnessAssessment,
     GraphSearchCounters,
     NamespaceId,
@@ -24,7 +26,6 @@ from kayak import (
     ScoreScalar,
     SearchResponse,
     SearchArtifactBuildPolicy,
-    SearchArtifactBuildSpec,
     SearchStageProfile,
     SegmentId,
     service_metrics_snapshot_json,
@@ -183,6 +184,9 @@ def test_create_collection_request_json_is_machine_readable() raises:
             "colbertv2",
             VECTOR_SCALAR_NAME,
             128,
+            SearchArtifactBuildPolicy(
+                [document_proxy_build_spec("proxy_sidecar", 2)]
+            ),
         )
     )
 
@@ -198,6 +202,14 @@ def test_create_collection_request_json_is_machine_readable() raises:
     )
     assert_equal(
         json.find("\"family\":\"document_proxy\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"key\":\"document_vector_budget\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"value\":\"2\"") != -1,
         True,
     )
 
@@ -224,10 +236,8 @@ def test_lifecycle_and_reclaim_json_are_machine_readable() raises:
             1,
             SearchArtifactBuildPolicy(
                 [
-                    SearchArtifactBuildSpec("document_proxy", "document_proxy"),
-                    SearchArtifactBuildSpec(
-                        "centroid_postings", "centroid_postings"
-                    ),
+                    document_proxy_build_spec("document_proxy", 2),
+                    gem_graph_build_spec(2, 3, 1, "gem_graph", 4, 5),
                 ]
             ),
             0,
@@ -277,6 +287,14 @@ def test_lifecycle_and_reclaim_json_are_machine_readable() raises:
     )
     assert_equal(
         lifecycle_response_json.find("\"search_artifact_build_policy\":[") != -1,
+        True,
+    )
+    assert_equal(
+        lifecycle_response_json.find("\"key\":\"fine_cluster_count\"") != -1,
+        True,
+    )
+    assert_equal(
+        lifecycle_response_json.find("\"value\":\"5\"") != -1,
         True,
     )
     assert_equal(

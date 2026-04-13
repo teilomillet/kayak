@@ -16,6 +16,7 @@ from .manifest_util import load_optional_manifest_value
 from .paths import collection_manifest_path
 from .search_artifact_policy import (
     SearchArtifactBuildPolicy,
+    SearchArtifactBuildConfigEntry,
     SearchArtifactBuildSpec,
     default_search_artifact_build_policy,
 )
@@ -68,6 +69,34 @@ def save_collection_manifest(root: Path, read manifest: CollectionManifest) rais
                 spec.root,
             )
         )
+        entries.append(
+            ManifestEntry(
+                "search_artifact_build_" + String(index) + "_config_count",
+                String(len(spec.config)),
+            )
+        )
+        for config_index in range(len(spec.config)):
+            var entry = spec.config[config_index].copy()
+            entries.append(
+                ManifestEntry(
+                    "search_artifact_build_"
+                        + String(index)
+                        + "_config_"
+                        + String(config_index)
+                        + "_key",
+                    entry.key,
+                )
+            )
+            entries.append(
+                ManifestEntry(
+                    "search_artifact_build_"
+                        + String(index)
+                        + "_config_"
+                        + String(config_index)
+                        + "_value",
+                    entry.value,
+                )
+            )
     if manifest.active_snapshot_id.byte_length() != 0:
         entries.append(
             ManifestEntry("active_snapshot_id", manifest.active_snapshot_id)
@@ -96,6 +125,38 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
         for index in range(
             parse_int(search_artifact_build_count, "search_artifact_build_count")
         ):
+            var config_entries = List[SearchArtifactBuildConfigEntry]()
+            var config_count = load_optional_manifest_value(
+                entries,
+                "search_artifact_build_" + String(index) + "_config_count",
+            )
+            if config_count.byte_length() != 0:
+                for config_index in range(
+                    parse_int(
+                        config_count,
+                        "search_artifact_build_" + String(index) + "_config_count",
+                    )
+                ):
+                    config_entries.append(
+                        SearchArtifactBuildConfigEntry(
+                            require_manifest_value(
+                                entries,
+                                "search_artifact_build_"
+                                    + String(index)
+                                    + "_config_"
+                                    + String(config_index)
+                                    + "_key",
+                            ),
+                            require_manifest_value(
+                                entries,
+                                "search_artifact_build_"
+                                    + String(index)
+                                    + "_config_"
+                                    + String(config_index)
+                                    + "_value",
+                            ),
+                        )
+                    )
             build_specs.append(
                 SearchArtifactBuildSpec(
                     require_manifest_value(
@@ -106,6 +167,7 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
                         entries,
                         "search_artifact_build_" + String(index) + "_root",
                     ),
+                    config_entries,
                 )
             )
         search_artifact_build_policy = SearchArtifactBuildPolicy(build_specs)
