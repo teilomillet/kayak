@@ -17,13 +17,13 @@ from .collection_store import (
 from .document_metadata_store import save_stored_document_metadata_corpus
 from .paths import collection_segment_root, collection_snapshot_root
 from .resolved_snapshot import (
+    LoadedSearchArtifact,
     LoadedSealedSegment,
     ResolvedCollectionSnapshot,
-    loaded_segment_has_search_artifact,
-    loaded_segment_stored_document_metadata,
-    loaded_segment_stored_centroid_postings_index,
-    loaded_segment_stored_document_proxy_index,
-    loaded_segment_stored_gem_graph_index,
+    loaded_search_artifact_stored_centroid_postings_index,
+    loaded_search_artifact_stored_document_metadata,
+    loaded_search_artifact_stored_document_proxy_index,
+    loaded_search_artifact_stored_gem_graph_index,
 )
 from .resolver import load_resolved_collection_snapshot
 from .search_artifact import (
@@ -35,7 +35,7 @@ from .search_artifact import (
     same_search_artifacts,
 )
 from .search_artifact_policy import same_search_artifact_build_policy
-from .segment import SealedSegmentManifest, sealed_segment_search_artifact_root
+from .segment import SealedSegmentManifest
 from .segment_store import (
     load_sealed_segment_manifest,
     save_sealed_segment_manifest,
@@ -284,66 +284,58 @@ def write_loaded_segment_into_collection_root(
         segment.stored_index,
     )
 
-    if loaded_segment_has_search_artifact(
-        segment, SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS
-    ):
-        save_stored_centroid_posting_index(
-            segment_root
-                / sealed_segment_search_artifact_root(
-                    segment.manifest, SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS
-                ),
-            loaded_segment_stored_centroid_postings_index(
-                segment, SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS
-            ),
-        )
-    if loaded_segment_has_search_artifact(
-        segment, SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS
-    ):
-        save_stored_centroid_heads_index(
-            segment_root
-                / sealed_segment_search_artifact_root(
-                    segment.manifest, SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS
-                ),
-            loaded_segment_stored_centroid_postings_index(
-                segment, SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS
-            ),
-        )
-
-    if loaded_segment_has_search_artifact(
-        segment, SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY
-    ):
-        save_stored_document_proxy_index(
-            segment_root
-                / sealed_segment_search_artifact_root(
-                    segment.manifest, SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY
-                ),
-            loaded_segment_stored_document_proxy_index(segment),
-        )
-    if loaded_segment_has_search_artifact(segment, SEARCH_ARTIFACT_FAMILY_GEM_GRAPH):
-        save_stored_gem_graph_index(
-            segment_root
-                / sealed_segment_search_artifact_root(
-                    segment.manifest, SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
-                ),
-            loaded_segment_stored_gem_graph_index(segment),
-        )
-
-    if loaded_segment_has_search_artifact(
-        segment, SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA
-    ):
-        save_stored_document_metadata_corpus(
-            segment_root
-                / sealed_segment_search_artifact_root(
-                    segment.manifest, SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA
-                ),
-            loaded_segment_stored_document_metadata(segment),
-        )
+    for artifact in segment.search_artifacts:
+        write_loaded_search_artifact(segment_root, artifact)
 
     if segment.has_text_corpus:
         save_stored_document_text_corpus(
             segment_root / segment.manifest.text_corpus_root,
             segment.stored_text_corpus,
         )
+
+
+def write_loaded_search_artifact(
+    segment_root: Path, read artifact: LoadedSearchArtifact
+) raises:
+    if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS:
+        save_stored_centroid_posting_index(
+            segment_root / artifact.manifest.root,
+            loaded_search_artifact_stored_centroid_postings_index(artifact),
+        )
+        return
+
+    if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS:
+        save_stored_centroid_heads_index(
+            segment_root / artifact.manifest.root,
+            loaded_search_artifact_stored_centroid_postings_index(artifact),
+        )
+        return
+
+    if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY:
+        save_stored_document_proxy_index(
+            segment_root / artifact.manifest.root,
+            loaded_search_artifact_stored_document_proxy_index(artifact),
+        )
+        return
+
+    if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_GEM_GRAPH:
+        save_stored_gem_graph_index(
+            segment_root / artifact.manifest.root,
+            loaded_search_artifact_stored_gem_graph_index(artifact),
+        )
+        return
+
+    if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA:
+        save_stored_document_metadata_corpus(
+            segment_root / artifact.manifest.root,
+            loaded_search_artifact_stored_document_metadata(artifact),
+        )
+        return
+
+    raise Error(
+        "unsupported loaded search artifact family while writing segment: "
+        + artifact.manifest.family
+    )
 
 
 def export_snapshot_bundle(

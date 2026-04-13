@@ -52,6 +52,20 @@ struct LoadedSearchArtifact(Copyable):
         self.stored_gem_graph_index = stored_gem_graph_index.copy()
 
 
+def loaded_search_artifact_family(read artifact: LoadedSearchArtifact) -> String:
+    return artifact.manifest.family.copy()
+
+
+def loaded_search_artifact_root(read artifact: LoadedSearchArtifact) -> String:
+    return artifact.manifest.root.copy()
+
+
+def loaded_search_artifact_has_family(
+    read artifact: LoadedSearchArtifact, family: String
+) -> Bool:
+    return artifact.manifest.family == family
+
+
 def loaded_search_artifact_is_centroid_family(
     read artifact: LoadedSearchArtifact
 ) -> Bool:
@@ -77,6 +91,54 @@ def loaded_search_artifact_is_gem_graph(read artifact: LoadedSearchArtifact) -> 
     return artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
 
 
+def loaded_search_artifact_stored_centroid_postings_index(
+    read artifact: LoadedSearchArtifact
+) raises -> StoredCentroidPostingIndex:
+    if not loaded_search_artifact_is_centroid_family(artifact):
+        raise Error(
+            "loaded search artifact family is not a centroid artifact: "
+            + artifact.manifest.family
+        )
+
+    return artifact.stored_centroid_postings_index.copy()
+
+
+def loaded_search_artifact_stored_document_proxy_index(
+    read artifact: LoadedSearchArtifact
+) raises -> StoredDocumentProxyIndex:
+    if not loaded_search_artifact_is_document_proxy(artifact):
+        raise Error(
+            "loaded search artifact family is not a document proxy artifact: "
+            + artifact.manifest.family
+        )
+
+    return artifact.stored_document_proxy_index.copy()
+
+
+def loaded_search_artifact_stored_document_metadata(
+    read artifact: LoadedSearchArtifact
+) raises -> StoredDocumentMetadataCorpus:
+    if not loaded_search_artifact_is_document_metadata(artifact):
+        raise Error(
+            "loaded search artifact family is not a document metadata artifact: "
+            + artifact.manifest.family
+        )
+
+    return artifact.stored_document_metadata_corpus.copy()
+
+
+def loaded_search_artifact_stored_gem_graph_index(
+    read artifact: LoadedSearchArtifact
+) raises -> StoredGemGraphIndex:
+    if not loaded_search_artifact_is_gem_graph(artifact):
+        raise Error(
+            "loaded search artifact family is not a gem graph artifact: "
+            + artifact.manifest.family
+        )
+
+    return artifact.stored_gem_graph_index.copy()
+
+
 struct LoadedSealedSegment(Copyable):
     var manifest: SealedSegmentManifest
     var stored_index: StoredPackedIndex
@@ -99,11 +161,30 @@ struct LoadedSealedSegment(Copyable):
         self.stored_text_corpus = stored_text_corpus.copy()
 
 
+def loaded_segment_search_artifact(
+    read segment: LoadedSealedSegment, family: String
+) raises -> LoadedSearchArtifact:
+    for artifact in segment.search_artifacts:
+        if loaded_search_artifact_has_family(artifact, family):
+            return artifact.copy()
+
+    raise Error("loaded segment is missing search artifact family: " + family)
+
+
+def loaded_segment_search_artifact_families(
+    read segment: LoadedSealedSegment
+) -> List[String]:
+    var families = List[String]()
+    for artifact in segment.search_artifacts:
+        families.append(loaded_search_artifact_family(artifact))
+    return families^
+
+
 def loaded_segment_has_search_artifact(
     read segment: LoadedSealedSegment, family: String
 ) -> Bool:
     for artifact in segment.search_artifacts:
-        if artifact.manifest.family == family:
+        if loaded_search_artifact_has_family(artifact, family):
             return True
 
     return False
@@ -151,49 +232,30 @@ def loaded_segment_stored_centroid_postings_index(
     read segment: LoadedSealedSegment,
     family: String = SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
 ) raises -> StoredCentroidPostingIndex:
-    for artifact in segment.search_artifacts:
-        if artifact.manifest.family == family:
-            if not loaded_search_artifact_is_centroid_family(artifact):
-                raise Error(
-                    "loaded search artifact family is not a centroid artifact: "
-                    + family
-                )
-            return artifact.stored_centroid_postings_index.copy()
-
-    raise Error("loaded segment is missing search artifact family: " + family)
+    return loaded_search_artifact_stored_centroid_postings_index(
+        loaded_segment_search_artifact(segment, family)
+    )
 
 
 def loaded_segment_stored_document_proxy_index(
     read segment: LoadedSealedSegment
 ) raises -> StoredDocumentProxyIndex:
-    for artifact in segment.search_artifacts:
-        if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY:
-            if not loaded_search_artifact_is_document_proxy(artifact):
-                raise Error(
-                    "loaded search artifact family is not a document proxy artifact"
-                )
-            return artifact.stored_document_proxy_index.copy()
-
-    raise Error(
-        "loaded segment is missing search artifact family: "
-        + SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY
+    return loaded_search_artifact_stored_document_proxy_index(
+        loaded_segment_search_artifact(
+            segment,
+            SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
+        )
     )
 
 
 def loaded_segment_stored_document_metadata(
     read segment: LoadedSealedSegment
 ) raises -> StoredDocumentMetadataCorpus:
-    for artifact in segment.search_artifacts:
-        if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA:
-            if not loaded_search_artifact_is_document_metadata(artifact):
-                raise Error(
-                    "loaded search artifact family is not a document metadata artifact"
-                )
-            return artifact.stored_document_metadata_corpus.copy()
-
-    raise Error(
-        "loaded segment is missing search artifact family: "
-        + SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA
+    return loaded_search_artifact_stored_document_metadata(
+        loaded_segment_search_artifact(
+            segment,
+            SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
+        )
     )
 
 
@@ -217,17 +279,11 @@ def loaded_segment_document_metadata_for_doc_index(
 def loaded_segment_stored_gem_graph_index(
     read segment: LoadedSealedSegment
 ) raises -> StoredGemGraphIndex:
-    for artifact in segment.search_artifacts:
-        if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_GEM_GRAPH:
-            if not loaded_search_artifact_is_gem_graph(artifact):
-                raise Error(
-                    "loaded search artifact family is not a gem graph artifact"
-                )
-            return artifact.stored_gem_graph_index.copy()
-
-    raise Error(
-        "loaded segment is missing search artifact family: "
-        + SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
+    return loaded_search_artifact_stored_gem_graph_index(
+        loaded_segment_search_artifact(
+            segment,
+            SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
+        )
     )
 
 

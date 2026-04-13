@@ -1,9 +1,11 @@
 from std.collections import List
 
 from kayak.collections import (
+    SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
     ResolvedCollectionSnapshot,
-    loaded_segment_has_gem_graph_index,
-    loaded_segment_stored_gem_graph_index,
+    loaded_search_artifact_stored_gem_graph_index,
+    loaded_segment_has_search_artifact,
+    loaded_segment_search_artifact,
 )
 from kayak.contracts import EncodedQuery
 from kayak.filters import FilterExpression, match_all_filter
@@ -311,12 +313,19 @@ def candidate_generation_for_graph_family[Backend: ExactScoringBackend](
     var max_frontier_size = 0
 
     for segment in snapshot.segments:
-        if not loaded_segment_has_gem_graph_index(segment):
+        if not loaded_segment_has_search_artifact(
+            segment, SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
+        ):
             raise Error(
                 "gem_graph stage-1 requires a gem graph sidecar for every segment"
             )
 
-        var stored_gem_graph = loaded_segment_stored_gem_graph_index(segment)
+        var stored_gem_graph = loaded_search_artifact_stored_gem_graph_index(
+            loaded_segment_search_artifact(
+                segment,
+                SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
+            )
+        )
         token_count += stored_gem_graph.index.total_token_count
         vector_count += (
             stored_gem_graph.index.total_token_count

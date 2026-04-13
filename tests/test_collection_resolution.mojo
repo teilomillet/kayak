@@ -21,11 +21,17 @@ from kayak.collections import (
     document_proxy_search_artifact,
     exact_only_snapshot_requirements,
     gem_graph_search_artifact,
+    loaded_search_artifact_family,
+    loaded_search_artifact_stored_document_metadata,
+    loaded_search_artifact_stored_document_proxy_index,
+    loaded_search_artifact_stored_gem_graph_index,
     loaded_segment_has_document_metadata,
     loaded_segment_stored_document_metadata,
     loaded_segment_has_document_proxy_index,
     loaded_segment_has_gem_graph_index,
     loaded_segment_has_search_artifact,
+    loaded_segment_search_artifact,
+    loaded_segment_search_artifact_families,
     loaded_segment_stored_gem_graph_index,
     load_collection_storage_report,
     load_resolved_collection_snapshot,
@@ -252,8 +258,20 @@ def test_resolved_snapshot_loads_document_metadata_sidecar() raises:
     )
 
     assert_equal(loaded_segment_has_document_metadata(resolved.segments[0]), True)
+    var metadata_artifact = loaded_segment_search_artifact(
+        resolved.segments[0],
+        "document_metadata",
+    )
+    assert_equal(loaded_search_artifact_family(metadata_artifact), "document_metadata")
     assert_equal(
         loaded_segment_stored_document_metadata(resolved.segments[0]).metadata_maps[0]
+            .entries[0]
+            .value,
+        "wire",
+    )
+    assert_equal(
+        loaded_search_artifact_stored_document_metadata(metadata_artifact)
+            .metadata_maps[0]
             .entries[0]
             .value,
         "wire",
@@ -418,11 +436,24 @@ def test_resolved_snapshot_loads_gem_graph_artifact_payload() raises:
     )
 
     assert_equal(loaded_segment_has_gem_graph_index(resolved.segments[0]), True)
+    assert_equal(
+        loaded_segment_search_artifact_families(resolved.segments[0])[0],
+        "gem_graph",
+    )
+    var gem_artifact = loaded_segment_search_artifact(
+        resolved.segments[0],
+        "gem_graph",
+    )
+    assert_equal(loaded_search_artifact_family(gem_artifact), "gem_graph")
     var stored_gem_graph = loaded_segment_stored_gem_graph_index(resolved.segments[0])
     assert_equal(stored_gem_graph.document_count, 1)
     assert_equal(stored_gem_graph.cluster_count, 1)
     assert_equal(stored_gem_graph.index.document_count, 1)
     assert_equal(stored_gem_graph.index.doc_ids[0], "doc-a")
+    assert_equal(
+        loaded_search_artifact_stored_gem_graph_index(gem_artifact).document_count,
+        1,
+    )
 
 
 def test_resolved_snapshot_can_skip_text_and_unrequested_sidecars() raises:
@@ -540,6 +571,20 @@ def test_resolved_snapshot_can_skip_text_and_unrequested_sidecars() raises:
     assert_equal(proxy_only.segments[0].has_text_corpus, False)
     assert_equal(loaded_segment_has_document_proxy_index(proxy_only.segments[0]), True)
     assert_equal(loaded_segment_has_gem_graph_index(proxy_only.segments[0]), False)
+    assert_equal(len(loaded_segment_search_artifact_families(proxy_only.segments[0])), 1)
+    assert_equal(
+        loaded_segment_search_artifact_families(proxy_only.segments[0])[0],
+        "document_proxy",
+    )
+    assert_equal(
+        loaded_search_artifact_stored_document_proxy_index(
+            loaded_segment_search_artifact(
+                proxy_only.segments[0],
+                "document_proxy",
+            )
+        ).index.document_count,
+        1,
+    )
 
 
 def main() raises:

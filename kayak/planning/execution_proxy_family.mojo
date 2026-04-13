@@ -1,9 +1,11 @@
 from std.collections import List
 
 from kayak.collections import (
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     ResolvedCollectionSnapshot,
-    loaded_segment_has_document_proxy_index,
-    loaded_segment_stored_document_proxy_index,
+    loaded_search_artifact_stored_document_proxy_index,
+    loaded_segment_has_search_artifact,
+    loaded_segment_search_artifact,
 )
 from kayak.contracts import EncodedQuery
 from kayak.filters import FilterExpression, match_all_filter
@@ -33,12 +35,19 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
     var byte_size = 0
 
     for segment in snapshot.segments:
-        if not loaded_segment_has_document_proxy_index(segment):
+        if not loaded_segment_has_search_artifact(
+            segment, SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY
+        ):
             raise Error(
                 "document_proxy stage-1 requires a document proxy sidecar for every segment"
             )
 
-        var stored_proxy = loaded_segment_stored_document_proxy_index(segment)
+        var stored_proxy = loaded_search_artifact_stored_document_proxy_index(
+            loaded_segment_search_artifact(
+                segment,
+                SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
+            )
+        )
         vector_count += (
             stored_proxy.index.document_count
             * stored_proxy.proxy_vector_count_per_document

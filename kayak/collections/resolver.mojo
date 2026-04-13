@@ -39,6 +39,7 @@ from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
+    SearchArtifactManifest,
 )
 from .segment import (
     SealedSegmentManifest,
@@ -311,6 +312,105 @@ def require_loaded_gem_graph_matches_segment(
         raise Error("gem graph vector_dim does not match segment manifest")
 
 
+def load_search_artifact_for_segment(
+    segment_root: Path,
+    read segment: SealedSegmentManifest,
+    read stored_index: StoredPackedIndex,
+    read search_artifact: SearchArtifactManifest,
+) raises -> LoadedSearchArtifact:
+    var stored_centroid_postings_index = empty_stored_centroid_posting_index(
+        segment.model_name,
+        segment.vector_scalar_name,
+        segment.vector_dim,
+    )
+    var stored_document_metadata_corpus = (
+        empty_stored_document_metadata_corpus(
+            segment.collection_id,
+            segment.segment_id,
+        )
+    )
+    var stored_document_proxy_index = empty_stored_document_proxy_index(
+        segment.model_name,
+        segment.vector_scalar_name,
+        segment.vector_dim,
+    )
+    var stored_gem_graph_index = empty_stored_gem_graph_index(
+        segment.model_name,
+        segment.vector_scalar_name,
+    )
+
+    if search_artifact.family == SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS:
+        stored_centroid_postings_index = load_stored_centroid_posting_index(
+            resolve_segment_artifact_root(
+                segment_root,
+                search_artifact.root,
+                "search_artifact root for " + search_artifact.family,
+            )
+        )
+        require_loaded_centroid_postings_matches_segment(
+            segment, stored_centroid_postings_index
+        )
+    elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS:
+        stored_centroid_postings_index = load_stored_centroid_heads_index(
+            resolve_segment_artifact_root(
+                segment_root,
+                search_artifact.root,
+                "search_artifact root for " + search_artifact.family,
+            )
+        )
+        require_loaded_centroid_heads_matches_segment(
+            segment, stored_centroid_postings_index
+        )
+    elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA:
+        stored_document_metadata_corpus = load_stored_document_metadata_corpus(
+            resolve_segment_artifact_root(
+                segment_root,
+                search_artifact.root,
+                "search_artifact root for " + search_artifact.family,
+            )
+        )
+        require_loaded_document_metadata_matches_segment(
+            segment,
+            stored_index,
+            stored_document_metadata_corpus,
+        )
+    elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY:
+        stored_document_proxy_index = load_stored_document_proxy_index(
+            resolve_segment_artifact_root(
+                segment_root,
+                search_artifact.root,
+                "search_artifact root for " + search_artifact.family,
+            )
+        )
+        require_loaded_document_proxy_matches_segment(
+            segment, stored_document_proxy_index
+        )
+    elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_GEM_GRAPH:
+        stored_gem_graph_index = load_stored_gem_graph_index(
+            resolve_segment_artifact_root(
+                segment_root,
+                search_artifact.root,
+                "search_artifact root for " + search_artifact.family,
+            )
+        )
+        require_loaded_gem_graph_matches_segment(
+            segment, stored_gem_graph_index
+        )
+    else:
+        raise Error(
+            "unsupported search artifact family while resolving snapshot: "
+            + search_artifact.family
+        )
+
+    return LoadedSearchArtifact(
+        search_artifact,
+        stored_centroid_postings_index,
+        stored_document_metadata_corpus,
+        stored_document_proxy_index,
+        stored_gem_graph_index,
+    )
+
+
 def aggregate_segment_stats(
     read segments: List[LoadedSealedSegment]
 ) raises -> CollectionStats:
@@ -396,99 +496,12 @@ def load_resolved_collection_snapshot(
             ):
                 continue
 
-            var stored_centroid_postings_index = empty_stored_centroid_posting_index(
-                segment.model_name,
-                segment.vector_scalar_name,
-                segment.vector_dim,
-            )
-            var stored_document_metadata_corpus = (
-                empty_stored_document_metadata_corpus(
-                    segment.collection_id,
-                    segment.segment_id,
-                )
-            )
-            var stored_document_proxy_index = empty_stored_document_proxy_index(
-                segment.model_name,
-                segment.vector_scalar_name,
-                segment.vector_dim,
-            )
-            var stored_gem_graph_index = empty_stored_gem_graph_index(
-                segment.model_name,
-                segment.vector_scalar_name,
-            )
-
-            if search_artifact.family == SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS:
-                stored_centroid_postings_index = load_stored_centroid_posting_index(
-                    resolve_segment_artifact_root(
-                        segment_root,
-                        search_artifact.root,
-                        "search_artifact root for " + search_artifact.family,
-                    )
-                )
-                require_loaded_centroid_postings_matches_segment(
-                    segment, stored_centroid_postings_index
-                )
-            elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS:
-                stored_centroid_postings_index = load_stored_centroid_heads_index(
-                    resolve_segment_artifact_root(
-                        segment_root,
-                        search_artifact.root,
-                        "search_artifact root for " + search_artifact.family,
-                    )
-                )
-                require_loaded_centroid_heads_matches_segment(
-                    segment, stored_centroid_postings_index
-                )
-            elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA:
-                stored_document_metadata_corpus = (
-                    load_stored_document_metadata_corpus(
-                        resolve_segment_artifact_root(
-                            segment_root,
-                            search_artifact.root,
-                            "search_artifact root for " + search_artifact.family,
-                        )
-                    )
-                )
-                require_loaded_document_metadata_matches_segment(
+            loaded_search_artifacts.append(
+                load_search_artifact_for_segment(
+                    segment_root,
                     segment,
                     stored_index,
-                    stored_document_metadata_corpus,
-                )
-            elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY:
-                stored_document_proxy_index = load_stored_document_proxy_index(
-                    resolve_segment_artifact_root(
-                        segment_root,
-                        search_artifact.root,
-                        "search_artifact root for " + search_artifact.family,
-                    )
-                )
-                require_loaded_document_proxy_matches_segment(
-                    segment, stored_document_proxy_index
-                )
-            elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_GEM_GRAPH:
-                stored_gem_graph_index = load_stored_gem_graph_index(
-                    resolve_segment_artifact_root(
-                        segment_root,
-                        search_artifact.root,
-                        "search_artifact root for " + search_artifact.family,
-                    )
-                )
-                require_loaded_gem_graph_matches_segment(
-                    segment, stored_gem_graph_index
-                )
-            else:
-                raise Error(
-                    "unsupported search artifact family while resolving snapshot: "
-                    + search_artifact.family
-                )
-
-            loaded_search_artifacts.append(
-                LoadedSearchArtifact(
                     search_artifact,
-                    stored_centroid_postings_index,
-                    stored_document_metadata_corpus,
-                    stored_document_proxy_index,
-                    stored_gem_graph_index,
                 )
             )
 

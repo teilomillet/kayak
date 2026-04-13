@@ -5,9 +5,9 @@ from kayak.collections import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
     ResolvedCollectionSnapshot,
-    loaded_segment_has_centroid_heads_index,
-    loaded_segment_has_centroid_postings_index,
-    loaded_segment_stored_centroid_postings_index,
+    loaded_search_artifact_stored_centroid_postings_index,
+    loaded_segment_has_search_artifact,
+    loaded_segment_search_artifact,
 )
 from kayak.contracts import EncodedQuery
 from kayak.filters import FilterExpression, match_all_filter
