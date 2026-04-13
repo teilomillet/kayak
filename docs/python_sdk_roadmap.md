@@ -234,6 +234,46 @@ Verified evidence:
 - [python/examples/search_plan.py](../python/examples/search_plan.py)
 - [docs/python_sdk.md](python_sdk.md)
 
+## Phase 6: Public Stage-2 Operators
+
+Status:
+- proposed next SDK-architecture step
+
+Goal:
+- align the public Python SDK with the engine's future stage-2 primitive
+  boundary instead of freezing around today's exact-only shortlist rerank path
+
+Reason:
+- the current repo now has explicit stage-1 families, but stage 2 is still
+  effectively hardcoded as exact late interaction in the Python plan path
+- the stronger ceiling and text-aware rerank work already exists in the engine
+  tree, but not behind one stable public operator model
+- if `kayak` is the canonical Python late-interaction SDK, users should
+  program against a stable refinement primitive rather than one specific
+  implementation detail
+
+Scope:
+- add an explicit Python `Stage2Operator`
+- make `search_with_plan(...)` carry that operator
+- keep exact late interaction as the default stage-2 operator
+- allow richer operators only when their artifact requirements are explicit
+- preserve the rule that backend choice stays explicit and non-magical
+
+Constraints:
+- no hidden promotion from exact stage 2 to text reranking
+- no generic callback API that hides required artifacts
+- no public API that forces the SDK to expose hosted-engine lifecycle concerns
+
+Exit criteria:
+- the Python search-plan API can express stage 2 without hardcoding
+  `"exact_late_interaction"` as the only public refinement mode
+- exact late interaction and at least one additional stage-2 operator share the
+  same public plan shape
+- tests verify that artifact requirements stay explicit in the public API
+
+Architecture note:
+- [docs/architecture/stage2_primitives.md](architecture/stage2_primitives.md)
+
 ## Deferred Until The Service Boundary Is Ready
 
 These are real possibilities, but they should stay out of the core SDK story
