@@ -136,6 +136,18 @@ def require_request_matches_collection(
         raise Error("request namespace_id does not match collection manifest")
 
 
+def require_query_matches_collection(
+    read collection: CollectionManifest,
+    query_model_name: String,
+    query_vector_dim: Int,
+) raises:
+    if query_model_name != collection.model_name:
+        raise Error("query_model_name does not match collection manifest")
+
+    if query_vector_dim != collection.vector_dim:
+        raise Error("query vector_dim does not match collection manifest")
+
+
 def load_collection_for_request(
     service_root: Path,
     collection_id: String,
@@ -488,6 +500,11 @@ def execute_search[Backend: ExactScoringBackend](
         request.namespace_id.value,
         collection_root,
     )
+    require_query_matches_collection(
+        collection,
+        request.query_model_name,
+        request.query.vector_dim,
+    )
     require_filter_supported_for_request(collection, request)
     var snapshot = load_resolved_collection_snapshot(
         collection_root,
@@ -525,6 +542,7 @@ def search_request_for_planned_request(
         request.namespace_id,
         request.snapshot_id,
         request.query,
+        request.query_model_name,
         request.query_text,
         request.filter_expression,
         effective_plan,
@@ -569,6 +587,11 @@ def select_search_plan_for_request(
         request.tenant_id.value,
         request.namespace_id.value,
         collection_root,
+    )
+    require_query_matches_collection(
+        collection,
+        request.query_model_name,
+        request.query.vector_dim,
     )
     var availability = load_snapshot_search_artifact_availability(
         collection_root,
@@ -648,6 +671,11 @@ def execute_explain[Backend: ExactScoringBackend](
         request.tenant_id.value,
         request.namespace_id.value,
         collection_root,
+    )
+    require_query_matches_collection(
+        collection,
+        request.query_model_name,
+        request.query.vector_dim,
     )
     require_filter_supported_for_request(collection, request)
     var snapshot = load_resolved_collection_snapshot(

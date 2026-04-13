@@ -633,6 +633,7 @@ def search_request_json(read request: SearchRequest) -> String:
     buffer += "\"tenant_id\":\"" + json_escape(request.tenant_id.value) + "\","
     buffer += "\"namespace_id\":\"" + json_escape(request.namespace_id.value) + "\","
     buffer += "\"snapshot_id\":\"" + json_escape(request.snapshot_id.value) + "\","
+    buffer += "\"query_model_name\":\"" + json_escape(request.query_model_name) + "\","
     buffer += "\"query\":"
     append_json_vector_list(buffer, request.query.token_vectors)
     buffer += ",\"query_text\":\""
@@ -658,6 +659,7 @@ def planned_search_request_json(read request: PlannedSearchRequest) -> String:
     buffer += "\"tenant_id\":\"" + json_escape(request.tenant_id.value) + "\","
     buffer += "\"namespace_id\":\"" + json_escape(request.namespace_id.value) + "\","
     buffer += "\"snapshot_id\":\"" + json_escape(request.snapshot_id.value) + "\","
+    buffer += "\"query_model_name\":\"" + json_escape(request.query_model_name) + "\","
     buffer += "\"query\":"
     append_json_vector_list(buffer, request.query.token_vectors)
     buffer += ",\"query_text\":\""

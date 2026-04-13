@@ -9,9 +9,12 @@ from kayak.numeric import (
 from kayak.scoring.dot import dot_product
 
 from .centroid_primitives import (
+    MutableCentroidSelectionScratch,
     ScoredCentroidSelection,
     accumulate_selected_centroid_scores,
+    accumulate_selected_centroid_scores_with_scratch,
 )
+from .centroid_segment_score_result import CentroidSegmentScoreResult
 
 
 comptime QUERY_TOKEN_CENTROID_PROBE_COUNT = 2
@@ -80,11 +83,11 @@ def top_centroid_indices_for_query_token(
     ).centroid_indices.copy()
 
 
-def centroid_posting_scores_for_segment(
+def centroid_posting_score_result_for_segment(
     read query_token_vectors: List[List[VectorScalar]],
     read index: CentroidPostingIndex,
     read allowed_flags: List[Int] = [],
-) -> List[ScoreScalar]:
+) -> CentroidSegmentScoreResult:
     var scores = List[ScoreScalar]()
     var active_flags = List[Int]()
     var active_doc_indices = List[Int]()
@@ -93,14 +96,32 @@ def centroid_posting_scores_for_segment(
         scores.append(zero_score_scalar())
         active_flags.append(0)
 
+    var scratch = MutableCentroidSelectionScratch(index.document_count)
     for query_token in query_token_vectors:
-        accumulate_selected_centroid_scores(
+        accumulate_selected_centroid_scores_with_scratch(
             top_centroid_selection_for_query_token(query_token, index),
             index,
             scores,
             active_doc_indices,
             active_flags,
+            scratch,
             allowed_flags,
         )
 
-    return scores^
+    return CentroidSegmentScoreResult(
+        scores^,
+        active_doc_indices^,
+        zero_score_scalar(),
+    )
+
+
+def centroid_posting_scores_for_segment(
+    read query_token_vectors: List[List[VectorScalar]],
+    read index: CentroidPostingIndex,
+    read allowed_flags: List[Int] = [],
+) -> List[ScoreScalar]:
+    return centroid_posting_score_result_for_segment(
+        query_token_vectors,
+        index,
+        allowed_flags,
+    ).scores.copy()

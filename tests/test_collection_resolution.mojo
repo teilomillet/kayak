@@ -6,6 +6,7 @@ from kayak.collections import (
     CollectionId,
     CollectionManifest,
     CollectionStats,
+    DocumentFilterPosting,
     DocumentMetadataEntry,
     DocumentMetadataMap,
     NamespaceId,
@@ -14,9 +15,11 @@ from kayak.collections import (
     SealedSegmentManifest,
     SnapshotId,
     SnapshotManifest,
+    StoredDocumentFilterIndex,
     StoredDocumentMetadataCorpus,
     StoredDocumentTextCorpus,
     TenantId,
+    document_filter_index_search_artifact,
     document_metadata_search_artifact,
     document_proxy_search_artifact,
     exact_only_snapshot_requirements,
@@ -38,6 +41,7 @@ from kayak.collections import (
     save_collection_manifest,
     save_sealed_segment_manifest,
     save_snapshot_manifest,
+    save_stored_document_filter_index,
     save_stored_document_metadata_corpus,
     save_stored_document_text_corpus,
     search_artifact_snapshot_requirements,
@@ -269,13 +273,88 @@ def test_resolved_snapshot_loads_document_metadata_sidecar() raises:
             .value,
         "wire",
     )
-    assert_equal(
-        loaded_search_artifact_stored_document_metadata(metadata_artifact)
-            .metadata_maps[0]
-            .entries[0]
-            .value,
-        "wire",
+
+
+def test_resolved_snapshot_rejects_misaligned_logical_scope_filter_sidecar() raises:
+    var collection_root = Path("/tmp/kayak-resolved-collection-filter-scope")
+    save_collection_manifest(
+        collection_root,
+        CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            1,
+        ),
     )
+
+    var segment_root = collection_root / "segments" / "segment-0001"
+    write_segment_payload(
+        segment_root,
+        "collection://news",
+        "colbertv2",
+        [
+            EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+            EncodedDocument("doc-b", [[0.5, 0.5], [0.0, 1.0]]),
+        ],
+    )
+    save_stored_document_filter_index(
+        segment_root / "document_filter_index",
+        StoredDocumentFilterIndex(
+            CollectionId("news"),
+            SegmentId("segment-0001"),
+            2,
+            0,
+            [
+                DocumentFilterPosting("__kayak_collection_id", "news", [0, 1]),
+                DocumentFilterPosting("__kayak_tenant_id", "tenant-b", [0, 1]),
+                DocumentFilterPosting("__kayak_namespace_id", "search", [0, 1]),
+            ],
+        ),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            "packed_index",
+            [document_filter_index_search_artifact("document_filter_index")],
+            "",
+            SegmentStats(2, 4, 4, 1024),
+        ),
+    )
+    save_snapshot_manifest(
+        collection_root / "snapshots" / "snapshot-0001",
+        SnapshotManifest(
+            SnapshotId("snapshot-0001"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 2, 4, 4, 1024),
+        ),
+    )
+
+    var raised = False
+    try:
+        _ = load_resolved_collection_snapshot(
+            collection_root,
+            SnapshotId("snapshot-0001"),
+            search_artifact_snapshot_requirements("document_filter_index"),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def test_resolved_snapshot_rejects_segment_generation_ahead_of_snapshot() raises:

@@ -11,9 +11,11 @@ from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
 from kayak.scoring.dot128_flat import dot_product_dim128_flat_pair_at
 
 from .centroid_primitives import (
+    MutableCentroidSelectionScratch,
     ScoredCentroidSelection,
-    accumulate_selected_centroid_scores,
+    accumulate_selected_centroid_scores_with_scratch,
 )
+from .centroid_segment_score_result import CentroidSegmentScoreResult
 from .centroid_postings_stage import insert_descending_centroid_match
 
 
@@ -87,11 +89,11 @@ def top_centroid_selection_for_flat_query_token_dim128(
     return ScoredCentroidSelection(centroid_indices^, centroid_scores^, ScoreScalar(0.0))
 
 
-def centroid_posting_flat_scores_for_segment_generic(
+def centroid_posting_flat_score_result_for_segment_generic(
     read query: EncodedQuery,
     read index: CentroidPostingIndex,
     read allowed_flags: List[Int] = [],
-) -> List[ScoreScalar]:
+) -> CentroidSegmentScoreResult:
     var flat_query_values = List[VectorScalar]()
     var scores = List[ScoreScalar]()
     var active_flags = List[Int]()
@@ -105,8 +107,9 @@ def centroid_posting_flat_scores_for_segment_generic(
         scores.append(zero_score_scalar())
         active_flags.append(0)
 
+    var scratch = MutableCentroidSelectionScratch(index.document_count)
     for query_index in range(query.vector_count):
-        accumulate_selected_centroid_scores(
+        accumulate_selected_centroid_scores_with_scratch(
             top_centroid_selection_for_flat_query_token_generic(
                 flat_query_values,
                 query_index * query.vector_dim,
@@ -116,17 +119,22 @@ def centroid_posting_flat_scores_for_segment_generic(
             scores,
             active_doc_indices,
             active_flags,
+            scratch,
             allowed_flags,
         )
 
-    return scores^
+    return CentroidSegmentScoreResult(
+        scores^,
+        active_doc_indices^,
+        zero_score_scalar(),
+    )
 
 
-def centroid_posting_flat_scores_for_segment_dim128(
+def centroid_posting_flat_score_result_for_segment_dim128(
     read query: FlatQueryDim128,
     read index: CentroidPostingIndex,
     read allowed_flags: List[Int] = [],
-) -> List[ScoreScalar]:
+) -> CentroidSegmentScoreResult:
     var scores = List[ScoreScalar]()
     var active_flags = List[Int]()
     var active_doc_indices = List[Int]()
@@ -135,8 +143,9 @@ def centroid_posting_flat_scores_for_segment_dim128(
         scores.append(zero_score_scalar())
         active_flags.append(0)
 
+    var scratch = MutableCentroidSelectionScratch(index.document_count)
     for query_index in range(query.vector_count):
-        accumulate_selected_centroid_scores(
+        accumulate_selected_centroid_scores_with_scratch(
             top_centroid_selection_for_flat_query_token_dim128(
                 query,
                 query_index,
@@ -146,10 +155,37 @@ def centroid_posting_flat_scores_for_segment_dim128(
             scores,
             active_doc_indices,
             active_flags,
+            scratch,
             allowed_flags,
         )
 
-    return scores^
+    return CentroidSegmentScoreResult(
+        scores^,
+        active_doc_indices^,
+        zero_score_scalar(),
+    )
+
+
+def centroid_posting_flat_score_result_for_segment(
+    read query: EncodedQuery,
+    read index: CentroidPostingIndex,
+    read allowed_flags: List[Int] = [],
+) raises -> CentroidSegmentScoreResult:
+    if query.vector_dim != index.vector_dim:
+        raise Error("centroid posting flat stage requires matching vector_dim")
+
+    if query.vector_dim == COLBERT_VECTOR_DIM:
+        return centroid_posting_flat_score_result_for_segment_dim128(
+            build_flat_query_dim128(query),
+            index,
+            allowed_flags,
+        )
+
+    return centroid_posting_flat_score_result_for_segment_generic(
+        query,
+        index,
+        allowed_flags,
+    )
 
 
 def centroid_posting_flat_scores_for_segment(
@@ -157,18 +193,8 @@ def centroid_posting_flat_scores_for_segment(
     read index: CentroidPostingIndex,
     read allowed_flags: List[Int] = [],
 ) raises -> List[ScoreScalar]:
-    if query.vector_dim != index.vector_dim:
-        raise Error("centroid posting flat stage requires matching vector_dim")
-
-    if query.vector_dim == COLBERT_VECTOR_DIM:
-        return centroid_posting_flat_scores_for_segment_dim128(
-            build_flat_query_dim128(query),
-            index,
-            allowed_flags,
-        )
-
-    return centroid_posting_flat_scores_for_segment_generic(
+    return centroid_posting_flat_score_result_for_segment(
         query,
         index,
         allowed_flags,
-    )
+    ).scores.copy()

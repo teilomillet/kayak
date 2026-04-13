@@ -20,21 +20,37 @@ struct ScoredCentroidSelection(Copyable):
         self.baseline_correction = baseline_correction
 
 
-def accumulate_selected_centroid_scores(
+struct MutableCentroidSelectionScratch:
+    var token_best_scores: List[ScoreScalar]
+    var token_seen_generations: List[Int]
+    var token_active_doc_indices: List[Int]
+    var generation: Int
+
+    def __init__(out self, document_count: Int):
+        self.token_best_scores = List[ScoreScalar]()
+        self.token_seen_generations = List[Int]()
+        self.token_active_doc_indices = List[Int]()
+        self.generation = 1
+
+        for _ in range(document_count):
+            self.token_best_scores.append(min_score_scalar())
+            self.token_seen_generations.append(0)
+
+    def begin_token(mut self):
+        self.generation += 1
+        self.token_active_doc_indices = List[Int]()
+
+
+def accumulate_selected_centroid_scores_with_scratch(
     read selection: ScoredCentroidSelection,
     read index: CentroidPostingIndex,
     mut scores: List[ScoreScalar],
     mut active_doc_indices: List[Int],
     mut active_flags: List[Int],
+    mut scratch: MutableCentroidSelectionScratch,
     read allowed_flags: List[Int] = [],
 ):
-    var token_best_scores = List[ScoreScalar]()
-    var token_active_doc_indices = List[Int]()
-    var token_active_flags = List[Int]()
-
-    for _ in range(len(scores)):
-        token_best_scores.append(min_score_scalar())
-        token_active_flags.append(0)
+    scratch.begin_token()
 
     for centroid_list_index in range(len(selection.centroid_indices)):
         var centroid_index = selection.centroid_indices[centroid_list_index]
@@ -50,18 +66,38 @@ def accumulate_selected_centroid_scores(
                 centroid_score * ScoreScalar(index.posting_weights[posting_index])
             )
 
-            if token_active_flags[doc_index] == 0:
-                token_active_doc_indices.append(doc_index)
-                token_active_flags[doc_index] = 1
+            if scratch.token_seen_generations[doc_index] != scratch.generation:
+                scratch.token_active_doc_indices.append(doc_index)
+                scratch.token_seen_generations[doc_index] = scratch.generation
+                scratch.token_best_scores[doc_index] = approximate_score
+            elif approximate_score > scratch.token_best_scores[doc_index]:
+                scratch.token_best_scores[doc_index] = approximate_score
 
-            if approximate_score > token_best_scores[doc_index]:
-                token_best_scores[doc_index] = approximate_score
-
-    for doc_index in token_active_doc_indices:
+    for doc_index in scratch.token_active_doc_indices:
         if active_flags[doc_index] == 0:
             active_doc_indices.append(doc_index)
             active_flags[doc_index] = 1
 
         scores[doc_index] += (
-            token_best_scores[doc_index] - selection.baseline_correction
+            scratch.token_best_scores[doc_index] - selection.baseline_correction
         )
+
+
+def accumulate_selected_centroid_scores(
+    read selection: ScoredCentroidSelection,
+    read index: CentroidPostingIndex,
+    mut scores: List[ScoreScalar],
+    mut active_doc_indices: List[Int],
+    mut active_flags: List[Int],
+    read allowed_flags: List[Int] = [],
+):
+    var scratch = MutableCentroidSelectionScratch(len(scores))
+    accumulate_selected_centroid_scores_with_scratch(
+        selection,
+        index,
+        scores,
+        active_doc_indices,
+        active_flags,
+        scratch,
+        allowed_flags,
+    )

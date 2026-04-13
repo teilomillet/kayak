@@ -10,6 +10,7 @@ from kayak import (
     ExactCpuBackend,
     JudgedTask,
     NamespaceId,
+    SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
     SearchPlan,
     SnapshotId,
     StoredPackedIndex,
@@ -29,6 +30,8 @@ from kayak import (
     ensure_limit_small_real_subset_cache,
     ensure_one_segment_collection_mirror,
     ensure_scifact_real_subset_cache,
+    loaded_segment_has_search_artifact,
+    loaded_segment_stored_centroid_postings_index,
     load_resolved_collection_snapshot,
 )
 from kayak.collections import ResolvedCollectionSnapshot
@@ -189,7 +192,10 @@ def measure_blockmax_profile(
     if len(snapshot.segments) != 1:
         raise Error("blockmax profile benchmark expects a one-segment snapshot")
 
-    if not snapshot.segments[0].has_centroid_postings_index:
+    if not loaded_segment_has_search_artifact(
+        snapshot.segments[0],
+        SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    ):
         raise Error(
             "blockmax profile benchmark requires centroid postings sidecars"
         )
@@ -205,7 +211,9 @@ def measure_blockmax_profile(
     for judged_query in task.queries:
         var result = centroid_posting_blockmax_scores_for_segment_profiled(
             judged_query.query.token_vectors,
-            snapshot.segments[0].stored_centroid_postings_index.index,
+            loaded_segment_stored_centroid_postings_index(
+                snapshot.segments[0]
+            ).index,
             candidate_k,
         )
         total_selected_centroid_count += Float64(

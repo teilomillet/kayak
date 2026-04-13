@@ -9,15 +9,11 @@ from kayak.numeric import ScoreScalar, VectorScalar, zero_score_scalar
 from kayak.scoring.dot import dot_product
 
 from .centroid_primitives import (
+    MutableCentroidSelectionScratch,
     ScoredCentroidSelection,
-    accumulate_selected_centroid_scores,
+    accumulate_selected_centroid_scores_with_scratch,
 )
-
-
-comptime DEFAULT_IMPUTED_CENTROID_NPROBE = 32
-comptime DEFAULT_IMPUTED_CENTROID_BOUND = 128
-comptime DEFAULT_T_PRIME_MAX_AT_K_100 = 50_000
-comptime DEFAULT_T_PRIME_MAX_ABOVE_K_100 = 100_000
+from .centroid_segment_score_result import CentroidSegmentScoreResult
 
 
 def append_descending_centroid_index(
@@ -44,6 +40,12 @@ def append_descending_centroid_index(
 
     centroid_indices[insert_at] = centroid_index
     centroid_scores[insert_at] = centroid_score
+
+
+comptime DEFAULT_IMPUTED_CENTROID_NPROBE = 32
+comptime DEFAULT_IMPUTED_CENTROID_BOUND = 128
+comptime DEFAULT_T_PRIME_MAX_AT_K_100 = 50_000
+comptime DEFAULT_T_PRIME_MAX_ABOVE_K_100 = 100_000
 
 
 def effective_imputed_centroid_bound(centroid_count: Int) -> Int:
@@ -137,12 +139,12 @@ def centroid_selection_for_query_token(
     )
 
 
-def centroid_posting_imputed_scores_for_segment(
+def centroid_posting_imputed_score_result_for_segment(
     read query_token_vectors: List[List[VectorScalar]],
     read index: CentroidPostingIndex,
     final_k: Int,
     read allowed_flags: List[Int] = [],
-) -> List[ScoreScalar]:
+) -> CentroidSegmentScoreResult:
     var selections = List[ScoredCentroidSelection]()
     var base_score = zero_score_scalar()
 
@@ -158,14 +160,34 @@ def centroid_posting_imputed_scores_for_segment(
         scores.append(base_score)
         active_flags.append(0)
 
+    var scratch = MutableCentroidSelectionScratch(index.document_count)
     for selection in selections:
-        accumulate_selected_centroid_scores(
+        accumulate_selected_centroid_scores_with_scratch(
             selection,
             index,
             scores,
             active_doc_indices,
             active_flags,
+            scratch,
             allowed_flags,
         )
 
-    return scores^
+    return CentroidSegmentScoreResult(
+        scores^,
+        active_doc_indices^,
+        base_score,
+    )
+
+
+def centroid_posting_imputed_scores_for_segment(
+    read query_token_vectors: List[List[VectorScalar]],
+    read index: CentroidPostingIndex,
+    final_k: Int,
+    read allowed_flags: List[Int] = [],
+) -> List[ScoreScalar]:
+    return centroid_posting_imputed_score_result_for_segment(
+        query_token_vectors,
+        index,
+        final_k,
+        allowed_flags,
+    ).scores.copy()

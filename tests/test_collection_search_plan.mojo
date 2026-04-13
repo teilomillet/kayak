@@ -486,6 +486,79 @@ def make_centroid_postings_collection_root() raises -> Path:
     return root^
 
 
+def make_three_dim_centroid_postings_collection_root() raises -> Path:
+    var root = Path("/tmp/kayak-collection-centroid-postings-3d")
+    var segment_root = root / "segments" / "segment-0001"
+    var packed_index = pack_documents(
+        [
+            EncodedDocument("doc-a", [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+            EncodedDocument("doc-b", [[1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+            EncodedDocument("doc-c", [[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]]),
+        ]
+    )
+    var stored_index = StoredPackedIndex(
+        "collection://centroid-postings-3d",
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        packed_index.copy(),
+    )
+
+    save_collection_manifest(
+        root,
+        CollectionManifest(
+            CollectionId("centroid-postings-3d"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            3,
+            1,
+        ),
+    )
+    save_stored_packed_index(segment_root / "packed_index", stored_index.copy())
+    save_stored_centroid_posting_index(
+        segment_root / "centroid_postings",
+        build_stored_centroid_posting_index(stored_index, 0),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("centroid-postings-3d"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            3,
+            "packed_index",
+            "centroid_postings",
+            "",
+            "",
+            "",
+            SegmentStats(
+                packed_index.document_count,
+                packed_index.total_vector_count,
+                packed_index.total_vector_count,
+                512,
+            ),
+        ),
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0001",
+        SnapshotManifest(
+            SnapshotId("snapshot-0001"),
+            CollectionId("centroid-postings-3d"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 3, 6, 6, 512),
+        ),
+    )
+    return root^
+
+
 def make_gem_graph_collection_root() raises -> Path:
     var root = Path("/tmp/kayak-collection-gem-graph")
     var segment_root = root / "segments" / "segment-0001"
@@ -910,6 +983,17 @@ def test_document_proxy_search_plan_pushes_exact_doc_id_filter_into_stage1() rai
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
     assert_equal(explain.faithfulness.passes, True)
+    assert_equal(
+        explain.candidate_set.filter_application_profile.matching_document_count,
+        1,
+    )
+    assert_equal(
+        explain.candidate_set.filter_application_profile.selectivity(),
+        MetricScalar(0.5),
+    )
+    assert_equal(explain.final_hits[0].doc_id, "doc-a")
+    assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
+    assert_equal(explain.faithfulness.passes, True)
 
 
 def test_document_proxy_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:
@@ -988,14 +1072,42 @@ def test_centroid_postings_search_plan_pushes_exact_doc_id_filter_into_stage1() 
         explain.candidate_set.filter_application_profile.input_document_count,
         2,
     )
-    assert_equal(
-        explain.candidate_set.filter_application_profile.matching_document_count,
-        1,
+
+
+def test_centroid_postings_search_plan_keeps_filtered_inactive_doc() raises:
+    var root = make_three_dim_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        centroid_postings_search_plan(
+            1, 1, oracle_full_recall_required_faithfulness_policy()
+        ),
+        one_of_filter("doc_id", ["doc-c"]),
     )
-    assert_equal(
-        explain.candidate_set.filter_application_profile.selectivity(),
-        MetricScalar(0.5),
+
+    assert_equal(len(explain.candidate_set.hits), 1)
+    assert_equal(explain.candidate_set.hits[0].doc_id, "doc-c")
+    assert_equal(explain.final_hits[0].doc_id, "doc-c")
+
+
+def test_centroid_postings_search_plan_fills_shortlist_with_inactive_doc() raises:
+    var root = make_three_dim_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        centroid_postings_search_plan(
+            1, 3, oracle_full_recall_required_faithfulness_policy()
+        ),
     )
+
+    assert_equal(len(explain.candidate_set.hits), 3)
+    assert_equal(explain.candidate_set.hits[2].doc_id, "doc-c")
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
     assert_equal(explain.faithfulness.passes, True)
@@ -1360,6 +1472,25 @@ def test_centroid_postings_imputed_search_plan_reports_oracle_miss_when_shortlis
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(0.0))
     assert_equal(explain.faithfulness.passes, False)
     assert_equal(explain.faithfulness.evidence_kind, "oracle_recall_loss")
+
+
+def test_centroid_postings_imputed_search_plan_keeps_filtered_inactive_doc() raises:
+    var root = make_three_dim_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        centroid_postings_imputed_search_plan(
+            1, 1, oracle_full_recall_required_faithfulness_policy()
+        ),
+        one_of_filter("doc_id", ["doc-c"]),
+    )
+
+    assert_equal(len(explain.candidate_set.hits), 1)
+    assert_equal(explain.candidate_set.hits[0].doc_id, "doc-c")
+    assert_equal(explain.final_hits[0].doc_id, "doc-c")
 
 
 def test_centroid_postings_imputed_flat_search_plan_exact_reranks_shortlist() raises:

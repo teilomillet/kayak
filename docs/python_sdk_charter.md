@@ -7,6 +7,8 @@ It is a product-positioning note, not a packaging trace.
 The goal is to keep the public story stable even while the internal engine
 keeps evolving.
 
+For the higher-level category positioning of Kayak versus Chroma, Qdrant, and
+Firnflow, see [docs/product_positioning.md](product_positioning.md).
 For the implementation sequence behind this position, see
 [docs/python_sdk_roadmap.md](python_sdk_roadmap.md).
 

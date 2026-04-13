@@ -29,6 +29,8 @@ from kayak import (
     FilterTerm,
     filter_expression_matches_document,
     stored_document_filter_index_has_logical_scope_postings,
+    stored_document_filter_index_has_uniform_logical_scope,
+    stored_document_filter_index_mentions_logical_scope_postings,
 )
 
 
@@ -82,6 +84,103 @@ def test_build_stored_document_filter_index_captures_sorted_postings() raises:
         0,
     )
     assert_equal(stored_document_filter_index_has_logical_scope_postings(stored), True)
+
+
+def test_uniform_logical_scope_check_requires_manifest_aligned_full_coverage() raises:
+    var stored = build_stored_document_filter_index(
+        CollectionId("news"),
+        SegmentId("segment-0001"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        [
+            DocumentMetadataMap(
+                [DocumentMetadataEntry("source", "wire")]
+            ),
+            DocumentMetadataMap(
+                [DocumentMetadataEntry("source", "blog")]
+            ),
+        ],
+    )
+
+    assert_equal(
+        stored_document_filter_index_mentions_logical_scope_postings(stored),
+        True,
+    )
+    assert_equal(
+        stored_document_filter_index_has_uniform_logical_scope(
+            stored,
+            "news",
+            "tenant-a",
+            "search",
+        ),
+        True,
+    )
+
+    var wrong_tenant_scope = StoredDocumentFilterIndex(
+        CollectionId("news"),
+        SegmentId("segment-0001"),
+        2,
+        0,
+        [
+            DocumentFilterPosting(
+                FILTER_FIELD_INTERNAL_COLLECTION_ID,
+                "news",
+                [0, 1],
+            ),
+            DocumentFilterPosting(
+                FILTER_FIELD_INTERNAL_TENANT_ID,
+                "tenant-b",
+                [0, 1],
+            ),
+            DocumentFilterPosting(
+                FILTER_FIELD_INTERNAL_NAMESPACE_ID,
+                "search",
+                [0, 1],
+            ),
+        ],
+    )
+    assert_equal(
+        stored_document_filter_index_has_uniform_logical_scope(
+            wrong_tenant_scope,
+            "news",
+            "tenant-a",
+            "search",
+        ),
+        False,
+    )
+
+    var partial_scope_coverage = StoredDocumentFilterIndex(
+        CollectionId("news"),
+        SegmentId("segment-0001"),
+        2,
+        0,
+        [
+            DocumentFilterPosting(
+                FILTER_FIELD_INTERNAL_COLLECTION_ID,
+                "news",
+                [0],
+            ),
+            DocumentFilterPosting(
+                FILTER_FIELD_INTERNAL_TENANT_ID,
+                "tenant-a",
+                [0, 1],
+            ),
+            DocumentFilterPosting(
+                FILTER_FIELD_INTERNAL_NAMESPACE_ID,
+                "search",
+                [0, 1],
+            ),
+        ],
+    )
+    assert_equal(
+        stored_document_filter_index_has_uniform_logical_scope(
+            partial_scope_coverage,
+            "news",
+            "tenant-a",
+            "search",
+        ),
+        False,
+    )
 
 
 def test_document_filter_index_store_roundtrip_preserves_postings() raises:

@@ -5,9 +5,8 @@ from kayak.collections import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
     ResolvedCollectionSnapshot,
-    loaded_search_artifact_stored_centroid_postings_index,
     loaded_segment_has_search_artifact,
-    loaded_segment_search_artifact,
+    loaded_segment_stored_centroid_postings_index,
 )
 from kayak.contracts import EncodedQuery
 from kayak.filters import (
@@ -20,6 +19,7 @@ from kayak.runtime import ExactScoringBackend
 from kayak.storage import CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC
 
 from .candidate_set import CandidateSet
+from .centroid_segment_score_result import CentroidSegmentScoreResult
 from .centroid_execution_contract import (
     CENTROID_EXECUTION_SCORE_VARIANT_BLOCKMAX,
     CENTROID_EXECUTION_SCORE_VARIANT_FLAT,
@@ -32,24 +32,24 @@ from .centroid_execution_contract import (
     centroid_execution_contract,
 )
 from .centroid_postings_blockmax_stage import (
-    centroid_posting_blockmax_scores_for_segment,
+    centroid_posting_blockmax_score_result_for_segment,
 )
 from .centroid_postings_flat_stage import (
-    centroid_posting_flat_scores_for_segment,
+    centroid_posting_flat_score_result_for_segment,
 )
 from .centroid_postings_head_auto_stage import (
-    centroid_posting_head_auto_scores_for_segment,
+    centroid_posting_head_auto_score_result_for_segment,
 )
 from .centroid_postings_head_stage import (
-    centroid_posting_head_scores_for_segment,
+    centroid_posting_head_score_result_for_segment,
 )
 from .centroid_postings_imputed_flat_stage import (
-    centroid_posting_imputed_flat_scores_for_segment,
+    centroid_posting_imputed_flat_score_result_for_segment,
 )
 from .centroid_postings_imputed_stage import (
-    centroid_posting_imputed_scores_for_segment,
+    centroid_posting_imputed_score_result_for_segment,
 )
-from .centroid_postings_stage import centroid_posting_scores_for_segment
+from .centroid_postings_stage import centroid_posting_score_result_for_segment
 from .collection_hit import CollectionHit
 from .filter_allowlist import (
     document_filter_allowlist_artifact_byte_size_for_segment,
@@ -71,30 +71,55 @@ def require_centroid_artifact_present(
     read contract: CentroidExecutionContract,
 ) raises:
     if contract.artifact_family == SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS:
-        if not loaded_segment_has_centroid_heads_index(segment):
+        if not loaded_segment_has_search_artifact(
+            segment,
+            SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
+        ):
             raise Error(
                 "centroid_heads stage-1 requires a centroid heads sidecar for every segment"
             )
         return
 
-    if not loaded_segment_has_centroid_postings_index(segment):
+    if not loaded_segment_has_search_artifact(
+        segment,
+        SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    ):
         raise Error(
             contract.generator_kind
             + " stage-1 requires a centroid postings sidecar for every segment"
         )
 
 
-def insert_centroid_scores(
+def inactive_centroid_docs_can_affect_topk(
+    read hits: List[CollectionHit],
+    candidate_k: Int,
+    inactive_score: ScoreScalar,
+    active_document_count: Int,
+    allowed_document_count: Int,
+) -> Bool:
+    if candidate_k <= 0:
+        return False
+
+    if active_document_count >= allowed_document_count:
+        return False
+
+    if len(hits) < candidate_k:
+        return True
+
+    # Strictly lower means every inactive document loses. Equality still needs
+    # the fallback scan because the previous dense walk was doc-index ordered.
+    return hits[len(hits) - 1].score <= inactive_score
+
+
+def insert_scored_centroid_doc_indices(
     mut hits: List[CollectionHit],
     segment_id: String,
     read doc_ids: List[String],
     read scores: List[ScoreScalar],
+    read doc_indices: List[Int],
     candidate_k: Int,
-    read allowed_flags: List[Int],
 ):
-    for document_index in range(len(scores)):
-        if len(allowed_flags) != 0 and allowed_flags[document_index] == 0:
-            continue
+    for document_index in doc_indices:
         var doc_id = doc_ids[document_index]
         insert_descending_collection_hit(
             hits,
@@ -102,6 +127,56 @@ def insert_centroid_scores(
                 segment_id.copy(),
                 doc_id.copy(),
                 scores[document_index],
+            ),
+            candidate_k,
+        )
+
+
+def insert_centroid_scores(
+    mut hits: List[CollectionHit],
+    segment_id: String,
+    read doc_ids: List[String],
+    read score_result: CentroidSegmentScoreResult,
+    candidate_k: Int,
+    allowed_document_count: Int,
+    read allowed_flags: List[Int],
+):
+    insert_scored_centroid_doc_indices(
+        hits,
+        segment_id,
+        doc_ids,
+        score_result.scores,
+        score_result.active_doc_indices,
+        candidate_k,
+    )
+
+    if not inactive_centroid_docs_can_affect_topk(
+        hits,
+        candidate_k,
+        score_result.inactive_score,
+        len(score_result.active_doc_indices),
+        allowed_document_count,
+    ):
+        return
+
+    var active_flags = List[Int]()
+    for _ in range(len(doc_ids)):
+        active_flags.append(0)
+
+    for document_index in score_result.active_doc_indices:
+        active_flags[document_index] = 1
+
+    for document_index in range(len(doc_ids)):
+        if active_flags[document_index] != 0:
+            continue
+        if len(allowed_flags) != 0 and allowed_flags[document_index] == 0:
+            continue
+        insert_descending_collection_hit(
+            hits,
+            CollectionHit(
+                segment_id.copy(),
+                doc_ids[document_index].copy(),
+                score_result.inactive_score,
             ),
             candidate_k,
         )
@@ -188,40 +263,40 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
             plan.candidate_budget.candidate_k,
             plan.candidate_budget.final_k,
         )
-        var scores = centroid_posting_scores_for_segment(
+        var score_result = centroid_posting_score_result_for_segment(
             query.token_vectors,
             stored_centroid.index,
             allowed_flags,
         )
         if contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_FLAT:
-            scores = centroid_posting_flat_scores_for_segment(
+            score_result = centroid_posting_flat_score_result_for_segment(
                 query,
                 stored_centroid.index,
                 allowed_flags,
             )
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_HEAD:
-            scores = centroid_posting_head_scores_for_segment(
+            score_result = centroid_posting_head_score_result_for_segment(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
                 allowed_flags,
             )
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_HEAD_AUTO:
-            scores = centroid_posting_head_auto_scores_for_segment(
+            score_result = centroid_posting_head_auto_score_result_for_segment(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
                 allowed_flags,
             )
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_BLOCKMAX:
-            scores = centroid_posting_blockmax_scores_for_segment(
+            score_result = centroid_posting_blockmax_score_result_for_segment(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
                 allowed_flags,
             )
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_IMPUTED:
-            scores = centroid_posting_imputed_scores_for_segment(
+            score_result = centroid_posting_imputed_score_result_for_segment(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
@@ -230,7 +305,7 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
         elif (
             contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_IMPUTED_FLAT
         ):
-            scores = centroid_posting_imputed_flat_scores_for_segment(
+            score_result = centroid_posting_imputed_flat_score_result_for_segment(
                 query,
                 stored_centroid.index,
                 shortlist_budget,
@@ -246,8 +321,9 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
             hits,
             segment.manifest.segment_id.value,
             segment.stored_index.index.doc_ids,
-            scores,
+            score_result,
             plan.candidate_budget.candidate_k,
+            matching_document_count,
             allowed_flags,
         )
 

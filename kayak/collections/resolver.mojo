@@ -17,6 +17,10 @@ from kayak.text import DocumentTextCorpus
 from .collection import CollectionManifest
 from .collection_store import load_collection_manifest
 from .document_filter_index import StoredDocumentFilterIndex
+from .document_filter_index import (
+    stored_document_filter_index_has_uniform_logical_scope,
+    stored_document_filter_index_mentions_logical_scope_postings,
+)
 from .document_filter_index_store import load_stored_document_filter_index
 from .document_metadata import StoredDocumentMetadataCorpus
 from .document_metadata_store import load_stored_document_metadata_corpus
@@ -278,6 +282,23 @@ def require_loaded_document_filter_index_matches_segment(
         raise Error(
             "document filter index document_count does not match segment stats"
         )
+
+    # Under the current collection-scoped segment contract, any internal scope
+    # postings must cover every document and agree with the segment manifest.
+    # This keeps "scope-aware" from degenerating into "reserved fields exist"
+    # after manual tampering or partial legacy rewrites.
+    if stored_document_filter_index_mentions_logical_scope_postings(
+        stored_document_filter_index
+    ):
+        if not stored_document_filter_index_has_uniform_logical_scope(
+            stored_document_filter_index,
+            segment.collection_id.value,
+            segment.tenant_id.value,
+            segment.namespace_id.value,
+        ):
+            raise Error(
+                "document filter index logical scope postings do not match segment manifest"
+            )
 
 
 def require_loaded_centroid_postings_matches_segment(

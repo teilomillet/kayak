@@ -9,6 +9,8 @@ from kayak.numeric import (
 )
 from kayak.scoring.dot import dot_product
 
+from .centroid_segment_score_result import CentroidSegmentScoreResult
+
 
 comptime QUERY_TOKEN_CENTROID_HEAD_PROBE_COUNT = 2
 comptime DEFAULT_CENTROID_HEAD_POSTING_CAP = 16
@@ -126,12 +128,12 @@ def accumulate_token_best_doc_scores_head(
         scores[doc_index] += token_best_scores[doc_index]
 
 
-def centroid_posting_head_scores_for_segment(
+def centroid_posting_head_score_result_for_segment(
     read query_token_vectors: List[List[VectorScalar]],
     read index: CentroidPostingIndex,
     candidate_k: Int,
     read allowed_flags: List[Int] = [],
-) -> List[ScoreScalar]:
+) -> CentroidSegmentScoreResult:
     var scores = List[ScoreScalar]()
     var active_flags = List[Int]()
     var active_doc_indices = List[Int]()
@@ -151,4 +153,22 @@ def centroid_posting_head_scores_for_segment(
             allowed_flags,
         )
 
-    return scores^
+    return CentroidSegmentScoreResult(
+        scores^,
+        active_doc_indices^,
+        zero_score_scalar(),
+    )
+
+
+def centroid_posting_head_scores_for_segment(
+    read query_token_vectors: List[List[VectorScalar]],
+    read index: CentroidPostingIndex,
+    candidate_k: Int,
+    read allowed_flags: List[Int] = [],
+) -> List[ScoreScalar]:
+    return centroid_posting_head_score_result_for_segment(
+        query_token_vectors,
+        index,
+        candidate_k,
+        allowed_flags,
+    ).scores.copy()

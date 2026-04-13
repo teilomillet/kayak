@@ -3,7 +3,7 @@
 from std.collections import List
 
 from kayak.collections import CollectionId, NamespaceId, SnapshotId, TenantId
-from kayak.collections.validation import require_positive_int
+from kayak.collections.validation import require_non_empty_string, require_positive_int
 from kayak.contracts import EncodedQuery
 from kayak.filters import (
     FilterExpression,
@@ -29,6 +29,7 @@ struct SearchRequest(Copyable):
     var namespace_id: NamespaceId
     var snapshot_id: SnapshotId
     var query: EncodedQuery
+    var query_model_name: String
     var query_text: String
     var filter_expression: FilterExpression
     var plan: SearchPlan
@@ -41,6 +42,7 @@ struct SearchRequest(Copyable):
         namespace_id: NamespaceId,
         snapshot_id: SnapshotId,
         query: EncodedQuery,
+        query_model_name: String,
         var query_text: String,
         filter_expression: FilterExpression,
         plan: SearchPlan,
@@ -52,6 +54,9 @@ struct SearchRequest(Copyable):
         self.namespace_id = namespace_id.copy()
         self.snapshot_id = snapshot_id.copy()
         self.query = query.copy()
+        self.query_model_name = require_non_empty_string(
+            query_model_name, "query_model_name"
+        )
         self.query_text = query_text^
         require_user_visible_filter_expression(
             filter_expression,
@@ -85,6 +90,7 @@ struct SearchRequest(Copyable):
         namespace_id: NamespaceId,
         snapshot_id: SnapshotId,
         query: EncodedQuery,
+        query_model_name: String,
         filter_expression: FilterExpression,
         plan: SearchPlan,
         debug_mode: Bool,
@@ -95,6 +101,7 @@ struct SearchRequest(Copyable):
             namespace_id,
             snapshot_id,
             query,
+            query_model_name,
             "",
             filter_expression,
             plan,
@@ -109,6 +116,7 @@ def default_exact_search_request(
     snapshot_id: SnapshotId,
     query: EncodedQuery,
     final_k: Int,
+    query_model_name: String,
     debug_mode: Bool = False,
     query_text: String = "",
 ) raises -> SearchRequest:
@@ -118,6 +126,7 @@ def default_exact_search_request(
         namespace_id,
         snapshot_id,
         query,
+        query_model_name,
         query_text,
         match_all_filter(),
         exact_full_scan_search_plan(final_k, final_k),
@@ -208,6 +217,7 @@ struct PlannedSearchRequest(Copyable):
     var namespace_id: NamespaceId
     var snapshot_id: SnapshotId
     var query: EncodedQuery
+    var query_model_name: String
     var query_text: String
     var stage_override: PlannedSearchStageOverride
     var filter_expression: FilterExpression
@@ -220,6 +230,7 @@ struct PlannedSearchRequest(Copyable):
         namespace_id: NamespaceId,
         snapshot_id: SnapshotId,
         query: EncodedQuery,
+        query_model_name: String,
         var query_text: String,
         var stage2_reference_kind: String,
         var stage3_verifier_kind: String,
@@ -231,6 +242,9 @@ struct PlannedSearchRequest(Copyable):
         self.namespace_id = namespace_id.copy()
         self.snapshot_id = snapshot_id.copy()
         self.query = query.copy()
+        self.query_model_name = require_non_empty_string(
+            query_model_name, "query_model_name"
+        )
         self.query_text = query_text^
         self.stage_override = PlannedSearchStageOverride(
             self.query_text,
@@ -251,6 +265,7 @@ struct PlannedSearchRequest(Copyable):
         namespace_id: NamespaceId,
         snapshot_id: SnapshotId,
         query: EncodedQuery,
+        query_model_name: String,
         var query_text: String,
         filter_expression: FilterExpression,
         planning: SearchPlanSelectionRequest,
@@ -261,6 +276,7 @@ struct PlannedSearchRequest(Copyable):
             namespace_id,
             snapshot_id,
             query,
+            query_model_name,
             query_text^,
             "",
             "",
@@ -275,6 +291,7 @@ struct PlannedSearchRequest(Copyable):
         namespace_id: NamespaceId,
         snapshot_id: SnapshotId,
         query: EncodedQuery,
+        query_model_name: String,
         filter_expression: FilterExpression,
         planning: SearchPlanSelectionRequest,
     ) raises:
@@ -284,6 +301,7 @@ struct PlannedSearchRequest(Copyable):
             namespace_id,
             snapshot_id,
             query,
+            query_model_name,
             "",
             "",
             "",

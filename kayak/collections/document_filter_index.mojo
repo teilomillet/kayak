@@ -11,6 +11,7 @@ from kayak.filters.logical_scope import (
     FILTER_FIELD_INTERNAL_COLLECTION_ID,
     FILTER_FIELD_INTERNAL_NAMESPACE_ID,
     FILTER_FIELD_INTERNAL_TENANT_ID,
+    filter_field_is_internal_logical_scope,
 )
 
 from .document_metadata import DocumentMetadataMap
@@ -112,6 +113,76 @@ def stored_document_filter_index_has_logical_scope_postings(
             has_namespace_scope = True
 
     return has_collection_scope and has_tenant_scope and has_namespace_scope
+
+
+def stored_document_filter_index_mentions_logical_scope_postings(
+    read stored: StoredDocumentFilterIndex
+) -> Bool:
+    for posting in stored.postings:
+        if filter_field_is_internal_logical_scope(posting.field_name):
+            return True
+
+    return False
+
+
+def document_filter_posting_covers_all_documents(
+    read posting: DocumentFilterPosting,
+    document_count: Int,
+) -> Bool:
+    if len(posting.doc_indices) != document_count:
+        return False
+
+    for doc_index in range(document_count):
+        if posting.doc_indices[doc_index] != doc_index:
+            return False
+
+    return True
+
+
+def stored_document_filter_index_has_uniform_logical_scope(
+    read stored: StoredDocumentFilterIndex,
+    collection_id: String,
+    tenant_id: String,
+    namespace_id: String,
+) -> Bool:
+    var collection_scope_posting_count = 0
+    var tenant_scope_posting_count = 0
+    var namespace_scope_posting_count = 0
+
+    for posting in stored.postings:
+        if posting.field_name == FILTER_FIELD_INTERNAL_COLLECTION_ID:
+            collection_scope_posting_count += 1
+            if posting.value != collection_id:
+                return False
+            if not document_filter_posting_covers_all_documents(
+                posting,
+                stored.document_count,
+            ):
+                return False
+        elif posting.field_name == FILTER_FIELD_INTERNAL_TENANT_ID:
+            tenant_scope_posting_count += 1
+            if posting.value != tenant_id:
+                return False
+            if not document_filter_posting_covers_all_documents(
+                posting,
+                stored.document_count,
+            ):
+                return False
+        elif posting.field_name == FILTER_FIELD_INTERNAL_NAMESPACE_ID:
+            namespace_scope_posting_count += 1
+            if posting.value != namespace_id:
+                return False
+            if not document_filter_posting_covers_all_documents(
+                posting,
+                stored.document_count,
+            ):
+                return False
+
+    return (
+        collection_scope_posting_count == 1
+        and tenant_scope_posting_count == 1
+        and namespace_scope_posting_count == 1
+    )
 
 
 def find_document_filter_posting_index(

@@ -9,6 +9,7 @@ from kayak.numeric import (
 )
 from kayak.scoring.dot import dot_product
 
+from .centroid_segment_score_result import CentroidSegmentScoreResult
 from .centroid_postings_stage import top_centroid_indices_for_query_token
 
 
@@ -70,15 +71,15 @@ struct CentroidPostingBlockmaxProfile(Copyable):
 
 
 struct CentroidPostingBlockmaxResult(Copyable):
-    var scores: List[ScoreScalar]
+    var score_result: CentroidSegmentScoreResult
     var profile: CentroidPostingBlockmaxProfile
 
     def __init__(
         out self,
-        var scores: List[ScoreScalar],
+        score_result: CentroidSegmentScoreResult,
         profile: CentroidPostingBlockmaxProfile,
     ):
-        self.scores = scores^
+        self.score_result = score_result.copy()
         self.profile = profile.copy()
 
 
@@ -329,7 +330,28 @@ def centroid_posting_blockmax_scores_for_segment_profiled(
             allowed_flags,
         )
 
-    return CentroidPostingBlockmaxResult(scores^, profile.freeze())
+    return CentroidPostingBlockmaxResult(
+        CentroidSegmentScoreResult(
+            scores^,
+            active_doc_indices^,
+            zero_score_scalar(),
+        ),
+        profile.freeze(),
+    )
+
+
+def centroid_posting_blockmax_score_result_for_segment(
+    read query_token_vectors: List[List[VectorScalar]],
+    read index: CentroidPostingIndex,
+    candidate_k: Int,
+    read allowed_flags: List[Int] = [],
+) raises -> CentroidSegmentScoreResult:
+    return centroid_posting_blockmax_scores_for_segment_profiled(
+        query_token_vectors,
+        index,
+        candidate_k,
+        allowed_flags,
+    ).score_result.copy()
 
 
 def centroid_posting_blockmax_scores_for_segment(
@@ -338,7 +360,7 @@ def centroid_posting_blockmax_scores_for_segment(
     candidate_k: Int,
     read allowed_flags: List[Int] = [],
 ) raises -> List[ScoreScalar]:
-    return centroid_posting_blockmax_scores_for_segment_profiled(
+    return centroid_posting_blockmax_score_result_for_segment(
         query_token_vectors,
         index,
         candidate_k,

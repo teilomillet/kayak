@@ -76,8 +76,10 @@ from .reference_scoring_semantics import (
     exact_late_interaction_reference_scoring_semantics,
 )
 from .centroid_primitives import (
+    MutableCentroidSelectionScratch,
     ScoredCentroidSelection,
     accumulate_selected_centroid_scores,
+    accumulate_selected_centroid_scores_with_scratch,
 )
 from .collection_hit import CollectionHit, to_search_hit
 from .execution import (

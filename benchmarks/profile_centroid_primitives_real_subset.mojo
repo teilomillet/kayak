@@ -8,17 +8,20 @@ from std.pathlib import Path
 from kayak import (
     CollectionId,
     JudgedTask,
+    MutableCentroidSelectionScratch,
     NamespaceId,
     ScoredCentroidSelection,
     SnapshotId,
     StoredPackedIndex,
     TenantId,
     accumulate_selected_centroid_scores,
+    accumulate_selected_centroid_scores_with_scratch,
     ensure_fiqa_real_subset_cache,
     ensure_limit_small_real_subset_cache,
     ensure_one_segment_collection_mirror,
     ensure_scifact_real_subset_cache,
     load_resolved_collection_snapshot,
+    loaded_segment_stored_centroid_postings_index,
 )
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.contracts import EncodedQuery, FlatQueryDim128, build_flat_query_dim128
@@ -101,9 +104,11 @@ def load_profile_snapshot(
 def exact_selections_for_query(
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
-) -> List[ScoredCentroidSelection]:
+) raises -> List[ScoredCentroidSelection]:
     var selections = List[ScoredCentroidSelection]()
-    var index = snapshot.segments[0].stored_centroid_postings_index.index.copy()
+    var index = loaded_segment_stored_centroid_postings_index(
+        snapshot.segments[0]
+    ).index.copy()
 
     for token in query.token_vectors:
         selections.append(top_centroid_selection_for_query_token(token, index))
@@ -114,9 +119,11 @@ def exact_selections_for_query(
 def exact_flat_selections_for_query(
     read query: FlatQueryDim128,
     read snapshot: ResolvedCollectionSnapshot,
-) -> List[ScoredCentroidSelection]:
+) raises -> List[ScoredCentroidSelection]:
     var selections = List[ScoredCentroidSelection]()
-    var index = snapshot.segments[0].stored_centroid_postings_index.index.copy()
+    var index = loaded_segment_stored_centroid_postings_index(
+        snapshot.segments[0]
+    ).index.copy()
 
     for query_index in range(query.vector_count):
         selections.append(
@@ -134,9 +141,11 @@ def imputed_selections_for_query(
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     final_k: Int,
-) -> List[ScoredCentroidSelection]:
+) raises -> List[ScoredCentroidSelection]:
     var selections = List[ScoredCentroidSelection]()
-    var index = snapshot.segments[0].stored_centroid_postings_index.index.copy()
+    var index = loaded_segment_stored_centroid_postings_index(
+        snapshot.segments[0]
+    ).index.copy()
 
     for token in query.token_vectors:
         selections.append(centroid_selection_for_query_token(token, index, final_k))
@@ -148,9 +157,11 @@ def imputed_flat_selections_for_query(
     read query: FlatQueryDim128,
     read snapshot: ResolvedCollectionSnapshot,
     final_k: Int,
-) -> List[ScoredCentroidSelection]:
+) raises -> List[ScoredCentroidSelection]:
     var selections = List[ScoredCentroidSelection]()
-    var index = snapshot.segments[0].stored_centroid_postings_index.index.copy()
+    var index = loaded_segment_stored_centroid_postings_index(
+        snapshot.segments[0]
+    ).index.copy()
 
     for query_index in range(query.vector_count):
         selections.append(
@@ -175,24 +186,28 @@ def baseline_score(read selections: List[ScoredCentroidSelection]) -> ScoreScala
 def accumulate_precomputed_selections(
     read selections: List[ScoredCentroidSelection],
     read snapshot: ResolvedCollectionSnapshot,
-) -> List[ScoreScalar]:
-    var index = snapshot.segments[0].stored_centroid_postings_index.index.copy()
+) raises -> List[ScoreScalar]:
+    var index = loaded_segment_stored_centroid_postings_index(
+        snapshot.segments[0]
+    ).index.copy()
     var scores = List[ScoreScalar]()
     var active_flags = List[Int]()
     var active_doc_indices = List[Int]()
     var base = baseline_score(selections)
+    var scratch = MutableCentroidSelectionScratch(index.document_count)
 
     for _ in range(index.document_count):
         scores.append(base)
         active_flags.append(0)
 
     for selection in selections:
-        accumulate_selected_centroid_scores(
+        accumulate_selected_centroid_scores_with_scratch(
             selection,
             index,
             scores,
             active_doc_indices,
             active_flags,
+            scratch,
         )
 
     return scores^
@@ -210,7 +225,7 @@ def append_measurements_for_dataset(
     var query_index = 0
     print("== exact_selection_nested ==")
 
-    def exact_selection_nested_once() capturing:
+    def exact_selection_nested_once() capturing raises:
         bench_compiler.keep(
             exact_selections_for_query(
                 task.queries[query_index].query,
@@ -240,7 +255,7 @@ def append_measurements_for_dataset(
     query_index = 0
     print("== exact_selection_flat ==")
 
-    def exact_selection_flat_once() capturing:
+    def exact_selection_flat_once() capturing raises:
         bench_compiler.keep(
             exact_flat_selections_for_query(
                 flat_queries[query_index],
@@ -266,7 +281,7 @@ def append_measurements_for_dataset(
     query_index = 0
     print("== imputed_selection_nested ==")
 
-    def imputed_selection_nested_once() capturing:
+    def imputed_selection_nested_once() capturing raises:
         bench_compiler.keep(
             imputed_selections_for_query(
                 task.queries[query_index].query,
@@ -293,7 +308,7 @@ def append_measurements_for_dataset(
     query_index = 0
     print("== imputed_selection_flat ==")
 
-    def imputed_selection_flat_once() capturing:
+    def imputed_selection_flat_once() capturing raises:
         bench_compiler.keep(
             imputed_flat_selections_for_query(
                 flat_queries[query_index],
@@ -330,7 +345,7 @@ def append_measurements_for_dataset(
     query_index = 0
     print("== exact_accumulation ==")
 
-    def exact_accumulation_once() capturing:
+    def exact_accumulation_once() capturing raises:
         bench_compiler.keep(
             accumulate_precomputed_selections(
                 exact_selection_cache[query_index],
@@ -356,7 +371,7 @@ def append_measurements_for_dataset(
     query_index = 0
     print("== imputed_accumulation ==")
 
-    def imputed_accumulation_once() capturing:
+    def imputed_accumulation_once() capturing raises:
         bench_compiler.keep(
             accumulate_precomputed_selections(
                 imputed_selection_cache[query_index],
