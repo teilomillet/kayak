@@ -37,6 +37,7 @@ from .document_proxy_store import (
 )
 from .gem_graph_store import (
     build_stored_gem_graph_index,
+    build_stored_gem_graph_index_with_config,
     gem_graph_index_exists,
     gem_graph_storage_byte_size,
     load_stored_gem_graph_index,

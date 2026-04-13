@@ -128,8 +128,11 @@ struct StoredGemGraphIndex(Copyable):
     var model_name: String
     var vector_scalar_name: String
     var cluster_cutoff: Int
+    var adaptive_cluster_cutoff_enabled: Bool
+    var adaptive_cluster_cutoff_max: Int
     var construction_neighbor_count: Int
     var degree_limit: Int
+    var shortcuts_enabled: Bool
     var document_count: Int
     var cluster_count: Int
     var graph_edge_count: Int
@@ -145,8 +148,11 @@ struct StoredGemGraphIndex(Copyable):
         var model_name: String,
         var vector_scalar_name: String,
         cluster_cutoff: Int,
+        adaptive_cluster_cutoff_enabled: Bool,
+        adaptive_cluster_cutoff_max: Int,
         construction_neighbor_count: Int,
         degree_limit: Int,
+        shortcuts_enabled: Bool,
         document_count: Int,
         cluster_count: Int,
         graph_edge_count: Int,
@@ -158,6 +164,10 @@ struct StoredGemGraphIndex(Copyable):
     ) raises:
         if cluster_cutoff < 0:
             raise Error("stored gem graph cluster_cutoff must be non-negative")
+        if adaptive_cluster_cutoff_max < 0:
+            raise Error(
+                "stored gem graph adaptive_cluster_cutoff_max must be non-negative"
+            )
         if construction_neighbor_count < 0:
             raise Error(
                 "stored gem graph construction_neighbor_count must be non-negative"
@@ -205,6 +215,17 @@ struct StoredGemGraphIndex(Copyable):
         if index.cluster_cutoff != cluster_cutoff:
             raise Error("stored gem graph cluster_cutoff must match index metadata")
         if (
+            index.adaptive_cluster_cutoff_enabled
+            != adaptive_cluster_cutoff_enabled
+        ):
+            raise Error(
+                "stored gem graph adaptive_cluster_cutoff_enabled must match index metadata"
+            )
+        if index.adaptive_cluster_cutoff_max != adaptive_cluster_cutoff_max:
+            raise Error(
+                "stored gem graph adaptive_cluster_cutoff_max must match index metadata"
+            )
+        if (
             index.construction_neighbor_count
             != construction_neighbor_count
         ):
@@ -213,13 +234,18 @@ struct StoredGemGraphIndex(Copyable):
             )
         if index.degree_limit != degree_limit:
             raise Error("stored gem graph degree_limit must match index metadata")
+        if index.shortcuts_enabled != shortcuts_enabled:
+            raise Error("stored gem graph shortcuts_enabled must match index metadata")
 
         self.dataset_id = dataset_id^
         self.model_name = model_name^
         self.vector_scalar_name = vector_scalar_name^
         self.cluster_cutoff = cluster_cutoff
+        self.adaptive_cluster_cutoff_enabled = adaptive_cluster_cutoff_enabled
+        self.adaptive_cluster_cutoff_max = adaptive_cluster_cutoff_max
         self.construction_neighbor_count = construction_neighbor_count
         self.degree_limit = degree_limit
+        self.shortcuts_enabled = shortcuts_enabled
         self.document_count = document_count
         self.cluster_count = cluster_count
         self.graph_edge_count = graph_edge_count

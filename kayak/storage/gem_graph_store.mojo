@@ -3,8 +3,9 @@ from std.os import makedirs
 from std.pathlib import Path
 
 from kayak.index import (
+    GemGraphBuildConfig,
     GemGraphIndex,
-    build_gem_graph_index,
+    build_gem_graph_index_with_config,
     DEFAULT_GEM_GRAPH_CONSTRUCTION_NEIGHBOR_COUNT,
     DEFAULT_GEM_GRAPH_DEGREE_LIMIT,
 )
@@ -51,6 +52,32 @@ def read_int_lines(path: Path, name: String) raises -> List[Int]:
     for line in read_non_empty_lines(path):
         values.append(parse_int(line, name))
     return values^
+
+
+def load_optional_manifest_value(read entries: List[ManifestEntry], key: String) -> String:
+    for entry in entries:
+        if entry.key == key:
+            return entry.value.copy()
+    return ""
+
+
+def bool_text(value: Bool) -> String:
+    if value:
+        return "true"
+    return "false"
+
+
+def parse_optional_bool_manifest_value(
+    read entries: List[ManifestEntry], key: String
+) raises -> Bool:
+    var value = load_optional_manifest_value(entries, key)
+    if value == "":
+        return False
+    if value == "true" or value == "True":
+        return True
+    if value == "false" or value == "False":
+        return False
+    raise Error(key + " manifest value must be true or false")
 
 
 def write_score_lines(path: Path, read values: List[Float32]) raises:
@@ -113,21 +140,35 @@ def build_stored_gem_graph_index(
     construction_neighbor_count: Int = DEFAULT_GEM_GRAPH_CONSTRUCTION_NEIGHBOR_COUNT,
     degree_limit: Int = DEFAULT_GEM_GRAPH_DEGREE_LIMIT,
 ) raises -> StoredGemGraphIndex:
-    var index = build_gem_graph_index(
+    return build_stored_gem_graph_index_with_config(
+        stored_packed_index,
+        GemGraphBuildConfig(
+            fine_cluster_count,
+            coarse_cluster_count,
+            cluster_cutoff,
+            construction_neighbor_count,
+            degree_limit,
+        ),
+    )
+
+
+def build_stored_gem_graph_index_with_config(
+    read stored_packed_index: StoredPackedIndex, read config: GemGraphBuildConfig
+) raises -> StoredGemGraphIndex:
+    var index = build_gem_graph_index_with_config(
         stored_packed_index.index,
-        fine_cluster_count,
-        coarse_cluster_count,
-        cluster_cutoff,
-        construction_neighbor_count,
-        degree_limit,
+        config,
     )
     return StoredGemGraphIndex(
         stored_packed_index.dataset_id.copy(),
         stored_packed_index.model_name.copy(),
         stored_packed_index.vector_scalar_name.copy(),
-        cluster_cutoff,
-        construction_neighbor_count,
-        degree_limit,
+        index.cluster_cutoff,
+        index.adaptive_cluster_cutoff_enabled,
+        index.adaptive_cluster_cutoff_max,
+        index.construction_neighbor_count,
+        index.degree_limit,
+        index.shortcuts_enabled,
         index.document_count,
         index.cluster_count,
         index.graph_edge_count,
@@ -157,10 +198,19 @@ def write_gem_graph_manifest(
             ManifestEntry("vector_dim", String(stored.index.vector_dim)),
             ManifestEntry("cluster_cutoff", String(stored.cluster_cutoff)),
             ManifestEntry(
+                "adaptive_cluster_cutoff_enabled",
+                bool_text(stored.adaptive_cluster_cutoff_enabled),
+            ),
+            ManifestEntry(
+                "adaptive_cluster_cutoff_max",
+                String(stored.adaptive_cluster_cutoff_max),
+            ),
+            ManifestEntry(
                 "construction_neighbor_count",
                 String(stored.construction_neighbor_count),
             ),
             ManifestEntry("degree_limit", String(stored.degree_limit)),
+            ManifestEntry("shortcuts_enabled", bool_text(stored.shortcuts_enabled)),
             ManifestEntry("document_count", String(stored.document_count)),
             ManifestEntry("cluster_count", String(stored.cluster_count)),
             ManifestEntry("graph_edge_count", String(stored.graph_edge_count)),
@@ -277,6 +327,16 @@ def load_stored_gem_graph_index(root: Path) raises -> StoredGemGraphIndex:
     var neighbor_doc_indices = read_int_lines(
         root / "neighbor_doc_indices.tsv", "neighbor_doc_index"
     )
+    var adaptive_cluster_cutoff_max_text = load_optional_manifest_value(
+        manifest, "adaptive_cluster_cutoff_max"
+    )
+    if adaptive_cluster_cutoff_max_text == "":
+        adaptive_cluster_cutoff_max_text = require_manifest_value(
+            manifest, "cluster_cutoff"
+        )
+    var adaptive_cluster_cutoff_max = parse_int(
+        adaptive_cluster_cutoff_max_text, "adaptive_cluster_cutoff_max"
+    )
 
     var index = GemGraphIndex(
         doc_ids^,
@@ -300,11 +360,16 @@ def load_stored_gem_graph_index(root: Path) raises -> StoredGemGraphIndex:
             "shortcut_edge_count",
         ),
         parse_int(require_manifest_value(manifest, "cluster_cutoff"), "cluster_cutoff"),
+        parse_optional_bool_manifest_value(
+            manifest, "adaptive_cluster_cutoff_enabled"
+        ),
+        adaptive_cluster_cutoff_max,
         parse_int(
             require_manifest_value(manifest, "construction_neighbor_count"),
             "construction_neighbor_count",
         ),
         parse_int(require_manifest_value(manifest, "degree_limit"), "degree_limit"),
+        parse_optional_bool_manifest_value(manifest, "shortcuts_enabled"),
     )
 
     return StoredGemGraphIndex(
@@ -312,11 +377,16 @@ def load_stored_gem_graph_index(root: Path) raises -> StoredGemGraphIndex:
         require_manifest_value(manifest, "model_name"),
         VECTOR_SCALAR_NAME,
         parse_int(require_manifest_value(manifest, "cluster_cutoff"), "cluster_cutoff"),
+        parse_optional_bool_manifest_value(
+            manifest, "adaptive_cluster_cutoff_enabled"
+        ),
+        adaptive_cluster_cutoff_max,
         parse_int(
             require_manifest_value(manifest, "construction_neighbor_count"),
             "construction_neighbor_count",
         ),
         parse_int(require_manifest_value(manifest, "degree_limit"), "degree_limit"),
+        parse_optional_bool_manifest_value(manifest, "shortcuts_enabled"),
         parse_int(require_manifest_value(manifest, "document_count"), "document_count"),
         parse_int(require_manifest_value(manifest, "cluster_count"), "cluster_count"),
         parse_int(

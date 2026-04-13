@@ -10,10 +10,10 @@
 #
 # Assumptions:
 # - clustering is deterministic k-means over the current packed index
-# - qCH follows the paper's quantized Chamfer shape
-# - graph construction uses a greedy quantized-EMD approximation; the paper uses
-#   optimal qEMD, which would require a dedicated transport solver that does not
-#   yet exist in this repo
+# - qCH and qEMD operate on quantized centroid similarities using `1 - dot`
+# - the graph is stored explicitly even though the public GEM reference uses
+#   HNSW internals; distance, bridge, and shortcut behavior should still mirror
+#   the GEM design
 
 from std.collections import List
 from std.math import log2
@@ -29,6 +29,8 @@ from kayak.numeric import (
 )
 from kayak.scoring.dot import dot_product
 
+from .gem_cutoff_tree import build_adaptive_cutoff_decision_tree
+from .gem_transport import min_cost_transport_distance
 from .packed_index import PackedIndex
 
 
@@ -38,6 +40,94 @@ comptime DEFAULT_GEM_GRAPH_CONSTRUCTION_NEIGHBOR_COUNT = 6
 comptime DEFAULT_GEM_GRAPH_DEGREE_LIMIT = 8
 comptime DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K = 2
 comptime DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH = 32
+comptime DEFAULT_GEM_GRAPH_ADAPTIVE_CUTOFF_MAX = 10
+comptime DEFAULT_GEM_GRAPH_ADAPTIVE_TREE_MAX_DEPTH = 3
+
+
+struct GemGraphTrainingPair(Copyable):
+    var query: EncodedQuery
+    var positive_doc_id: String
+
+    def __init__(
+        out self, var query: EncodedQuery, var positive_doc_id: String
+    ) raises:
+        if positive_doc_id.byte_length() == 0:
+            raise Error("gem graph training pair positive_doc_id must not be empty")
+        self.query = query^
+        self.positive_doc_id = positive_doc_id^
+
+
+struct GemGraphBuildConfig(Copyable):
+    var fine_cluster_count: Int
+    var coarse_cluster_count: Int
+    var cluster_cutoff: Int
+    var construction_neighbor_count: Int
+    var degree_limit: Int
+    var enable_adaptive_cluster_cutoff: Bool
+    var adaptive_cluster_cutoff_max: Int
+    var adaptive_tree_max_depth: Int
+    var cluster_top_k_per_query_token: Int
+    var enable_shortcuts: Bool
+    var shortcut_candidate_k: Int
+    var shortcut_beam_width: Int
+    var training_pairs: List[GemGraphTrainingPair]
+
+    def __init__(
+        out self,
+        fine_cluster_count: Int,
+        coarse_cluster_count: Int,
+        cluster_cutoff: Int,
+        construction_neighbor_count: Int = DEFAULT_GEM_GRAPH_CONSTRUCTION_NEIGHBOR_COUNT,
+        degree_limit: Int = DEFAULT_GEM_GRAPH_DEGREE_LIMIT,
+        enable_adaptive_cluster_cutoff: Bool = False,
+        adaptive_cluster_cutoff_max: Int = DEFAULT_GEM_GRAPH_ADAPTIVE_CUTOFF_MAX,
+        adaptive_tree_max_depth: Int = DEFAULT_GEM_GRAPH_ADAPTIVE_TREE_MAX_DEPTH,
+        cluster_top_k_per_query_token: Int = DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
+        enable_shortcuts: Bool = False,
+        shortcut_candidate_k: Int = DEFAULT_GEM_GRAPH_CONSTRUCTION_NEIGHBOR_COUNT,
+        shortcut_beam_width: Int = DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
+        var training_pairs: List[GemGraphTrainingPair] = List[GemGraphTrainingPair](),
+    ) raises:
+        if fine_cluster_count < 0:
+            raise Error("gem graph fine_cluster_count must be non-negative")
+        if coarse_cluster_count < 0:
+            raise Error("gem graph coarse_cluster_count must be non-negative")
+        if cluster_cutoff < 0:
+            raise Error("gem graph cluster_cutoff must be non-negative")
+        if construction_neighbor_count <= 0:
+            raise Error(
+                "gem graph construction_neighbor_count must be positive"
+            )
+        if degree_limit <= 0:
+            raise Error("gem graph degree_limit must be positive")
+        if adaptive_cluster_cutoff_max <= 0:
+            raise Error(
+                "gem graph adaptive_cluster_cutoff_max must be positive"
+            )
+        if adaptive_tree_max_depth < 0:
+            raise Error("gem graph adaptive_tree_max_depth must be non-negative")
+        if cluster_top_k_per_query_token <= 0:
+            raise Error(
+                "gem graph cluster_top_k_per_query_token must be positive"
+            )
+        if shortcut_candidate_k <= 0:
+            raise Error("gem graph shortcut_candidate_k must be positive")
+        if shortcut_beam_width <= 0:
+            raise Error("gem graph shortcut_beam_width must be positive")
+
+        self.fine_cluster_count = fine_cluster_count
+        self.coarse_cluster_count = coarse_cluster_count
+        self.cluster_cutoff = cluster_cutoff
+        self.construction_neighbor_count = construction_neighbor_count
+        self.degree_limit = degree_limit
+        self.enable_adaptive_cluster_cutoff = enable_adaptive_cluster_cutoff
+        self.adaptive_cluster_cutoff_max = adaptive_cluster_cutoff_max
+        self.adaptive_tree_max_depth = adaptive_tree_max_depth
+        self.cluster_top_k_per_query_token = cluster_top_k_per_query_token
+        self.enable_shortcuts = enable_shortcuts
+        self.shortcut_candidate_k = shortcut_candidate_k
+        self.shortcut_beam_width = shortcut_beam_width
+        self.training_pairs = training_pairs^
 
 
 struct GemGraphIndex(Copyable):
@@ -64,8 +154,11 @@ struct GemGraphIndex(Copyable):
     var graph_edge_count: Int
     var shortcut_edge_count: Int
     var cluster_cutoff: Int
+    var adaptive_cluster_cutoff_enabled: Bool
+    var adaptive_cluster_cutoff_max: Int
     var construction_neighbor_count: Int
     var degree_limit: Int
+    var shortcuts_enabled: Bool
 
     def __init__(out self):
         self.doc_ids = List[String]()
@@ -91,8 +184,11 @@ struct GemGraphIndex(Copyable):
         self.graph_edge_count = 0
         self.shortcut_edge_count = 0
         self.cluster_cutoff = 0
+        self.adaptive_cluster_cutoff_enabled = False
+        self.adaptive_cluster_cutoff_max = 0
         self.construction_neighbor_count = 0
         self.degree_limit = 0
+        self.shortcuts_enabled = False
 
     def __init__(
         out self,
@@ -114,8 +210,11 @@ struct GemGraphIndex(Copyable):
         vector_dim: Int,
         shortcut_edge_count: Int,
         cluster_cutoff: Int,
+        adaptive_cluster_cutoff_enabled: Bool,
+        adaptive_cluster_cutoff_max: Int,
         construction_neighbor_count: Int,
         degree_limit: Int,
+        shortcuts_enabled: Bool,
     ) raises:
         require_valid_gem_graph_index(
             doc_ids,
@@ -136,8 +235,11 @@ struct GemGraphIndex(Copyable):
             vector_dim,
             shortcut_edge_count,
             cluster_cutoff,
+            adaptive_cluster_cutoff_enabled,
+            adaptive_cluster_cutoff_max,
             construction_neighbor_count,
             degree_limit,
+            shortcuts_enabled,
         )
 
         self.doc_ids = doc_ids^
@@ -163,8 +265,11 @@ struct GemGraphIndex(Copyable):
         self.graph_edge_count = len(self.neighbor_doc_indices)
         self.shortcut_edge_count = shortcut_edge_count
         self.cluster_cutoff = cluster_cutoff
+        self.adaptive_cluster_cutoff_enabled = adaptive_cluster_cutoff_enabled
+        self.adaptive_cluster_cutoff_max = adaptive_cluster_cutoff_max
         self.construction_neighbor_count = construction_neighbor_count
         self.degree_limit = degree_limit
+        self.shortcuts_enabled = shortcuts_enabled
 
 
 def sum_ints(read values: List[Int]) -> Int:
@@ -207,13 +312,22 @@ def require_valid_gem_graph_index(
     vector_dim: Int,
     shortcut_edge_count: Int,
     cluster_cutoff: Int,
+    adaptive_cluster_cutoff_enabled: Bool,
+    adaptive_cluster_cutoff_max: Int,
     construction_neighbor_count: Int,
     degree_limit: Int,
+    shortcuts_enabled: Bool,
 ) raises:
     if shortcut_edge_count < 0:
         raise Error("gem graph shortcut_edge_count must be non-negative")
     if cluster_cutoff < 0:
         raise Error("gem graph cluster_cutoff must be non-negative")
+    if adaptive_cluster_cutoff_max < 0:
+        raise Error("gem graph adaptive_cluster_cutoff_max must be non-negative")
+    if adaptive_cluster_cutoff_enabled and adaptive_cluster_cutoff_max <= 0:
+        raise Error(
+            "gem graph adaptive_cluster_cutoff_max must be positive when adaptive cutoff is enabled"
+        )
     if construction_neighbor_count < 0:
         raise Error("gem graph construction_neighbor_count must be non-negative")
     if degree_limit < 0:
@@ -558,7 +672,10 @@ def build_quantization_distance_matrix(
     for left_index in range(len(centroids)):
         for right_index in range(len(centroids)):
             distances.append(
-                squared_l2_distance(centroids[left_index], centroids[right_index])
+                MetricScalar(1.0)
+                - MetricScalar(
+                    dot_product(centroids[left_index], centroids[right_index])
+                )
             )
     return distances^
 
@@ -573,7 +690,7 @@ def centroid_distance_at(
     return matrix[left_index * centroid_count + right_index]
 
 
-def greedy_quantized_emd_distance(
+def exact_quantized_emd_distance(
     read left_histogram: QuantizedCodeHistogram,
     left_total_count: Int,
     read right_histogram: QuantizedCodeHistogram,
@@ -586,45 +703,22 @@ def greedy_quantized_emd_distance(
 
     var left_masses = List[MetricScalar]()
     var right_masses = List[MetricScalar]()
+    var pair_costs = List[MetricScalar]()
     for count in left_histogram.counts:
         left_masses.append(MetricScalar(count) / MetricScalar(left_total_count))
     for count in right_histogram.counts:
         right_masses.append(MetricScalar(count) / MetricScalar(right_total_count))
-
-    var total = zero_metric_scalar()
-    while True:
-        var best_left = -1
-        var best_right = -1
-        var best_distance = max_metric_scalar()
-
-        for left_index in range(len(left_histogram.code_ids)):
-            if left_masses[left_index] <= zero_metric_scalar():
-                continue
-            for right_index in range(len(right_histogram.code_ids)):
-                if right_masses[right_index] <= zero_metric_scalar():
-                    continue
-                var distance = centroid_distance_at(
+    for left_index in range(len(left_histogram.code_ids)):
+        for right_index in range(len(right_histogram.code_ids)):
+            pair_costs.append(
+                centroid_distance_at(
                     distance_matrix,
                     centroid_count,
                     left_histogram.code_ids[left_index],
                     right_histogram.code_ids[right_index],
                 )
-                if distance < best_distance:
-                    best_distance = distance
-                    best_left = left_index
-                    best_right = right_index
-
-        if best_left < 0 or best_right < 0:
-            break
-
-        var flow = left_masses[best_left]
-        if right_masses[best_right] < flow:
-            flow = right_masses[best_right]
-
-        total += flow * best_distance
-        left_masses[best_left] -= flow
-        right_masses[best_right] -= flow
-    return total
+            )
+    return min_cost_transport_distance(left_masses, right_masses, pair_costs)
 
 
 def quantized_chamfer_distance_for_document(
@@ -657,7 +751,7 @@ def quantized_chamfer_distance_for_document(
                 best_distance = distance
         total += best_distance
 
-    return total
+    return total / MetricScalar(len(query_codes))
 
 
 def document_profile_has_cluster_arrays(
@@ -796,7 +890,7 @@ def profile_score_for_cluster_arrays(
     return min_score_scalar()
 
 
-def build_gem_graph_index(
+def build_gem_graph_index_legacy(
     read packed_index: PackedIndex,
     fine_cluster_count: Int,
     coarse_cluster_count: Int,
@@ -1056,6 +1150,963 @@ def build_gem_graph_index(
         packed_index.vector_dim,
         0,
         cluster_cutoff,
+        False,
+        0,
         construction_neighbor_count,
         degree_limit,
+        False,
+    )
+
+
+def list_contains_int(read values: List[Int], target: Int) -> Bool:
+    for value in values:
+        if value == target:
+            return True
+    return False
+
+
+def insert_unique_int(mut values: List[Int], item: Int):
+    if not list_contains_int(values, item):
+        values.append(item)
+
+
+def remove_front(
+    mut ids: List[Int], mut distances: List[MetricScalar]
+) raises -> Int:
+    if len(ids) == 0:
+        raise Error("cannot remove from an empty queue")
+
+    var head_id = ids[0]
+    for index in range(1, len(ids)):
+        ids[index - 1] = ids[index]
+        distances[index - 1] = distances[index]
+    _ = ids.pop()
+    _ = distances.pop()
+    return head_id
+
+
+struct FlattenedNeighborLists(Copyable):
+    var offsets: List[Int]
+    var doc_indices: List[Int]
+
+    def __init__(out self):
+        self.offsets = [0]
+        self.doc_indices = List[Int]()
+
+    def __init__(out self, var offsets: List[Int], var doc_indices: List[Int]):
+        self.offsets = offsets^
+        self.doc_indices = doc_indices^
+
+
+def flatten_neighbor_lists(
+    read neighbor_ids_by_doc: List[List[Int]]
+) -> FlattenedNeighborLists:
+    var offsets = [0]
+    var doc_indices = List[Int]()
+    for neighbors in neighbor_ids_by_doc:
+        for neighbor_doc in neighbors:
+            doc_indices.append(neighbor_doc)
+        offsets.append(len(doc_indices))
+    return FlattenedNeighborLists(offsets^, doc_indices^)
+
+
+def qemd_distance_between_documents(
+    read histograms_by_doc: List[QuantizedCodeHistogram],
+    read histogram_totals_by_doc: List[Int],
+    left_doc: Int,
+    right_doc: Int,
+    read distance_matrix: List[MetricScalar],
+    centroid_count: Int,
+) raises -> MetricScalar:
+    return exact_quantized_emd_distance(
+        histograms_by_doc[left_doc],
+        histogram_totals_by_doc[left_doc],
+        histograms_by_doc[right_doc],
+        histogram_totals_by_doc[right_doc],
+        distance_matrix,
+        centroid_count,
+    )
+
+
+def choose_profile_limit_for_document(
+    doc_unique_cluster_count: Int, max_profile_limit: Int
+) -> Int:
+    var limit = doc_unique_cluster_count
+    if max_profile_limit > 0 and max_profile_limit < limit:
+        limit = max_profile_limit
+    return limit
+
+
+def query_relevant_cluster_ids_for_centroids(
+    read query: EncodedQuery,
+    read index_centroids: List[List[VectorScalar]],
+    cluster_top_k_per_query_token: Int,
+) raises -> List[Int]:
+    if cluster_top_k_per_query_token <= 0:
+        raise Error("cluster_top_k_per_query_token must be positive")
+
+    var cluster_ids = List[Int]()
+    for query_token in query.token_vectors:
+        var top_ids = List[Int]()
+        var top_scores = List[ScoreScalar]()
+        for cluster_index in range(len(index_centroids)):
+            insert_descending_score(
+                top_ids,
+                top_scores,
+                cluster_index,
+                dot_product(query_token, index_centroids[cluster_index]),
+                cluster_top_k_per_query_token,
+            )
+        for cluster_index in top_ids:
+            insert_unique_int(cluster_ids, cluster_index)
+    return cluster_ids^
+
+
+def adaptive_profile_feature_row(
+    read profile_scores: List[ScoreScalar],
+    max_profile_limit: Int,
+    vector_count: Int,
+) raises -> List[MetricScalar]:
+    if max_profile_limit <= 0:
+        raise Error("adaptive profile max_profile_limit must be positive")
+    if vector_count <= 0:
+        raise Error("adaptive profile vector_count must be positive")
+
+    var features = List[MetricScalar]()
+    for score_index in range(max_profile_limit):
+        if score_index < len(profile_scores):
+            features.append(MetricScalar(profile_scores[score_index]))
+        else:
+            features.append(zero_metric_scalar())
+    features.append(MetricScalar(vector_count))
+    return features^
+
+
+def adaptive_profile_label(
+    read query: EncodedQuery,
+    read index_centroids: List[List[VectorScalar]],
+    read document_profile_cluster_ids: List[Int],
+    cluster_top_k_per_query_token: Int,
+    max_profile_limit: Int,
+) raises -> Int:
+    var relevant_clusters = query_relevant_cluster_ids_for_centroids(
+        query, index_centroids, cluster_top_k_per_query_token
+    )
+    var stop = len(document_profile_cluster_ids)
+    if stop > max_profile_limit:
+        stop = max_profile_limit
+    for rank in range(stop):
+        if list_contains_int(relevant_clusters, document_profile_cluster_ids[rank]):
+            return rank + 1
+    return max_profile_limit
+
+
+def find_document_index_by_id(read doc_ids: List[String], doc_id: String) raises -> Int:
+    for document_index in range(len(doc_ids)):
+        if doc_ids[document_index] == doc_id:
+            return document_index
+    raise Error("training pair positive_doc_id was not found in the packed index")
+
+
+def document_vector_count(read packed_index: PackedIndex, document_index: Int) -> Int:
+    return (
+        packed_index.doc_offsets[document_index + 1]
+        - packed_index.doc_offsets[document_index]
+    )
+
+
+def build_adaptive_profile_limits(
+    read packed_index: PackedIndex,
+    read raw_profile_ids_by_doc: List[List[Int]],
+    read raw_profile_scores_by_doc: List[List[ScoreScalar]],
+    read index_centroids: List[List[VectorScalar]],
+    read config: GemGraphBuildConfig,
+) raises -> List[Int]:
+    if not config.enable_adaptive_cluster_cutoff:
+        raise Error("adaptive profile limits require adaptive cutoff to be enabled")
+    if len(config.training_pairs) == 0:
+        raise Error(
+            "adaptive cluster cutoff requires training_pairs because the paper-defined labels are supervised"
+        )
+
+    var feature_rows = List[List[MetricScalar]]()
+    var labels = List[Int]()
+    for training_pair in config.training_pairs:
+        var document_index = find_document_index_by_id(
+            packed_index.doc_ids, training_pair.positive_doc_id
+        )
+        feature_rows.append(
+            adaptive_profile_feature_row(
+                raw_profile_scores_by_doc[document_index],
+                config.adaptive_cluster_cutoff_max,
+                document_vector_count(packed_index, document_index),
+            )
+        )
+        labels.append(
+            adaptive_profile_label(
+                training_pair.query,
+                index_centroids,
+                raw_profile_ids_by_doc[document_index],
+                config.cluster_top_k_per_query_token,
+                config.adaptive_cluster_cutoff_max,
+            )
+        )
+
+    var decision_tree = build_adaptive_cutoff_decision_tree(
+        feature_rows,
+        labels,
+        config.adaptive_tree_max_depth,
+    )
+    var predicted_limits = List[Int]()
+    for document_index in range(packed_index.document_count):
+        var unique_cluster_count = len(raw_profile_ids_by_doc[document_index])
+        if unique_cluster_count == 0:
+            predicted_limits.append(0)
+            continue
+        var predicted_limit = decision_tree.predict_label(
+            adaptive_profile_feature_row(
+                raw_profile_scores_by_doc[document_index],
+                config.adaptive_cluster_cutoff_max,
+                document_vector_count(packed_index, document_index),
+            )
+        )
+        if predicted_limit < 1:
+            predicted_limit = 1
+        if predicted_limit > config.adaptive_cluster_cutoff_max:
+            predicted_limit = config.adaptive_cluster_cutoff_max
+        if predicted_limit > unique_cluster_count:
+            predicted_limit = unique_cluster_count
+        predicted_limits.append(predicted_limit)
+    return predicted_limits^
+
+
+def approximate_cluster_neighbor_candidates(
+    document_index: Int,
+    entry_doc: Int,
+    read cluster_inserted_docs: List[Int],
+    read neighbor_ids_by_doc: List[List[Int]],
+    read histograms_by_doc: List[QuantizedCodeHistogram],
+    read histogram_totals_by_doc: List[Int],
+    read distance_matrix: List[MetricScalar],
+    centroid_count: Int,
+    candidate_count: Int,
+) raises -> List[Int]:
+    if candidate_count <= 0 or len(cluster_inserted_docs) == 0:
+        return List[Int]()
+    if not list_contains_int(cluster_inserted_docs, entry_doc):
+        raise Error("cluster entry_doc must already be present in the cluster graph")
+
+    var queue_ids = List[Int]()
+    var queue_distances = List[MetricScalar]()
+    var result_ids = List[Int]()
+    var result_distances = List[MetricScalar]()
+    var visited = List[Int]()
+
+    var entry_distance = qemd_distance_between_documents(
+        histograms_by_doc,
+        histogram_totals_by_doc,
+        document_index,
+        entry_doc,
+        distance_matrix,
+        centroid_count,
+    )
+    visited.append(entry_doc)
+    insert_ascending_metric(
+        queue_ids, queue_distances, entry_doc, entry_distance, candidate_count
+    )
+    insert_ascending_metric(
+        result_ids, result_distances, entry_doc, entry_distance, candidate_count
+    )
+
+    while len(queue_ids) > 0:
+        var current_distance = queue_distances[0]
+        var tau = max_metric_scalar()
+        if len(result_distances) >= candidate_count:
+            tau = result_distances[len(result_distances) - 1]
+        if len(result_distances) >= candidate_count and current_distance > tau:
+            break
+
+        var current_doc = remove_front(queue_ids, queue_distances)
+        for neighbor_doc in neighbor_ids_by_doc[current_doc]:
+            if not list_contains_int(cluster_inserted_docs, neighbor_doc):
+                continue
+            if list_contains_int(visited, neighbor_doc):
+                continue
+            visited.append(neighbor_doc)
+            var neighbor_distance = qemd_distance_between_documents(
+                histograms_by_doc,
+                histogram_totals_by_doc,
+                document_index,
+                neighbor_doc,
+                distance_matrix,
+                centroid_count,
+            )
+            insert_ascending_metric(
+                queue_ids,
+                queue_distances,
+                neighbor_doc,
+                neighbor_distance,
+                candidate_count,
+            )
+            insert_ascending_metric(
+                result_ids,
+                result_distances,
+                neighbor_doc,
+                neighbor_distance,
+                candidate_count,
+            )
+
+    return result_ids^
+
+
+def insert_neighbor_with_degree_limit(
+    mut neighbor_ids_by_doc: List[List[Int]],
+    document_index: Int,
+    neighbor_doc: Int,
+    degree_limit: Int,
+    read histograms_by_doc: List[QuantizedCodeHistogram],
+    read histogram_totals_by_doc: List[Int],
+    read distance_matrix: List[MetricScalar],
+    centroid_count: Int,
+) raises:
+    if document_index == neighbor_doc:
+        return
+
+    var candidate_ids = List[Int]()
+    for existing_neighbor in neighbor_ids_by_doc[document_index]:
+        insert_unique_int(candidate_ids, existing_neighbor)
+    insert_unique_int(candidate_ids, neighbor_doc)
+
+    var selected_ids = List[Int]()
+    var selected_distances = List[MetricScalar]()
+    for candidate_doc in candidate_ids:
+        insert_ascending_metric(
+            selected_ids,
+            selected_distances,
+            candidate_doc,
+            qemd_distance_between_documents(
+                histograms_by_doc,
+                histogram_totals_by_doc,
+                document_index,
+                candidate_doc,
+                distance_matrix,
+                centroid_count,
+            ),
+            degree_limit,
+        )
+    neighbor_ids_by_doc[document_index] = selected_ids^
+
+
+def add_mutual_connection(
+    mut neighbor_ids_by_doc: List[List[Int]],
+    left_doc: Int,
+    right_doc: Int,
+    degree_limit: Int,
+    read histograms_by_doc: List[QuantizedCodeHistogram],
+    read histogram_totals_by_doc: List[Int],
+    read distance_matrix: List[MetricScalar],
+    centroid_count: Int,
+) raises:
+    insert_neighbor_with_degree_limit(
+        neighbor_ids_by_doc,
+        left_doc,
+        right_doc,
+        degree_limit,
+        histograms_by_doc,
+        histogram_totals_by_doc,
+        distance_matrix,
+        centroid_count,
+    )
+    insert_neighbor_with_degree_limit(
+        neighbor_ids_by_doc,
+        right_doc,
+        left_doc,
+        degree_limit,
+        histograms_by_doc,
+        histogram_totals_by_doc,
+        distance_matrix,
+        centroid_count,
+    )
+
+
+def merge_bridge_neighbors(
+    mut neighbor_ids_by_doc: List[List[Int]],
+    document_index: Int,
+    read new_neighbors: List[Int],
+    read doc_profile_offsets: List[Int],
+    read doc_profile_cluster_ids: List[Int],
+    degree_limit: Int,
+    read histograms_by_doc: List[QuantizedCodeHistogram],
+    read histogram_totals_by_doc: List[Int],
+    read distance_matrix: List[MetricScalar],
+    centroid_count: Int,
+) raises:
+    var combined_ids = List[Int]()
+    for neighbor_doc in neighbor_ids_by_doc[document_index]:
+        insert_unique_int(combined_ids, neighbor_doc)
+    for neighbor_doc in new_neighbors:
+        insert_unique_int(combined_ids, neighbor_doc)
+
+    var selected_ids = List[Int]()
+    for profile_index in range(
+        doc_profile_offsets[document_index],
+        doc_profile_offsets[document_index + 1],
+    ):
+        if len(selected_ids) >= degree_limit:
+            break
+        var coarse_cluster = doc_profile_cluster_ids[profile_index]
+        var best_neighbor = -1
+        var best_distance = max_metric_scalar()
+        for candidate_doc in combined_ids:
+            if not document_profile_has_cluster_arrays(
+                doc_profile_offsets,
+                doc_profile_cluster_ids,
+                candidate_doc,
+                coarse_cluster,
+            ):
+                continue
+            var distance = qemd_distance_between_documents(
+                histograms_by_doc,
+                histogram_totals_by_doc,
+                document_index,
+                candidate_doc,
+                distance_matrix,
+                centroid_count,
+            )
+            if distance < best_distance:
+                best_distance = distance
+                best_neighbor = candidate_doc
+        if best_neighbor != -1:
+            insert_unique_int(selected_ids, best_neighbor)
+
+    var ranked_ids = List[Int]()
+    var ranked_distances = List[MetricScalar]()
+    for candidate_doc in combined_ids:
+        insert_ascending_metric(
+            ranked_ids,
+            ranked_distances,
+            candidate_doc,
+            qemd_distance_between_documents(
+                histograms_by_doc,
+                histogram_totals_by_doc,
+                document_index,
+                candidate_doc,
+                distance_matrix,
+                centroid_count,
+            ),
+            len(combined_ids),
+        )
+    for candidate_doc in ranked_ids:
+        if len(selected_ids) >= degree_limit:
+            break
+        insert_unique_int(selected_ids, candidate_doc)
+
+    var final_selected_ids = selected_ids.copy()
+    neighbor_ids_by_doc[document_index] = selected_ids^
+    for neighbor_doc in final_selected_ids:
+        insert_neighbor_with_degree_limit(
+            neighbor_ids_by_doc,
+            neighbor_doc,
+            document_index,
+            degree_limit,
+            histograms_by_doc,
+            histogram_totals_by_doc,
+            distance_matrix,
+            centroid_count,
+        )
+
+
+def graph_candidate_doc_indices_for_query(
+    read query: EncodedQuery,
+    read index: GemGraphIndex,
+    read neighbor_ids_by_doc: List[List[Int]],
+    candidate_k: Int,
+    cluster_top_k_per_query_token: Int,
+    beam_width: Int,
+) raises -> List[Int]:
+    if candidate_k <= 0:
+        return List[Int]()
+
+    var relevant_clusters = query_relevant_cluster_ids(
+        query,
+        index,
+        cluster_top_k_per_query_token,
+    )
+    if len(relevant_clusters) == 0:
+        return List[Int]()
+
+    var entry_docs = query_entry_doc_indices(index, relevant_clusters)
+    if len(entry_docs) == 0:
+        return List[Int]()
+
+    var distance_matrix = build_quantization_distance_matrix(
+        index.quantization_centroids
+    )
+    var query_codes = quantize_query_codes(query, index)
+
+    var result_doc_indices = List[Int]()
+    var result_distances = List[MetricScalar]()
+    var visited = List[Int]()
+    var queue_doc_indices = List[List[Int]]()
+    var queue_distances = List[List[MetricScalar]]()
+
+    var effective_beam_width = beam_width
+    if effective_beam_width < candidate_k:
+        effective_beam_width = candidate_k
+
+    for entry_doc in entry_docs:
+        var entry_distance = quantized_chamfer_distance_for_document(
+            query_codes,
+            index,
+            entry_doc,
+            distance_matrix,
+        )
+        visited.append(entry_doc)
+        insert_ascending_metric(
+            result_doc_indices,
+            result_distances,
+            entry_doc,
+            entry_distance,
+            effective_beam_width,
+        )
+        var local_ids = List[Int]()
+        var local_distances = List[MetricScalar]()
+        insert_ascending_metric(
+            local_ids,
+            local_distances,
+            entry_doc,
+            entry_distance,
+            effective_beam_width,
+        )
+        queue_doc_indices.append(local_ids^)
+        queue_distances.append(local_distances^)
+
+    while True:
+        var any_non_empty = False
+        for queue_index in range(len(queue_doc_indices)):
+            if len(queue_doc_indices[queue_index]) == 0:
+                continue
+
+            any_non_empty = True
+            var current_distance = queue_distances[queue_index][0]
+            var tau = max_metric_scalar()
+            if len(result_distances) >= effective_beam_width:
+                tau = result_distances[len(result_distances) - 1]
+
+            if (
+                len(result_distances) >= effective_beam_width
+                and current_distance > tau
+            ):
+                queue_doc_indices[queue_index] = List[Int]()
+                queue_distances[queue_index] = List[MetricScalar]()
+                continue
+
+            var current_doc = remove_front(
+                queue_doc_indices[queue_index],
+                queue_distances[queue_index],
+            )
+            for neighbor_doc in neighbor_ids_by_doc[current_doc]:
+                if list_contains_int(visited, neighbor_doc):
+                    continue
+                if not document_profile_intersects_clusters(
+                    index, neighbor_doc, relevant_clusters
+                ):
+                    continue
+
+                var neighbor_distance = quantized_chamfer_distance_for_document(
+                    query_codes,
+                    index,
+                    neighbor_doc,
+                    distance_matrix,
+                )
+                visited.append(neighbor_doc)
+                insert_ascending_metric(
+                    queue_doc_indices[queue_index],
+                    queue_distances[queue_index],
+                    neighbor_doc,
+                    neighbor_distance,
+                    effective_beam_width,
+                )
+                insert_ascending_metric(
+                    result_doc_indices,
+                    result_distances,
+                    neighbor_doc,
+                    neighbor_distance,
+                    effective_beam_width,
+                )
+        if not any_non_empty:
+            break
+
+    var top_doc_indices = List[Int]()
+    var limit = candidate_k
+    if len(result_doc_indices) < limit:
+        limit = len(result_doc_indices)
+    for result_index in range(limit):
+        top_doc_indices.append(result_doc_indices[result_index])
+    return top_doc_indices^
+
+
+def inject_shortcuts(
+    read index: GemGraphIndex,
+    mut neighbor_ids_by_doc: List[List[Int]],
+    read config: GemGraphBuildConfig,
+) raises -> Int:
+    var injected_shortcut_count = 0
+    for training_pair in config.training_pairs:
+        var positive_doc = find_document_index_by_id(
+            index.doc_ids, training_pair.positive_doc_id
+        )
+        var candidate_doc_indices = graph_candidate_doc_indices_for_query(
+            training_pair.query,
+            index,
+            neighbor_ids_by_doc,
+            config.shortcut_candidate_k,
+            config.cluster_top_k_per_query_token,
+            config.shortcut_beam_width,
+        )
+        if len(candidate_doc_indices) == 0:
+            continue
+        if list_contains_int(candidate_doc_indices, positive_doc):
+            continue
+
+        var top_doc = candidate_doc_indices[0]
+        if top_doc == positive_doc:
+            continue
+        if len(neighbor_ids_by_doc[top_doc]) >= config.degree_limit:
+            continue
+        if len(neighbor_ids_by_doc[positive_doc]) >= config.degree_limit:
+            continue
+        if list_contains_int(neighbor_ids_by_doc[top_doc], positive_doc):
+            continue
+
+        neighbor_ids_by_doc[top_doc].append(positive_doc)
+        neighbor_ids_by_doc[positive_doc].append(top_doc)
+        injected_shortcut_count += 1
+    return injected_shortcut_count
+
+
+def build_gem_graph_index_with_config(
+    read packed_index: PackedIndex,
+    read config: GemGraphBuildConfig,
+) raises -> GemGraphIndex:
+    if packed_index.document_count <= 0:
+        raise Error("gem graph requires at least one document")
+
+    var effective_fine_cluster_count = choose_effective_cluster_count(
+        config.fine_cluster_count, packed_index.total_vector_count
+    )
+    var quantization_centroids = build_kmeans_centroids(
+        packed_index.token_vectors,
+        effective_fine_cluster_count,
+        DEFAULT_GEM_GRAPH_FINE_CLUSTER_REFINEMENT_STEPS,
+    )
+    var effective_coarse_cluster_count = choose_effective_cluster_count(
+        config.coarse_cluster_count, len(quantization_centroids)
+    )
+    var index_centroids = build_kmeans_centroids(
+        quantization_centroids,
+        effective_coarse_cluster_count,
+        DEFAULT_GEM_GRAPH_COARSE_CLUSTER_REFINEMENT_STEPS,
+    )
+
+    var quantization_to_index = List[Int]()
+    for centroid in quantization_centroids:
+        quantization_to_index.append(
+            nearest_centroid_index(centroid, index_centroids)
+        )
+
+    var doc_code_offsets = [0]
+    var doc_code_ids = List[Int]()
+    var doc_code_counts = List[Int]()
+    var doc_cluster_ids = List[List[Int]]()
+    var doc_cluster_counts = List[List[Int]]()
+    var document_frequencies = List[Int]()
+    for _ in range(len(index_centroids)):
+        document_frequencies.append(0)
+
+    for document_index in range(packed_index.document_count):
+        var histogram_code_ids = List[Int]()
+        var histogram_code_counts = List[Int]()
+        var cluster_ids = List[Int]()
+        var cluster_counts = List[Int]()
+        var start = packed_index.doc_offsets[document_index]
+        var stop = packed_index.doc_offsets[document_index + 1]
+        for token_index in range(start, stop):
+            var code_id = nearest_centroid_index(
+                packed_index.token_vectors[token_index], quantization_centroids
+            )
+            append_or_increment_count(
+                histogram_code_ids, histogram_code_counts, code_id
+            )
+            append_or_increment_count(
+                cluster_ids,
+                cluster_counts,
+                quantization_to_index[code_id],
+            )
+        for code_index in range(len(histogram_code_ids)):
+            doc_code_ids.append(histogram_code_ids[code_index])
+            doc_code_counts.append(histogram_code_counts[code_index])
+        doc_code_offsets.append(len(doc_code_ids))
+        doc_cluster_ids.append(cluster_ids^)
+        doc_cluster_counts.append(cluster_counts^)
+        for cluster_id in doc_cluster_ids[document_index]:
+            document_frequencies[cluster_id] += 1
+
+    var raw_profile_ids_by_doc = List[List[Int]]()
+    var raw_profile_scores_by_doc = List[List[ScoreScalar]]()
+    var raw_profile_limit = config.cluster_cutoff
+    if (
+        config.enable_adaptive_cluster_cutoff
+        and config.adaptive_cluster_cutoff_max > raw_profile_limit
+    ):
+        raw_profile_limit = config.adaptive_cluster_cutoff_max
+
+    for document_index in range(packed_index.document_count):
+        var profile_ids = List[Int]()
+        var profile_scores = List[ScoreScalar]()
+        var profile_limit = choose_profile_limit_for_document(
+            len(doc_cluster_ids[document_index]), raw_profile_limit
+        )
+        for cluster_position in range(len(doc_cluster_ids[document_index])):
+            var coarse_cluster = doc_cluster_ids[document_index][cluster_position]
+            var tf = doc_cluster_counts[document_index][cluster_position]
+            var idf = MetricScalar(log2(
+                MetricScalar(packed_index.document_count)
+                / MetricScalar(1 + document_frequencies[coarse_cluster])
+            ))
+            insert_descending_score(
+                profile_ids,
+                profile_scores,
+                coarse_cluster,
+                ScoreScalar(MetricScalar(tf) * idf),
+                profile_limit,
+            )
+        raw_profile_ids_by_doc.append(profile_ids^)
+        raw_profile_scores_by_doc.append(profile_scores^)
+
+    var profile_limits_by_doc = List[Int]()
+    if config.enable_adaptive_cluster_cutoff:
+        profile_limits_by_doc = build_adaptive_profile_limits(
+            packed_index,
+            raw_profile_ids_by_doc,
+            raw_profile_scores_by_doc,
+            index_centroids,
+            config,
+        )
+    else:
+        for document_index in range(packed_index.document_count):
+            profile_limits_by_doc.append(
+                choose_profile_limit_for_document(
+                    len(raw_profile_ids_by_doc[document_index]),
+                    config.cluster_cutoff,
+                )
+            )
+
+    var doc_profile_offsets = [0]
+    var doc_profile_cluster_ids = List[Int]()
+    var doc_profile_scores = List[ScoreScalar]()
+    var cluster_members = List[List[Int]]()
+    for _ in range(len(index_centroids)):
+        cluster_members.append(List[Int]())
+
+    for document_index in range(packed_index.document_count):
+        var effective_cluster_cutoff = profile_limits_by_doc[document_index]
+        for profile_index in range(effective_cluster_cutoff):
+            doc_profile_cluster_ids.append(
+                raw_profile_ids_by_doc[document_index][profile_index]
+            )
+            doc_profile_scores.append(
+                raw_profile_scores_by_doc[document_index][profile_index]
+            )
+            cluster_members[
+                raw_profile_ids_by_doc[document_index][profile_index]
+            ].append(document_index)
+        doc_profile_offsets.append(len(doc_profile_cluster_ids))
+
+    var cluster_offsets = [0]
+    var cluster_doc_indices = List[Int]()
+    for cluster_index in range(len(index_centroids)):
+        for document_index in cluster_members[cluster_index]:
+            cluster_doc_indices.append(document_index)
+        cluster_offsets.append(len(cluster_doc_indices))
+
+    var entry_doc_indices = List[Int]()
+    for cluster_index in range(len(index_centroids)):
+        if len(cluster_members[cluster_index]) == 0:
+            entry_doc_indices.append(-1)
+            continue
+        var best_doc = cluster_members[cluster_index][0]
+        var best_score = min_score_scalar()
+        for document_index in cluster_members[cluster_index]:
+            var score = profile_score_for_cluster_arrays(
+                doc_profile_offsets,
+                doc_profile_cluster_ids,
+                doc_profile_scores,
+                document_index,
+                cluster_index,
+            )
+            if score > best_score:
+                best_score = score
+                best_doc = document_index
+        entry_doc_indices.append(best_doc)
+
+    var histograms_by_doc = List[QuantizedCodeHistogram]()
+    var histogram_totals_by_doc = List[Int]()
+    for document_index in range(packed_index.document_count):
+        var histogram = build_document_quantized_histogram(
+            doc_code_ids,
+            doc_code_counts,
+            doc_code_offsets[document_index],
+            doc_code_offsets[document_index + 1],
+        )
+        histogram_totals_by_doc.append(sum_ints(histogram.counts))
+        histograms_by_doc.append(histogram^)
+
+    var distance_matrix = build_quantization_distance_matrix(quantization_centroids)
+    var neighbor_ids_by_doc = List[List[Int]]()
+    var inserted_globally = List[Bool]()
+    for _ in range(packed_index.document_count):
+        neighbor_ids_by_doc.append(List[Int]())
+        inserted_globally.append(False)
+
+    for cluster_index in range(len(index_centroids)):
+        if len(cluster_members[cluster_index]) == 0:
+            continue
+        var entry_doc = entry_doc_indices[cluster_index]
+        var cluster_inserted_docs = List[Int]()
+        for cluster_doc in cluster_members[cluster_index]:
+            if len(cluster_inserted_docs) == 0:
+                inserted_globally[cluster_doc] = True
+                cluster_inserted_docs.append(cluster_doc)
+                continue
+
+            var new_neighbors = approximate_cluster_neighbor_candidates(
+                cluster_doc,
+                entry_doc,
+                cluster_inserted_docs,
+                neighbor_ids_by_doc,
+                histograms_by_doc,
+                histogram_totals_by_doc,
+                distance_matrix,
+                len(quantization_centroids),
+                config.construction_neighbor_count,
+            )
+            if len(new_neighbors) == 0:
+                new_neighbors.append(entry_doc)
+
+            if not inserted_globally[cluster_doc]:
+                inserted_globally[cluster_doc] = True
+                for neighbor_doc in new_neighbors:
+                    add_mutual_connection(
+                        neighbor_ids_by_doc,
+                        cluster_doc,
+                        neighbor_doc,
+                        config.degree_limit,
+                        histograms_by_doc,
+                        histogram_totals_by_doc,
+                        distance_matrix,
+                        len(quantization_centroids),
+                )
+            else:
+                merge_bridge_neighbors(
+                    neighbor_ids_by_doc,
+                    cluster_doc,
+                    new_neighbors,
+                    doc_profile_offsets,
+                    doc_profile_cluster_ids,
+                    config.degree_limit,
+                    histograms_by_doc,
+                    histogram_totals_by_doc,
+                    distance_matrix,
+                    len(quantization_centroids),
+                )
+            cluster_inserted_docs.append(cluster_doc)
+
+    var provisional_flattened_neighbors = flatten_neighbor_lists(neighbor_ids_by_doc)
+    var provisional_neighbor_offsets = provisional_flattened_neighbors.offsets.copy()
+    var provisional_neighbor_doc_indices = (
+        provisional_flattened_neighbors.doc_indices.copy()
+    )
+    var stored_adaptive_cluster_cutoff_max = 0
+    if config.enable_adaptive_cluster_cutoff:
+        stored_adaptive_cluster_cutoff_max = config.adaptive_cluster_cutoff_max
+    var provisional_index = GemGraphIndex(
+        packed_index.doc_ids.copy(),
+        doc_code_offsets.copy(),
+        doc_code_ids.copy(),
+        doc_code_counts.copy(),
+        quantization_centroids.copy(),
+        index_centroids.copy(),
+        quantization_to_index.copy(),
+        doc_profile_offsets.copy(),
+        doc_profile_cluster_ids.copy(),
+        doc_profile_scores.copy(),
+        cluster_offsets.copy(),
+        cluster_doc_indices.copy(),
+        entry_doc_indices.copy(),
+        provisional_neighbor_offsets^,
+        provisional_neighbor_doc_indices^,
+        packed_index.vector_dim,
+        0,
+        config.cluster_cutoff,
+        config.enable_adaptive_cluster_cutoff,
+        stored_adaptive_cluster_cutoff_max,
+        config.construction_neighbor_count,
+        config.degree_limit,
+        config.enable_shortcuts,
+    )
+    var shortcut_edge_count = 0
+    if config.enable_shortcuts:
+        shortcut_edge_count = inject_shortcuts(
+            provisional_index,
+            neighbor_ids_by_doc,
+            config,
+        )
+    var flattened_neighbors = flatten_neighbor_lists(neighbor_ids_by_doc)
+    var flattened_neighbor_offsets = flattened_neighbors.offsets.copy()
+    var flattened_neighbor_doc_indices = flattened_neighbors.doc_indices.copy()
+    return GemGraphIndex(
+        packed_index.doc_ids.copy(),
+        doc_code_offsets^,
+        doc_code_ids^,
+        doc_code_counts^,
+        quantization_centroids^,
+        index_centroids^,
+        quantization_to_index^,
+        doc_profile_offsets^,
+        doc_profile_cluster_ids^,
+        doc_profile_scores^,
+        cluster_offsets^,
+        cluster_doc_indices^,
+        entry_doc_indices^,
+        flattened_neighbor_offsets^,
+        flattened_neighbor_doc_indices^,
+        packed_index.vector_dim,
+        shortcut_edge_count,
+        config.cluster_cutoff,
+        config.enable_adaptive_cluster_cutoff,
+        stored_adaptive_cluster_cutoff_max,
+        config.construction_neighbor_count,
+        config.degree_limit,
+        config.enable_shortcuts,
+    )
+
+
+def build_gem_graph_index(
+    read packed_index: PackedIndex,
+    fine_cluster_count: Int,
+    coarse_cluster_count: Int,
+    cluster_cutoff: Int,
+    construction_neighbor_count: Int = DEFAULT_GEM_GRAPH_CONSTRUCTION_NEIGHBOR_COUNT,
+    degree_limit: Int = DEFAULT_GEM_GRAPH_DEGREE_LIMIT,
+) raises -> GemGraphIndex:
+    return build_gem_graph_index_with_config(
+        packed_index,
+        GemGraphBuildConfig(
+            fine_cluster_count,
+            coarse_cluster_count,
+            cluster_cutoff,
+            construction_neighbor_count,
+            degree_limit,
+        ),
     )
