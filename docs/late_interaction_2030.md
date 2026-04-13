@@ -80,6 +80,10 @@ Verified since the first version of this note:
   - service health and storage counters aggregate the published manifest tree
   - live-snapshot compaction can publish a replacement snapshot without
     mutating the old one in place
+- the hosted runtime now has one narrow non-`match_all` filter capability:
+  - exact-only `doc_id` filtering is supported
+  - wider metadata and candidate-pushdown filtering are still explicitly
+    unsupported
 
 Those are substrate wins, not proof of the stronger efficiency thesis.
 
@@ -123,6 +127,7 @@ Evidence:
 - [docs/traces/2026-04-12_synthetic_hard_recall_stage_aware.md](traces/2026-04-12_synthetic_hard_recall_stage_aware.md)
 - [docs/traces/2026-04-13_hosted_engine_p0.md](traces/2026-04-13_hosted_engine_p0.md)
 - [docs/traces/2026-04-13_hosted_engine_p1_ops.md](traces/2026-04-13_hosted_engine_p1_ops.md)
+- [docs/traces/2026-04-13_exact_doc_id_filters.md](traces/2026-04-13_exact_doc_id_filters.md)
 - [docs/epistemic_status.md](epistemic_status.md)
 
 ## What Kayak Should Change

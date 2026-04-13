@@ -18,17 +18,22 @@ from kayak import (
     UpsertDocument,
     UpsertDocumentsRequest,
     VECTOR_SCALAR_NAME,
+    best_effort_faithfulness_policy,
     build_service_health_status,
     build_service_metrics_snapshot,
     create_collection,
     create_snapshot,
     default_exact_search_request,
     delete_documents,
+    document_proxy_search_plan,
     execute_debug_search,
     execute_search,
+    exact_full_scan_search_plan,
     export_snapshot,
     import_snapshot,
     load_collection_manifest,
+    one_of_filter,
+    SearchRequest,
     upsert_documents,
 )
 
@@ -336,6 +341,89 @@ def test_hosted_service_metrics_aggregate_visible_snapshots() raises:
         metrics.byte_size,
         news_snapshot.stats.byte_size + blogs_snapshot.stats.byte_size,
     )
+
+
+def test_hosted_collection_runtime_supports_exact_doc_id_filters() raises:
+    var service_root = unique_service_root("kayak-service-runtime-doc-id-filter")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-a", [[0.0, 1.0], [0.0, 1.0]]),
+                    "alpha",
+                ),
+                UpsertDocument(
+                    make_document("doc-b", [[1.0, 0.0], [0.0, 1.0]]),
+                    "beta",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish filter fixture",
+        ),
+    )
+
+    var exact_filtered = execute_search(
+        ExactCpuBackend(),
+        service_root,
+        SearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            one_of_filter("doc_id", ["doc-a"]),
+            exact_full_scan_search_plan(1, 1),
+            False,
+        ),
+    )
+
+    var raised = False
+    try:
+        _ = execute_search(
+            ExactCpuBackend(),
+            service_root,
+            SearchRequest(
+                CollectionId("news"),
+                TenantId("tenant-a"),
+                NamespaceId("search"),
+                SnapshotId("snapshot-0001"),
+                make_query(),
+                one_of_filter("doc_id", ["doc-a"]),
+                document_proxy_search_plan(
+                    1, 1, best_effort_faithfulness_policy()
+                ),
+                False,
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(exact_filtered.hits[0].doc_id, "doc-a")
+    assert_equal(raised, True)
 
 
 def main() raises:

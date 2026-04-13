@@ -35,6 +35,7 @@ The goal is to make each major claim legible as:
 - [docs/traces/2026-04-13_centroid_primitives.md](traces/2026-04-13_centroid_primitives.md)
 - [docs/traces/2026-04-13_hosted_engine_p0.md](traces/2026-04-13_hosted_engine_p0.md)
 - [docs/traces/2026-04-13_hosted_engine_p1_ops.md](traces/2026-04-13_hosted_engine_p1_ops.md)
+- [docs/traces/2026-04-13_exact_doc_id_filters.md](traces/2026-04-13_exact_doc_id_filters.md)
 
 ## Status Key
 

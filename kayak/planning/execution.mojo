@@ -2,6 +2,7 @@ from std.collections import List
 
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.contracts import EncodedQuery
+from kayak.filters import FilterExpression, match_all_filter
 from kayak.numeric import MetricScalar
 from kayak.runtime import ExactScoringBackend
 from kayak.search import SearchHit
@@ -27,6 +28,7 @@ def candidate_generation_for_plan[Backend: ExactScoringBackend](
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
+    read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     if plan.candidate_generator.family == CANDIDATE_GENERATOR_FAMILY_EXACT:
         return candidate_generation_for_exact_family(
@@ -34,6 +36,7 @@ def candidate_generation_for_plan[Backend: ExactScoringBackend](
             query,
             snapshot,
             plan,
+            filter_expression,
         )
 
     if plan.candidate_generator.family == CANDIDATE_GENERATOR_FAMILY_PROXY:
@@ -42,6 +45,7 @@ def candidate_generation_for_plan[Backend: ExactScoringBackend](
             query,
             snapshot,
             plan,
+            filter_expression,
         )
 
     if plan.candidate_generator.family == CANDIDATE_GENERATOR_FAMILY_CENTROID:
@@ -50,6 +54,7 @@ def candidate_generation_for_plan[Backend: ExactScoringBackend](
             query,
             snapshot,
             plan,
+            filter_expression,
         )
 
     if plan.candidate_generator.family == CANDIDATE_GENERATOR_FAMILY_GRAPH:
@@ -58,6 +63,7 @@ def candidate_generation_for_plan[Backend: ExactScoringBackend](
             query,
             snapshot,
             plan,
+            filter_expression,
         )
 
     raise Error(
@@ -110,12 +116,14 @@ def search_collection_for_plan[Backend: ExactScoringBackend](
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
+    read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> List[CollectionHit]:
     var candidate_set = candidate_generation_for_plan(
         backend,
         query,
         snapshot,
         plan,
+        filter_expression,
     )
     return final_hits_for_plan(
         backend,

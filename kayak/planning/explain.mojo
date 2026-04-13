@@ -2,6 +2,7 @@ from std.collections import List
 
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.contracts import EncodedQuery
+from kayak.filters import FilterExpression, match_all_filter
 from kayak.numeric import MetricScalar
 from kayak.runtime import ExactScoringBackend
 
@@ -58,15 +59,20 @@ def explain_collection_search[Backend: ExactScoringBackend](
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
+    read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CollectionSearchExplain:
     var candidate_set = candidate_generation_for_plan(
-        backend, query, snapshot, plan
+        backend, query, snapshot, plan, filter_expression
     )
     var exact_stage = final_hits_for_plan(
         backend, query, snapshot, candidate_set, plan
     )
     var oracle_final_hits = exact_oracle_hits_for_snapshot(
-        backend, query, snapshot, plan.candidate_budget.final_k
+        backend,
+        query,
+        snapshot,
+        plan.candidate_budget.final_k,
+        filter_expression,
     )
     var observed_candidate_recall_at_final_k = candidate_recall_at_final_k(
         candidate_set, oracle_final_hits

@@ -54,7 +54,8 @@ That combination implies a clear next move:
 - snapshot publication is explicit, but not yet atomic across crash boundaries
 - search-native sidecars still need policy-driven build selection and metadata
   sidecars beyond today's baseline registry
-- filters exist in the request contract but not in hosted execution
+- hosted execution now supports only a narrow exact `doc_id` filter path;
+  metadata and candidate-pushdown filters still do not exist
 - service health and metrics contracts exist, but operational metrics do not
   yet drive runtime behavior
 - current stronger ceiling support is still narrow and benchmark-oriented

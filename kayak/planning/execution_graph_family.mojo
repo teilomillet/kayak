@@ -6,6 +6,7 @@ from kayak.collections import (
     loaded_segment_stored_gem_graph_index,
 )
 from kayak.contracts import EncodedQuery
+from kayak.filters import FilterExpression, match_all_filter
 from kayak.index import (
     build_quantization_distance_matrix,
     document_profile_intersects_clusters,
@@ -240,8 +241,10 @@ def candidate_generation_for_graph_family[Backend: ExactScoringBackend](
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
+    read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     _ = backend
+    _ = filter_expression
 
     var hits = List[CollectionHit]()
     var token_count = 0

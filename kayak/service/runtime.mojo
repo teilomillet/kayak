@@ -24,7 +24,10 @@ from kayak.collections import (
     snapshot_manifest_exists,
 )
 from kayak.contracts import EncodedDocument
-from kayak.filters import FilterExpression
+from kayak.filters import (
+    FilterExpression,
+    filter_expression_is_exact_doc_id_filter,
+)
 from kayak.planning import (
     explain_collection_search,
     search_collection_for_plan,
@@ -57,9 +60,19 @@ from .snapshot_requests import (
 )
 
 
-def require_filter_is_match_all(read filter_expression: FilterExpression) raises:
-    if not filter_expression.is_match_all():
-        raise Error("hosted collection runtime currently supports match_all filters only")
+def require_filter_supported_for_request(read request: SearchRequest) raises:
+    if request.filter_expression.is_match_all():
+        return
+
+    if not filter_expression_is_exact_doc_id_filter(request.filter_expression):
+        raise Error(
+            "hosted collection runtime currently supports only match_all or exact doc_id filters"
+        )
+
+    if request.plan.candidate_generator.kind != "exact_full_scan":
+        raise Error(
+            "non-match_all filters currently require exact_full_scan stage-1"
+        )
 
 
 def require_request_matches_collection(
@@ -360,7 +373,7 @@ def execute_search[Backend: ExactScoringBackend](
     service_root: Path,
     read request: SearchRequest,
 ) raises -> SearchResponse:
-    require_filter_is_match_all(request.filter_expression)
+    require_filter_supported_for_request(request)
     var collection_root = service_collection_root(
         service_root,
         request.tenant_id,
@@ -386,7 +399,11 @@ def execute_search[Backend: ExactScoringBackend](
         request.snapshot_id,
         request.plan,
         search_collection_for_plan(
-            backend, request.query, snapshot, request.plan
+            backend,
+            request.query,
+            snapshot,
+            request.plan,
+            request.filter_expression,
         ),
     )
 
@@ -406,7 +423,7 @@ def execute_explain[Backend: ExactScoringBackend](
     service_root: Path,
     read request: SearchRequest,
 ) raises -> ExplainResponse:
-    require_filter_is_match_all(request.filter_expression)
+    require_filter_supported_for_request(request)
     var collection_root = service_collection_root(
         service_root,
         request.tenant_id,
@@ -426,5 +443,11 @@ def execute_explain[Backend: ExactScoringBackend](
         snapshot_load_requirements_for_request(request),
     )
     return ExplainResponse(
-        explain_collection_search(backend, request.query, snapshot, request.plan)
+        explain_collection_search(
+            backend,
+            request.query,
+            snapshot,
+            request.plan,
+            request.filter_expression,
+        )
     )

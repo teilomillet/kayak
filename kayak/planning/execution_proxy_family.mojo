@@ -6,6 +6,7 @@ from kayak.collections import (
     loaded_segment_stored_document_proxy_index,
 )
 from kayak.contracts import EncodedQuery
+from kayak.filters import FilterExpression, match_all_filter
 from kayak.index import build_query_proxy_vector
 from kayak.runtime import ExactScoringBackend
 from kayak.scoring.dot import dot_product
@@ -21,8 +22,10 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
+    read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     _ = backend
+    _ = filter_expression
 
     var hits = List[CollectionHit]()
     var query_proxy = build_query_proxy_vector(query, 0)

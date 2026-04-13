@@ -10,6 +10,7 @@ from kayak.collections import (
     loaded_segment_stored_centroid_postings_index,
 )
 from kayak.contracts import EncodedQuery
+from kayak.filters import FilterExpression, match_all_filter
 from kayak.numeric import ScoreScalar
 from kayak.runtime import ExactScoringBackend
 from kayak.storage import CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC
@@ -103,8 +104,10 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
+    read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     _ = backend
+    _ = filter_expression
 
     var hits = List[CollectionHit]()
     var vector_count = 0

@@ -10,6 +10,8 @@ from .filters import (
     FilterField,
     FilterTerm,
     and_filter,
+    filter_expression_is_exact_doc_id_filter,
+    filter_expression_matches_doc_id,
     match_all_filter,
     one_of_filter,
 )

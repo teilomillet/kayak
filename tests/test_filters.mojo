@@ -6,6 +6,8 @@ from kayak.filters import (
     FilterField,
     FilterTerm,
     and_filter,
+    filter_expression_is_exact_doc_id_filter,
+    filter_expression_matches_doc_id,
     match_all_filter,
     one_of_filter,
 )
@@ -43,6 +45,18 @@ def test_filter_clause_rejects_empty_term_lists() raises:
         raised = True
 
     assert_equal(raised, True)
+
+
+def test_exact_doc_id_filter_runtime_support_is_explicit() raises:
+    var doc_id_filter = one_of_filter("doc_id", ["doc-a", "doc-b"])
+    var mixed_filter = and_filter(
+        [FilterTerm(FilterField("source"), "eq", ["wire"])]
+    )
+
+    assert_equal(filter_expression_is_exact_doc_id_filter(doc_id_filter), True)
+    assert_equal(filter_expression_matches_doc_id(doc_id_filter, "doc-a"), True)
+    assert_equal(filter_expression_matches_doc_id(doc_id_filter, "doc-z"), False)
+    assert_equal(filter_expression_is_exact_doc_id_filter(mixed_filter), False)
 
 
 def main() raises:

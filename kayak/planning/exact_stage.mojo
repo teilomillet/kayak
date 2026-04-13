@@ -2,6 +2,7 @@ from std.collections import List
 
 from kayak.collections import LoadedSealedSegment, ResolvedCollectionSnapshot
 from kayak.contracts import EncodedDocument, EncodedQuery
+from kayak.filters import FilterExpression, filter_expression_matches_doc_id, match_all_filter
 from kayak.index import PackedIndex, pack_documents
 from kayak.numeric import VectorScalar
 from kayak.runtime import ExactScoringBackend
@@ -199,6 +200,7 @@ def exact_oracle_hits_for_snapshot[Backend: ExactScoringBackend](
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     final_k: Int,
+    read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> List[CollectionHit]:
     var oracle_hits = List[CollectionHit]()
 
@@ -206,6 +208,11 @@ def exact_oracle_hits_for_snapshot[Backend: ExactScoringBackend](
         var scores = backend.score_all(query, segment.stored_index.index)
 
         for document_index in range(len(scores)):
+            if not filter_expression_matches_doc_id(
+                filter_expression,
+                segment.stored_index.index.doc_ids[document_index],
+            ):
+                continue
             insert_descending_collection_hit(
                 oracle_hits,
                 CollectionHit(
