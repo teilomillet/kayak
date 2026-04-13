@@ -23,6 +23,7 @@ def test_exact_stage1_capabilities_require_no_sidecars() raises:
     assert_equal(capabilities.score_kind, "exact_score")
     assert_equal(capabilities.stage1_is_exact, True)
     assert_equal(capabilities.supports_match_all_filter, True)
+    assert_equal(capabilities.supports_exact_doc_id_filter, True)
     assert_equal(capabilities.supports_structured_filter, True)
     assert_equal(len(capabilities.required_search_artifact_families), 0)
 
@@ -46,12 +47,14 @@ def test_centroid_and_graph_stage1_capabilities_remain_generic() raises:
         "approximate_interaction_score",
     )
     assert_equal(centroid_capabilities.stage1_is_exact, False)
+    assert_equal(centroid_capabilities.supports_exact_doc_id_filter, True)
     assert_equal(centroid_capabilities.supports_structured_filter, False)
     assert_equal(
         centroid_capabilities.required_search_artifact_families[0],
         "centroid_postings",
     )
     assert_equal(graph_capabilities.generator_family, "graph")
+    assert_equal(graph_capabilities.supports_exact_doc_id_filter, False)
     assert_equal(
         graph_capabilities.interaction_semantics,
         "approximate_late_interaction",
@@ -84,6 +87,7 @@ def test_candidate_generator_carries_stage1_contract_metadata() raises:
     assert_equal(generator.required_search_artifact_families[0], "document_proxy")
     assert_equal(generator.is_exact, False)
     assert_equal(generator.supports_match_all_filter, True)
+    assert_equal(generator.supports_exact_doc_id_filter, True)
     assert_equal(generator.supports_structured_filter, False)
     assert_equal(generator.requires_artifact_family("document_proxy"), True)
     assert_equal(generator.requires_artifact_family("gem_graph"), False)

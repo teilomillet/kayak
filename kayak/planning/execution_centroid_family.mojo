@@ -10,7 +10,12 @@ from kayak.collections import (
     loaded_segment_search_artifact,
 )
 from kayak.contracts import EncodedQuery
-from kayak.filters import FilterExpression, match_all_filter
+from kayak.filters import (
+    FilterExpression,
+    filter_expression_is_exact_doc_id_filter,
+    filter_expression_matches_doc_id,
+    match_all_filter,
+)
 from kayak.numeric import ScoreScalar
 from kayak.runtime import ExactScoringBackend
 from kayak.storage import CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC
@@ -75,13 +80,20 @@ def insert_centroid_scores(
     read doc_ids: List[String],
     read scores: List[ScoreScalar],
     candidate_k: Int,
+    read filter_expression: FilterExpression,
 ):
     for document_index in range(len(scores)):
+        var doc_id = doc_ids[document_index]
+        if (
+            not filter_expression.is_match_all()
+            and not filter_expression_matches_doc_id(filter_expression, doc_id)
+        ):
+            continue
         insert_descending_collection_hit(
             hits,
             CollectionHit(
                 segment_id.copy(),
-                doc_ids[document_index].copy(),
+                doc_id.copy(),
                 scores[document_index],
             ),
             candidate_k,
@@ -96,7 +108,15 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
     read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     _ = backend
-    _ = filter_expression
+
+    if (
+        not filter_expression.is_match_all()
+        and not filter_expression_is_exact_doc_id_filter(filter_expression)
+    ):
+        raise Error(
+            plan.candidate_generator.kind
+            + " stage-1 currently supports only match_all or exact doc_id filters"
+        )
 
     var hits = List[CollectionHit]()
     var vector_count = 0
@@ -182,6 +202,7 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
             segment.stored_index.index.doc_ids,
             scores,
             plan.candidate_budget.candidate_k,
+            filter_expression,
         )
 
     return CandidateSet(

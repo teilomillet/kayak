@@ -2,6 +2,12 @@
 
 from std.collections import List
 
+from kayak.filters import (
+    FilterExpression,
+    filter_expression_is_exact_doc_id_filter,
+    filter_expression_requires_document_metadata,
+)
+
 from kayak.index import (
     DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
     DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
@@ -38,6 +44,7 @@ struct CandidateGenerator(Copyable):
     var required_search_artifact_families: List[String]
     var is_exact: Bool
     var supports_match_all_filter: Bool
+    var supports_exact_doc_id_filter: Bool
     var supports_structured_filter: Bool
     var cluster_top_k_per_query_token: Int
     var beam_width: Int
@@ -52,6 +59,7 @@ struct CandidateGenerator(Copyable):
         self.required_search_artifact_families = List[String]()
         self.is_exact = True
         self.supports_match_all_filter = True
+        self.supports_exact_doc_id_filter = True
         self.supports_structured_filter = True
         self.cluster_top_k_per_query_token = 0
         self.beam_width = 0
@@ -80,6 +88,9 @@ struct CandidateGenerator(Copyable):
         )
         self.is_exact = capabilities.stage1_is_exact
         self.supports_match_all_filter = capabilities.supports_match_all_filter
+        self.supports_exact_doc_id_filter = (
+            capabilities.supports_exact_doc_id_filter
+        )
         self.supports_structured_filter = capabilities.supports_structured_filter
         if self.kind == "gem_graph":
             if cluster_top_k_per_query_token <= 0:
@@ -99,6 +110,20 @@ struct CandidateGenerator(Copyable):
         for required_family in self.required_search_artifact_families:
             if required_family == family:
                 return True
+
+        return False
+
+    def supports_filter_expression(
+        self, read filter_expression: FilterExpression
+    ) -> Bool:
+        if filter_expression.is_match_all():
+            return self.supports_match_all_filter
+
+        if filter_expression_is_exact_doc_id_filter(filter_expression):
+            return self.supports_exact_doc_id_filter
+
+        if filter_expression_requires_document_metadata(filter_expression):
+            return self.supports_structured_filter
 
         return False
 

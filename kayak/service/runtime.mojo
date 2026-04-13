@@ -32,6 +32,7 @@ from kayak.collections.document_metadata import (
 )
 from kayak.filters import (
     FilterExpression,
+    filter_expression_is_exact_doc_id_filter,
     filter_expression_requires_document_metadata,
 )
 from kayak.planning import (
@@ -77,20 +78,31 @@ from .snapshot_requests import (
 
 
 def require_filter_supported_for_request(read request: SearchRequest) raises:
-    if not request.plan.candidate_generator.supports_match_all_filter:
-        raise Error(
-            "candidate generator does not support match_all filters: "
-            + request.plan.candidate_generator.kind
-        )
-
     if request.filter_expression.is_match_all():
+        if not request.plan.candidate_generator.supports_match_all_filter:
+            raise Error(
+                "candidate generator does not support match_all filters: "
+                + request.plan.candidate_generator.kind
+            )
         return
 
-    if not request.plan.candidate_generator.supports_structured_filter:
+    if filter_expression_is_exact_doc_id_filter(request.filter_expression):
+        if request.plan.candidate_generator.supports_exact_doc_id_filter:
+            return
         raise Error(
-            "non-match_all filters currently require a stage-1 generator with structured-filter support: "
+            "exact doc_id filters currently require a stage-1 generator with exact-doc_id-filter support: "
             + request.plan.candidate_generator.kind
         )
+
+    if filter_expression_requires_document_metadata(request.filter_expression):
+        if request.plan.candidate_generator.supports_structured_filter:
+            return
+        raise Error(
+            "metadata filters currently require a stage-1 generator with structured-filter support: "
+            + request.plan.candidate_generator.kind
+        )
+
+    raise Error("unsupported filter expression for search request")
 
 
 def require_request_matches_collection(

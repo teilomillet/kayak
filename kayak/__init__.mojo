@@ -225,6 +225,8 @@ from .planning import (
     SEARCH_PLANNER_STATUS_REGRESSION_BASELINE,
     oracle_full_recall_required_faithfulness_policy,
     stage1_capabilities_for_candidate_generator_kind,
+    stage1_generator_supports_exact_doc_id_filter,
+    stage1_generator_supports_filter_expression,
     stage1_generator_is_exact,
     stage1_generator_supports_match_all_filter,
     stage1_generator_supports_structured_filter,

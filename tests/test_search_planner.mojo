@@ -92,7 +92,7 @@ def test_planner_falls_back_to_exact_for_filters_and_oracle_guardrails() raises:
             5,
             20,
             best_effort_faithfulness_policy(),
-            one_of_filter("doc_id", ["doc-a"]),
+            one_of_filter("source", ["wire"]),
             SEARCH_PLANNING_GOAL_BALANCED,
         ),
     )
@@ -122,6 +122,32 @@ def test_planner_falls_back_to_exact_for_filters_and_oracle_guardrails() raises:
     )
     assert_equal(
         oracle_selection.reason.find("oracle_full_recall_required") != -1,
+        True,
+    )
+
+
+def test_planner_keeps_native_stage1_for_exact_doc_id_filters() raises:
+    var selection = select_search_plan_for_availability(
+        SnapshotSearchArtifactAvailability(
+            1,
+            ["document_proxy", "centroid_postings"],
+            ["document_proxy", "centroid_postings"],
+        ),
+        SearchPlanSelectionRequest(
+            5,
+            20,
+            best_effort_faithfulness_policy(),
+            one_of_filter("doc_id", ["doc-a"]),
+            SEARCH_PLANNING_GOAL_BALANCED,
+        ),
+    )
+
+    assert_equal(
+        selection.plan.candidate_generator.kind,
+        "centroid_postings_imputed_flat",
+    )
+    assert_equal(
+        selection.reason.find("default candidate-generator order") != -1,
         True,
     )
 

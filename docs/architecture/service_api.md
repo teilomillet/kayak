@@ -179,7 +179,9 @@ Current verified behavior:
   stage-2 override can still rerank the intended exact candidate set
 
 Current guardrails:
-- non-`match_all` filters fall back to exact stage 1
+- exact `doc_id` filters stay native for `document_proxy` and centroid stage 1
+- metadata filters currently fall back to exact stage 1
+- `gem_graph` currently supports only `match_all` filters
 - `exact_stage1_required` falls back to exact stage 1
 - `oracle_full_recall_required` without `debug_mode` falls back to exact stage 1
 

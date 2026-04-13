@@ -842,29 +842,25 @@ def test_hosted_collection_runtime_supports_exact_doc_id_filters() raises:
         ),
     )
 
-    var raised = False
-    try:
-        _ = execute_search(
-            ExactCpuBackend(),
-            service_root,
-            SearchRequest(
-                CollectionId("news"),
-                TenantId("tenant-a"),
-                NamespaceId("search"),
-                SnapshotId("snapshot-0001"),
-                make_query(),
-                one_of_filter("doc_id", ["doc-a"]),
-                document_proxy_search_plan(
-                    1, 1, best_effort_faithfulness_policy()
-                ),
-                False,
+    var proxy_filtered = execute_search(
+        ExactCpuBackend(),
+        service_root,
+        SearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            one_of_filter("doc_id", ["doc-a"]),
+            document_proxy_search_plan(
+                1, 1, best_effort_faithfulness_policy()
             ),
-        )
-    except:
-        raised = True
+            False,
+        ),
+    )
 
     assert_equal(exact_filtered.hits[0].doc_id, "doc-a")
-    assert_equal(raised, True)
+    assert_equal(proxy_filtered.hits[0].doc_id, "doc-a")
 
 
 def test_hosted_collection_runtime_executes_planned_search_with_balanced_goal() raises:
@@ -937,6 +933,80 @@ def test_hosted_collection_runtime_executes_planned_search_with_balanced_goal() 
         "centroid_postings_imputed_flat",
     )
     assert_equal(response.search.hits[0].doc_id, "doc-a")
+
+
+def test_hosted_collection_runtime_keeps_native_stage1_for_exact_doc_id_filters() raises:
+    var service_root = unique_service_root(
+        "kayak-service-runtime-planned-doc-id-filter"
+    )
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+                    "alpha",
+                ),
+                UpsertDocument(
+                    make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]),
+                    "beta",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish planned doc-id fixture",
+        ),
+    )
+
+    var response = execute_planned_search(
+        ExactCpuBackend(),
+        service_root,
+        PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            one_of_filter("doc_id", ["doc-b"]),
+            SearchPlanSelectionRequest(
+                1,
+                2,
+                best_effort_faithfulness_policy(),
+            ),
+        ),
+    )
+
+    assert_equal(
+        response.selection.plan.candidate_generator.kind,
+        "centroid_postings_imputed_flat",
+    )
+    assert_equal(
+        response.search.plan.candidate_generator.kind,
+        "centroid_postings_imputed_flat",
+    )
+    assert_equal(response.search.hits[0].doc_id, "doc-b")
 
 
 def test_hosted_collection_runtime_executes_planned_search_with_clause_text_stage2() raises:
@@ -1160,7 +1230,7 @@ def test_hosted_collection_runtime_executes_planned_search_with_native_goal() ra
     assert_equal(response.search.hits[0].doc_id, "doc-a")
 
 
-def test_hosted_collection_runtime_planned_debug_search_keeps_exact_filter_guardrail() raises:
+def test_hosted_collection_runtime_planned_debug_search_keeps_metadata_filter_guardrail() raises:
     var service_root = unique_service_root("kayak-service-runtime-planned-filter")
 
     _ = create_collection(
@@ -1184,10 +1254,12 @@ def test_hosted_collection_runtime_planned_debug_search_keeps_exact_filter_guard
                 UpsertDocument(
                     make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
                     "alpha",
+                    [DocumentMetadataUpdate("source", "wire")],
                 ),
                 UpsertDocument(
                     make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]),
                     "beta",
+                    [DocumentMetadataUpdate("source", "blog")],
                 ),
             ],
         ),
@@ -1212,12 +1284,12 @@ def test_hosted_collection_runtime_planned_debug_search_keeps_exact_filter_guard
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
-            one_of_filter("doc_id", ["doc-a"]),
+            one_of_filter("source", ["wire"]),
             SearchPlanSelectionRequest(
                 1,
                 2,
                 best_effort_faithfulness_policy(),
-                one_of_filter("doc_id", ["doc-a"]),
+                one_of_filter("source", ["wire"]),
                 "native_multivector",
                 True,
             ),

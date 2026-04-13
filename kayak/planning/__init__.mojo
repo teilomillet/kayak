@@ -50,6 +50,8 @@ from .stage1_capabilities import (
     STAGE1_SCORE_KIND_EXACT_SCORE,
     STAGE1_SCORE_KIND_PROXY_SCORE,
     stage1_capabilities_for_candidate_generator_kind,
+    stage1_generator_supports_exact_doc_id_filter,
+    stage1_generator_supports_filter_expression,
     stage1_generator_supports_match_all_filter,
     stage1_generator_supports_structured_filter,
     stage1_requires_search_artifact_family,

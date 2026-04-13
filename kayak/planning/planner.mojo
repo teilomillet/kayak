@@ -2,7 +2,12 @@ from std.collections import List
 
 from kayak.collections import SnapshotSearchArtifactAvailability
 from kayak.collections.validation import require_non_empty_string
-from kayak.filters import FilterExpression, match_all_filter
+from kayak.filters import (
+    FilterExpression,
+    filter_expression_is_exact_doc_id_filter,
+    filter_expression_requires_document_metadata,
+    match_all_filter,
+)
 from kayak.index import (
     DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
     DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
@@ -26,6 +31,7 @@ from .planner_plan_factory import planner_default_search_plan_for_kind
 from .search_plan import SearchPlan, exact_full_scan_search_plan
 from .stage1_capabilities import (
     stage1_capabilities_for_candidate_generator_kind,
+    stage1_generator_supports_filter_expression,
     stage1_required_search_artifact_families,
 )
 
@@ -57,6 +63,16 @@ def candidate_generator_kind_is_available(
             return False
 
     return True
+
+
+def candidate_generator_kind_supports_filter_expression(
+    candidate_generator_kind: String,
+    read filter_expression: FilterExpression,
+) raises -> Bool:
+    return stage1_generator_supports_filter_expression(
+        candidate_generator_kind,
+        filter_expression,
+    )
 
 
 def available_candidate_generator_kinds(
@@ -214,10 +230,22 @@ def search_plan_for_candidate_generator_kind(
 def effective_candidate_generator_order(
     read request: SearchPlanSelectionRequest
 ) raises -> CandidateGeneratorOrderDecision:
-    if not request.filter_expression.is_match_all():
+    if (
+        not request.filter_expression.is_match_all()
+        and not filter_expression_is_exact_doc_id_filter(
+            request.filter_expression
+        )
+    ):
+        if filter_expression_requires_document_metadata(
+            request.filter_expression
+        ):
+            return CandidateGeneratorOrderDecision(
+                ["exact_full_scan"],
+                "metadata filters currently require exact stage-1 candidate generation",
+            )
         return CandidateGeneratorOrderDecision(
             ["exact_full_scan"],
-            "non-match_all filters currently require exact stage-1 candidate generation",
+            "unsupported non-match_all filters currently require exact stage-1 candidate generation",
         )
 
     if request.faithfulness_policy.kind == "exact_stage1_required":
@@ -261,17 +289,24 @@ def select_search_plan_for_availability(
     var decision = effective_candidate_generator_order(request)
 
     for candidate_generator_kind in decision.order:
-        if candidate_generator_kind_is_available(
+        if not candidate_generator_kind_is_available(
             availability, candidate_generator_kind
         ):
-            return SearchPlanSelection(
-                request.goal,
-                search_planner_registry_entry(candidate_generator_kind).planner_status,
-                available_kinds,
-                decision.order,
-                selected_plan_for_kind(candidate_generator_kind, request),
-                decision.reason,
-            )
+            continue
+        if not candidate_generator_kind_supports_filter_expression(
+            candidate_generator_kind,
+            request.filter_expression,
+        ):
+            continue
+
+        return SearchPlanSelection(
+            request.goal,
+            search_planner_registry_entry(candidate_generator_kind).planner_status,
+            available_kinds,
+            decision.order,
+            selected_plan_for_kind(candidate_generator_kind, request),
+            decision.reason,
+        )
 
     return SearchPlanSelection(
         request.goal,

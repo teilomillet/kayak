@@ -67,6 +67,7 @@ from kayak import (
     SearchPlan,
 )
 from kayak.text import DocumentTextCorpus
+from kayak.filters import one_of_filter
 
 
 def write_segment(
@@ -846,6 +847,27 @@ def test_document_proxy_search_plan_exact_reranks_shortlist() raises:
     assert_equal(explain.stage2.document_count, 2)
 
 
+def test_document_proxy_search_plan_pushes_exact_doc_id_filter_into_stage1() raises:
+    var root = make_document_proxy_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        document_proxy_search_plan(
+            1, 1, oracle_full_recall_required_faithfulness_policy()
+        ),
+        one_of_filter("doc_id", ["doc-a"]),
+    )
+
+    assert_equal(len(explain.candidate_set.hits), 1)
+    assert_equal(explain.candidate_set.hits[0].doc_id, "doc-a")
+    assert_equal(explain.final_hits[0].doc_id, "doc-a")
+    assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
+    assert_equal(explain.faithfulness.passes, True)
+
+
 def test_document_proxy_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:
     var root = make_document_proxy_collection_root()
     var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
@@ -888,6 +910,27 @@ def test_centroid_postings_search_plan_exact_reranks_shortlist() raises:
     assert_equal(explain.candidate_stage.vector_count, 2)
     assert_equal(explain.candidate_stage.token_count, 3)
     assert_equal(explain.stage2.document_count, 2)
+
+
+def test_centroid_postings_search_plan_pushes_exact_doc_id_filter_into_stage1() raises:
+    var root = make_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        centroid_postings_search_plan(
+            1, 1, oracle_full_recall_required_faithfulness_policy()
+        ),
+        one_of_filter("doc_id", ["doc-a"]),
+    )
+
+    assert_equal(len(explain.candidate_set.hits), 1)
+    assert_equal(explain.candidate_set.hits[0].doc_id, "doc-a")
+    assert_equal(explain.final_hits[0].doc_id, "doc-a")
+    assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
+    assert_equal(explain.faithfulness.passes, True)
 
 
 def test_centroid_postings_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:

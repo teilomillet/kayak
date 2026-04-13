@@ -8,7 +8,12 @@ from kayak.collections import (
     loaded_segment_search_artifact,
 )
 from kayak.contracts import EncodedQuery
-from kayak.filters import FilterExpression, match_all_filter
+from kayak.filters import (
+    FilterExpression,
+    filter_expression_is_exact_doc_id_filter,
+    filter_expression_matches_doc_id,
+    match_all_filter,
+)
 from kayak.index import build_query_proxy_vector
 from kayak.runtime import ExactScoringBackend
 from kayak.scoring.dot import dot_product
@@ -27,7 +32,14 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
     read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     _ = backend
-    _ = filter_expression
+
+    if (
+        not filter_expression.is_match_all()
+        and not filter_expression_is_exact_doc_id_filter(filter_expression)
+    ):
+        raise Error(
+            "document_proxy stage-1 currently supports only match_all or exact doc_id filters"
+        )
 
     var hits = List[CollectionHit]()
     var query_proxy = build_query_proxy_vector(query, 0)
@@ -55,11 +67,17 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
         byte_size += stored_proxy.artifact_byte_size
 
         for document_index in range(stored_proxy.index.document_count):
+            var doc_id = stored_proxy.index.doc_ids[document_index]
+            if (
+                not filter_expression.is_match_all()
+                and not filter_expression_matches_doc_id(filter_expression, doc_id)
+            ):
+                continue
             insert_descending_collection_hit(
                 hits,
                 CollectionHit(
                     segment.manifest.segment_id.value.copy(),
-                    stored_proxy.index.doc_ids[document_index].copy(),
+                    doc_id.copy(),
                     dot_product(
                         query_proxy,
                         stored_proxy.index.proxy_vectors[document_index],

@@ -5,6 +5,11 @@ from kayak.collections import (
     search_artifact_build_policy_supports_required_families,
 )
 from kayak.collections.validation import require_non_empty_string
+from kayak.filters import (
+    FilterExpression,
+    filter_expression_is_exact_doc_id_filter,
+    filter_expression_requires_document_metadata,
+)
 
 
 comptime STAGE1_INTERACTION_SEMANTICS_NONE = "none"
@@ -36,6 +41,7 @@ struct Stage1Capabilities(Copyable):
     var required_search_artifact_families: List[String]
     var stage1_is_exact: Bool
     var supports_match_all_filter: Bool
+    var supports_exact_doc_id_filter: Bool
     var supports_structured_filter: Bool
 
     def __init__(
@@ -48,6 +54,7 @@ struct Stage1Capabilities(Copyable):
         read required_search_artifact_families: List[String],
         stage1_is_exact: Bool,
         supports_match_all_filter: Bool,
+        supports_exact_doc_id_filter: Bool,
         supports_structured_filter: Bool,
     ) raises:
         self.generator_kind = require_non_empty_string(
@@ -80,9 +87,12 @@ struct Stage1Capabilities(Copyable):
         self.required_search_artifact_families = normalized_required_families^
         self.stage1_is_exact = stage1_is_exact
         self.supports_match_all_filter = supports_match_all_filter
+        self.supports_exact_doc_id_filter = supports_exact_doc_id_filter
         self.supports_structured_filter = supports_structured_filter
         if self.stage1_is_exact and not self.supports_structured_filter:
             raise Error("exact stage-1 must support structured filters")
+        if self.stage1_is_exact and not self.supports_exact_doc_id_filter:
+            raise Error("exact stage-1 must support exact doc_id filters")
         if (
             self.stage1_is_exact
             and self.interaction_semantics
@@ -96,6 +106,20 @@ struct Stage1Capabilities(Copyable):
         for required_family in self.required_search_artifact_families:
             if required_family == family:
                 return True
+
+        return False
+
+    def supports_filter_expression(
+        self, read filter_expression: FilterExpression
+    ) -> Bool:
+        if filter_expression.is_match_all():
+            return self.supports_match_all_filter
+
+        if filter_expression_is_exact_doc_id_filter(filter_expression):
+            return self.supports_exact_doc_id_filter
+
+        if filter_expression_requires_document_metadata(filter_expression):
+            return self.supports_structured_filter
 
         return False
 
@@ -124,6 +148,7 @@ def exact_stage1_capabilities() raises -> Stage1Capabilities:
         True,
         True,
         True,
+        True,
     )
 
 
@@ -136,6 +161,7 @@ def document_proxy_stage1_capabilities() raises -> Stage1Capabilities:
         STAGE1_SCORE_KIND_PROXY_SCORE,
         ["document_proxy"],
         False,
+        True,
         True,
         False,
     )
@@ -151,6 +177,7 @@ def centroid_heads_stage1_capabilities() raises -> Stage1Capabilities:
         ["centroid_heads"],
         False,
         True,
+        True,
         False,
     )
 
@@ -164,6 +191,7 @@ def centroid_postings_stage1_capabilities(kind: String) raises -> Stage1Capabili
         STAGE1_SCORE_KIND_APPROXIMATE_INTERACTION_SCORE,
         ["centroid_postings"],
         False,
+        True,
         True,
         False,
     )
@@ -179,6 +207,7 @@ def gem_graph_stage1_capabilities() raises -> Stage1Capabilities:
         ["gem_graph"],
         False,
         True,
+        False,
         False,
     )
 
@@ -241,12 +270,29 @@ def stage1_generator_supports_match_all_filter(
     ).supports_match_all_filter
 
 
+def stage1_generator_supports_exact_doc_id_filter(
+    candidate_generator_kind: String
+) raises -> Bool:
+    return stage1_capabilities_for_candidate_generator_kind(
+        candidate_generator_kind
+    ).supports_exact_doc_id_filter
+
+
 def stage1_generator_supports_structured_filter(
     candidate_generator_kind: String
 ) raises -> Bool:
     return stage1_capabilities_for_candidate_generator_kind(
         candidate_generator_kind
     ).supports_structured_filter
+
+
+def stage1_generator_supports_filter_expression(
+    candidate_generator_kind: String,
+    read filter_expression: FilterExpression,
+) raises -> Bool:
+    return stage1_capabilities_for_candidate_generator_kind(
+        candidate_generator_kind
+    ).supports_filter_expression(filter_expression)
 
 
 def stage1_generator_is_exact(candidate_generator_kind: String) raises -> Bool:

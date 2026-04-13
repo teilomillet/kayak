@@ -303,7 +303,8 @@ def candidate_generation_for_graph_family[Backend: ExactScoringBackend](
     read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     _ = backend
-    _ = filter_expression
+    if not filter_expression.is_match_all():
+        raise Error("gem_graph stage-1 currently supports only match_all filters")
 
     var hits = List[CollectionHit]()
     var token_count = 0

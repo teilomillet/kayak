@@ -293,6 +293,9 @@ What Kayak should do:
 - continue treating hosted-engine continuity as a first-class track
 - resist the temptation to bypass the service/storage loop in pursuit of a
   paper-shaped engine result that would not survive product constraints
+- make native filter-aware candidate generation concrete instead of aspirational:
+  exact `doc_id` filters can stay on proxy/centroid stage-1 paths, while
+  broader metadata filters still need first-class native support
 
 ## Additional Decision Rules
 
