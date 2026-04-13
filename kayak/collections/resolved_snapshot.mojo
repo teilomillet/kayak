@@ -10,9 +10,15 @@ from kayak.storage import (
 )
 
 from .collection import CollectionManifest
+from .document_metadata import (
+    DocumentMetadataMap,
+    StoredDocumentMetadataCorpus,
+    empty_document_metadata_map,
+)
 from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
     SearchArtifactManifest,
@@ -25,6 +31,7 @@ from .text_corpus import StoredDocumentTextCorpus
 struct LoadedSearchArtifact(Copyable):
     var manifest: SearchArtifactManifest
     var stored_centroid_postings_index: StoredCentroidPostingIndex
+    var stored_document_metadata_corpus: StoredDocumentMetadataCorpus
     var stored_document_proxy_index: StoredDocumentProxyIndex
     var stored_gem_graph_index: StoredGemGraphIndex
 
@@ -32,11 +39,15 @@ struct LoadedSearchArtifact(Copyable):
         out self,
         manifest: SearchArtifactManifest,
         stored_centroid_postings_index: StoredCentroidPostingIndex,
+        stored_document_metadata_corpus: StoredDocumentMetadataCorpus,
         stored_document_proxy_index: StoredDocumentProxyIndex,
         stored_gem_graph_index: StoredGemGraphIndex,
     ):
         self.manifest = manifest.copy()
         self.stored_centroid_postings_index = stored_centroid_postings_index.copy()
+        self.stored_document_metadata_corpus = (
+            stored_document_metadata_corpus.copy()
+        )
         self.stored_document_proxy_index = stored_document_proxy_index.copy()
         self.stored_gem_graph_index = stored_gem_graph_index.copy()
 
@@ -54,6 +65,12 @@ def loaded_search_artifact_is_document_proxy(
     read artifact: LoadedSearchArtifact
 ) -> Bool:
     return artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY
+
+
+def loaded_search_artifact_is_document_metadata(
+    read artifact: LoadedSearchArtifact
+) -> Bool:
+    return artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA
 
 
 def loaded_search_artifact_is_gem_graph(read artifact: LoadedSearchArtifact) -> Bool:
@@ -116,6 +133,14 @@ def loaded_segment_has_document_proxy_index(
     )
 
 
+def loaded_segment_has_document_metadata(
+    read segment: LoadedSealedSegment
+) -> Bool:
+    return loaded_segment_has_search_artifact(
+        segment, SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA
+    )
+
+
 def loaded_segment_has_gem_graph_index(read segment: LoadedSealedSegment) -> Bool:
     return loaded_segment_has_search_artifact(
         segment, SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
@@ -153,6 +178,40 @@ def loaded_segment_stored_document_proxy_index(
         "loaded segment is missing search artifact family: "
         + SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY
     )
+
+
+def loaded_segment_stored_document_metadata(
+    read segment: LoadedSealedSegment
+) raises -> StoredDocumentMetadataCorpus:
+    for artifact in segment.search_artifacts:
+        if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA:
+            if not loaded_search_artifact_is_document_metadata(artifact):
+                raise Error(
+                    "loaded search artifact family is not a document metadata artifact"
+                )
+            return artifact.stored_document_metadata_corpus.copy()
+
+    raise Error(
+        "loaded segment is missing search artifact family: "
+        + SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA
+    )
+
+
+def loaded_segment_document_metadata_for_doc_index(
+    read segment: LoadedSealedSegment,
+    document_index: Int,
+) raises -> DocumentMetadataMap:
+    if document_index < 0:
+        raise Error("document_index must be non-negative")
+
+    if not loaded_segment_has_document_metadata(segment):
+        return empty_document_metadata_map()
+
+    var stored_document_metadata = loaded_segment_stored_document_metadata(segment)
+    if document_index >= len(stored_document_metadata.metadata_maps):
+        raise Error("document_index exceeds loaded document metadata corpus")
+
+    return stored_document_metadata.metadata_maps[document_index].copy()
 
 
 def loaded_segment_stored_gem_graph_index(

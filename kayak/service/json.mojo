@@ -1,5 +1,6 @@
 from std.collections import List
 
+from kayak.collections.document_metadata import DocumentMetadataUpdate
 from kayak.filters import FilterClause, FilterExpression, FilterTerm
 from kayak.numeric import VectorScalar
 from kayak.planning import CollectionHit, collection_search_explain_json
@@ -107,6 +108,23 @@ def append_json_filter_expression(
     buffer += "]}"
 
 
+def append_json_metadata_updates(
+    mut buffer: String, read metadata_updates: List[DocumentMetadataUpdate]
+):
+    buffer += "["
+
+    for index in range(len(metadata_updates)):
+        if index > 0:
+            buffer += ","
+
+        buffer += "{"
+        buffer += "\"key\":\"" + json_escape(metadata_updates[index].key) + "\","
+        buffer += "\"value\":\"" + json_escape(metadata_updates[index].value) + "\""
+        buffer += "}"
+
+    buffer += "]"
+
+
 def append_json_search_plan(mut buffer: String, read request: SearchRequest):
     buffer += "{"
     buffer += "\"candidate_generator_kind\":\""
@@ -162,9 +180,17 @@ def append_json_upsert_document(mut buffer: String, read document: UpsertDocumen
         buffer += "true"
     else:
         buffer += "false"
+    buffer += ",\"has_metadata_updates\":"
+    if document.has_metadata_updates:
+        buffer += "true"
+    else:
+        buffer += "false"
 
     if document.has_text:
         buffer += ",\"text\":\"" + json_escape(document.text) + "\""
+    if document.has_metadata_updates:
+        buffer += ",\"metadata_updates\":"
+        append_json_metadata_updates(buffer, document.metadata_updates)
 
     buffer += "}"
 

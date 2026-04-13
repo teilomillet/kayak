@@ -1,9 +1,11 @@
 # Executable hosted-collection loop for create, mutate, snapshot, search, and explain.
 
+from std.collections import List
 from std.pathlib import Path
 
 from kayak.collections import (
     CollectionManifest,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     CollectionStats,
     SegmentId,
     SealedSegmentManifest,
@@ -20,13 +22,17 @@ from kayak.collections import (
     publish_snapshot_manifest,
     save_collection_manifest,
     seal_single_segment,
-    search_artifact_snapshot_requirements,
     snapshot_manifest_exists,
 )
 from kayak.contracts import EncodedDocument
+from kayak.collections.document_metadata import (
+    DocumentMetadataMap,
+    empty_document_metadata_map,
+    merge_document_metadata,
+)
 from kayak.filters import (
     FilterExpression,
-    filter_expression_is_exact_doc_id_filter,
+    filter_expression_requires_document_metadata,
 )
 from kayak.planning import (
     explain_collection_search,
@@ -63,11 +69,6 @@ from .snapshot_requests import (
 def require_filter_supported_for_request(read request: SearchRequest) raises:
     if request.filter_expression.is_match_all():
         return
-
-    if not filter_expression_is_exact_doc_id_filter(request.filter_expression):
-        raise Error(
-            "hosted collection runtime currently supports only match_all or exact doc_id filters"
-        )
 
     if request.plan.candidate_generator.kind != "exact_full_scan":
         raise Error(
@@ -156,6 +157,10 @@ def upsert_documents(service_root: Path, request: UpsertDocumentsRequest) raises
     var state = load_draft_collection_state(draft_state_root(collection_root), collection)
     var documents = state.documents.copy()
     var texts = state.texts.copy()
+    var metadata_maps = state.metadata_maps.copy()
+    var normalized_documents = List[EncodedDocument]()
+    var normalized_texts = List[String]()
+    var normalized_metadata_maps = List[DocumentMetadataMap]()
 
     for upsert in request.documents:
         if upsert.document.vector_dim != collection.vector_dim:
@@ -163,40 +168,40 @@ def upsert_documents(service_root: Path, request: UpsertDocumentsRequest) raises
 
         var existing_index = find_document_index(documents, upsert.document.doc_id)
         var next_text = String()
+        var next_metadata = empty_document_metadata_map()
         if existing_index != -1:
             next_text = texts[existing_index].copy()
+            next_metadata = metadata_maps[existing_index].copy()
         if upsert.has_text:
             next_text = upsert.text.copy()
+        if upsert.has_metadata_updates:
+            next_metadata = merge_document_metadata(
+                next_metadata,
+                upsert.metadata_updates,
+            )
 
         if existing_index == -1:
             documents.append(upsert.document.copy())
-            texts.append(next_text^)
+            texts.append(next_text.copy())
+            metadata_maps.append(next_metadata.copy())
         else:
             documents[existing_index] = upsert.document.copy()
-            texts[existing_index] = next_text^
-
-    var final_document_count = len(documents)
-    var normalized_documents = List[EncodedDocument]()
-    var normalized_texts = List[String]()
-    for upsert in request.documents:
-        var normalized_text = String()
-        var existing_index = find_document_index(state.documents, upsert.document.doc_id)
-        if existing_index != -1:
-            normalized_text = state.texts[existing_index].copy()
-        if upsert.has_text:
-            normalized_text = upsert.text.copy()
+            texts[existing_index] = next_text.copy()
+            metadata_maps[existing_index] = next_metadata.copy()
 
         normalized_documents.append(upsert.document.copy())
-        normalized_texts.append(normalized_text^)
+        normalized_texts.append(next_text^)
+        normalized_metadata_maps.append(next_metadata.copy())
 
     append_draft_upsert_batch(
         draft_state_root(collection_root),
         collection,
         normalized_documents,
         normalized_texts,
-        final_document_count,
+        normalized_metadata_maps,
+        len(documents),
     )
-    return final_document_count
+    return len(documents)
 
 
 def delete_documents(service_root: Path, request: DeleteDocumentsRequest) raises -> Int:
@@ -248,11 +253,28 @@ def parse_file_uri(source_uri: String) raises -> Path:
 def snapshot_load_requirements_for_request(
     read request: SearchRequest
 ) raises -> SnapshotLoadRequirements:
+    var needs_document_metadata = filter_expression_requires_document_metadata(
+        request.filter_expression
+    )
+
     if request.plan.candidate_generator.artifact_family.byte_length() == 0:
+        if needs_document_metadata:
+            return SnapshotLoadRequirements(
+                False,
+                [SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA],
+                False,
+            )
         return exact_only_snapshot_requirements()
 
-    return search_artifact_snapshot_requirements(
-        request.plan.candidate_generator.artifact_family
+    var required_artifacts = List[String]()
+    required_artifacts.append(request.plan.candidate_generator.artifact_family.copy())
+    if needs_document_metadata:
+        required_artifacts.append(SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA)
+
+    return SnapshotLoadRequirements(
+        False,
+        required_artifacts,
+        False,
     )
 
 
@@ -313,6 +335,7 @@ def create_snapshot(
         generation,
         draft_state.documents,
         draft_state.texts,
+        draft_state.metadata_maps,
     )
     var snapshot = snapshot_manifest_for_segment(
         request,

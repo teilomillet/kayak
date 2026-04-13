@@ -6,17 +6,23 @@ from kayak.collections import (
     CollectionId,
     CollectionManifest,
     CollectionStats,
+    DocumentMetadataEntry,
+    DocumentMetadataMap,
     NamespaceId,
     SegmentId,
     SegmentStats,
     SealedSegmentManifest,
     SnapshotId,
     SnapshotManifest,
+    StoredDocumentMetadataCorpus,
     StoredDocumentTextCorpus,
     TenantId,
+    document_metadata_search_artifact,
     document_proxy_search_artifact,
     exact_only_snapshot_requirements,
     gem_graph_search_artifact,
+    loaded_segment_has_document_metadata,
+    loaded_segment_stored_document_metadata,
     loaded_segment_has_document_proxy_index,
     loaded_segment_has_gem_graph_index,
     loaded_segment_has_search_artifact,
@@ -26,6 +32,7 @@ from kayak.collections import (
     save_collection_manifest,
     save_sealed_segment_manifest,
     save_snapshot_manifest,
+    save_stored_document_metadata_corpus,
     save_stored_document_text_corpus,
     search_artifact_snapshot_requirements,
 )
@@ -171,6 +178,86 @@ def test_resolved_snapshot_loads_segments_and_text_sidecars() raises:
     assert_equal(len(report.segment_reports), 2)
     assert_equal(report.segment_reports[0].segment_id, "segment-0001")
     assert_equal(report.segment_reports[0].density.bytes_per_document, 512.0)
+
+
+def test_resolved_snapshot_loads_document_metadata_sidecar() raises:
+    var collection_root = Path("/tmp/kayak-resolved-collection-metadata")
+    save_collection_manifest(
+        collection_root,
+        CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            1,
+        ),
+    )
+
+    var segment_root = collection_root / "segments" / "segment-0001"
+    write_segment_payload(
+        segment_root,
+        "collection://news",
+        "colbertv2",
+        [EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]])],
+    )
+    save_stored_document_metadata_corpus(
+        segment_root / "document_metadata",
+        StoredDocumentMetadataCorpus(
+            CollectionId("news"),
+            SegmentId("segment-0001"),
+            ["doc-a"],
+            [
+                DocumentMetadataMap(
+                    [DocumentMetadataEntry("source", "wire")]
+                )
+            ],
+        ),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            "packed_index",
+            [document_metadata_search_artifact("document_metadata")],
+            "",
+            SegmentStats(1, 2, 2, 512),
+        ),
+    )
+    save_snapshot_manifest(
+        collection_root / "snapshots" / "snapshot-0001",
+        SnapshotManifest(
+            SnapshotId("snapshot-0001"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 1, 2, 2, 512),
+        ),
+    )
+
+    var resolved = load_resolved_collection_snapshot(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+        search_artifact_snapshot_requirements("document_metadata"),
+    )
+
+    assert_equal(loaded_segment_has_document_metadata(resolved.segments[0]), True)
+    assert_equal(
+        loaded_segment_stored_document_metadata(resolved.segments[0]).metadata_maps[0]
+            .entries[0]
+            .value,
+        "wire",
+    )
 
 
 def test_resolved_snapshot_rejects_segment_generation_ahead_of_snapshot() raises:

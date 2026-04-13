@@ -6,10 +6,15 @@ from kayak.index import unpack_documents
 
 from .collection_store import load_collection_manifest
 from .compaction import CompactionPlan
+from .document_metadata import DocumentMetadataMap
 from .ids import SegmentId, SnapshotId
 from .publish import publish_snapshot_manifest, promote_collection_generation
 from .resolution_requirements import load_all_snapshot_requirements
-from .resolved_snapshot import LoadedSealedSegment, ResolvedCollectionSnapshot
+from .resolved_snapshot import (
+    LoadedSealedSegment,
+    ResolvedCollectionSnapshot,
+    loaded_segment_document_metadata_for_doc_index,
+)
 from .resolver import load_resolved_collection_snapshot
 from .segment import SealedSegmentManifest
 from .segment_builder import seal_single_segment
@@ -91,6 +96,7 @@ def build_compaction_plan_for_snapshot(
 def append_segment_documents(
     mut documents: List[EncodedDocument],
     mut texts: List[String],
+    mut metadata_maps: List[DocumentMetadataMap],
     read segment: LoadedSealedSegment,
 ) raises:
     var unpacked = unpack_documents(segment.stored_index.index)
@@ -100,6 +106,9 @@ def append_segment_documents(
             texts.append(segment.stored_text_corpus.corpus.texts[index].copy())
         else:
             texts.append(String())
+        metadata_maps.append(
+            loaded_segment_document_metadata_for_doc_index(segment, index)
+        )
 
 
 def aggregate_snapshot_stats(
@@ -154,6 +163,7 @@ def execute_compaction_plan(
 
     var documents = List[EncodedDocument]()
     var texts = List[String]()
+    var metadata_maps = List[DocumentMetadataMap]()
     var kept_segments = List[LoadedSealedSegment]()
     var kept_segment_ids = List[SegmentId]()
     var source_segment_count = 0
@@ -167,7 +177,7 @@ def execute_compaction_plan(
 
         if is_source:
             source_segment_count += 1
-            append_segment_documents(documents, texts, segment)
+            append_segment_documents(documents, texts, metadata_maps, segment)
         else:
             kept_segments.append(segment.copy())
             kept_segment_ids.append(segment.manifest.segment_id.copy())
@@ -185,6 +195,7 @@ def execute_compaction_plan(
         next_generation,
         documents,
         texts,
+        metadata_maps,
     )
     if compacted_segment.stats.document_count != plan.expected_output_stats.document_count:
         raise Error("compacted document_count does not match compaction plan")

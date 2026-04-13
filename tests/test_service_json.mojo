@@ -6,6 +6,8 @@ from kayak import (
     CollectionSearchExplain,
     CreateCollectionRequest,
     DebugSearchResponse,
+    DocumentMetadataUpdate,
+    EncodedDocument,
     ExplainResponse,
     FaithfulnessAssessment,
     NamespaceId,
@@ -16,9 +18,12 @@ from kayak import (
     SnapshotId,
     TenantId,
     VECTOR_SCALAR_NAME,
+    UpsertDocument,
+    UpsertDocumentsRequest,
     create_collection_request_json,
     debug_search_response_json,
     service_health_status_json,
+    upsert_documents_request_json,
 )
 from kayak.filters import match_all_filter
 from kayak.planning import CandidateSet, exact_full_scan_search_plan
@@ -110,6 +115,28 @@ def test_service_health_status_json_contains_counters() raises:
 
     assert_equal(json.find("\"status\":\"ok\"") != -1, True)
     assert_equal(json.find("\"live_snapshot_count\":3") != -1, True)
+
+
+def test_upsert_documents_request_json_contains_metadata_updates() raises:
+    var json = upsert_documents_request_json(
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    EncodedDocument("doc-a", [[1.0, 0.0]]),
+                    "alpha",
+                    [DocumentMetadataUpdate("source", "wire")],
+                )
+            ],
+        )
+    )
+
+    assert_equal(json.find("\"has_metadata_updates\":true") != -1, True)
+    assert_equal(json.find("\"metadata_updates\"") != -1, True)
+    assert_equal(json.find("\"key\":\"source\"") != -1, True)
+    assert_equal(json.find("\"value\":\"wire\"") != -1, True)
 
 
 def main() raises:

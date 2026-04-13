@@ -2,7 +2,14 @@ from std.collections import List
 
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.contracts import EncodedQuery
-from kayak.filters import FilterExpression, filter_expression_matches_doc_id, match_all_filter
+from kayak.collections.resolved_snapshot import (
+    loaded_segment_document_metadata_for_doc_index,
+)
+from kayak.filters import (
+    FilterExpression,
+    filter_expression_matches_document,
+    match_all_filter,
+)
 from kayak.runtime import ExactScoringBackend
 
 from .candidate_set import CandidateSet
@@ -24,9 +31,10 @@ def candidate_generation_for_exact_family[Backend: ExactScoringBackend](
         var scores = backend.score_all(query, segment.stored_index.index)
 
         for index in range(len(scores)):
-            if not filter_expression_matches_doc_id(
+            if not filter_expression_matches_document(
                 filter_expression,
                 segment.stored_index.index.doc_ids[index],
+                loaded_segment_document_metadata_for_doc_index(segment, index),
             ):
                 continue
             insert_descending_collection_hit(

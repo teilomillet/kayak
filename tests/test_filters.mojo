@@ -6,11 +6,14 @@ from kayak.filters import (
     FilterField,
     FilterTerm,
     and_filter,
+    filter_expression_matches_document,
     filter_expression_is_exact_doc_id_filter,
     filter_expression_matches_doc_id,
+    filter_expression_requires_document_metadata,
     match_all_filter,
     one_of_filter,
 )
+from kayak import DocumentMetadataEntry, DocumentMetadataMap
 
 
 def test_match_all_filter_has_zero_clauses() raises:
@@ -57,6 +60,35 @@ def test_exact_doc_id_filter_runtime_support_is_explicit() raises:
     assert_equal(filter_expression_matches_doc_id(doc_id_filter, "doc-a"), True)
     assert_equal(filter_expression_matches_doc_id(doc_id_filter, "doc-z"), False)
     assert_equal(filter_expression_is_exact_doc_id_filter(mixed_filter), False)
+
+
+def test_filter_expression_matches_document_metadata_exactly() raises:
+    var metadata_filter = and_filter(
+        [FilterTerm(FilterField("source"), "eq", ["wire"])]
+    )
+    var metadata = DocumentMetadataMap(
+        [DocumentMetadataEntry("source", "wire")]
+    )
+
+    assert_equal(
+        filter_expression_requires_document_metadata(metadata_filter), True
+    )
+    assert_equal(
+        filter_expression_matches_document(
+            metadata_filter,
+            "doc-a",
+            metadata,
+        ),
+        True,
+    )
+    assert_equal(
+        filter_expression_matches_document(
+            metadata_filter,
+            "doc-a",
+            DocumentMetadataMap(),
+        ),
+        False,
+    )
 
 
 def main() raises:

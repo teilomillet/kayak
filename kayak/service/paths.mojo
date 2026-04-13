@@ -59,5 +59,9 @@ def draft_state_mutation_text_corpus_root(mutation_root: Path) -> Path:
     return mutation_root / "text_corpus"
 
 
+def draft_state_mutation_document_metadata_root(mutation_root: Path) -> Path:
+    return mutation_root / "document_metadata"
+
+
 def draft_state_mutation_doc_ids_path(mutation_root: Path) -> Path:
     return mutation_root / "doc_ids.tsv"

@@ -5,6 +5,8 @@ from kayak.collections import (
     CollectionId,
     CollectionManifest,
     CollectionStats,
+    DocumentMetadataEntry,
+    DocumentMetadataMap,
     NamespaceId,
     SearchArtifactManifest,
     SegmentId,
@@ -12,8 +14,10 @@ from kayak.collections import (
     SealedSegmentManifest,
     SnapshotId,
     SnapshotManifest,
+    StoredDocumentMetadataCorpus,
     StoredDocumentTextCorpus,
     TenantId,
+    load_stored_document_metadata_corpus,
     document_proxy_search_artifact,
     gem_graph_search_artifact,
     load_collection_manifest,
@@ -23,6 +27,7 @@ from kayak.collections import (
     save_collection_manifest,
     save_sealed_segment_manifest,
     save_snapshot_manifest,
+    save_stored_document_metadata_corpus,
     save_stored_document_text_corpus,
 )
 from kayak.numeric import VECTOR_SCALAR_NAME
@@ -194,6 +199,31 @@ def test_document_text_corpus_rejects_missing_text_file() raises:
         raised = True
 
     assert_equal(raised, True)
+
+
+def test_document_metadata_corpus_roundtrip_preserves_entries() raises:
+    var root = Path("/tmp/kayak-document-metadata-roundtrip")
+    save_stored_document_metadata_corpus(
+        root,
+        StoredDocumentMetadataCorpus(
+            CollectionId("news"),
+            SegmentId("segment-0009"),
+            ["doc-a", "doc-b"],
+            [
+                DocumentMetadataMap(
+                    [DocumentMetadataEntry("source", "wire")]
+                ),
+                DocumentMetadataMap(),
+            ],
+        ),
+    )
+
+    var loaded = load_stored_document_metadata_corpus(root)
+
+    assert_equal(loaded.doc_ids[0], "doc-a")
+    assert_equal(loaded.metadata_maps[0].entries[0].key, "source")
+    assert_equal(loaded.metadata_maps[0].entries[0].value, "wire")
+    assert_equal(loaded.metadata_maps[1].is_empty(), True)
 
 
 def main() raises:

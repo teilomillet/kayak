@@ -6,6 +6,21 @@ from .collection_store import (
     load_collection_manifest,
     save_collection_manifest,
 )
+from .document_metadata import (
+    DocumentMetadataEntry,
+    DocumentMetadataMap,
+    StoredDocumentMetadataCorpus,
+    copy_document_metadata_maps,
+    document_metadata_has_key,
+    document_metadata_value,
+    empty_document_metadata_map,
+    merge_document_metadata,
+)
+from .document_metadata_store import (
+    load_stored_document_metadata_corpus,
+    save_stored_document_metadata_corpus,
+    stored_document_metadata_corpus_exists,
+)
 from .compaction import CompactionPlan
 from .compaction_runtime import (
     build_compaction_plan_for_snapshot,
@@ -30,12 +45,15 @@ from .resolved_snapshot import (
     LoadedSearchArtifact,
     LoadedSealedSegment,
     ResolvedCollectionSnapshot,
+    loaded_segment_document_metadata_for_doc_index,
     loaded_segment_has_centroid_heads_index,
     loaded_segment_has_centroid_postings_index,
+    loaded_segment_has_document_metadata,
     loaded_segment_has_document_proxy_index,
     loaded_segment_has_gem_graph_index,
     loaded_segment_has_search_artifact,
     loaded_segment_stored_centroid_postings_index,
+    loaded_segment_stored_document_metadata,
     loaded_segment_stored_document_proxy_index,
     loaded_segment_stored_gem_graph_index,
 )
@@ -43,11 +61,13 @@ from .resolver import load_resolved_collection_snapshot
 from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
     SearchArtifactManifest,
     centroid_heads_search_artifact,
     centroid_postings_search_artifact,
+    document_metadata_search_artifact,
     document_proxy_search_artifact,
     gem_graph_search_artifact,
     has_search_artifact,

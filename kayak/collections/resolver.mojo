@@ -16,6 +16,8 @@ from kayak.text import DocumentTextCorpus
 
 from .collection import CollectionManifest
 from .collection_store import load_collection_manifest
+from .document_metadata import StoredDocumentMetadataCorpus
+from .document_metadata_store import load_stored_document_metadata_corpus
 from .ids import CollectionId, SegmentId, SnapshotId
 from .paths import (
     collection_segment_root,
@@ -34,6 +36,7 @@ from .resolved_snapshot import (
 from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
 )
@@ -56,6 +59,17 @@ def empty_stored_document_text_corpus(
         collection_id.copy(),
         segment_id.copy(),
         DocumentTextCorpus([], []),
+    )
+
+
+def empty_stored_document_metadata_corpus(
+    read collection_id: CollectionId, read segment_id: SegmentId
+) raises -> StoredDocumentMetadataCorpus:
+    return StoredDocumentMetadataCorpus(
+        collection_id.copy(),
+        segment_id.copy(),
+        [],
+        [],
     )
 
 
@@ -208,6 +222,25 @@ def require_loaded_document_proxy_matches_segment(
         != segment.stats.document_count
     ):
         raise Error("document proxy document_count does not match segment stats")
+
+
+def require_loaded_document_metadata_matches_segment(
+    read segment: SealedSegmentManifest,
+    read stored_index: StoredPackedIndex,
+    read stored_document_metadata: StoredDocumentMetadataCorpus,
+) raises:
+    if stored_document_metadata.collection_id.value != segment.collection_id.value:
+        raise Error("document metadata collection_id does not match segment manifest")
+
+    if stored_document_metadata.segment_id.value != segment.segment_id.value:
+        raise Error("document metadata segment_id does not match segment manifest")
+
+    if len(stored_document_metadata.doc_ids) != segment.stats.document_count:
+        raise Error("document metadata document_count does not match segment stats")
+
+    for index in range(len(stored_document_metadata.doc_ids)):
+        if stored_document_metadata.doc_ids[index] != stored_index.index.doc_ids[index]:
+            raise Error("document metadata doc_ids do not align with packed index")
 
 
 def require_loaded_centroid_postings_matches_segment(
@@ -365,6 +398,12 @@ def load_resolved_collection_snapshot(
                 segment.vector_scalar_name,
                 segment.vector_dim,
             )
+            var stored_document_metadata_corpus = (
+                empty_stored_document_metadata_corpus(
+                    segment.collection_id,
+                    segment.segment_id,
+                )
+            )
             var stored_document_proxy_index = empty_stored_document_proxy_index(
                 segment.model_name,
                 segment.vector_scalar_name,
@@ -396,6 +435,21 @@ def load_resolved_collection_snapshot(
                 )
                 require_loaded_centroid_heads_matches_segment(
                     segment, stored_centroid_postings_index
+                )
+            elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA:
+                stored_document_metadata_corpus = (
+                    load_stored_document_metadata_corpus(
+                        resolve_segment_artifact_root(
+                            segment_root,
+                            search_artifact.root,
+                            "search_artifact root for " + search_artifact.family,
+                        )
+                    )
+                )
+                require_loaded_document_metadata_matches_segment(
+                    segment,
+                    stored_index,
+                    stored_document_metadata_corpus,
                 )
             elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY:
                 stored_document_proxy_index = load_stored_document_proxy_index(
@@ -429,6 +483,7 @@ def load_resolved_collection_snapshot(
                 LoadedSearchArtifact(
                     search_artifact,
                     stored_centroid_postings_index,
+                    stored_document_metadata_corpus,
                     stored_document_proxy_index,
                     stored_gem_graph_index,
                 )

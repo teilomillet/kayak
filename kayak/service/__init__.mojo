@@ -1,3 +1,5 @@
+from kayak.collections.document_metadata import DocumentMetadataUpdate
+
 from .collection_requests import CreateCollectionRequest
 from .document_requests import (
     DeleteDocumentsRequest,

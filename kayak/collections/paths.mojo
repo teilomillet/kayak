@@ -48,6 +48,18 @@ def text_corpus_payload_root(root: Path) -> Path:
     return root / "texts"
 
 
+def document_metadata_manifest_path(root: Path) -> Path:
+    return root / "manifest.tsv"
+
+
+def document_metadata_entries_path(root: Path) -> Path:
+    return root / "entries.tsv"
+
+
+def document_metadata_payload_root(root: Path) -> Path:
+    return root / "metadata"
+
+
 def require_relative_artifact_root(
     artifact_root: String, field_name: String
 ) raises -> String:

@@ -11,6 +11,7 @@ from kayak import (
     EncodedQuery,
     ExplainRequest,
     ExplainResponse,
+    DocumentMetadataUpdate,
     NamespaceId,
     ScoreScalar,
     SearchRequest,
@@ -119,7 +120,11 @@ def test_document_mutation_requests_keep_text_sidecar_explicit() raises:
         TenantId("tenant-a"),
         NamespaceId("search"),
         [
-            UpsertDocument(make_document("doc-a", 1.0), "alpha"),
+            UpsertDocument(
+                make_document("doc-a", 1.0),
+                "alpha",
+                [DocumentMetadataUpdate("source", "wire")],
+            ),
             UpsertDocument(make_document("doc-b", 2.0)),
         ],
     )
@@ -132,7 +137,10 @@ def test_document_mutation_requests_keep_text_sidecar_explicit() raises:
 
     assert_equal(len(request.documents), 2)
     assert_equal(request.documents[0].has_text, True)
+    assert_equal(request.documents[0].has_metadata_updates, True)
+    assert_equal(request.documents[0].metadata_updates[0].key, "source")
     assert_equal(request.documents[1].has_text, False)
+    assert_equal(request.documents[1].has_metadata_updates, False)
     assert_equal(delete_request.doc_ids[0], "doc-a")
 
 

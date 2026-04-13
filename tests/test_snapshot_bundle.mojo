@@ -6,14 +6,18 @@ from kayak.collections import (
     CollectionId,
     CollectionManifest,
     CollectionStats,
+    DocumentMetadataEntry,
+    DocumentMetadataMap,
     NamespaceId,
     SegmentId,
     SegmentStats,
     SealedSegmentManifest,
     SnapshotId,
     SnapshotManifest,
+    StoredDocumentMetadataCorpus,
     StoredDocumentTextCorpus,
     TenantId,
+    document_metadata_search_artifact,
     export_snapshot_bundle,
     import_snapshot_bundle,
     load_collection_manifest,
@@ -21,6 +25,7 @@ from kayak.collections import (
     save_collection_manifest,
     save_sealed_segment_manifest,
     save_snapshot_manifest,
+    save_stored_document_metadata_corpus,
     save_stored_document_text_corpus,
 )
 from kayak.storage import StoredPackedIndex, save_stored_packed_index
@@ -86,6 +91,20 @@ def build_source_collection(root: Path) raises:
             DocumentTextCorpus(["doc-a", "doc-b"], ["alpha", "beta"]),
         ),
     )
+    save_stored_document_metadata_corpus(
+        segment_root / "document_metadata",
+        StoredDocumentMetadataCorpus(
+            CollectionId("news"),
+            SegmentId("segment-0001"),
+            ["doc-a", "doc-b"],
+            [
+                DocumentMetadataMap(
+                    [DocumentMetadataEntry("source", "wire")]
+                ),
+                DocumentMetadataMap(),
+            ],
+        ),
+    )
     save_sealed_segment_manifest(
         segment_root,
         SealedSegmentManifest(
@@ -98,7 +117,7 @@ def build_source_collection(root: Path) raises:
             VECTOR_SCALAR_NAME,
             2,
             "packed_index",
-            "",
+            [document_metadata_search_artifact("document_metadata")],
             "text_corpus",
             SegmentStats(2, 4, 4, 1024),
         ),
@@ -145,6 +164,13 @@ def test_snapshot_bundle_export_import_roundtrip() raises:
     assert_equal(resolved.segments[0].stored_index.index.document_count, 2)
     assert_equal(resolved.segments[0].has_text_corpus, True)
     assert_equal(resolved.segments[0].stored_text_corpus.corpus.texts[1], "beta")
+    assert_equal(
+        resolved.segments[0].search_artifacts[0].stored_document_metadata_corpus
+            .metadata_maps[0]
+            .entries[0]
+            .value,
+        "wire",
+    )
 
 
 def test_snapshot_bundle_import_rejects_collection_mismatch() raises:

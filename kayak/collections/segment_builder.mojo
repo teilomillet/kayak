@@ -14,10 +14,16 @@ from kayak.storage import (
 from kayak.text import DocumentTextCorpus
 
 from .collection import CollectionManifest
+from .document_metadata import (
+    DocumentMetadataMap,
+    StoredDocumentMetadataCorpus,
+)
+from .document_metadata_store import save_stored_document_metadata_corpus
 from .ids import SegmentId
 from .search_artifact import (
     SearchArtifactManifest,
     centroid_postings_search_artifact,
+    document_metadata_search_artifact,
     document_proxy_search_artifact,
 )
 from .segment import SealedSegmentManifest
@@ -50,6 +56,20 @@ def text_corpus_storage_byte_size(
     return total
 
 
+def document_metadata_storage_byte_size(
+    root: Path, document_count: Int
+) raises -> Int:
+    var total = (root / "manifest.tsv").read_text().byte_length()
+    total += (root / "entries.tsv").read_text().byte_length()
+
+    for index in range(document_count):
+        total += (
+            root / "metadata" / (String(index) + ".tsv")
+        ).read_text().byte_length()
+
+    return total
+
+
 def seal_single_segment(
     collection_root: Path,
     read collection: CollectionManifest,
@@ -57,12 +77,15 @@ def seal_single_segment(
     generation: Int,
     read documents: List[EncodedDocument],
     read texts: List[String],
+    read metadata_maps: List[DocumentMetadataMap],
 ) raises -> SealedSegmentManifest:
     if len(documents) == 0:
         raise Error("cannot seal an empty segment")
 
     if len(documents) != len(texts):
         raise Error("segment seal requires aligned documents and texts")
+    if len(documents) != len(metadata_maps):
+        raise Error("segment seal requires aligned documents and metadata")
 
     var packed_index = pack_documents(documents)
     var stored_index = StoredPackedIndex(
@@ -119,6 +142,33 @@ def seal_single_segment(
                 len(documents),
             )
 
+    var has_any_metadata = False
+    for metadata in metadata_maps:
+        if not metadata.is_empty():
+            has_any_metadata = True
+            break
+
+    if has_any_metadata:
+        var metadata_root_name = "document_metadata"
+        var doc_ids = List[String]()
+        for document in documents:
+            doc_ids.append(document.doc_id.copy())
+
+        save_stored_document_metadata_corpus(
+            segment_root / metadata_root_name,
+            StoredDocumentMetadataCorpus(
+                collection.collection_id,
+                segment_id.copy(),
+                doc_ids,
+                metadata_maps,
+            ),
+        )
+        byte_size += document_metadata_storage_byte_size(
+            segment_root / metadata_root_name,
+            len(documents),
+        )
+        search_artifacts.append(document_metadata_search_artifact(metadata_root_name))
+
     var manifest = SealedSegmentManifest(
         segment_id,
         collection.collection_id,
@@ -140,3 +190,26 @@ def seal_single_segment(
     )
     save_sealed_segment_manifest(segment_root, manifest)
     return manifest^
+
+
+def seal_single_segment(
+    collection_root: Path,
+    read collection: CollectionManifest,
+    segment_id: SegmentId,
+    generation: Int,
+    read documents: List[EncodedDocument],
+    read texts: List[String],
+) raises -> SealedSegmentManifest:
+    var empty_metadata_maps = List[DocumentMetadataMap]()
+    for _ in range(len(documents)):
+        empty_metadata_maps.append(DocumentMetadataMap())
+
+    return seal_single_segment(
+        collection_root,
+        collection,
+        segment_id,
+        generation,
+        documents,
+        texts,
+        empty_metadata_maps,
+    )

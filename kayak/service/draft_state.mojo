@@ -6,9 +6,13 @@ from std.pathlib import Path
 
 from kayak.collections import (
     CollectionManifest,
+    DocumentMetadataMap,
     SegmentId,
+    StoredDocumentMetadataCorpus,
     StoredDocumentTextCorpus,
+    load_stored_document_metadata_corpus,
     load_stored_document_text_corpus,
+    save_stored_document_metadata_corpus,
     save_stored_document_text_corpus,
 )
 from kayak.collections.artifact_manifest import (
@@ -31,6 +35,7 @@ from kayak.text import DocumentTextCorpus
 from .paths import (
     draft_state_manifest_path,
     draft_state_mutation_doc_ids_path,
+    draft_state_mutation_document_metadata_root,
     draft_state_mutation_manifest_path,
     draft_state_mutation_packed_index_root,
     draft_state_mutation_root,
@@ -47,17 +52,22 @@ comptime DRAFT_MUTATION_KIND_UPSERT = "upsert"
 struct DraftCollectionState(Copyable):
     var documents: List[EncodedDocument]
     var texts: List[String]
+    var metadata_maps: List[DocumentMetadataMap]
 
     def __init__(
         out self,
         var documents: List[EncodedDocument],
         var texts: List[String],
+        read metadata_maps: List[DocumentMetadataMap],
     ) raises:
-        if len(documents) != len(texts):
-            raise Error("draft collection state requires aligned documents and texts")
+        if len(documents) != len(texts) or len(documents) != len(metadata_maps):
+            raise Error(
+                "draft collection state requires aligned documents, texts, and metadata"
+            )
 
         self.documents = documents^
         self.texts = texts^
+        self.metadata_maps = metadata_maps.copy()
 
     def document_count(self) -> Int:
         return len(self.documents)
@@ -96,7 +106,7 @@ struct DraftStateMetadata(Copyable):
 
 
 def empty_draft_collection_state() raises -> DraftCollectionState:
-    return DraftCollectionState([], [])
+    return DraftCollectionState([], [], [])
 
 
 def draft_state_exists(draft_root: Path) -> Bool:
@@ -111,6 +121,20 @@ def find_document_index(
             return index
 
     return -1
+
+
+def encode_optional_draft_artifact_root(root: String) -> String:
+    if root.byte_length() == 0:
+        return "-"
+
+    return root.copy()
+
+
+def decode_optional_draft_artifact_root(root: String) -> String:
+    if root == "-":
+        return ""
+
+    return root.copy()
 
 
 def require_draft_state_matches_collection(
@@ -202,10 +226,13 @@ def append_draft_upsert_batch(
     read collection: CollectionManifest,
     read documents: List[EncodedDocument],
     read texts: List[String],
+    read metadata_maps: List[DocumentMetadataMap],
     document_count_after_batch: Int,
 ) raises:
-    if len(documents) != len(texts):
-        raise Error("draft upsert batch requires aligned documents and texts")
+    if len(documents) != len(texts) or len(documents) != len(metadata_maps):
+        raise Error(
+            "draft upsert batch requires aligned documents, texts, and metadata"
+        )
 
     if len(documents) == 0:
         return
@@ -230,6 +257,10 @@ def append_draft_upsert_batch(
             ManifestEntry("mutation_kind", DRAFT_MUTATION_KIND_UPSERT),
             ManifestEntry("mutation_index", String(next_mutation_index)),
             ManifestEntry("document_count", String(len(documents))),
+            ManifestEntry(
+                "document_metadata_root",
+                encode_optional_draft_artifact_root("document_metadata"),
+            ),
         ],
     )
     save_stored_packed_index(
@@ -246,7 +277,16 @@ def append_draft_upsert_batch(
         StoredDocumentTextCorpus(
             collection.collection_id,
             SegmentId("draft-mutation-" + String(next_mutation_index)),
-            DocumentTextCorpus(doc_ids^, texts.copy()),
+            DocumentTextCorpus(doc_ids.copy(), texts.copy()),
+        ),
+    )
+    save_stored_document_metadata_corpus(
+        draft_state_mutation_document_metadata_root(mutation_root),
+        StoredDocumentMetadataCorpus(
+            collection.collection_id,
+            SegmentId("draft-mutation-" + String(next_mutation_index)),
+            doc_ids,
+            metadata_maps,
         ),
     )
     write_draft_state_manifest(
@@ -336,7 +376,15 @@ def load_legacy_draft_collection_state(
         if documents[index].doc_id != stored_text.corpus.doc_ids[index]:
             raise Error("draft document ids do not align with stored text corpus")
 
-    return DraftCollectionState(documents^, stored_text.corpus.texts.copy())
+    var metadata_maps = List[DocumentMetadataMap]()
+    for _ in range(metadata.document_count):
+        metadata_maps.append(DocumentMetadataMap())
+
+    return DraftCollectionState(
+        documents^,
+        stored_text.corpus.texts.copy(),
+        metadata_maps,
+    )
 
 
 def load_mutation_log_draft_collection_state(
@@ -349,6 +397,7 @@ def load_mutation_log_draft_collection_state(
 
     var documents = List[EncodedDocument]()
     var texts = List[String]()
+    var metadata_maps = List[DocumentMetadataMap]()
 
     for mutation_index in range(1, metadata.mutation_count + 1):
         var mutation_root = draft_state_mutation_root(draft_root, mutation_index)
@@ -371,6 +420,19 @@ def load_mutation_log_draft_collection_state(
             var stored_text = load_stored_document_text_corpus(
                 draft_state_mutation_text_corpus_root(mutation_root)
             )
+            var metadata_root = decode_optional_draft_artifact_root(
+                load_optional_manifest_value(entries, "document_metadata_root")
+            )
+            var stored_document_metadata = StoredDocumentMetadataCorpus(
+                collection.collection_id,
+                SegmentId("draft-mutation-" + String(mutation_index)),
+                [],
+                [],
+            )
+            if metadata_root.byte_length() != 0:
+                stored_document_metadata = load_stored_document_metadata_corpus(
+                    draft_state_mutation_document_metadata_root(mutation_root)
+                )
             var batch_documents = unpack_documents(stored_index.index)
             if len(batch_documents) != expected_document_count:
                 raise Error(
@@ -380,22 +442,40 @@ def load_mutation_log_draft_collection_state(
                 raise Error(
                     "draft upsert document_count does not match stored text corpus"
                 )
+            if metadata_root.byte_length() != 0 and (
+                len(stored_document_metadata.doc_ids) != expected_document_count
+            ):
+                raise Error(
+                    "draft upsert document_count does not match stored metadata corpus"
+                )
 
             for index in range(expected_document_count):
                 if batch_documents[index].doc_id != stored_text.corpus.doc_ids[index]:
                     raise Error(
                         "draft upsert document ids do not align with stored text corpus"
                     )
+                if metadata_root.byte_length() != 0 and (
+                    batch_documents[index].doc_id
+                    != stored_document_metadata.doc_ids[index]
+                ):
+                    raise Error(
+                        "draft upsert document ids do not align with stored metadata corpus"
+                    )
 
                 var existing_index = find_document_index(
                     documents, batch_documents[index].doc_id
                 )
+                var next_metadata = DocumentMetadataMap()
+                if metadata_root.byte_length() != 0:
+                    next_metadata = stored_document_metadata.metadata_maps[index].copy()
                 if existing_index == -1:
                     documents.append(batch_documents[index].copy())
                     texts.append(stored_text.corpus.texts[index].copy())
+                    metadata_maps.append(next_metadata.copy())
                 else:
                     documents[existing_index] = batch_documents[index].copy()
                     texts[existing_index] = stored_text.corpus.texts[index].copy()
+                    metadata_maps[existing_index] = next_metadata.copy()
         elif mutation_kind == DRAFT_MUTATION_KIND_DELETE:
             for doc_id in read_non_empty_lines(
                 draft_state_mutation_doc_ids_path(mutation_root)
@@ -406,22 +486,25 @@ def load_mutation_log_draft_collection_state(
 
                 var kept_documents = List[EncodedDocument]()
                 var kept_texts = List[String]()
+                var kept_metadata_maps = List[DocumentMetadataMap]()
                 for index in range(len(documents)):
                     if index == existing_index:
                         continue
 
                     kept_documents.append(documents[index].copy())
                     kept_texts.append(texts[index].copy())
+                    kept_metadata_maps.append(metadata_maps[index].copy())
 
                 documents = kept_documents^
                 texts = kept_texts^
+                metadata_maps = kept_metadata_maps^
         else:
             raise Error("unknown draft mutation kind: " + mutation_kind)
 
     if len(documents) != metadata.document_count:
         raise Error("draft document_count does not match applied mutation log")
 
-    return DraftCollectionState(documents^, texts^)
+    return DraftCollectionState(documents^, texts^, metadata_maps)
 
 
 def save_draft_collection_state(
@@ -438,6 +521,7 @@ def save_draft_collection_state(
         collection,
         state.documents,
         state.texts,
+        state.metadata_maps,
         state.document_count(),
     )
 

@@ -5,6 +5,7 @@ from .validation import require_non_empty_string
 
 comptime SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS = "centroid_heads"
 comptime SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS = "centroid_postings"
+comptime SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA = "document_metadata"
 comptime SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY = "document_proxy"
 comptime SEARCH_ARTIFACT_FAMILY_GEM_GRAPH = "gem_graph"
 
@@ -28,6 +29,10 @@ def centroid_postings_search_artifact(root: String) raises -> SearchArtifactMani
 
 def document_proxy_search_artifact(root: String) raises -> SearchArtifactManifest:
     return SearchArtifactManifest(SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY, root)
+
+
+def document_metadata_search_artifact(root: String) raises -> SearchArtifactManifest:
+    return SearchArtifactManifest(SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA, root)
 
 
 def gem_graph_search_artifact(root: String) raises -> SearchArtifactManifest:

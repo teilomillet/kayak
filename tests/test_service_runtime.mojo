@@ -7,6 +7,7 @@ from kayak import (
     CreateCollectionRequest,
     CreateSnapshotRequest,
     DeleteDocumentsRequest,
+    DocumentMetadataUpdate,
     EncodedDocument,
     EncodedQuery,
     ExactCpuBackend,
@@ -424,6 +425,105 @@ def test_hosted_collection_runtime_supports_exact_doc_id_filters() raises:
 
     assert_equal(exact_filtered.hits[0].doc_id, "doc-a")
     assert_equal(raised, True)
+
+
+def test_hosted_collection_runtime_merges_metadata_and_filters_exactly() raises:
+    var service_root = unique_service_root("kayak-service-runtime-metadata")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+                    "alpha",
+                    [
+                        DocumentMetadataUpdate("source", "wire"),
+                        DocumentMetadataUpdate("language", "en"),
+                    ],
+                ),
+                UpsertDocument(
+                    make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]),
+                    "beta",
+                    [DocumentMetadataUpdate("source", "blog")],
+                ),
+            ],
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+                    [
+                        DocumentMetadataUpdate("source", "analysis"),
+                        DocumentMetadataUpdate("language", ""),
+                    ],
+                )
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish metadata fixture",
+        ),
+    )
+
+    var metadata_response = execute_search(
+        ExactCpuBackend(),
+        service_root,
+        SearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            one_of_filter("source", ["analysis"]),
+            exact_full_scan_search_plan(1, 1),
+            False,
+        ),
+    )
+    var removed_field_response = execute_search(
+        ExactCpuBackend(),
+        service_root,
+        SearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            one_of_filter("language", ["en"]),
+            exact_full_scan_search_plan(1, 1),
+            False,
+        ),
+    )
+
+    assert_equal(len(metadata_response.hits), 1)
+    assert_equal(metadata_response.hits[0].doc_id, "doc-a")
+    assert_equal(len(removed_field_response.hits), 0)
 
 
 def main() raises:

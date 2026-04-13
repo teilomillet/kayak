@@ -14,11 +14,13 @@ from .collection_store import (
     load_collection_manifest,
     save_collection_manifest,
 )
+from .document_metadata_store import save_stored_document_metadata_corpus
 from .paths import collection_segment_root, collection_snapshot_root
 from .resolved_snapshot import (
     LoadedSealedSegment,
     ResolvedCollectionSnapshot,
     loaded_segment_has_search_artifact,
+    loaded_segment_stored_document_metadata,
     loaded_segment_stored_centroid_postings_index,
     loaded_segment_stored_document_proxy_index,
     loaded_segment_stored_gem_graph_index,
@@ -27,6 +29,7 @@ from .resolver import load_resolved_collection_snapshot
 from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
     same_search_artifacts,
@@ -301,6 +304,17 @@ def write_loaded_segment_into_collection_root(
                     segment.manifest, SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
                 ),
             loaded_segment_stored_gem_graph_index(segment),
+        )
+
+    if loaded_segment_has_search_artifact(
+        segment, SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA
+    ):
+        save_stored_document_metadata_corpus(
+            segment_root
+                / sealed_segment_search_artifact_root(
+                    segment.manifest, SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA
+                ),
+            loaded_segment_stored_document_metadata(segment),
         )
 
     if segment.has_text_corpus:

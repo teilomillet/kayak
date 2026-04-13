@@ -5,6 +5,8 @@ from kayak import (
     CollectionId,
     CollectionManifest,
     CollectionStats,
+    DocumentMetadataEntry,
+    DocumentMetadataMap,
     NamespaceId,
     SealedSegmentManifest,
     SegmentId,
@@ -16,6 +18,7 @@ from kayak import (
     execute_compaction_plan,
     load_collection_manifest,
     load_resolved_collection_snapshot,
+    loaded_segment_stored_document_metadata,
     load_snapshot_manifest,
     save_collection_manifest,
     save_snapshot_manifest,
@@ -119,6 +122,83 @@ def test_execute_compaction_plan_publishes_replacement_snapshot() raises:
     assert_equal(resolved.snapshot.stats.segment_count, 1)
     assert_equal(resolved.segments[0].stored_index.index.doc_ids[0], "doc-a")
     assert_equal(resolved.segments[0].stored_index.index.doc_ids[1], "doc-b")
+
+
+def test_execute_compaction_plan_preserves_document_metadata_sidecars() raises:
+    var root = unique_root("kayak-collection-compaction-metadata")
+    var collection = CollectionManifest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        2,
+        2,
+    )
+    save_collection_manifest(root, collection)
+
+    var segment_one = seal_single_segment(
+        root,
+        collection,
+        SegmentId("segment-1"),
+        1,
+        [EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]])],
+        ["alpha"],
+        [
+            DocumentMetadataMap([DocumentMetadataEntry("source", "wire")])
+        ],
+    )
+    var segment_two = seal_single_segment(
+        root,
+        collection,
+        SegmentId("segment-2"),
+        2,
+        [EncodedDocument("doc-b", [[0.0, 1.0], [1.0, 0.0]])],
+        ["beta"],
+        [
+            DocumentMetadataMap([DocumentMetadataEntry("source", "blog")])
+        ],
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0002",
+        SnapshotManifest(
+            SnapshotId("snapshot-0002"),
+            collection.collection_id,
+            collection.tenant_id,
+            collection.namespace_id,
+            2,
+            [segment_one.segment_id.copy(), segment_two.segment_id.copy()],
+            aggregate_stats(segment_one, segment_two),
+        ),
+    )
+
+    var plan = build_compaction_plan_for_snapshot(
+        root,
+        SnapshotId("snapshot-0002"),
+        [SegmentId("segment-1"), SegmentId("segment-2")],
+        SegmentId("segment-3"),
+        "merge visible metadata segments",
+    )
+    _ = execute_compaction_plan(
+        root,
+        SnapshotId("snapshot-0002"),
+        SnapshotId("snapshot-0003"),
+        plan,
+    )
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0003"))
+
+    assert_equal(
+        loaded_segment_stored_document_metadata(resolved.segments[0]).metadata_maps[0]
+            .entries[0]
+            .value,
+        "wire",
+    )
+    assert_equal(
+        loaded_segment_stored_document_metadata(resolved.segments[0]).metadata_maps[1]
+            .entries[0]
+            .value,
+        "blog",
+    )
 
 
 def main() raises:
