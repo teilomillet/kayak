@@ -375,17 +375,18 @@ def test_resolved_snapshot_can_skip_text_and_unrequested_sidecars() raises:
     )
     save_stored_gem_graph_index(
         segment_root / "gem_graph",
-        StoredGemGraphIndex(
-            "collection://news",
-            "colbertv2",
-            VECTOR_SCALAR_NAME,
+        build_stored_gem_graph_index(
+            StoredPackedIndex(
+                "collection://news",
+                "colbertv2",
+                VECTOR_SCALAR_NAME,
+                pack_documents(documents),
+            ),
             1,
-            2,
-            3,
             1,
-            2,
-            16,
-            0,
+            1,
+            1,
+            1,
         ),
     )
     save_stored_document_text_corpus(
