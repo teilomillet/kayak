@@ -12,13 +12,20 @@ from kayak.collections import (
     load_snapshot_search_artifact_availability,
 )
 from kayak.eval import JudgedTask
+from kayak.interop import (
+    load_browsecomp_plus_gold_real_subset_document_text_corpus,
+    load_browsecomp_plus_real_subset_document_text_corpus,
+)
 from kayak.planning import (
     SEARCH_PLANNING_GOAL_BALANCED,
     SEARCH_PLANNING_GOAL_EXACT_ONLY,
     SEARCH_PLANNING_GOAL_LATENCY_FIRST,
     SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
     SearchPlanSelectionRequest,
+    Stage2Operator,
     best_effort_faithfulness_policy,
+    clause_text_stage2_operator,
+    exact_late_interaction_stage2_operator,
 )
 from kayak.runtime import ExactCpuBackend
 from kayak.storage import (
@@ -30,6 +37,7 @@ from kayak.storage import (
     ensure_limit_small_real_subset_cache,
     ensure_scifact_real_subset_cache,
 )
+from kayak.text import DocumentTextCorpus
 
 from .candidate_window_json import standard_candidate_window_sizes
 from .gem_frontier_config import frontier_gem_graph_build_config
@@ -53,6 +61,7 @@ struct PlannerBenchmarkRunOptions(Copyable):
     var include_limit_small: Bool
     var include_browsecomp_plus: Bool
     var include_browsecomp_plus_gold: Bool
+    var include_clause_text_stage2_when_text_available: Bool
 
     def __init__(
         out self,
@@ -65,6 +74,7 @@ struct PlannerBenchmarkRunOptions(Copyable):
         include_limit_small: Bool,
         include_browsecomp_plus: Bool,
         include_browsecomp_plus_gold: Bool,
+        include_clause_text_stage2_when_text_available: Bool = False,
     ):
         self.output_file_name = output_file_name^
         self.collection_suffix = collection_suffix^
@@ -75,6 +85,9 @@ struct PlannerBenchmarkRunOptions(Copyable):
         self.include_limit_small = include_limit_small
         self.include_browsecomp_plus = include_browsecomp_plus
         self.include_browsecomp_plus_gold = include_browsecomp_plus_gold
+        self.include_clause_text_stage2_when_text_available = (
+            include_clause_text_stage2_when_text_available
+        )
 
 
 def default_planner_benchmark_run_options() -> PlannerBenchmarkRunOptions:
@@ -114,6 +127,17 @@ def max_query_vector_budget(read task: JudgedTask) -> Int:
     if max_budget <= 0:
         return 1
     return max_budget
+
+
+def planner_benchmark_stage2_operators(
+    include_clause_text_stage2_when_text_available: Bool,
+    has_text_corpus: Bool,
+) raises -> List[Stage2Operator]:
+    var stage2_operators = List[Stage2Operator]()
+    stage2_operators.append(exact_late_interaction_stage2_operator())
+    if include_clause_text_stage2_when_text_available and has_text_corpus:
+        stage2_operators.append(clause_text_stage2_operator())
+    return stage2_operators^
 
 
 def append_unique_int(mut values: List[Int], value: Int):
@@ -159,6 +183,7 @@ def append_planner_summaries_for_dataset(
     collection_root: Path,
     full_candidate_window_sweep: Bool,
     candidate_window_limit: Int,
+    read stage2_operators: List[Stage2Operator],
 ) raises:
     var snapshot_id = SnapshotId("snapshot-0001")
     var snapshot = load_resolved_collection_snapshot(
@@ -178,74 +203,79 @@ def append_planner_summaries_for_dataset(
         full_candidate_window_sweep,
         candidate_window_limit,
     ):
-        summaries.append(
-            build_planner_benchmark_summary(
-                backend,
-                stored_task,
-                snapshot,
-                availability,
-                SearchPlanSelectionRequest(
-                    task.k,
-                    candidate_k,
-                    best_effort_faithfulness_policy(),
-                    goal=SEARCH_PLANNING_GOAL_BALANCED,
-                ),
-                query_budget,
-                0,
-                CENTROID_HEAD_POSTING_CAP,
+        for stage2_operator in stage2_operators:
+            summaries.append(
+                build_planner_benchmark_summary(
+                    backend,
+                    stored_task,
+                    snapshot,
+                    availability,
+                    SearchPlanSelectionRequest(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                        goal=SEARCH_PLANNING_GOAL_BALANCED,
+                    ),
+                    stage2_operator,
+                    query_budget,
+                    0,
+                    CENTROID_HEAD_POSTING_CAP,
+                )
             )
-        )
-        summaries.append(
-            build_planner_benchmark_summary(
-                backend,
-                stored_task,
-                snapshot,
-                availability,
-                SearchPlanSelectionRequest(
-                    task.k,
-                    candidate_k,
-                    best_effort_faithfulness_policy(),
-                    goal=SEARCH_PLANNING_GOAL_LATENCY_FIRST,
-                ),
-                query_budget,
-                0,
-                CENTROID_HEAD_POSTING_CAP,
+            summaries.append(
+                build_planner_benchmark_summary(
+                    backend,
+                    stored_task,
+                    snapshot,
+                    availability,
+                    SearchPlanSelectionRequest(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                        goal=SEARCH_PLANNING_GOAL_LATENCY_FIRST,
+                    ),
+                    stage2_operator,
+                    query_budget,
+                    0,
+                    CENTROID_HEAD_POSTING_CAP,
+                )
             )
-        )
-        summaries.append(
-            build_planner_benchmark_summary(
-                backend,
-                stored_task,
-                snapshot,
-                availability,
-                SearchPlanSelectionRequest(
-                    task.k,
-                    candidate_k,
-                    best_effort_faithfulness_policy(),
-                    goal=SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
-                ),
-                query_budget,
-                0,
-                CENTROID_HEAD_POSTING_CAP,
+            summaries.append(
+                build_planner_benchmark_summary(
+                    backend,
+                    stored_task,
+                    snapshot,
+                    availability,
+                    SearchPlanSelectionRequest(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                        goal=SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
+                    ),
+                    stage2_operator,
+                    query_budget,
+                    0,
+                    CENTROID_HEAD_POSTING_CAP,
+                )
             )
-        )
-        summaries.append(
-            build_planner_benchmark_summary(
-                backend,
-                stored_task,
-                snapshot,
-                availability,
-                SearchPlanSelectionRequest(
-                    task.k,
-                    candidate_k,
-                    best_effort_faithfulness_policy(),
-                    goal=SEARCH_PLANNING_GOAL_EXACT_ONLY,
-                ),
-                query_budget,
-                0,
-                CENTROID_HEAD_POSTING_CAP,
+            summaries.append(
+                build_planner_benchmark_summary(
+                    backend,
+                    stored_task,
+                    snapshot,
+                    availability,
+                    SearchPlanSelectionRequest(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                        goal=SEARCH_PLANNING_GOAL_EXACT_ONLY,
+                    ),
+                    stage2_operator,
+                    query_budget,
+                    0,
+                    CENTROID_HEAD_POSTING_CAP,
+                )
             )
-        )
 
 
 def append_planner_summaries_for_cache(
@@ -254,6 +284,8 @@ def append_planner_summaries_for_cache(
     collection_root: Path,
     read stored_task: StoredJudgedTask,
     read stored_index: StoredPackedIndex,
+    read document_text_corpus: DocumentTextCorpus,
+    include_clause_text_stage2_when_text_available: Bool,
     full_candidate_window_sweep: Bool,
     candidate_window_limit: Int,
 ) raises:
@@ -261,6 +293,7 @@ def append_planner_summaries_for_cache(
         stored_index,
         max_query_vector_budget(stored_task.task),
     )
+    var has_text_corpus = len(document_text_corpus.doc_ids) != 0
     append_planner_summaries_for_dataset(
         summaries,
         backend,
@@ -273,6 +306,7 @@ def append_planner_summaries_for_cache(
             SnapshotId("snapshot-0001"),
             1,
             stored_index,
+            document_text_corpus,
             0,
             0,
             CENTROID_HEAD_POSTING_CAP,
@@ -280,6 +314,32 @@ def append_planner_summaries_for_cache(
             gem_config.coarse_cluster_count,
             gem_config.cluster_cutoff,
         ),
+        full_candidate_window_sweep,
+        candidate_window_limit,
+        planner_benchmark_stage2_operators(
+            include_clause_text_stage2_when_text_available,
+            has_text_corpus,
+        ),
+    )
+
+def append_planner_summaries_for_cache(
+    mut summaries: List[PlannerBenchmarkSummary],
+    read backend: ExactCpuBackend,
+    collection_root: Path,
+    read stored_task: StoredJudgedTask,
+    read stored_index: StoredPackedIndex,
+    include_clause_text_stage2_when_text_available: Bool,
+    full_candidate_window_sweep: Bool,
+    candidate_window_limit: Int,
+) raises:
+    append_planner_summaries_for_cache(
+        summaries,
+        backend,
+        collection_root,
+        stored_task,
+        stored_index,
+        DocumentTextCorpus(List[String](), List[String]()),
+        include_clause_text_stage2_when_text_available,
         full_candidate_window_sweep,
         candidate_window_limit,
     )
@@ -307,6 +367,7 @@ def planner_benchmark_summaries_for_options(
             ),
             scifact_cache.stored_task,
             scifact_cache.stored_index,
+            options.include_clause_text_stage2_when_text_available,
             options.full_candidate_window_sweep,
             options.candidate_window_limit,
         )
@@ -321,6 +382,7 @@ def planner_benchmark_summaries_for_options(
             ),
             fiqa_cache.stored_task,
             fiqa_cache.stored_index,
+            options.include_clause_text_stage2_when_text_available,
             options.full_candidate_window_sweep,
             options.candidate_window_limit,
         )
@@ -335,37 +397,70 @@ def planner_benchmark_summaries_for_options(
             ),
             limit_cache.stored_task,
             limit_cache.stored_index,
+            options.include_clause_text_stage2_when_text_available,
             options.full_candidate_window_sweep,
             options.candidate_window_limit,
         )
 
     if options.include_browsecomp_plus:
         var browsecomp_cache = ensure_browsecomp_plus_real_subset_cache()
-        append_planner_summaries_for_cache(
-            summaries,
-            backend,
-            planner_collection_root_for_dataset(
-                "browsecomp_plus_real_subset", options.collection_suffix
-            ),
-            browsecomp_cache.stored_task,
-            browsecomp_cache.stored_index,
-            options.full_candidate_window_sweep,
-            options.candidate_window_limit,
-        )
+        if options.include_clause_text_stage2_when_text_available:
+            append_planner_summaries_for_cache(
+                summaries,
+                backend,
+                planner_collection_root_for_dataset(
+                    "browsecomp_plus_real_subset", options.collection_suffix
+                ),
+                browsecomp_cache.stored_task,
+                browsecomp_cache.stored_index,
+                load_browsecomp_plus_real_subset_document_text_corpus(),
+                options.include_clause_text_stage2_when_text_available,
+                options.full_candidate_window_sweep,
+                options.candidate_window_limit,
+            )
+        else:
+            append_planner_summaries_for_cache(
+                summaries,
+                backend,
+                planner_collection_root_for_dataset(
+                    "browsecomp_plus_real_subset", options.collection_suffix
+                ),
+                browsecomp_cache.stored_task,
+                browsecomp_cache.stored_index,
+                options.include_clause_text_stage2_when_text_available,
+                options.full_candidate_window_sweep,
+                options.candidate_window_limit,
+            )
 
     if options.include_browsecomp_plus_gold:
         var browsecomp_gold_cache = ensure_browsecomp_plus_gold_real_subset_cache()
-        append_planner_summaries_for_cache(
-            summaries,
-            backend,
-            planner_collection_root_for_dataset(
-                "browsecomp_plus_gold", options.collection_suffix
-            ),
-            browsecomp_gold_cache.stored_task,
-            browsecomp_gold_cache.stored_index,
-            options.full_candidate_window_sweep,
-            options.candidate_window_limit,
-        )
+        if options.include_clause_text_stage2_when_text_available:
+            append_planner_summaries_for_cache(
+                summaries,
+                backend,
+                planner_collection_root_for_dataset(
+                    "browsecomp_plus_gold", options.collection_suffix
+                ),
+                browsecomp_gold_cache.stored_task,
+                browsecomp_gold_cache.stored_index,
+                load_browsecomp_plus_gold_real_subset_document_text_corpus(),
+                options.include_clause_text_stage2_when_text_available,
+                options.full_candidate_window_sweep,
+                options.candidate_window_limit,
+            )
+        else:
+            append_planner_summaries_for_cache(
+                summaries,
+                backend,
+                planner_collection_root_for_dataset(
+                    "browsecomp_plus_gold", options.collection_suffix
+                ),
+                browsecomp_gold_cache.stored_task,
+                browsecomp_gold_cache.stored_index,
+                options.include_clause_text_stage2_when_text_available,
+                options.full_candidate_window_sweep,
+                options.candidate_window_limit,
+            )
 
     return summaries^
 

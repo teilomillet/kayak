@@ -16,6 +16,7 @@ def main() raises:
             False,
             False,
             True,
+            True,
         )
     )
     print("wrote ", String(output_path))

@@ -1,3 +1,4 @@
+from std.collections import List
 from std.pathlib import Path
 from std.testing import TestSuite, assert_equal
 
@@ -25,9 +26,12 @@ from kayak.planning import (
     SEARCH_PLANNING_GOAL_BALANCED,
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
+    clause_text_stage2_operator,
+    exact_late_interaction_stage2_operator,
 )
 from kayak.runtime import ExactCpuBackend
 from kayak.scoring import ExactScoringConfig
+from kayak.text import DocumentTextCorpus
 
 
 def unique_collection_root(prefix: String) -> Path:
@@ -89,6 +93,7 @@ def test_planner_benchmark_summary_json_contains_selection_fields() raises:
     var json = planner_benchmark_summary_json(
         PlannerBenchmarkSummary(
             "balanced",
+            "exact_late_interaction",
             "document_proxy",
             "promoted",
             "planner used the default candidate-generator order for goal balanced",
@@ -135,6 +140,7 @@ def test_planner_benchmark_summary_json_contains_selection_fields() raises:
     )
 
     assert_equal(json.find("\"planning_goal\":\"balanced\"") != -1, True)
+    assert_equal(json.find("\"stage2_kind\":\"exact_late_interaction\"") != -1, True)
     assert_equal(
         json.find("\"selected_candidate_generator_status\":\"promoted\"") != -1,
         True,
@@ -182,15 +188,68 @@ def test_build_planner_benchmark_summary_reports_selected_generator() raises:
             best_effort_faithfulness_policy(),
             goal=SEARCH_PLANNING_GOAL_BALANCED,
         ),
+        exact_late_interaction_stage2_operator(),
         profile.query_vector_count,
         profile.vector_dim,
         8,
     )
 
     assert_equal(summary.planning_goal, "balanced")
+    assert_equal(summary.stage2_kind, "exact_late_interaction")
     assert_equal(summary.selected_candidate_generator_kind, "document_proxy")
     assert_equal(summary.selected_candidate_generator_status, "promoted")
     assert_equal(summary.measured.mean_candidate_recall_at_final_k >= 0.0, True)
+    assert_equal(summary.measured.stage1_byte_size > 0, True)
+
+
+def test_build_planner_benchmark_summary_supports_clause_text_on_mirrored_text_corpus() raises:
+    var profile = default_single_core_scale_profiles()[0].copy()
+    var fixture = make_single_core_scale_fixture(profile)
+    var doc_ids = fixture.stored_index.index.doc_ids.copy()
+    var texts = List[String]()
+    for doc_id in doc_ids:
+        texts.append("benchmark text for " + doc_id)
+
+    var collection_root = ensure_one_segment_collection_mirror(
+        unique_collection_root("kayak-planner-benchmark-clause-text"),
+        CollectionId("planner-benchmark-clause-text"),
+        TenantId("public"),
+        NamespaceId("benchmark"),
+        SnapshotId("snapshot-0001"),
+        1,
+        fixture.stored_index,
+        DocumentTextCorpus(doc_ids^, texts^),
+        profile.document_vector_count,
+        profile.vector_dim,
+        8,
+    )
+    var snapshot = load_resolved_collection_snapshot(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+    )
+    var availability = load_snapshot_search_artifact_availability(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+    )
+    var summary = build_planner_benchmark_summary(
+        single_core_backend(),
+        fixture.stored_task,
+        snapshot,
+        availability,
+        SearchPlanSelectionRequest(
+            profile.final_k,
+            profile.candidate_k,
+            best_effort_faithfulness_policy(),
+            goal=SEARCH_PLANNING_GOAL_BALANCED,
+        ),
+        clause_text_stage2_operator(),
+        profile.query_vector_count,
+        profile.vector_dim,
+        8,
+    )
+
+    assert_equal(summary.stage2_kind, "clause_text")
+    assert_equal(summary.selected_candidate_generator_kind, "document_proxy")
     assert_equal(summary.measured.stage1_byte_size > 0, True)
 
 
