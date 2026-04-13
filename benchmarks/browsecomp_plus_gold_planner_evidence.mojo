@@ -5,20 +5,18 @@ from std.pathlib import Path
 from kayak.benchmarks import (
     PlannerEvidenceSummary,
     build_planner_evidence_summary,
+    ensure_public_benchmark_dataset_collection_mirror,
+    load_public_benchmark_dataset,
     planner_evidence_summaries_json,
+    require_public_benchmark_dataset_loaded_text_corpus,
     standard_candidate_window_sizes,
 )
 from kayak.collections import (
-    CollectionId,
-    NamespaceId,
     SnapshotId,
-    TenantId,
-    ensure_one_segment_collection_mirror,
     load_resolved_collection_snapshot,
     load_snapshot_search_artifact_availability,
 )
 from kayak.eval import JudgedTask
-from kayak.interop import load_browsecomp_plus_gold_real_subset_document_text_corpus
 from kayak.planning import (
     SEARCH_PLANNING_GOAL_BALANCED,
     SEARCH_PLANNING_GOAL_EXACT_ONLY,
@@ -30,7 +28,6 @@ from kayak.planning import (
     exact_late_interaction_stage2_operator,
 )
 from kayak.runtime import ExactCpuBackend
-from kayak.storage import ensure_browsecomp_plus_gold_real_subset_cache
 
 
 comptime CENTROID_HEAD_POSTING_CAP = 16
@@ -48,21 +45,19 @@ def max_query_vector_budget(read task: JudgedTask) -> Int:
 
 
 def main() raises:
-    var cache = ensure_browsecomp_plus_gold_real_subset_cache()
-    var task = cache.stored_task.task.copy()
-    var document_text_corpus = load_browsecomp_plus_gold_real_subset_document_text_corpus()
-    var collection_root = ensure_one_segment_collection_mirror(
-        Path(".cache/kayak/browsecomp_plus_gold_planner_evidence_collection"),
-        CollectionId("browsecomp_plus_gold_real_subset"),
-        TenantId("public"),
-        NamespaceId("benchmark"),
-        SnapshotId("snapshot-0001"),
-        1,
-        cache.stored_index,
-        document_text_corpus,
+    var dataset = load_public_benchmark_dataset(
+        "browsecomp_plus_gold",
+        load_text_corpus=True,
+    )
+    var task = dataset.stored_task.task.copy()
+    _ = require_public_benchmark_dataset_loaded_text_corpus(dataset)
+    var collection_root = ensure_public_benchmark_dataset_collection_mirror(
+        dataset,
+        "planner_evidence_collection",
         0,
         0,
         CENTROID_HEAD_POSTING_CAP,
+        include_frontier_gem_graph=True,
     )
     var snapshot = load_resolved_collection_snapshot(
         collection_root,
@@ -88,7 +83,7 @@ def main() raises:
             summaries.append(
                 build_planner_evidence_summary(
                     backend,
-                    cache.stored_task,
+                    dataset.stored_task,
                     snapshot,
                     availability,
                     SearchPlanSelectionRequest(
@@ -106,7 +101,7 @@ def main() raises:
             summaries.append(
                 build_planner_evidence_summary(
                     backend,
-                    cache.stored_task,
+                    dataset.stored_task,
                     snapshot,
                     availability,
                     SearchPlanSelectionRequest(
@@ -124,7 +119,7 @@ def main() raises:
             summaries.append(
                 build_planner_evidence_summary(
                     backend,
-                    cache.stored_task,
+                    dataset.stored_task,
                     snapshot,
                     availability,
                     SearchPlanSelectionRequest(
@@ -142,7 +137,7 @@ def main() raises:
             summaries.append(
                 build_planner_evidence_summary(
                     backend,
-                    cache.stored_task,
+                    dataset.stored_task,
                     snapshot,
                     availability,
                     SearchPlanSelectionRequest(

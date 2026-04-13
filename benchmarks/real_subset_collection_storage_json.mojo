@@ -5,22 +5,13 @@ from std.pathlib import Path
 from kayak.benchmarks import (
     RealSliceCollectionStorageSummary,
     build_real_slice_collection_storage_summary,
+    ensure_public_benchmark_dataset_collection_mirror,
+    load_default_public_benchmark_datasets,
     real_slice_collection_storage_summaries_json,
 )
 from kayak.collections import (
-    CollectionId,
-    NamespaceId,
     SnapshotId,
-    TenantId,
-    ensure_one_segment_collection_mirror,
     load_collection_storage_report,
-)
-from kayak.storage import (
-    ensure_browsecomp_plus_gold_real_subset_cache,
-    ensure_browsecomp_plus_real_subset_cache,
-    ensure_fiqa_real_subset_cache,
-    ensure_limit_small_real_subset_cache,
-    ensure_scifact_real_subset_cache,
 )
 
 
@@ -47,95 +38,17 @@ def append_storage_summary(
 def main() raises:
     var summaries = List[RealSliceCollectionStorageSummary]()
 
-    var scifact_cache = ensure_scifact_real_subset_cache()
-    append_storage_summary(
-        summaries,
-        scifact_cache.stored_task.dataset_id,
-        "scifact_real_subset",
-        ensure_one_segment_collection_mirror(
-            Path(".cache/kayak/scifact_real_subset_collection"),
-            CollectionId("scifact_real_subset"),
-            TenantId("public"),
-            NamespaceId("benchmark"),
-            SnapshotId("snapshot-0001"),
-            1,
-            scifact_cache.stored_index,
-            0,
-        ),
-        scifact_cache.stored_index.model_name,
-    )
-
-    var fiqa_cache = ensure_fiqa_real_subset_cache()
-    append_storage_summary(
-        summaries,
-        fiqa_cache.stored_task.dataset_id,
-        "fiqa_real_subset",
-        ensure_one_segment_collection_mirror(
-            Path(".cache/kayak/fiqa_real_subset_collection"),
-            CollectionId("fiqa_real_subset"),
-            TenantId("public"),
-            NamespaceId("benchmark"),
-            SnapshotId("snapshot-0001"),
-            1,
-            fiqa_cache.stored_index,
-            0,
-        ),
-        fiqa_cache.stored_index.model_name,
-    )
-
-    var limit_small_cache = ensure_limit_small_real_subset_cache()
-    append_storage_summary(
-        summaries,
-        limit_small_cache.stored_task.dataset_id,
-        "limit_small_real_subset",
-        ensure_one_segment_collection_mirror(
-            Path(".cache/kayak/limit_small_real_subset_collection"),
-            CollectionId("limit_small_real_subset"),
-            TenantId("public"),
-            NamespaceId("benchmark"),
-            SnapshotId("snapshot-0001"),
-            1,
-            limit_small_cache.stored_index,
-            0,
-        ),
-        limit_small_cache.stored_index.model_name,
-    )
-
-    var browsecomp_cache = ensure_browsecomp_plus_real_subset_cache()
-    append_storage_summary(
-        summaries,
-        browsecomp_cache.stored_task.dataset_id,
-        "browsecomp_plus_real_subset",
-        ensure_one_segment_collection_mirror(
-            Path(".cache/kayak/browsecomp_plus_real_subset_collection"),
-            CollectionId("browsecomp_plus_real_subset"),
-            TenantId("public"),
-            NamespaceId("benchmark"),
-            SnapshotId("snapshot-0001"),
-            1,
-            browsecomp_cache.stored_index,
-            0,
-        ),
-        browsecomp_cache.stored_index.model_name,
-    )
-
-    var browsecomp_gold_cache = ensure_browsecomp_plus_gold_real_subset_cache()
-    append_storage_summary(
-        summaries,
-        browsecomp_gold_cache.stored_task.dataset_id,
-        "browsecomp_plus_gold_real_subset",
-        ensure_one_segment_collection_mirror(
-            Path(".cache/kayak/browsecomp_plus_gold_real_subset_collection"),
-            CollectionId("browsecomp_plus_gold_real_subset"),
-            TenantId("public"),
-            NamespaceId("benchmark"),
-            SnapshotId("snapshot-0001"),
-            1,
-            browsecomp_gold_cache.stored_index,
-            0,
-        ),
-        browsecomp_gold_cache.stored_index.model_name,
-    )
+    for dataset in load_default_public_benchmark_datasets():
+        append_storage_summary(
+            summaries,
+            dataset.stored_task.dataset_id,
+            dataset.collection_root_stem,
+            ensure_public_benchmark_dataset_collection_mirror(
+                dataset,
+                "collection",
+            ),
+            dataset.stored_index.model_name,
+        )
 
     var output_root = Path(".cache/kayak")
     makedirs(output_root, exist_ok=True)

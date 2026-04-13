@@ -85,6 +85,19 @@ from .storage_encoding_json import (
     storage_encoding_summaries_json,
     storage_encoding_summary_json,
 )
+from .public_benchmark_dataset import (
+    PublicBenchmarkDataset,
+    default_public_benchmark_dataset_keys,
+    empty_document_text_corpus,
+    ensure_public_benchmark_dataset_collection_mirror,
+    load_default_public_benchmark_datasets,
+    load_public_benchmark_dataset,
+    max_query_vector_budget_for_public_benchmark_dataset,
+    public_benchmark_dataset_collection_root,
+    public_benchmark_dataset_has_loaded_text_corpus,
+    public_benchmark_dataset_has_text_sidecars,
+    require_public_benchmark_dataset_loaded_text_corpus,
+)
 from .vector_pruning_json import (
     VectorPruningSummary,
     build_vector_pruning_summary,

@@ -1,17 +1,14 @@
 from std.collections import List
 
+from kayak.benchmarks import (
+    load_public_benchmark_dataset,
+    require_public_benchmark_dataset_loaded_text_corpus,
+)
 from kayak.eval import JudgedTask, evaluate_query_hits
 from kayak.index import PackedIndex
-from kayak.interop import (
-    load_browsecomp_plus_gold_real_subset_document_text_corpus,
-)
 from kayak.numeric import MetricScalar
 from kayak.runtime import ExactCpuBackend
 from kayak.search import SearchHit, search_exact
-from kayak.storage import (
-    ensure_browsecomp_plus_gold_real_subset_cache,
-    ensure_browsecomp_plus_real_subset_cache,
-)
 from kayak.verifier import (
     default_clause_text_rerank_config,
     rerank_hits_clause_text,
@@ -136,25 +133,36 @@ def evaluate_reranked_task(
 
 def main() raises:
     print("loading BrowseComp-Plus evidence and gold slices with text sidecar...")
-    var evidence_cache = ensure_browsecomp_plus_real_subset_cache()
-    var gold_cache = ensure_browsecomp_plus_gold_real_subset_cache()
-    var evidence_task = evidence_cache.stored_task.task.copy()
-    var gold_task = gold_cache.stored_task.task.copy()
-    var evidence_index = evidence_cache.stored_index.index.copy()
-    var gold_index = gold_cache.stored_index.index.copy()
-    var document_texts = load_browsecomp_plus_gold_real_subset_document_text_corpus()
+    var evidence_dataset = load_public_benchmark_dataset(
+        "browsecomp_plus_real_subset",
+        load_text_corpus=True,
+    )
+    var gold_dataset = load_public_benchmark_dataset(
+        "browsecomp_plus_gold",
+        load_text_corpus=True,
+    )
+    var evidence_task = evidence_dataset.stored_task.task.copy()
+    var gold_task = gold_dataset.stored_task.task.copy()
+    var evidence_index = evidence_dataset.stored_index.index.copy()
+    var gold_index = gold_dataset.stored_index.index.copy()
+    var evidence_document_texts = require_public_benchmark_dataset_loaded_text_corpus(
+        evidence_dataset
+    )
+    var gold_document_texts = require_public_benchmark_dataset_loaded_text_corpus(
+        gold_dataset
+    )
 
     evaluate_reranked_task(
         "BrowseComp evidence clause-text rerank",
         evidence_task,
         evidence_index,
-        document_texts,
+        evidence_document_texts,
         20,
     )
     evaluate_reranked_task(
         "BrowseComp gold clause-text rerank",
         gold_task,
         gold_index,
-        document_texts,
+        gold_document_texts,
         20,
     )
