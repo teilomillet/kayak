@@ -8,10 +8,11 @@ from kayak.planning import (
     SearchPlanSelectionRequest,
     SearchPlannerRegistryEntry,
     SearchPlan,
-    Stage2Operator,
+    Stage2ReferenceOperator,
+    Stage3VerifierOperator,
     explain_collection_search,
     search_plan_for_candidate_generator_kind,
-    search_plan_with_stage2_operator,
+    search_plan_with_stage_components,
     search_planner_registry_entry,
     select_search_plan_for_availability,
 )
@@ -131,7 +132,8 @@ def candidate_summary_for_kind(
     read stored_task: StoredJudgedTask,
     read snapshot: ResolvedCollectionSnapshot,
     read request: SearchPlanSelectionRequest,
-    stage2_operator: Stage2Operator,
+    read stage2_reference_operator: Stage2ReferenceOperator,
+    read stage3_verifier: Stage3VerifierOperator,
     candidate_generator_kind: String,
     query_vector_budget: Int,
     requested_stage1_vector_budget: Int,
@@ -141,12 +143,13 @@ def candidate_summary_for_kind(
     var registry_entry: SearchPlannerRegistryEntry = search_planner_registry_entry(
         candidate_generator_kind
     )
-    var plan = search_plan_with_stage2_operator(
+    var plan = search_plan_with_stage_components(
         search_plan_for_candidate_generator_kind(
             candidate_generator_kind,
             request,
         ),
-        stage2_operator,
+        stage2_reference_operator,
+        stage3_verifier,
     )
     return PlannerEvidenceCandidateSummary(
         candidate_generator_kind.copy(),
@@ -170,15 +173,17 @@ def build_planner_evidence_summary(
     read snapshot: ResolvedCollectionSnapshot,
     read availability: SnapshotSearchArtifactAvailability,
     read request: SearchPlanSelectionRequest,
-    stage2_operator: Stage2Operator,
+    read stage2_reference_operator: Stage2ReferenceOperator,
+    read stage3_verifier: Stage3VerifierOperator,
     query_vector_budget: Int,
     requested_stage1_vector_budget: Int = 0,
     posting_cap: Int = 0,
 ) raises -> PlannerEvidenceSummary:
     var selection = select_search_plan_for_availability(availability, request)
-    var selected_plan = search_plan_with_stage2_operator(
+    var selected_plan = search_plan_with_stage_components(
         selection.plan,
-        stage2_operator,
+        stage2_reference_operator,
+        stage3_verifier,
     )
     var candidates = List[PlannerEvidenceCandidateSummary]()
 
@@ -189,7 +194,8 @@ def build_planner_evidence_summary(
                 stored_task,
                 snapshot,
                 request,
-                stage2_operator,
+                stage2_reference_operator,
+                stage3_verifier,
                 candidate_generator_kind,
                 query_vector_budget,
                 requested_stage1_vector_budget,

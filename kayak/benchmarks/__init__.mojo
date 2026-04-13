@@ -108,10 +108,18 @@ from .vector_pruning_json import (
 from .token_pooling_json import (
     TokenPoolingSummary,
     build_token_pooling_summary,
-    standard_token_pooling_factors,
-    supported_token_pooling_policies,
     token_pooling_summaries_json,
     token_pooling_summary_json,
+)
+from .token_pooling_common import (
+    standard_token_pooling_factors,
+    supported_token_pooling_policies,
+)
+from .token_pooling_stage_aware_json import (
+    TokenPoolingStageAwareSummary,
+    build_token_pooling_stage_aware_summary,
+    token_pooling_stage_aware_summaries_json,
+    token_pooling_stage_aware_summary_json,
 )
 from .filter_fixtures import (
     FilterSelectivityFixture,

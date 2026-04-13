@@ -88,6 +88,15 @@ Compatibility fields are still emitted, but only under explicit
 `compatibility_*` names. The benchmark surfaces no longer present those legacy
 combined names as the primary contract.
 
+The active benchmark setup surfaces now follow the same split:
+
+- `build_planner_benchmark_summary(...)` takes
+  `stage2_reference_operator` plus `stage3_verifier`
+- `build_planner_evidence_summary(...)` takes
+  `stage2_reference_operator` plus `stage3_verifier`
+- `PlannerBenchmarkRunOptions` now names the text verifier toggle as
+  `include_clause_text_stage3_when_text_available`
+
 This matters for comparing stage-1 engines like centroid-family WARP-style
 paths and GEM:
 
@@ -115,6 +124,16 @@ This contract was verified locally against:
 - `python/tests/test_search_plan_api.py`
 - `python/tests/test_public_api_contract.py`
 - `python/tests/test_python_sdk_docs.py`
+- `python/tests/test_stage_semantic_guardrails.py`
+
+The repo also now has a compatibility-boundary guardrail:
+
+- legacy combined stage naming is only allowed in explicitly allowlisted
+  compatibility modules
+- new production files that introduce `Stage2Operator`,
+  `stage2_operator_kind`, `search_plan_with_stage2_operator`,
+  `exact_stage_kind`, or `reranker_kind` outside that allowlist should fail the
+  guardrail test
 
 ## Next steps
 

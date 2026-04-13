@@ -14,10 +14,12 @@ from kayak.planning import (
     SEARCH_PLANNING_GOAL_LATENCY_FIRST,
     SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
     SearchPlanSelectionRequest,
-    Stage2Operator,
     best_effort_faithfulness_policy,
-    clause_text_stage2_operator,
-    exact_late_interaction_stage2_operator,
+    clause_text_stage3_verifier_operator,
+    exact_late_interaction_stage2_reference_operator,
+    none_stage3_verifier_operator,
+    Stage2ReferenceOperator,
+    Stage3VerifierOperator,
 )
 from kayak.runtime import ExactCpuBackend
 from kayak.storage import StoredJudgedTask
@@ -49,7 +51,7 @@ struct PlannerBenchmarkRunOptions(Copyable):
     var include_limit_small: Bool
     var include_browsecomp_plus: Bool
     var include_browsecomp_plus_gold: Bool
-    var include_clause_text_stage2_when_text_available: Bool
+    var include_clause_text_stage3_when_text_available: Bool
 
     def __init__(
         out self,
@@ -62,7 +64,7 @@ struct PlannerBenchmarkRunOptions(Copyable):
         include_limit_small: Bool,
         include_browsecomp_plus: Bool,
         include_browsecomp_plus_gold: Bool,
-        include_clause_text_stage2_when_text_available: Bool = False,
+        include_clause_text_stage3_when_text_available: Bool = False,
     ):
         self.output_file_name = output_file_name^
         self.collection_suffix = collection_suffix^
@@ -73,8 +75,8 @@ struct PlannerBenchmarkRunOptions(Copyable):
         self.include_limit_small = include_limit_small
         self.include_browsecomp_plus = include_browsecomp_plus
         self.include_browsecomp_plus_gold = include_browsecomp_plus_gold
-        self.include_clause_text_stage2_when_text_available = (
-            include_clause_text_stage2_when_text_available
+        self.include_clause_text_stage3_when_text_available = (
+            include_clause_text_stage3_when_text_available
         )
 
 
@@ -117,15 +119,38 @@ def max_query_vector_budget(read task: JudgedTask) -> Int:
     return max_budget
 
 
-def planner_benchmark_stage2_operators(
-    include_clause_text_stage2_when_text_available: Bool,
+struct PlannerBenchmarkRefinementSetup(Copyable):
+    var stage2_reference_operator: Stage2ReferenceOperator
+    var stage3_verifier: Stage3VerifierOperator
+
+    def __init__(
+        out self,
+        read stage2_reference_operator: Stage2ReferenceOperator,
+        read stage3_verifier: Stage3VerifierOperator,
+    ):
+        self.stage2_reference_operator = stage2_reference_operator.copy()
+        self.stage3_verifier = stage3_verifier.copy()
+
+
+def planner_benchmark_refinement_setups(
+    include_clause_text_stage3_when_text_available: Bool,
     has_text_corpus: Bool,
-) raises -> List[Stage2Operator]:
-    var stage2_operators = List[Stage2Operator]()
-    stage2_operators.append(exact_late_interaction_stage2_operator())
-    if include_clause_text_stage2_when_text_available and has_text_corpus:
-        stage2_operators.append(clause_text_stage2_operator())
-    return stage2_operators^
+) raises -> List[PlannerBenchmarkRefinementSetup]:
+    var refinement_setups = List[PlannerBenchmarkRefinementSetup]()
+    refinement_setups.append(
+        PlannerBenchmarkRefinementSetup(
+            exact_late_interaction_stage2_reference_operator(),
+            none_stage3_verifier_operator(),
+        )
+    )
+    if include_clause_text_stage3_when_text_available and has_text_corpus:
+        refinement_setups.append(
+            PlannerBenchmarkRefinementSetup(
+                exact_late_interaction_stage2_reference_operator(),
+                clause_text_stage3_verifier_operator(),
+            )
+        )
+    return refinement_setups^
 
 
 def append_unique_int(mut values: List[Int], value: Int):
@@ -171,7 +196,7 @@ def append_planner_summaries_for_dataset(
     collection_root: Path,
     full_candidate_window_sweep: Bool,
     candidate_window_limit: Int,
-    read stage2_operators: List[Stage2Operator],
+    read refinement_setups: List[PlannerBenchmarkRefinementSetup],
 ) raises:
     var snapshot_id = SnapshotId("snapshot-0001")
     var snapshot = load_resolved_collection_snapshot(
@@ -191,7 +216,7 @@ def append_planner_summaries_for_dataset(
         full_candidate_window_sweep,
         candidate_window_limit,
     ):
-        for stage2_operator in stage2_operators:
+        for refinement_setup in refinement_setups:
             summaries.append(
                 build_planner_benchmark_summary(
                     backend,
@@ -204,7 +229,8 @@ def append_planner_summaries_for_dataset(
                         best_effort_faithfulness_policy(),
                         goal=SEARCH_PLANNING_GOAL_BALANCED,
                     ),
-                    stage2_operator,
+                    refinement_setup.stage2_reference_operator,
+                    refinement_setup.stage3_verifier,
                     query_budget,
                     0,
                     CENTROID_HEAD_POSTING_CAP,
@@ -222,7 +248,8 @@ def append_planner_summaries_for_dataset(
                         best_effort_faithfulness_policy(),
                         goal=SEARCH_PLANNING_GOAL_LATENCY_FIRST,
                     ),
-                    stage2_operator,
+                    refinement_setup.stage2_reference_operator,
+                    refinement_setup.stage3_verifier,
                     query_budget,
                     0,
                     CENTROID_HEAD_POSTING_CAP,
@@ -240,7 +267,8 @@ def append_planner_summaries_for_dataset(
                         best_effort_faithfulness_policy(),
                         goal=SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
                     ),
-                    stage2_operator,
+                    refinement_setup.stage2_reference_operator,
+                    refinement_setup.stage3_verifier,
                     query_budget,
                     0,
                     CENTROID_HEAD_POSTING_CAP,
@@ -258,7 +286,8 @@ def append_planner_summaries_for_dataset(
                         best_effort_faithfulness_policy(),
                         goal=SEARCH_PLANNING_GOAL_EXACT_ONLY,
                     ),
-                    stage2_operator,
+                    refinement_setup.stage2_reference_operator,
+                    refinement_setup.stage3_verifier,
                     query_budget,
                     0,
                     CENTROID_HEAD_POSTING_CAP,
@@ -286,8 +315,8 @@ def append_planner_summaries_for_public_dataset(
         ),
         options.full_candidate_window_sweep,
         options.candidate_window_limit,
-        planner_benchmark_stage2_operators(
-            options.include_clause_text_stage2_when_text_available,
+        planner_benchmark_refinement_setups(
+            options.include_clause_text_stage3_when_text_available,
             public_benchmark_dataset_has_loaded_text_corpus(dataset),
         ),
     )
@@ -322,7 +351,7 @@ def planner_benchmark_summaries_for_options(
             load_public_benchmark_dataset(
                 dataset_key,
                 load_text_corpus=(
-                    options.include_clause_text_stage2_when_text_available
+                    options.include_clause_text_stage3_when_text_available
                 ),
             ),
             options,

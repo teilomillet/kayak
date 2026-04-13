@@ -158,6 +158,7 @@ from .search_plan import (
     exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
     gem_graph_search_plan,
+    search_plan_with_stage_components,
     search_plan_with_stage2_operator,
 )
 from .planning_goal import (

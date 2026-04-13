@@ -129,6 +129,21 @@ def search_plan_with_stage2_operator(
     )
 
 
+def search_plan_with_stage_components(
+    read plan: SearchPlan,
+    read stage2_reference_operator: Stage2ReferenceOperator,
+    read stage3_verifier: Stage3VerifierOperator,
+) raises -> SearchPlan:
+    return SearchPlan(
+        plan.candidate_generator,
+        plan.candidate_budget,
+        plan.faithfulness_policy,
+        plan.reference_scoring_semantics,
+        stage2_reference_operator,
+        stage3_verifier,
+    )
+
+
 def exact_full_scan_search_plan(final_k: Int, candidate_k: Int) raises -> SearchPlan:
     return SearchPlan(
         exact_full_scan_candidate_generator(),

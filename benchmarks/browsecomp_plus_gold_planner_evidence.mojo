@@ -24,8 +24,9 @@ from kayak.planning import (
     SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
-    clause_text_stage2_operator,
-    exact_late_interaction_stage2_operator,
+    clause_text_stage3_verifier_operator,
+    exact_late_interaction_stage2_reference_operator,
+    none_stage3_verifier_operator,
 )
 from kayak.runtime import ExactCpuBackend
 
@@ -70,16 +71,20 @@ def main() raises:
     var summaries = List[PlannerEvidenceSummary]()
     var backend = ExactCpuBackend()
     var query_budget = max_query_vector_budget(task)
-    var stage2_operators = [
-        exact_late_interaction_stage2_operator(),
-        clause_text_stage2_operator(),
+    var stage2_reference_operators = [
+        exact_late_interaction_stage2_reference_operator(),
+        exact_late_interaction_stage2_reference_operator(),
+    ]
+    var stage3_verifiers = [
+        none_stage3_verifier_operator(),
+        clause_text_stage3_verifier_operator(),
     ]
 
     for candidate_k in standard_candidate_window_sizes(
         task.k,
         snapshot.snapshot.stats.document_count,
     ):
-        for stage2_operator in stage2_operators:
+        for index in range(len(stage2_reference_operators)):
             summaries.append(
                 build_planner_evidence_summary(
                     backend,
@@ -92,7 +97,8 @@ def main() raises:
                         best_effort_faithfulness_policy(),
                         goal=SEARCH_PLANNING_GOAL_BALANCED,
                     ),
-                    stage2_operator,
+                    stage2_reference_operators[index],
+                    stage3_verifiers[index],
                     query_budget,
                     0,
                     CENTROID_HEAD_POSTING_CAP,
@@ -110,7 +116,8 @@ def main() raises:
                         best_effort_faithfulness_policy(),
                         goal=SEARCH_PLANNING_GOAL_LATENCY_FIRST,
                     ),
-                    stage2_operator,
+                    stage2_reference_operators[index],
+                    stage3_verifiers[index],
                     query_budget,
                     0,
                     CENTROID_HEAD_POSTING_CAP,
@@ -128,7 +135,8 @@ def main() raises:
                         best_effort_faithfulness_policy(),
                         goal=SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
                     ),
-                    stage2_operator,
+                    stage2_reference_operators[index],
+                    stage3_verifiers[index],
                     query_budget,
                     0,
                     CENTROID_HEAD_POSTING_CAP,
@@ -146,7 +154,8 @@ def main() raises:
                         best_effort_faithfulness_policy(),
                         goal=SEARCH_PLANNING_GOAL_EXACT_ONLY,
                     ),
-                    stage2_operator,
+                    stage2_reference_operators[index],
+                    stage3_verifiers[index],
                     query_budget,
                     0,
                     CENTROID_HEAD_POSTING_CAP,

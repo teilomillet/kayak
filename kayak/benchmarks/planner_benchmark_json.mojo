@@ -7,8 +7,9 @@ from kayak.collections import (
 from kayak.planning import (
     SearchPlan,
     SearchPlanSelectionRequest,
-    Stage2Operator,
-    search_plan_with_stage2_operator,
+    Stage2ReferenceOperator,
+    Stage3VerifierOperator,
+    search_plan_with_stage_components,
     select_search_plan_for_availability,
 )
 from kayak.runtime import ExactCpuBackend
@@ -63,13 +64,18 @@ def build_planner_benchmark_summary(
     read snapshot: ResolvedCollectionSnapshot,
     read availability: SnapshotSearchArtifactAvailability,
     read request: SearchPlanSelectionRequest,
-    stage2_operator: Stage2Operator,
+    read stage2_reference_operator: Stage2ReferenceOperator,
+    read stage3_verifier: Stage3VerifierOperator,
     query_vector_budget: Int,
     requested_stage1_vector_budget: Int = 0,
     posting_cap: Int = 0,
 ) raises -> PlannerBenchmarkSummary:
     var selection = select_search_plan_for_availability(availability, request)
-    var plan = search_plan_with_stage2_operator(selection.plan, stage2_operator)
+    var plan = search_plan_with_stage_components(
+        selection.plan,
+        stage2_reference_operator,
+        stage3_verifier,
+    )
     return PlannerBenchmarkSummary(
         request.goal.copy(),
         plan,
