@@ -111,17 +111,6 @@ def make_explain() raises -> CollectionSearchExplain:
             16,
             ScoreHistogram(1, 1.0, 1.0, [1]),
         ),
-        SearchStageProfile(
-            "exact_oracle",
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            16,
-            ScoreHistogram(1, 1.0, 1.0, [1]),
-        ),
         1.0,
         FaithfulnessAssessment(
             "exact_stage1_required",
