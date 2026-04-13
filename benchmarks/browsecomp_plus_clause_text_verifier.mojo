@@ -2,7 +2,9 @@ from std.collections import List
 
 from kayak.eval import JudgedTask, evaluate_query_hits
 from kayak.index import PackedIndex
-from kayak.interop import load_document_text_corpus_json
+from kayak.interop import (
+    load_browsecomp_plus_gold_real_subset_document_text_corpus,
+)
 from kayak.numeric import MetricScalar
 from kayak.runtime import ExactCpuBackend
 from kayak.search import SearchHit, search_exact
@@ -140,9 +142,7 @@ def main() raises:
     var gold_task = gold_cache.stored_task.task.copy()
     var evidence_index = evidence_cache.stored_index.index.copy()
     var gold_index = gold_cache.stored_index.index.copy()
-    var document_texts = load_document_text_corpus_json(
-        ".cache/kayak/browsecomp_plus_real_subset/python_task_gold.json"
-    )
+    var document_texts = load_browsecomp_plus_gold_real_subset_document_text_corpus()
 
     evaluate_reranked_task(
         "BrowseComp evidence clause-text rerank",

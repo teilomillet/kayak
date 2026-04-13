@@ -14,6 +14,7 @@ from kayak.storage import (
     save_stored_gem_graph_index,
     save_stored_packed_index,
 )
+from kayak.text import DocumentTextCorpus
 
 from .collection import CollectionManifest
 from .collection_store import save_collection_manifest
@@ -25,11 +26,14 @@ from .search_artifact import (
     document_proxy_search_artifact,
     gem_graph_search_artifact,
 )
+from .segment_builder import text_corpus_storage_byte_size
 from .segment import SealedSegmentManifest
 from .segment_store import save_sealed_segment_manifest
 from .snapshot import SnapshotManifest
 from .snapshot_store import save_snapshot_manifest
 from .stats import CollectionStats, SegmentStats
+from .text_corpus import StoredDocumentTextCorpus
+from .text_corpus_store import save_stored_document_text_corpus
 
 
 def file_size_bytes(path: Path) raises -> Int:
@@ -52,6 +56,33 @@ def packed_index_storage_byte_size(root: Path) raises -> Int:
     return total
 
 
+def require_document_text_corpus_matches_packed_index(
+    read stored_index: StoredPackedIndex,
+    read document_text_corpus: DocumentTextCorpus,
+) raises:
+    if len(document_text_corpus.doc_ids) == 0:
+        return
+
+    if len(document_text_corpus.doc_ids) != stored_index.index.document_count:
+        raise Error(
+            "document text corpus document_count must match packed index document_count"
+        )
+
+    for index in range(stored_index.index.document_count):
+        if document_text_corpus.doc_ids[index] != stored_index.index.doc_ids[index]:
+            raise Error(
+                "document text corpus doc_id order must match packed index doc_ids"
+            )
+
+
+def mirror_has_any_text(read document_text_corpus: DocumentTextCorpus) -> Bool:
+    for text in document_text_corpus.texts:
+        if text.byte_length() != 0:
+            return True
+
+    return False
+
+
 def ensure_one_segment_collection_mirror(
     collection_root: Path,
     collection_id: CollectionId,
@@ -60,6 +91,7 @@ def ensure_one_segment_collection_mirror(
     snapshot_id: SnapshotId,
     generation: Int,
     read stored_index: StoredPackedIndex,
+    read document_text_corpus: DocumentTextCorpus,
     document_proxy_vector_budget: Int = 0,
     centroid_postings_vector_budget: Int = 0,
     centroid_head_posting_cap: Int = 0,
@@ -67,6 +99,11 @@ def ensure_one_segment_collection_mirror(
     gem_graph_coarse_cluster_count: Int = 0,
     gem_graph_cluster_cutoff: Int = 0,
 ) raises -> Path:
+    require_document_text_corpus_matches_packed_index(
+        stored_index,
+        document_text_corpus,
+    )
+
     var segment_id = SegmentId("segment-0001")
     var segment_root = collection_root / "segments" / segment_id.value
     save_collection_manifest(
@@ -121,6 +158,26 @@ def ensure_one_segment_collection_mirror(
             segment_root / "centroid_heads"
         )
 
+    var text_corpus_root_name = String()
+    var text_corpus_byte_size = 0
+    if (
+        len(document_text_corpus.doc_ids) != 0
+        and mirror_has_any_text(document_text_corpus)
+    ):
+        text_corpus_root_name = "text_corpus"
+        save_stored_document_text_corpus(
+            segment_root / text_corpus_root_name,
+            StoredDocumentTextCorpus(
+                collection_id,
+                segment_id.copy(),
+                document_text_corpus,
+            ),
+        )
+        text_corpus_byte_size = text_corpus_storage_byte_size(
+            segment_root / text_corpus_root_name,
+            stored_index.index.document_count,
+        )
+
     var search_artifacts = List[SearchArtifactManifest]()
     search_artifacts.append(
         centroid_postings_search_artifact("centroid_postings")
@@ -139,7 +196,8 @@ def ensure_one_segment_collection_mirror(
             + centroid_postings_storage_byte_size(segment_root / "centroid_postings")
             + document_proxy_storage_byte_size(segment_root / "document_proxy")
             + centroid_heads_byte_size
-            + gem_graph_byte_size,
+            + gem_graph_byte_size
+            + text_corpus_byte_size,
     )
     save_sealed_segment_manifest(
         segment_root,
@@ -154,7 +212,7 @@ def ensure_one_segment_collection_mirror(
             stored_index.index.vector_dim,
             "packed_index",
             search_artifacts^,
-            "",
+            text_corpus_root_name,
             segment_stats.copy(),
         ),
     )
@@ -177,3 +235,36 @@ def ensure_one_segment_collection_mirror(
         ),
     )
     return collection_root
+
+
+def ensure_one_segment_collection_mirror(
+    collection_root: Path,
+    collection_id: CollectionId,
+    tenant_id: TenantId,
+    namespace_id: NamespaceId,
+    snapshot_id: SnapshotId,
+    generation: Int,
+    read stored_index: StoredPackedIndex,
+    document_proxy_vector_budget: Int = 0,
+    centroid_postings_vector_budget: Int = 0,
+    centroid_head_posting_cap: Int = 0,
+    gem_graph_fine_cluster_count: Int = 0,
+    gem_graph_coarse_cluster_count: Int = 0,
+    gem_graph_cluster_cutoff: Int = 0,
+) raises -> Path:
+    return ensure_one_segment_collection_mirror(
+        collection_root,
+        collection_id,
+        tenant_id,
+        namespace_id,
+        snapshot_id,
+        generation,
+        stored_index,
+        DocumentTextCorpus(List[String](), List[String]()),
+        document_proxy_vector_budget,
+        centroid_postings_vector_budget,
+        centroid_head_posting_cap,
+        gem_graph_fine_cluster_count,
+        gem_graph_coarse_cluster_count,
+        gem_graph_cluster_cutoff,
+    )

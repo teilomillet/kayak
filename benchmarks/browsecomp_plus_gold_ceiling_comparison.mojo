@@ -17,7 +17,7 @@ from kayak.collections import (
     ensure_one_segment_collection_mirror,
     load_resolved_collection_snapshot,
 )
-from kayak.interop import load_document_text_corpus_json
+from kayak.interop import load_browsecomp_plus_gold_real_subset_document_text_corpus
 from kayak.planning import (
     best_effort_faithfulness_policy,
     document_proxy_search_plan,
@@ -28,9 +28,7 @@ from kayak.storage import ensure_browsecomp_plus_gold_real_subset_cache
 
 def main() raises:
     var cache = ensure_browsecomp_plus_gold_real_subset_cache()
-    var document_texts = load_document_text_corpus_json(
-        ".cache/kayak/browsecomp_plus_real_subset/python_task_gold.json"
-    )
+    var document_texts = load_browsecomp_plus_gold_real_subset_document_text_corpus()
     var backend = ExactCpuBackend()
     var output_root = Path(".cache/kayak")
     makedirs(output_root, exist_ok=True)
@@ -45,6 +43,7 @@ def main() raises:
         snapshot_id,
         1,
         cache.stored_index,
+        document_texts,
         cache.stored_task.task.nominal_document_vector_count,
     )
     var snapshot = load_resolved_collection_snapshot(collection_root, snapshot_id)
@@ -86,8 +85,8 @@ def main() raises:
             summary.method_kind,
             " generator=",
             summary.candidate_generator_kind,
-            " reranker=",
-            summary.reranker_kind,
+            " stage2=",
+            summary.stage2_kind,
             " candidate_k=",
             summary.candidate_k,
             " ndcg=",

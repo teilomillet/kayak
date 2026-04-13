@@ -18,6 +18,7 @@ from kayak.collections import (
     load_snapshot_search_artifact_availability,
 )
 from kayak.eval import JudgedTask
+from kayak.interop import load_browsecomp_plus_gold_real_subset_document_text_corpus
 from kayak.planning import (
     SEARCH_PLANNING_GOAL_BALANCED,
     SEARCH_PLANNING_GOAL_EXACT_ONLY,
@@ -25,6 +26,7 @@ from kayak.planning import (
     SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
+    clause_text_stage2_operator,
     exact_late_interaction_stage2_operator,
 )
 from kayak.runtime import ExactCpuBackend
@@ -48,6 +50,7 @@ def max_query_vector_budget(read task: JudgedTask) -> Int:
 def main() raises:
     var cache = ensure_browsecomp_plus_gold_real_subset_cache()
     var task = cache.stored_task.task.copy()
+    var document_text_corpus = load_browsecomp_plus_gold_real_subset_document_text_corpus()
     var collection_root = ensure_one_segment_collection_mirror(
         Path(".cache/kayak/browsecomp_plus_gold_planner_evidence_collection"),
         CollectionId("browsecomp_plus_gold_real_subset"),
@@ -56,6 +59,7 @@ def main() raises:
         SnapshotId("snapshot-0001"),
         1,
         cache.stored_index,
+        document_text_corpus,
         0,
         0,
         CENTROID_HEAD_POSTING_CAP,
@@ -71,83 +75,88 @@ def main() raises:
     var summaries = List[PlannerEvidenceSummary]()
     var backend = ExactCpuBackend()
     var query_budget = max_query_vector_budget(task)
+    var stage2_operators = [
+        exact_late_interaction_stage2_operator(),
+        clause_text_stage2_operator(),
+    ]
 
     for candidate_k in standard_candidate_window_sizes(
         task.k,
         snapshot.snapshot.stats.document_count,
     ):
-        summaries.append(
-            build_planner_evidence_summary(
-                backend,
-                cache.stored_task,
-                snapshot,
-                availability,
-                SearchPlanSelectionRequest(
-                    task.k,
-                    candidate_k,
-                    best_effort_faithfulness_policy(),
-                    goal=SEARCH_PLANNING_GOAL_BALANCED,
-                ),
-                exact_late_interaction_stage2_operator(),
-                query_budget,
-                0,
-                CENTROID_HEAD_POSTING_CAP,
+        for stage2_operator in stage2_operators:
+            summaries.append(
+                build_planner_evidence_summary(
+                    backend,
+                    cache.stored_task,
+                    snapshot,
+                    availability,
+                    SearchPlanSelectionRequest(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                        goal=SEARCH_PLANNING_GOAL_BALANCED,
+                    ),
+                    stage2_operator,
+                    query_budget,
+                    0,
+                    CENTROID_HEAD_POSTING_CAP,
+                )
             )
-        )
-        summaries.append(
-            build_planner_evidence_summary(
-                backend,
-                cache.stored_task,
-                snapshot,
-                availability,
-                SearchPlanSelectionRequest(
-                    task.k,
-                    candidate_k,
-                    best_effort_faithfulness_policy(),
-                    goal=SEARCH_PLANNING_GOAL_LATENCY_FIRST,
-                ),
-                exact_late_interaction_stage2_operator(),
-                query_budget,
-                0,
-                CENTROID_HEAD_POSTING_CAP,
+            summaries.append(
+                build_planner_evidence_summary(
+                    backend,
+                    cache.stored_task,
+                    snapshot,
+                    availability,
+                    SearchPlanSelectionRequest(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                        goal=SEARCH_PLANNING_GOAL_LATENCY_FIRST,
+                    ),
+                    stage2_operator,
+                    query_budget,
+                    0,
+                    CENTROID_HEAD_POSTING_CAP,
+                )
             )
-        )
-        summaries.append(
-            build_planner_evidence_summary(
-                backend,
-                cache.stored_task,
-                snapshot,
-                availability,
-                SearchPlanSelectionRequest(
-                    task.k,
-                    candidate_k,
-                    best_effort_faithfulness_policy(),
-                    goal=SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
-                ),
-                exact_late_interaction_stage2_operator(),
-                query_budget,
-                0,
-                CENTROID_HEAD_POSTING_CAP,
+            summaries.append(
+                build_planner_evidence_summary(
+                    backend,
+                    cache.stored_task,
+                    snapshot,
+                    availability,
+                    SearchPlanSelectionRequest(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                        goal=SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
+                    ),
+                    stage2_operator,
+                    query_budget,
+                    0,
+                    CENTROID_HEAD_POSTING_CAP,
+                )
             )
-        )
-        summaries.append(
-            build_planner_evidence_summary(
-                backend,
-                cache.stored_task,
-                snapshot,
-                availability,
-                SearchPlanSelectionRequest(
-                    task.k,
-                    candidate_k,
-                    best_effort_faithfulness_policy(),
-                    goal=SEARCH_PLANNING_GOAL_EXACT_ONLY,
-                ),
-                exact_late_interaction_stage2_operator(),
-                query_budget,
-                0,
-                CENTROID_HEAD_POSTING_CAP,
+            summaries.append(
+                build_planner_evidence_summary(
+                    backend,
+                    cache.stored_task,
+                    snapshot,
+                    availability,
+                    SearchPlanSelectionRequest(
+                        task.k,
+                        candidate_k,
+                        best_effort_faithfulness_policy(),
+                        goal=SEARCH_PLANNING_GOAL_EXACT_ONLY,
+                    ),
+                    stage2_operator,
+                    query_budget,
+                    0,
+                    CENTROID_HEAD_POSTING_CAP,
+                )
             )
-        )
 
     var output_root = Path(".cache/kayak")
     makedirs(output_root, exist_ok=True)

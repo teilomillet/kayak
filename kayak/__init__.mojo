@@ -56,7 +56,9 @@ from .index import (
 )
 from .interop import (
     load_browsecomp_plus_gold_real_subset,
+    load_browsecomp_plus_gold_real_subset_document_text_corpus,
     load_browsecomp_plus_real_subset,
+    load_browsecomp_plus_real_subset_document_text_corpus,
     load_document_text_corpus_json,
     load_fiqa_real_subset,
     load_limit_small_real_subset,

@@ -1,3 +1,4 @@
+from std.collections import List
 from std.pathlib import Path
 from std.testing import TestSuite, assert_equal
 
@@ -23,12 +24,15 @@ from kayak.collections import (
 )
 from kayak.planning import (
     SEARCH_PLANNING_GOAL_BALANCED,
+    SEARCH_PLANNING_GOAL_EXACT_ONLY,
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
+    clause_text_stage2_operator,
     exact_late_interaction_stage2_operator,
 )
 from kayak.runtime import ExactCpuBackend
 from kayak.scoring import ExactScoringConfig
+from kayak.text import DocumentTextCorpus
 
 
 def unique_collection_root(prefix: String) -> Path:
@@ -181,6 +185,59 @@ def test_build_planner_evidence_summary_reports_selected_candidate_and_stage2() 
         if candidate.is_selected:
             selected_count += 1
     assert_equal(selected_count, 1)
+
+
+def test_build_planner_evidence_summary_supports_clause_text_on_mirrored_text_corpus() raises:
+    var profile = default_single_core_scale_profiles()[0].copy()
+    var fixture = make_single_core_scale_fixture(profile)
+    var doc_ids = fixture.stored_index.index.doc_ids.copy()
+    var texts = List[String]()
+    for doc_id in doc_ids:
+        texts.append("evidence for " + doc_id)
+
+    var collection_root = ensure_one_segment_collection_mirror(
+        unique_collection_root("kayak-planner-evidence-clause-text"),
+        CollectionId("planner-evidence-clause-text"),
+        TenantId("public"),
+        NamespaceId("benchmark"),
+        SnapshotId("snapshot-0001"),
+        1,
+        fixture.stored_index,
+        DocumentTextCorpus(doc_ids^, texts^),
+        profile.document_vector_count,
+        profile.vector_dim,
+        8,
+    )
+    var snapshot = load_resolved_collection_snapshot(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+    )
+    var availability = load_snapshot_search_artifact_availability(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+    )
+    var summary = build_planner_evidence_summary(
+        single_core_backend(),
+        fixture.stored_task,
+        snapshot,
+        availability,
+        SearchPlanSelectionRequest(
+            profile.final_k,
+            profile.candidate_k,
+            best_effort_faithfulness_policy(),
+            goal=SEARCH_PLANNING_GOAL_EXACT_ONLY,
+        ),
+        clause_text_stage2_operator(),
+        profile.query_vector_count,
+        profile.vector_dim,
+        8,
+    )
+
+    assert_equal(summary.planning_goal, "exact_only")
+    assert_equal(summary.stage2_kind, "clause_text")
+    assert_equal(summary.selected_candidate_generator_kind, "exact_full_scan")
+    assert_equal(len(summary.candidates) > 0, True)
+    assert_equal(summary.candidates[0].measured.stage1_byte_size > 0, True)
 
 
 def main() raises:
