@@ -52,7 +52,9 @@ def test_seal_single_segment_supports_empty_stage1_policy() raises:
         ["alpha", "beta"],
     )
 
-    assert_equal(len(sealed.search_artifacts), 0)
+    assert_equal(len(sealed.search_artifacts), 1)
+    assert_equal(sealed.search_artifacts[0].family, "document_filter_index")
+    assert_equal(sealed.search_artifacts[0].root, "document_filter_index")
     assert_equal(
         (collection_root / "segments" / "segment-0001" / "document_proxy").exists(),
         False,
@@ -92,9 +94,11 @@ def test_seal_single_segment_uses_configured_stage1_sidecar_roots() raises:
         ["alpha", "beta"],
     )
 
-    assert_equal(len(sealed.search_artifacts), 2)
+    assert_equal(len(sealed.search_artifacts), 3)
     assert_equal(sealed.search_artifacts[0].root, "proxy_sidecar")
     assert_equal(sealed.search_artifacts[1].root, "postings_sidecar")
+    assert_equal(sealed.search_artifacts[2].family, "document_filter_index")
+    assert_equal(sealed.search_artifacts[2].root, "document_filter_index")
     assert_equal(
         (
             collection_root
@@ -134,8 +138,9 @@ def test_seal_single_segment_builds_configured_centroid_heads_sidecar() raises:
         collection_root / "segments" / "segment-0001" / "heads_sidecar"
     )
 
-    assert_equal(len(sealed.search_artifacts), 1)
+    assert_equal(len(sealed.search_artifacts), 2)
     assert_equal(sealed.search_artifacts[0].family, "centroid_heads")
+    assert_equal(sealed.search_artifacts[1].family, "document_filter_index")
     assert_equal(stored.centroid_budget, 1)
     assert_equal(stored.posting_cap, 1)
 
@@ -167,8 +172,9 @@ def test_seal_single_segment_builds_configured_gem_graph_sidecar() raises:
         collection_root / "segments" / "segment-0001" / "gem_sidecar"
     )
 
-    assert_equal(len(sealed.search_artifacts), 1)
+    assert_equal(len(sealed.search_artifacts), 2)
     assert_equal(sealed.search_artifacts[0].family, "gem_graph")
+    assert_equal(sealed.search_artifacts[1].family, "document_filter_index")
     assert_equal(stored.cluster_cutoff, 1)
     assert_equal(stored.construction_neighbor_count, 1)
     assert_equal(stored.degree_limit, 1)

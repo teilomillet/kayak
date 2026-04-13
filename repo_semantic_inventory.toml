@@ -10,6 +10,7 @@ paths = [
     ".python-version",
     "AGENTS.md",
     "README.md",
+    "repo_semantic_inventory.toml",
     "TODO.md",
 ]
 normative_docs = ["AGENTS.md", "README.md"]
