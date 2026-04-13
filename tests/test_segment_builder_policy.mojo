@@ -8,6 +8,7 @@ from kayak import (
     EncodedDocument,
     centroid_heads_build_spec,
     gem_graph_build_spec,
+    DOCUMENT_REPRESENTATION_TRANSFORM_KIND_TOKEN_POOLING,
     load_stored_centroid_heads_index,
     load_stored_gem_graph_index,
     NamespaceId,
@@ -17,6 +18,8 @@ from kayak import (
     TenantId,
     VECTOR_SCALAR_NAME,
     seal_single_segment,
+    sealed_segment_has_document_representation_transform_kind,
+    token_pooling_document_representation_transform,
 )
 
 
@@ -177,6 +180,59 @@ def test_seal_single_segment_builds_configured_gem_graph_sidecar() raises:
             / "gem_sidecar"
             / "manifest.tsv"
         ).exists(),
+        True,
+    )
+
+
+def test_seal_single_segment_applies_token_pooling_transform() raises:
+    var collection_root = Path("/tmp/kayak-segment-builder-token-pooling")
+    var collection = CollectionManifest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        2,
+        0,
+        SearchArtifactBuildPolicy([]),
+    )
+
+    var sealed = seal_single_segment(
+        collection_root,
+        collection,
+        SegmentId("segment-0001"),
+        1,
+        [
+            EncodedDocument(
+                "doc-a",
+                [
+                    [1.0, 0.0],
+                    [0.9, 0.1],
+                    [0.0, 1.0],
+                    [0.1, 0.9],
+                ],
+            ),
+            EncodedDocument(
+                "doc-b",
+                [
+                    [1.0, 1.0],
+                    [1.0, 0.0],
+                    [0.0, 1.0],
+                    [0.0, 0.0],
+                ],
+            ),
+        ],
+        ["alpha", "beta"],
+        [token_pooling_document_representation_transform(2)],
+    )
+
+    assert_equal(sealed.stats.document_count, 2)
+    assert_equal(sealed.stats.total_vector_count, 4)
+    assert_equal(
+        sealed_segment_has_document_representation_transform_kind(
+            sealed,
+            DOCUMENT_REPRESENTATION_TRANSFORM_KIND_TOKEN_POOLING,
+        ),
         True,
     )
 

@@ -140,13 +140,22 @@ Evidence:
   - stronger evaluation ceiling
 - the document-representation-transform seam is now explicit at the sealed
   segment boundary
-- the next open step on that seam is transform execution and measurement, not
-  transform provenance naming
+- transform execution now exists for prefix pruning and token pooling, and the
+  first BrowseComp-Plus gold measurement is recorded
+- measured result worth preserving:
+  - hierarchical factor-`2` token pooling cut stored vectors and on-disk packed
+    storage roughly in half while preserving the current gold-slice `nDCG@10`
+  - hierarchical factor-`3` improved the tiny-slice task metric while dropping
+    exact-reference top-`10` overlap to `0.9`, which confirms that stage-1
+    faithfulness and final task metric are different axes
+- the next open step on that seam is stage-aware restoration measurement
+  against the exact late-interaction oracle, not more provenance plumbing
 
 Related strategic note:
 - [docs/late_interaction_2030.md](docs/late_interaction_2030.md)
 - [docs/architecture/extensibility_wall.md](docs/architecture/extensibility_wall.md)
 - [docs/traces/2026-04-13_document_representation_transform_contract.md](docs/traces/2026-04-13_document_representation_transform_contract.md)
+- [docs/traces/2026-04-13_token_pooling_document_transform.md](docs/traces/2026-04-13_token_pooling_document_transform.md)
 
 ## North Star
 

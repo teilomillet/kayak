@@ -65,6 +65,9 @@ from .document_representation_transform import (
     DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POOL_FACTOR,
     DOCUMENT_REPRESENTATION_TRANSFORM_KIND_PREFIX_PRUNING,
     DOCUMENT_REPRESENTATION_TRANSFORM_KIND_TOKEN_POOLING,
+    DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_HIERARCHICAL,
+    DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX,
+    DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_SEQUENTIAL,
     DocumentRepresentationTransformConfigEntry,
     DocumentRepresentationTransformManifest,
     copy_document_representation_transform_config_entries,
@@ -75,6 +78,19 @@ from .document_representation_transform import (
     same_document_representation_transform_config_entries,
     same_document_representation_transforms,
     token_pooling_document_representation_transform,
+)
+from .document_representation_transform_runtime import (
+    TokenPoolCluster,
+    apply_document_representation_transform_to_document,
+    apply_document_representation_transforms_to_document,
+    apply_document_representation_transforms_to_documents,
+    apply_document_representation_transforms_to_packed_index,
+    hierarchical_token_pool_document,
+    merge_token_pool_clusters,
+    prefix_prune_document,
+    sequential_token_pool_document,
+    target_pooled_vector_count,
+    ward_merge_cost,
 )
 from .document_metadata_store import (
     load_stored_document_metadata_corpus,

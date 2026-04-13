@@ -20,9 +20,11 @@ from kayak import (
     load_resolved_collection_snapshot,
     loaded_segment_stored_document_metadata,
     load_snapshot_manifest,
+    same_document_representation_transforms,
     save_collection_manifest,
     save_snapshot_manifest,
     seal_single_segment,
+    token_pooling_document_representation_transform,
 )
 from kayak.contracts import EncodedDocument
 
@@ -200,6 +202,162 @@ def test_execute_compaction_plan_preserves_document_metadata_sidecars() raises:
             .value,
         "blog",
     )
+
+
+def test_execute_compaction_plan_preserves_token_pooling_provenance_without_reapplying() raises:
+    var root = unique_root("kayak-collection-compaction-token-pooling")
+    var collection = CollectionManifest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        2,
+        2,
+    )
+    save_collection_manifest(root, collection)
+
+    var transforms = [token_pooling_document_representation_transform(2)]
+    var segment_one = seal_single_segment(
+        root,
+        collection,
+        SegmentId("segment-1"),
+        1,
+        [
+            EncodedDocument(
+                "doc-a",
+                [[1.0, 0.0], [0.9, 0.1], [0.0, 1.0], [0.1, 0.9]],
+            )
+        ],
+        ["alpha"],
+        transforms,
+    )
+    var segment_two = seal_single_segment(
+        root,
+        collection,
+        SegmentId("segment-2"),
+        2,
+        [
+            EncodedDocument(
+                "doc-b",
+                [[1.0, 1.0], [1.0, 0.0], [0.0, 1.0], [0.0, 0.0]],
+            )
+        ],
+        ["beta"],
+        transforms,
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0002",
+        SnapshotManifest(
+            SnapshotId("snapshot-0002"),
+            collection.collection_id,
+            collection.tenant_id,
+            collection.namespace_id,
+            2,
+            [segment_one.segment_id.copy(), segment_two.segment_id.copy()],
+            aggregate_stats(segment_one, segment_two),
+        ),
+    )
+
+    var plan = build_compaction_plan_for_snapshot(
+        root,
+        SnapshotId("snapshot-0002"),
+        [SegmentId("segment-1"), SegmentId("segment-2")],
+        SegmentId("segment-3"),
+        "merge pooled segments",
+    )
+    _ = execute_compaction_plan(
+        root,
+        SnapshotId("snapshot-0002"),
+        SnapshotId("snapshot-0003"),
+        plan,
+    )
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0003"))
+
+    assert_equal(
+        same_document_representation_transforms(
+            resolved.segments[0].manifest.document_representation_transforms,
+            transforms,
+        ),
+        True,
+    )
+    assert_equal(resolved.segments[0].stored_index.index.total_vector_count, 4)
+
+
+def test_execute_compaction_plan_rejects_mismatched_transform_chains() raises:
+    var root = unique_root("kayak-collection-compaction-transform-mismatch")
+    var collection = CollectionManifest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        2,
+        2,
+    )
+    save_collection_manifest(root, collection)
+
+    var segment_one = seal_single_segment(
+        root,
+        collection,
+        SegmentId("segment-1"),
+        1,
+        [
+            EncodedDocument(
+                "doc-a",
+                [[1.0, 0.0], [0.9, 0.1], [0.0, 1.0], [0.1, 0.9]],
+            )
+        ],
+        ["alpha"],
+        [token_pooling_document_representation_transform(2)],
+    )
+    var segment_two = seal_single_segment(
+        root,
+        collection,
+        SegmentId("segment-2"),
+        2,
+        [
+            EncodedDocument(
+                "doc-b",
+                [[1.0, 1.0], [1.0, 0.0], [0.0, 1.0], [0.0, 0.0]],
+            )
+        ],
+        ["beta"],
+        [token_pooling_document_representation_transform(3)],
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0002",
+        SnapshotManifest(
+            SnapshotId("snapshot-0002"),
+            collection.collection_id,
+            collection.tenant_id,
+            collection.namespace_id,
+            2,
+            [segment_one.segment_id.copy(), segment_two.segment_id.copy()],
+            aggregate_stats(segment_one, segment_two),
+        ),
+    )
+
+    var plan = build_compaction_plan_for_snapshot(
+        root,
+        SnapshotId("snapshot-0002"),
+        [SegmentId("segment-1"), SegmentId("segment-2")],
+        SegmentId("segment-3"),
+        "reject mismatched transform chains",
+    )
+    var raised = False
+
+    try:
+        _ = execute_compaction_plan(
+            root,
+            SnapshotId("snapshot-0002"),
+            SnapshotId("snapshot-0003"),
+            plan,
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def main() raises:

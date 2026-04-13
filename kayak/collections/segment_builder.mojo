@@ -15,6 +15,10 @@ from .document_filter_index_store import (
     document_filter_index_storage_byte_size,
     save_stored_document_filter_index,
 )
+from .document_representation_transform import DocumentRepresentationTransformManifest
+from .document_representation_transform_runtime import (
+    apply_document_representation_transforms_to_documents,
+)
 from .document_metadata import (
     DocumentMetadataMap,
     StoredDocumentMetadataCorpus,
@@ -30,6 +34,7 @@ from .search_artifact import (
 from .search_artifact_policy import (
     build_spec_as_search_artifact_manifest,
 )
+from .search_artifact_builders import build_search_artifact_for_segment
 from .segment import SealedSegmentManifest
 from .segment_store import save_sealed_segment_manifest
 from .stats import SegmentStats
@@ -74,38 +79,47 @@ def document_metadata_storage_byte_size(
     return total
 
 
-def seal_single_segment(
+def stored_index_for_segment_documents(
+    read collection: CollectionManifest,
+    read documents: List[EncodedDocument],
+) raises -> StoredPackedIndex:
+    var packed_index = pack_documents(documents)
+    return StoredPackedIndex(
+        "collection://" + collection.collection_id.value,
+        collection.model_name.copy(),
+        collection.vector_scalar_name.copy(),
+        packed_index^,
+    )
+
+
+def seal_single_segment_from_stored_documents(
     collection_root: Path,
     read collection: CollectionManifest,
     segment_id: SegmentId,
     generation: Int,
-    read documents: List[EncodedDocument],
+    read stored_documents: List[EncodedDocument],
+    read document_representation_transforms: List[
+        DocumentRepresentationTransformManifest
+    ],
     read texts: List[String],
     read metadata_maps: List[DocumentMetadataMap],
 ) raises -> SealedSegmentManifest:
-    if len(documents) == 0:
+    if len(stored_documents) == 0:
         raise Error("cannot seal an empty segment")
 
-    if len(documents) != len(texts):
+    if len(stored_documents) != len(texts):
         raise Error("segment seal requires aligned documents and texts")
-    if len(documents) != len(metadata_maps):
+    if len(stored_documents) != len(metadata_maps):
         raise Error("segment seal requires aligned documents and metadata")
 
-    var packed_index = pack_documents(documents)
-    var stored_index = StoredPackedIndex(
-        "collection://" + collection.collection_id.value,
-        collection.model_name.copy(),
-        collection.vector_scalar_name.copy(),
-        packed_index.copy(),
-    )
+    var stored_index = stored_index_for_segment_documents(collection, stored_documents)
+    var packed_index = stored_index.index.copy()
     var segment_root = collection_root / "segments" / segment_id.value
     var packed_index_root = segment_root / "packed_index"
-
     save_stored_packed_index(packed_index_root, stored_index.copy())
 
     var byte_size = packed_index_storage_byte_size(packed_index_root)
     var search_artifacts = List[SearchArtifactManifest]()
-
     for spec in collection.search_artifact_build_policy.stage1_artifacts:
         byte_size += build_search_artifact_for_segment(
             segment_root,
@@ -134,8 +148,8 @@ def seal_single_segment(
     if len(texts) != 0:
         var doc_ids = List[String]()
         var has_any_text = False
-        for index in range(len(documents)):
-            doc_ids.append(documents[index].doc_id.copy())
+        for index in range(len(stored_documents)):
+            doc_ids.append(stored_documents[index].doc_id.copy())
             if texts[index].byte_length() != 0:
                 has_any_text = True
 
@@ -151,7 +165,7 @@ def seal_single_segment(
             )
             byte_size += text_corpus_storage_byte_size(
                 segment_root / text_corpus_root_name,
-                len(documents),
+                len(stored_documents),
             )
 
     var has_any_metadata = False
@@ -163,7 +177,7 @@ def seal_single_segment(
     if has_any_metadata:
         var metadata_root_name = "document_metadata"
         var doc_ids = List[String]()
-        for document in documents:
+        for document in stored_documents:
             doc_ids.append(document.doc_id.copy())
 
         save_stored_document_metadata_corpus(
@@ -177,7 +191,7 @@ def seal_single_segment(
         )
         byte_size += document_metadata_storage_byte_size(
             segment_root / metadata_root_name,
-            len(documents),
+            len(stored_documents),
         )
         search_artifacts.append(document_metadata_search_artifact(metadata_root_name))
 
@@ -199,9 +213,61 @@ def seal_single_segment(
             packed_index.total_vector_count,
             byte_size,
         ),
+        document_representation_transforms,
     )
     save_sealed_segment_manifest(segment_root, manifest)
     return manifest^
+
+
+def seal_single_segment(
+    collection_root: Path,
+    read collection: CollectionManifest,
+    segment_id: SegmentId,
+    generation: Int,
+    read documents: List[EncodedDocument],
+    read texts: List[String],
+    read metadata_maps: List[DocumentMetadataMap],
+) raises -> SealedSegmentManifest:
+    if len(documents) == 0:
+        raise Error("cannot seal an empty segment")
+
+    return seal_single_segment_from_stored_documents(
+        collection_root,
+        collection,
+        segment_id,
+        generation,
+        documents,
+        [],
+        texts,
+        metadata_maps,
+    )
+
+
+def seal_single_segment(
+    collection_root: Path,
+    read collection: CollectionManifest,
+    segment_id: SegmentId,
+    generation: Int,
+    read documents: List[EncodedDocument],
+    read texts: List[String],
+    read metadata_maps: List[DocumentMetadataMap],
+    read document_representation_transforms: List[
+        DocumentRepresentationTransformManifest
+    ],
+) raises -> SealedSegmentManifest:
+    return seal_single_segment_from_stored_documents(
+        collection_root,
+        collection,
+        segment_id,
+        generation,
+        apply_document_representation_transforms_to_documents(
+            documents,
+            document_representation_transforms,
+        ),
+        document_representation_transforms,
+        texts,
+        metadata_maps,
+    )
 
 
 def seal_single_segment(
@@ -224,4 +290,31 @@ def seal_single_segment(
         documents,
         texts,
         empty_metadata_maps,
+    )
+
+
+def seal_single_segment(
+    collection_root: Path,
+    read collection: CollectionManifest,
+    segment_id: SegmentId,
+    generation: Int,
+    read documents: List[EncodedDocument],
+    read texts: List[String],
+    read document_representation_transforms: List[
+        DocumentRepresentationTransformManifest
+    ],
+) raises -> SealedSegmentManifest:
+    var empty_metadata_maps = List[DocumentMetadataMap]()
+    for _ in range(len(documents)):
+        empty_metadata_maps.append(DocumentMetadataMap())
+
+    return seal_single_segment(
+        collection_root,
+        collection,
+        segment_id,
+        generation,
+        documents,
+        texts,
+        empty_metadata_maps,
+        document_representation_transforms,
     )

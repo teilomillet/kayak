@@ -6,6 +6,10 @@ from kayak.index import unpack_documents
 
 from .collection_store import load_collection_manifest
 from .compaction import CompactionPlan
+from .document_representation_transform import (
+    DocumentRepresentationTransformManifest,
+    same_document_representation_transforms,
+)
 from .document_metadata import DocumentMetadataMap
 from .ids import SegmentId, SnapshotId
 from .publish import publish_collection_snapshot
@@ -17,7 +21,7 @@ from .resolved_snapshot import (
 )
 from .resolver import load_resolved_collection_snapshot
 from .segment import SealedSegmentManifest
-from .segment_builder import seal_single_segment
+from .segment_builder import seal_single_segment_from_stored_documents
 from .segment_store import sealed_segment_manifest_exists
 from .snapshot import SnapshotManifest
 from .snapshot_store import load_snapshot_manifest
@@ -143,6 +147,29 @@ def aggregate_snapshot_stats(
     )
 
 
+def require_consistent_source_segment_transforms(
+    read source_segments: List[LoadedSealedSegment]
+) raises -> List[DocumentRepresentationTransformManifest]:
+    if len(source_segments) == 0:
+        return List[DocumentRepresentationTransformManifest]()
+
+    var expected = (
+        source_segments[0].manifest.document_representation_transforms.copy()
+    )
+    for segment_index in range(1, len(source_segments)):
+        if not same_document_representation_transforms(
+            expected,
+            source_segments[segment_index]
+                .manifest
+                .document_representation_transforms,
+        ):
+            raise Error(
+                "compaction currently requires source segments to share the same document representation transforms"
+            )
+
+    return expected.copy()
+
+
 def execute_compaction_plan(
     collection_root: Path,
     source_snapshot_id: SnapshotId,
@@ -172,6 +199,7 @@ def execute_compaction_plan(
     var metadata_maps = List[DocumentMetadataMap]()
     var kept_segments = List[LoadedSealedSegment]()
     var kept_segment_ids = List[SegmentId]()
+    var source_segments = List[LoadedSealedSegment]()
     var source_segment_count = 0
 
     for segment in resolved.segments:
@@ -183,6 +211,7 @@ def execute_compaction_plan(
 
         if is_source:
             source_segment_count += 1
+            source_segments.append(segment.copy())
             append_segment_documents(documents, texts, metadata_maps, segment)
         else:
             kept_segments.append(segment.copy())
@@ -192,14 +221,18 @@ def execute_compaction_plan(
         raise Error("not all compaction source segments were found in the snapshot")
     if len(documents) == 0:
         raise Error("compaction plan did not select any documents")
+    var document_representation_transforms = (
+        require_consistent_source_segment_transforms(source_segments)
+    )
 
     var next_generation = resolved.collection.latest_generation + 1
-    var compacted_segment = seal_single_segment(
+    var compacted_segment = seal_single_segment_from_stored_documents(
         collection_root,
         resolved.collection,
         plan.target_segment_id,
         next_generation,
         documents,
+        document_representation_transforms,
         texts,
         metadata_maps,
     )

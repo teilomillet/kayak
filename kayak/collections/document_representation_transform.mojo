@@ -12,6 +12,10 @@ comptime DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POLICY = "policy"
 comptime DOCUMENT_REPRESENTATION_TRANSFORM_KIND_PREFIX_PRUNING = "prefix_pruning"
 comptime DOCUMENT_REPRESENTATION_TRANSFORM_KIND_TOKEN_POOLING = "token_pooling"
 
+comptime DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_HIERARCHICAL = "hierarchical"
+comptime DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX = "prefix"
+comptime DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_SEQUENTIAL = "sequential"
+
 
 struct DocumentRepresentationTransformConfigEntry(Copyable):
     var key: String
@@ -131,7 +135,8 @@ def document_representation_transforms_have_kind(
 
 
 def prefix_pruning_document_representation_transform(
-    document_vector_budget: Int, policy: String = "prefix"
+    document_vector_budget: Int,
+    policy: String = DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX,
 ) raises -> DocumentRepresentationTransformManifest:
     _ = require_positive_int(
         document_vector_budget,
@@ -155,7 +160,8 @@ def prefix_pruning_document_representation_transform(
 
 
 def token_pooling_document_representation_transform(
-    pool_factor: Int, policy: String = "hierarchical"
+    pool_factor: Int,
+    policy: String = DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_HIERARCHICAL,
 ) raises -> DocumentRepresentationTransformManifest:
     _ = require_positive_int(
         pool_factor,
