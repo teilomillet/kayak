@@ -41,9 +41,6 @@ from kayak.planning import (
     search_plan_with_stage2_operator,
     select_search_plan_for_availability,
     search_collection_for_plan,
-    stage1_required_search_artifact_families,
-    stage1_generator_supports_match_all_filter,
-    stage1_generator_supports_structured_filter,
     Stage2Operator,
 )
 from kayak.runtime import ExactScoringBackend
@@ -80,9 +77,7 @@ from .snapshot_requests import (
 
 
 def require_filter_supported_for_request(read request: SearchRequest) raises:
-    if not stage1_generator_supports_match_all_filter(
-        request.plan.candidate_generator.kind
-    ):
+    if not request.plan.candidate_generator.supports_match_all_filter:
         raise Error(
             "candidate generator does not support match_all filters: "
             + request.plan.candidate_generator.kind
@@ -91,9 +86,7 @@ def require_filter_supported_for_request(read request: SearchRequest) raises:
     if request.filter_expression.is_match_all():
         return
 
-    if not stage1_generator_supports_structured_filter(
-        request.plan.candidate_generator.kind
-    ):
+    if not request.plan.candidate_generator.supports_structured_filter:
         raise Error(
             "non-match_all filters currently require a stage-1 generator with structured-filter support: "
             + request.plan.candidate_generator.kind
@@ -283,8 +276,8 @@ def snapshot_load_requirements_for_request(
     var needs_document_text = request.plan.stage2_operator.requires_artifact_family(
         "document_text"
     )
-    var required_artifacts = stage1_required_search_artifact_families(
-        request.plan.candidate_generator.kind
+    var required_artifacts = (
+        request.plan.candidate_generator.required_search_artifact_families.copy()
     )
     if needs_document_metadata:
         required_artifacts.append(SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA)

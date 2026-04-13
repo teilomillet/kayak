@@ -13,8 +13,12 @@ from kayak.filters import (
 from kayak.index import PackedIndex, pack_documents
 from kayak.numeric import VectorScalar
 from kayak.runtime import ExactScoringBackend
+from kayak.storage.binary_vector_codec import native_vector_scalar_byte_width
 
 from .collection_hit import CollectionHit
+from .graph_search_counters import GraphSearchCounters
+from .score_histogram import build_score_histogram
+from .stage_profile import SearchStageProfile
 from .stage2_result import Stage2Result
 from .topk import insert_descending_collection_hit
 
@@ -118,13 +122,14 @@ def materialize_candidate_index(
             )
 
     var index = pack_documents(documents)
+    var scalar_width = native_vector_scalar_byte_width()
     return MaterializedCandidateIndex(
         index,
         segment_ids^,
         count_unique_segment_ids(segment_ids),
         index.total_vector_count,
         index.total_vector_count,
-        index.total_vector_count * index.vector_dim * 4,
+        index.total_vector_count * index.vector_dim * scalar_width,
     )
 
 
@@ -195,3 +200,24 @@ def exact_oracle_hits_for_snapshot[Backend: ExactScoringBackend](
             )
 
     return oracle_hits^
+
+
+def exact_oracle_stage_profile_for_snapshot(
+    read snapshot: ResolvedCollectionSnapshot,
+    read oracle_hits: List[CollectionHit],
+) raises -> SearchStageProfile:
+    var scalar_width = native_vector_scalar_byte_width()
+    return SearchStageProfile(
+        "exact_oracle",
+        snapshot.snapshot.stats.document_count,
+        len(oracle_hits),
+        snapshot.snapshot.stats.segment_count,
+        snapshot.snapshot.stats.document_count,
+        snapshot.snapshot.stats.token_count,
+        snapshot.snapshot.stats.total_vector_count,
+        snapshot.snapshot.stats.total_vector_count
+            * snapshot.collection.vector_dim
+            * scalar_width,
+        GraphSearchCounters(),
+        build_score_histogram(oracle_hits, 8),
+    )

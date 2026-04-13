@@ -1,5 +1,7 @@
 # Stage-1 candidate generator contract.
 
+from std.collections import List
+
 from kayak.index import (
     DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
     DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
@@ -17,10 +19,9 @@ comptime CANDIDATE_GENERATOR_FAMILY_PROXY = "proxy"
 
 
 def artifact_family_for_generator_kind(kind: String) raises -> String:
-    var capabilities = stage1_capabilities_for_candidate_generator_kind(kind)
-    if len(capabilities.required_search_artifact_families) == 1:
-        return capabilities.required_search_artifact_families[0].copy()
-    return ""
+    return stage1_capabilities_for_candidate_generator_kind(
+        kind
+    ).single_required_search_artifact_family()
 
 
 def family_for_generator_kind(kind: String) raises -> String:
@@ -31,6 +32,10 @@ struct CandidateGenerator(Copyable):
     var kind: String
     var family: String
     var artifact_family: String
+    var required_search_artifact_families: List[String]
+    var is_exact: Bool
+    var supports_match_all_filter: Bool
+    var supports_structured_filter: Bool
     var cluster_top_k_per_query_token: Int
     var beam_width: Int
 
@@ -38,6 +43,10 @@ struct CandidateGenerator(Copyable):
         self.kind = "exact_full_scan"
         self.family = CANDIDATE_GENERATOR_FAMILY_EXACT
         self.artifact_family = ""
+        self.required_search_artifact_families = List[String]()
+        self.is_exact = True
+        self.supports_match_all_filter = True
+        self.supports_structured_filter = True
         self.cluster_top_k_per_query_token = 0
         self.beam_width = 0
 
@@ -53,9 +62,16 @@ struct CandidateGenerator(Copyable):
             )
         if beam_width < 0:
             raise Error("candidate generator beam_width must be non-negative")
+        var capabilities = stage1_capabilities_for_candidate_generator_kind(kind)
         self.kind = kind^
-        self.family = family_for_generator_kind(self.kind)
-        self.artifact_family = artifact_family_for_generator_kind(self.kind)
+        self.family = capabilities.generator_family.copy()
+        self.artifact_family = capabilities.single_required_search_artifact_family()
+        self.required_search_artifact_families = (
+            capabilities.required_search_artifact_families.copy()
+        )
+        self.is_exact = capabilities.stage1_is_exact
+        self.supports_match_all_filter = capabilities.supports_match_all_filter
+        self.supports_structured_filter = capabilities.supports_structured_filter
         if self.kind == "gem_graph":
             if cluster_top_k_per_query_token <= 0:
                 raise Error(
@@ -69,6 +85,13 @@ struct CandidateGenerator(Copyable):
             )
         self.cluster_top_k_per_query_token = cluster_top_k_per_query_token
         self.beam_width = beam_width
+
+    def requires_artifact_family(self, family: String) -> Bool:
+        for required_family in self.required_search_artifact_families:
+            if required_family == family:
+                return True
+
+        return False
 
 
 def exact_full_scan_candidate_generator() -> CandidateGenerator:

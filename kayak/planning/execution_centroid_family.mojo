@@ -41,17 +41,12 @@ from .topk import insert_descending_collection_hit
 
 
 def required_centroid_artifact_family(read plan: SearchPlan) raises -> String:
-    if plan.candidate_generator.kind == "centroid_heads":
+    if plan.candidate_generator.artifact_family == SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS:
         return SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS
 
     if (
-        plan.candidate_generator.kind == "centroid_postings"
-        or plan.candidate_generator.kind == "centroid_postings_flat"
-        or plan.candidate_generator.kind == "centroid_postings_head"
-        or plan.candidate_generator.kind == "centroid_postings_head_auto"
-        or plan.candidate_generator.kind == "centroid_postings_blockmax"
-        or plan.candidate_generator.kind == "centroid_postings_imputed"
-        or plan.candidate_generator.kind == "centroid_postings_imputed_flat"
+        plan.candidate_generator.artifact_family
+        == SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS
     ):
         return SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS
 

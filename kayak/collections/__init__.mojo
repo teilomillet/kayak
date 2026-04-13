@@ -30,6 +30,8 @@ from .search_artifact_policy import (
     document_proxy_build_spec,
     gem_graph_build_spec,
     require_search_artifact_build_policy_layout_safe,
+    search_artifact_build_policy_has_family,
+    search_artifact_build_policy_supports_required_families,
     search_artifact_build_config_value,
     same_search_artifact_build_policy,
 )

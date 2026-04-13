@@ -182,6 +182,27 @@ def same_search_artifact_build_policy(
     )
 
 
+def search_artifact_build_policy_has_family(
+    read policy: SearchArtifactBuildPolicy, family: String
+) -> Bool:
+    for spec in policy.stage1_artifacts:
+        if spec.family == family:
+            return True
+
+    return False
+
+
+def search_artifact_build_policy_supports_required_families(
+    read policy: SearchArtifactBuildPolicy,
+    read required_families: List[String],
+) -> Bool:
+    for family in required_families:
+        if not search_artifact_build_policy_has_family(policy, family):
+            return False
+
+    return True
+
+
 def document_proxy_build_spec(
     root: String = SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     document_vector_budget: Int = 0,

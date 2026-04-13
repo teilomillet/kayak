@@ -1,5 +1,9 @@
 from std.collections import List
 
+from kayak.collections import (
+    SearchArtifactBuildPolicy,
+    search_artifact_build_policy_supports_required_families,
+)
 from kayak.collections.validation import require_non_empty_string
 
 
@@ -46,6 +50,26 @@ struct Stage1Capabilities(Copyable):
         self.supports_structured_filter = supports_structured_filter
         if self.stage1_is_exact and not self.supports_structured_filter:
             raise Error("exact stage-1 must support structured filters")
+
+    def requires_search_artifact_family(self, family: String) -> Bool:
+        for required_family in self.required_search_artifact_families:
+            if required_family == family:
+                return True
+
+        return False
+
+    def single_required_search_artifact_family(self) raises -> String:
+        if len(self.required_search_artifact_families) == 0:
+            return ""
+
+        if len(self.required_search_artifact_families) == 1:
+            return self.required_search_artifact_families[0].copy()
+
+        raise Error(
+            "stage-1 capabilities for "
+            + self.generator_kind
+            + " require multiple search artifact families"
+        )
 
 
 def exact_stage1_capabilities() raises -> Stage1Capabilities:
@@ -136,6 +160,23 @@ def stage1_required_search_artifact_families(
     ).required_search_artifact_families.copy()
 
 
+def stage1_requires_search_artifact_family(
+    candidate_generator_kind: String,
+    family: String,
+) raises -> Bool:
+    return stage1_capabilities_for_candidate_generator_kind(
+        candidate_generator_kind
+    ).requires_search_artifact_family(family)
+
+
+def stage1_single_required_search_artifact_family(
+    candidate_generator_kind: String
+) raises -> String:
+    return stage1_capabilities_for_candidate_generator_kind(
+        candidate_generator_kind
+    ).single_required_search_artifact_family()
+
+
 def stage1_generator_supports_match_all_filter(
     candidate_generator_kind: String
 ) raises -> Bool:
@@ -156,3 +197,13 @@ def stage1_generator_is_exact(candidate_generator_kind: String) raises -> Bool:
     return stage1_capabilities_for_candidate_generator_kind(
         candidate_generator_kind
     ).stage1_is_exact
+
+
+def stage1_supported_by_search_artifact_build_policy(
+    read policy: SearchArtifactBuildPolicy,
+    candidate_generator_kind: String,
+) raises -> Bool:
+    return search_artifact_build_policy_supports_required_families(
+        policy,
+        stage1_required_search_artifact_families(candidate_generator_kind),
+    )

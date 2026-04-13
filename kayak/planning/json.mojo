@@ -157,6 +157,15 @@ def collection_search_explain_json(
     buffer += "\"candidate_generator_kind\":\""
     buffer += json_escape(explain.plan.candidate_generator.kind)
     buffer += "\","
+    buffer += "\"candidate_generator_family\":\""
+    buffer += json_escape(explain.plan.candidate_generator.family)
+    buffer += "\","
+    buffer += "\"stage1_required_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        explain.plan.candidate_generator.required_search_artifact_families,
+    )
+    buffer += ","
     buffer += "\"faithfulness_policy_kind\":\""
     buffer += json_escape(explain.plan.faithfulness_policy.kind)
     buffer += "\","

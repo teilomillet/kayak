@@ -178,7 +178,10 @@ from .planning import (
     stage1_generator_is_exact,
     stage1_generator_supports_match_all_filter,
     stage1_generator_supports_structured_filter,
+    stage1_requires_search_artifact_family,
     stage1_required_search_artifact_families,
+    stage1_single_required_search_artifact_family,
+    stage1_supported_by_search_artifact_build_policy,
 )
 from .runtime import ExactCpuBackend, ExactScoringBackend
 from .service import (
@@ -371,6 +374,8 @@ from .collections import (
     SEARCH_ARTIFACT_BUILD_CONFIG_FINE_CLUSTER_COUNT,
     SEARCH_ARTIFACT_BUILD_CONFIG_POSTING_CAP,
     search_artifact_snapshot_requirements,
+    search_artifact_build_policy_has_family,
+    search_artifact_build_policy_supports_required_families,
     search_artifact_build_config_value,
     search_artifact_root,
     seal_single_segment,

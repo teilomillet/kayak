@@ -13,7 +13,10 @@ from .execution import (
     candidate_recall_at_final_k,
     final_hits_for_plan,
 )
-from .exact_stage import exact_oracle_hits_for_snapshot
+from .exact_stage import (
+    exact_oracle_hits_for_snapshot,
+    exact_oracle_stage_profile_for_snapshot,
+)
 from .faithfulness import FaithfulnessAssessment, assess_faithfulness
 from .graph_search_counters import GraphSearchCounters
 from .score_histogram import build_score_histogram
@@ -41,6 +44,7 @@ struct CollectionSearchExplain(Copyable):
         candidate_set: CandidateSet,
         candidate_stage: SearchStageProfile,
         stage2: SearchStageProfile,
+        exact_stage: SearchStageProfile,
         candidate_recall_at_final_k: MetricScalar,
         faithfulness: FaithfulnessAssessment,
         var final_hits: List[CollectionHit],
@@ -51,7 +55,7 @@ struct CollectionSearchExplain(Copyable):
         self.candidate_set = candidate_set.copy()
         self.candidate_stage = candidate_stage.copy()
         self.stage2 = stage2.copy()
-        self.exact_stage = stage2.copy()
+        self.exact_stage = exact_stage.copy()
         self.candidate_recall_at_final_k = candidate_recall_at_final_k
         self.faithfulness = faithfulness.copy()
         self.final_hits = final_hits^
@@ -80,6 +84,10 @@ def explain_collection_search[Backend: ExactScoringBackend](
     )
     var observed_candidate_recall_at_final_k = candidate_recall_at_final_k(
         candidate_set, oracle_final_hits
+    )
+    var exact_stage = exact_oracle_stage_profile_for_snapshot(
+        snapshot,
+        oracle_final_hits,
     )
 
     return CollectionSearchExplain(
@@ -111,6 +119,7 @@ def explain_collection_search[Backend: ExactScoringBackend](
             GraphSearchCounters(),
             build_score_histogram(stage2_result.final_hits, 8),
         ),
+        exact_stage,
         observed_candidate_recall_at_final_k,
         assess_faithfulness(
             plan.faithfulness_policy,

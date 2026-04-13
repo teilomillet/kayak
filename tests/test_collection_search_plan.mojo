@@ -539,6 +539,11 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
     assert_equal(explain.final_hits[1].doc_id, "doc-c")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
+    assert_equal(explain.exact_stage.stage_name, "exact_oracle")
+    assert_equal(explain.exact_stage.document_count, 4)
+    assert_equal(explain.exact_stage.output_hit_count, 2)
+    assert_equal(explain.exact_stage.vector_count, 8)
+    assert_equal(explain.exact_stage.byte_size > 0, True)
     assert_equal(explain.candidate_stage.score_histogram.bin_count, 8)
     assert_equal(
         explain.stage2.score_histogram.counts[0]
@@ -553,8 +558,10 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
     )
     assert_equal(json.find("\"collection_id\":\"search-plan\"") != -1, True)
     assert_equal(json.find("\"candidate_generator_kind\":\"exact_full_scan\"") != -1, True)
+    assert_equal(json.find("\"candidate_generator_family\":\"exact\"") != -1, True)
     assert_equal(json.find("\"faithfulness_policy_kind\":\"exact_stage1_required\"") != -1, True)
     assert_equal(json.find("\"faithfulness\":") != -1, True)
+    assert_equal(json.find("\"stage1_required_artifact_families\":[]") != -1, True)
     assert_equal(json.find("\"stage2_kind\":\"noop_topk\"") != -1, True)
     assert_equal(json.find("\"stage2_family\":\"identity\"") != -1, True)
 

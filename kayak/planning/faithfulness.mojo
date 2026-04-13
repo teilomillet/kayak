@@ -1,5 +1,7 @@
 from kayak.numeric import MetricScalar
 
+from .stage1_capabilities import stage1_capabilities_for_candidate_generator_kind
+
 
 struct FaithfulnessPolicy(Copyable):
     var kind: String
@@ -27,14 +29,16 @@ def oracle_full_recall_required_faithfulness_policy() raises -> FaithfulnessPoli
     return FaithfulnessPolicy("oracle_full_recall_required")
 
 
-def stage1_generator_is_exact(candidate_generator_kind: String) -> Bool:
-    return candidate_generator_kind == "exact_full_scan"
+def stage1_generator_is_exact(candidate_generator_kind: String) raises -> Bool:
+    return stage1_capabilities_for_candidate_generator_kind(
+        candidate_generator_kind
+    ).stage1_is_exact
 
 
 def faithfulness_evidence_kind(
     candidate_generator_kind: String,
     observed_candidate_recall_at_final_k: MetricScalar,
-) -> String:
+) raises -> String:
     if stage1_generator_is_exact(candidate_generator_kind):
         return "exact_stage1"
 
@@ -78,7 +82,7 @@ def assess_faithfulness(
     read policy: FaithfulnessPolicy,
     candidate_generator_kind: String,
     observed_candidate_recall_at_final_k: MetricScalar,
-) -> FaithfulnessAssessment:
+) raises -> FaithfulnessAssessment:
     var stage1_is_exact = stage1_generator_is_exact(candidate_generator_kind)
     var evidence_kind = faithfulness_evidence_kind(
         candidate_generator_kind,
