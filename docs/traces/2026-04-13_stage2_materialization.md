@@ -108,9 +108,10 @@ This step does **not** yet prove everything about the stage-2 primitive.
 
 Still open:
 
-- planner-evidence and other auxiliary reporting surfaces do not yet emit
-  stage-2 materialization families
 - future multi-artifact stage-2 operators have not been implemented yet
+- non-benchmark auxiliary surfaces outside the current reporting stack may still
+  need the same propagation if they later start exposing stage-2 identity
+  without using `CollectionSearchExplain`
 
 So the contract is now explicit in the engine and the local Python SDK, but not
 yet fully propagated through every reporting surface.

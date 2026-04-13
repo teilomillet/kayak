@@ -9,6 +9,7 @@ from kayak.planning import (
     SearchPlannerRegistryEntry,
     SearchPlan,
     Stage2Operator,
+    explain_collection_search,
     search_plan_for_candidate_generator_kind,
     search_plan_with_stage2_operator,
     search_planner_registry_entry,
@@ -22,7 +23,9 @@ from .faithfulness_frontier_json import (
     build_faithfulness_frontier_summary_for_plan,
     faithfulness_frontier_summary_json,
 )
-from .json_common import json_escape
+from .json_common import append_json_string_list, json_escape
+from .materialized_artifact_families import materialized_artifact_families
+from .query_text_support import judged_query_text_for_plan
 
 
 struct PlannerEvidenceCandidateSummary(Copyable):
@@ -47,6 +50,9 @@ struct PlannerEvidenceCandidateSummary(Copyable):
 struct PlannerEvidenceSummary(Copyable):
     var planning_goal: String
     var stage2_kind: String
+    var stage2_family: String
+    var stage2_requires_query_text: Bool
+    var stage2_materialized_artifact_families: List[String]
     var selected_candidate_generator_kind: String
     var selected_candidate_generator_status: String
     var selection_reason: String
@@ -61,6 +67,9 @@ struct PlannerEvidenceSummary(Copyable):
         out self,
         var planning_goal: String,
         var stage2_kind: String,
+        var stage2_family: String,
+        stage2_requires_query_text: Bool,
+        read stage2_materialized_artifact_families: List[String],
         var selected_candidate_generator_kind: String,
         var selected_candidate_generator_status: String,
         var selection_reason: String,
@@ -73,6 +82,11 @@ struct PlannerEvidenceSummary(Copyable):
     ):
         self.planning_goal = planning_goal^
         self.stage2_kind = stage2_kind^
+        self.stage2_family = stage2_family^
+        self.stage2_requires_query_text = stage2_requires_query_text
+        self.stage2_materialized_artifact_families = (
+            stage2_materialized_artifact_families.copy()
+        )
         self.selected_candidate_generator_kind = (
             selected_candidate_generator_kind^
         )
@@ -167,6 +181,10 @@ def build_planner_evidence_summary(
     posting_cap: Int = 0,
 ) raises -> PlannerEvidenceSummary:
     var selection = select_search_plan_for_availability(availability, request)
+    var selected_plan = search_plan_with_stage2_operator(
+        selection.plan,
+        stage2_operator,
+    )
     var candidates = List[PlannerEvidenceCandidateSummary]()
 
     for candidate_generator_kind in selection.available_candidate_generator_kinds:
@@ -181,7 +199,7 @@ def build_planner_evidence_summary(
                 query_vector_budget,
                 requested_stage1_vector_budget,
                 posting_cap,
-                selection.plan.candidate_generator.kind,
+                selected_plan.candidate_generator.kind,
             )
         )
 
@@ -211,10 +229,27 @@ def build_planner_evidence_summary(
             )
             break
 
+    var representative_query = stored_task.task.queries[0].copy()
+    var representative_explain = explain_collection_search(
+        backend,
+        representative_query.query,
+        snapshot,
+        selected_plan,
+        query_text=judged_query_text_for_plan(
+            selected_plan,
+            representative_query.description,
+        ),
+    )
+
     return PlannerEvidenceSummary(
         request.goal.copy(),
         stage2_operator.kind.copy(),
-        selection.plan.candidate_generator.kind.copy(),
+        stage2_operator.family.copy(),
+        stage2_operator.requires_query_text,
+        materialized_artifact_families(
+            representative_explain.stage2.materialized_artifacts
+        ),
+        selected_plan.candidate_generator.kind.copy(),
         selection.selected_candidate_generator_status.copy(),
         selection.reason.copy(),
         selection.available_candidate_generator_kinds,
@@ -252,6 +287,18 @@ def append_planner_evidence_summary_json(
     buffer += "{"
     buffer += "\"planning_goal\":\"" + json_escape(summary.planning_goal) + "\","
     buffer += "\"stage2_kind\":\"" + json_escape(summary.stage2_kind) + "\","
+    buffer += "\"stage2_family\":\"" + json_escape(summary.stage2_family) + "\","
+    buffer += "\"stage2_requires_query_text\":"
+    if summary.stage2_requires_query_text:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"stage2_materialized_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        summary.stage2_materialized_artifact_families,
+    )
+    buffer += ","
     buffer += "\"selected_candidate_generator_kind\":\""
     buffer += json_escape(summary.selected_candidate_generator_kind) + "\","
     buffer += "\"selected_candidate_generator_status\":\""

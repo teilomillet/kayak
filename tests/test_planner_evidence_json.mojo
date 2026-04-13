@@ -98,6 +98,9 @@ def test_planner_evidence_summary_json_contains_candidates_and_advisory() raises
         PlannerEvidenceSummary(
             "balanced",
             "exact_late_interaction",
+            "late_interaction",
+            False,
+            ["late_interaction"],
             "document_proxy",
             "promoted",
             "planner used the default candidate-generator order for goal balanced",
@@ -124,6 +127,19 @@ def test_planner_evidence_summary_json_contains_candidates_and_advisory() raises
     )
 
     assert_equal(json.find("\"stage2_kind\":\"exact_late_interaction\"") != -1, True)
+    assert_equal(
+        json.find("\"stage2_family\":\"late_interaction\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage2_requires_query_text\":false") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage2_materialized_artifact_families\":[\"late_interaction\"]")
+            != -1,
+        True,
+    )
     assert_equal(
         json.find("\"selected_candidate_generator_kind\":\"document_proxy\"") != -1,
         True,
@@ -175,6 +191,10 @@ def test_build_planner_evidence_summary_reports_selected_candidate_and_stage2() 
 
     assert_equal(summary.planning_goal, "balanced")
     assert_equal(summary.stage2_kind, "exact_late_interaction")
+    assert_equal(summary.stage2_family, "late_interaction")
+    assert_equal(summary.stage2_requires_query_text, False)
+    assert_equal(len(summary.stage2_materialized_artifact_families), 1)
+    assert_equal(summary.stage2_materialized_artifact_families[0], "late_interaction")
     assert_equal(summary.selected_candidate_generator_kind, "document_proxy")
     assert_equal(summary.selected_candidate_generator_status, "promoted")
     assert_equal(len(summary.candidates) > 0, True)
