@@ -13,7 +13,7 @@ from kayak import (
 from kayak.filters import match_all_filter, one_of_filter
 
 
-def test_balanced_planner_prefers_proxy_frontier_when_available() raises:
+def test_balanced_planner_prefers_native_frontier_when_available() raises:
     var selection = select_search_plan_for_availability(
         SnapshotSearchArtifactAvailability(
             1,
@@ -29,7 +29,10 @@ def test_balanced_planner_prefers_proxy_frontier_when_available() raises:
         ),
     )
 
-    assert_equal(selection.plan.candidate_generator.kind, "document_proxy")
+    assert_equal(
+        selection.plan.candidate_generator.kind,
+        "centroid_postings_imputed_flat",
+    )
 
 
 def test_native_multivector_planner_prefers_current_warp_shaped_path() raises:

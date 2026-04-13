@@ -1,6 +1,6 @@
 # Stage-2 Primitives
 
-Status: `architecture note`  
+Status: `superseded architecture note`
 Date: `2026-04-13`
 
 This note records the current repository state after a fresh code scan and
@@ -15,6 +15,18 @@ Historical note:
   [docs/architecture/search_plan_semantics.md](search_plan_semantics.md)
 - the sections below remain useful mainly for the multi-artifact motivation and
   the cautions about hiding refinement semantics behind one opaque reranker
+
+Current source of truth:
+- [docs/architecture/search_plan_semantics.md](search_plan_semantics.md)
+
+Why this note is superseded:
+- the current code no longer treats `stage2_operator` as the primary semantic
+  description
+- `SearchPlan` now separates:
+  - `reference_scoring_semantics`
+  - `stage2_reference_operator`
+  - `stage3_verifier`
+- the combined `stage2_operator` surface is now a compatibility view
 
 The purpose was not to replace the current exact rerank path immediately.
 The implemented goal was to make the stage-2 contract explicit enough that:

@@ -237,17 +237,17 @@ Verified evidence:
 ## Phase 6: Public Stage-2 Operators
 
 Status:
-- proposed next SDK-architecture step
+- completed on `2026-04-13` for the current public refinement boundary
 
 Goal:
 - align the public Python SDK with the engine's future stage-2 primitive
   boundary instead of freezing around today's exact-only shortlist rerank path
 
 Reason:
-- the current repo now has explicit stage-1 families, but stage 2 is still
-  effectively hardcoded as exact late interaction in the Python plan path
-- the stronger ceiling and text-aware rerank work already exists in the engine
-  tree, but not behind one stable public operator model
+- the public SDK now needs to expose the same explicit refinement concepts that
+  the engine uses internally
+- clause-text and hybrid refinement should be visible as explicit operators,
+  not hidden as side behavior
 - if `kayak` is the canonical Python late-interaction SDK, users should
   program against a stable refinement primitive rather than one specific
   implementation detail
@@ -273,6 +273,16 @@ Exit criteria:
 
 Architecture note:
 - [docs/architecture/stage2_primitives.md](architecture/stage2_primitives.md)
+
+Verified evidence:
+- public exports now include `Stage2Operator`,
+  `Stage2ReferenceOperator`, `Stage3VerifierOperator`,
+  and `ReferenceScoringSemantics`
+- the public SDK exposes `exact_late_interaction_clause_text_stage2_operator()`
+- [python/tests/test_search_plan_api.py](../python/tests/test_search_plan_api.py)
+- [python/tests/test_public_api_contract.py](../python/tests/test_public_api_contract.py)
+- [docs/python_sdk.md](python_sdk.md)
+- [python/kayak/README.md](../python/kayak/README.md)
 
 ## Deferred Until The Service Boundary Is Ready
 

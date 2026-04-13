@@ -181,13 +181,18 @@ Supported exports today:
 - `LateDocuments`
 - `LateIndex`
 - `LateScores`
+- `ReferenceScoringSemantics`
 - `SearchHit`
 - `SearchPlan`
 - `SearchPlanResult`
 - `SearchStageProfile`
+- `Stage2ReferenceOperator`
 - `Stage2Operator`
+- `Stage3VerifierOperator`
+- `StageArtifactMaterialization`
 - `available_backends`
 - `backend_info`
+- `clause_text_stage3_verifier_operator`
 - `clause_text_stage2_operator`
 - `document_proxy_candidate_generator`
 - `document_proxy_search_plan`
@@ -197,6 +202,9 @@ Supported exports today:
 - `exact_full_scan_clause_text_search_plan`
 - `exact_full_scan_candidate_generator`
 - `exact_full_scan_search_plan`
+- `exact_late_interaction_clause_text_stage2_operator`
+- `exact_late_interaction_reference_scoring_semantics`
+- `exact_late_interaction_stage2_reference_operator`
 - `exact_late_interaction_stage2_operator`
 - `generate_candidates`
 - `packed_index`
@@ -204,9 +212,12 @@ Supported exports today:
 - `flat_query_dim128`
 - `maxsim`
 - `maxsim_batch`
+- `none_stage3_verifier_operator`
 - `search`
 - `search_batch`
 - `search_with_plan`
+- `stage2_operator_for_components`
+- `noop_topk_stage2_reference_operator`
 - `noop_topk_stage2_operator`
 - `NUMPY_REFERENCE_BACKEND`
 - `MOJO_EXACT_CPU_BACKEND`
@@ -293,6 +304,7 @@ The supported public stage-1 generators today are:
 The supported public stage-2 operators today are:
 - `noop_topk`
 - `exact_late_interaction`
+- `exact_late_interaction_clause_text`
 - `clause_text`
 
 Example:
@@ -330,8 +342,11 @@ The result keeps the stages inspectable:
 
 Compatibility note:
 - `result.exact_scores` and `result.exact_stage` are legacy aliases
-- use `result.plan.stage2_operator.is_exact_reference` to decide whether stage 2
-  is actually an exact-reference operator
+- the primary semantic plan fields are:
+  - `result.plan.reference_scoring_semantics`
+  - `result.plan.stage2_reference_operator`
+  - `result.plan.stage3_verifier`
+- `result.plan.stage2_operator` remains the compatibility combined view
 
 The stage profiles keep query and document vector counts explicit when the
 operator is vector-based, and document-text counts explicit when the operator
