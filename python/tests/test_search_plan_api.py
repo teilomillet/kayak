@@ -5,7 +5,6 @@ import unittest
 import numpy as np
 
 import kayak
-from kayak_bridge.search_plan import search_plan_compatibility_semantics
 
 
 def _dim128_vector(*entries: tuple[int, float]) -> np.ndarray:
@@ -209,7 +208,7 @@ class SearchPlanApiTests(unittest.TestCase):
 
         result = kayak.search_with_plan(query, index, plan)
 
-        self.assertEqual(result.plan.stage2_operator.kind, "noop_topk")
+        self.assertEqual(result.plan.stage2_reference_operator.kind, "noop_topk")
         self.assertEqual(result.hits, result.candidate_stage.hits[:2])
         self.assertIsNone(result.candidate_index)
         self.assertEqual(result.stage2.stage_name, "noop_topk")
@@ -278,16 +277,21 @@ class SearchPlanApiTests(unittest.TestCase):
 
         result = kayak.search_with_plan(query, index, plan)
 
-        self.assertEqual(result.plan.stage2_operator.kind, "exact_late_interaction_clause_text")
-        self.assertEqual(result.plan.stage2_operator.family, "hybrid")
-        self.assertEqual(
-            result.plan.stage2_operator.required_artifact_families,
-            ("late_interaction", "document_text"),
-        )
-        self.assertFalse(result.plan.stage2_operator.is_exact_reference)
         self.assertEqual(result.plan.reference_scoring_semantics.kind, "exact_late_interaction")
         self.assertEqual(result.plan.stage2_reference_operator.kind, "exact_late_interaction")
+        self.assertEqual(result.plan.stage2_reference_operator.family, "late_interaction")
+        self.assertEqual(
+            result.plan.stage2_reference_operator.required_artifact_families,
+            ("late_interaction",),
+        )
+        self.assertTrue(result.plan.stage2_reference_operator.executes_reference_scoring)
         self.assertEqual(result.plan.stage3_verifier.kind, "clause_text")
+        self.assertEqual(result.plan.stage3_verifier.family, "text")
+        self.assertEqual(
+            result.plan.stage3_verifier.required_artifact_families,
+            ("document_text",),
+        )
+        self.assertTrue(result.plan.stage3_verifier.requires_query_text)
         self.assertEqual(result.candidate_stage.candidate_doc_ids, ("doc-context", "doc-answer"))
         self.assertEqual([hit.doc_id for hit in result.hits], ["doc-answer"])
         self.assertEqual(result.stage2.stage_name, "exact_late_interaction")
@@ -328,48 +332,21 @@ class SearchPlanApiTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "requires document texts"):
             kayak.search_with_plan(query, index.with_texts(None), plan)
 
-    def test_plan_builders_reject_mixed_legacy_and_explicit_stage_overrides(self) -> None:
-        with self.assertRaisesRegex(ValueError, "cannot be mixed"):
+    def test_plan_builders_reject_legacy_stage2_operator_keyword(self) -> None:
+        with self.assertRaisesRegex(TypeError, "stage2_operator"):
             kayak.exact_full_scan_search_plan(
                 final_k=1,
                 candidate_k=2,
-                stage2_operator=kayak.clause_text_stage2_operator(),
+                stage2_operator="clause_text",
                 stage3_verifier=kayak.clause_text_stage3_verifier_operator(),
             )
 
-        with self.assertRaisesRegex(ValueError, "cannot be mixed"):
+        with self.assertRaisesRegex(TypeError, "stage2_operator"):
             kayak.document_proxy_search_plan(
                 final_k=1,
                 candidate_k=2,
-                stage2_operator=(
-                    kayak.exact_late_interaction_clause_text_stage2_operator()
-                ),
-                stage2_reference_operator=(
-                    kayak.exact_late_interaction_stage2_reference_operator()
-                ),
+                stage2_operator="exact_late_interaction_clause_text",
             )
-
-    def test_stage2_operator_remains_supported_as_compatibility_input(self) -> None:
-        plan = kayak.document_proxy_search_plan(
-            final_k=1,
-            candidate_k=2,
-            stage2_operator=kayak.exact_late_interaction_clause_text_stage2_operator(),
-        )
-        compatibility = search_plan_compatibility_semantics(plan)
-
-        self.assertEqual(plan.reference_scoring_semantics.kind, "exact_late_interaction")
-        self.assertEqual(plan.stage2_reference_operator.kind, "exact_late_interaction")
-        self.assertEqual(plan.stage3_verifier.kind, "clause_text")
-        self.assertEqual(plan.stage2_operator.kind, "exact_late_interaction_clause_text")
-        self.assertEqual(compatibility.stage2_kind, plan.stage2_operator.kind)
-        self.assertEqual(compatibility.stage2_family, plan.stage2_operator.family)
-        self.assertTrue(compatibility.stage2_requires_query_text)
-        self.assertEqual(
-            compatibility.stage2_required_artifact_families,
-            ("late_interaction", "document_text"),
-        )
-        self.assertEqual(compatibility.exact_stage_kind, "exact_late_interaction")
-        self.assertEqual(compatibility.reranker_kind, "clause_text")
 
     def test_clause_text_shorthand_builder_matches_explicit_stage3_override(self) -> None:
         shorthand = kayak.exact_full_scan_clause_text_search_plan(
@@ -417,8 +394,10 @@ class SearchPlanApiTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not accept"):
             kayak.CandidateGenerator("exact_full_scan", query_vector_budget=1)
 
-        with self.assertRaisesRegex(ValueError, "unsupported stage-2 operator"):
-            kayak.Stage2Operator("dense_mlp")
+        with self.assertRaisesRegex(
+            ValueError, "unsupported stage-2 reference operator"
+        ):
+            kayak.Stage2ReferenceOperator("dense_mlp")
 
 
 if __name__ == "__main__":

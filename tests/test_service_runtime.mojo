@@ -44,7 +44,8 @@ from kayak import (
     execute_search,
     exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
-    exact_late_interaction_clause_text_stage2_operator,
+    clause_text_stage3_verifier_operator,
+    exact_late_interaction_stage2_reference_operator,
     export_snapshot,
     gem_graph_build_spec,
     gem_graph_search_plan,
@@ -392,7 +393,8 @@ def test_hosted_collection_runtime_supports_hybrid_stage2() raises:
             1,
             2,
             best_effort_faithfulness_policy(),
-            exact_late_interaction_clause_text_stage2_operator(),
+            exact_late_interaction_stage2_reference_operator(),
+            clause_text_stage3_verifier_operator(),
         ),
         True,
     )
@@ -400,9 +402,10 @@ def test_hosted_collection_runtime_supports_hybrid_stage2() raises:
     var debug = execute_debug_search(ExactCpuBackend(), service_root, request)
 
     assert_equal(
-        response.plan.stage2_operator.kind,
-        "exact_late_interaction_clause_text",
+        response.plan.stage2_reference_operator.kind,
+        "exact_late_interaction",
     )
+    assert_equal(response.plan.stage3_verifier.kind, "clause_text")
     assert_equal(response.hits[0].doc_id, "doc-answer")
     assert_equal(debug.explain.candidate_set.hits[0].doc_id, "doc-context")
     assert_equal(debug.explain.final_hits[0].doc_id, "doc-answer")
@@ -1080,7 +1083,6 @@ def test_hosted_collection_runtime_executes_planned_search_with_explicit_stage3_
     )
 
     assert_equal(response.selection.plan.candidate_generator.kind, "exact_full_scan")
-    assert_equal(response.search.plan.stage2_operator.kind, "clause_text")
     assert_equal(response.search.plan.stage2_reference_operator.kind, "noop_topk")
     assert_equal(response.search.plan.stage3_verifier.kind, "clause_text")
     assert_equal(response.search.hits[0].doc_id, "doc-answer")
@@ -1141,7 +1143,8 @@ def test_hosted_collection_runtime_executes_planned_search_with_hybrid_stage2() 
             SnapshotId("snapshot-0001"),
             EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
             "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
-            "exact_late_interaction_clause_text",
+            "exact_late_interaction",
+            "clause_text",
             match_all_filter(),
             SearchPlanSelectionRequest(
                 1,
@@ -1156,10 +1159,8 @@ def test_hosted_collection_runtime_executes_planned_search_with_hybrid_stage2() 
         response.selection.plan.candidate_generator.kind,
         "centroid_postings_imputed_flat",
     )
-    assert_equal(
-        response.search.plan.stage2_operator.kind,
-        "exact_late_interaction_clause_text",
-    )
+    assert_equal(response.search.plan.stage2_reference_operator.kind, "exact_late_interaction")
+    assert_equal(response.search.plan.stage3_verifier.kind, "clause_text")
     assert_equal(response.search.hits[0].doc_id, "doc-answer")
 
 

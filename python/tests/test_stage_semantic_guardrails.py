@@ -1,53 +1,26 @@
 from __future__ import annotations
 
-from pathlib import Path
-import re
 import unittest
+from pathlib import Path
 
 from kayak_bridge.cache_paths import REPO_ROOT
 
 
-LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS = {
-    "Stage2Operator": {
-        Path("kayak/__init__.mojo"),
-        Path("kayak/planning/__init__.mojo"),
-        Path("kayak/planning/search_plan.mojo"),
-        Path("kayak/planning/stage2_operator.mojo"),
-        Path("kayak/service/planned_search_stage_override.mojo"),
-        Path("python/kayak/__init__.py"),
-        Path("python/kayak_bridge/__init__.py"),
-        Path("python/kayak_bridge/late_ops.py"),
-        Path("python/kayak_bridge/search_plan.py"),
-        Path("python/kayak_bridge/stage2_operator.py"),
-    },
-    "stage2_operator_kind": {
-        Path("kayak/service/json.mojo"),
-        Path("kayak/service/planned_search_stage_override.mojo"),
-        Path("kayak/service/runtime.mojo"),
-        Path("kayak/service/search_contracts.mojo"),
-    },
-    "exact_stage_kind": {
-        Path("kayak/benchmarks/search_plan_semantics_json.mojo"),
-        Path("kayak/planning/json.mojo"),
-        Path("kayak/planning/search_plan.mojo"),
-        Path("kayak/service/json.mojo"),
-        Path("python/kayak_bridge/search_plan.py"),
-    },
-    "reranker_kind": {
-        Path("kayak/benchmarks/search_plan_semantics_json.mojo"),
-        Path("kayak/planning/json.mojo"),
-        Path("kayak/planning/search_plan.mojo"),
-        Path("kayak/service/json.mojo"),
-        Path("python/kayak_bridge/search_plan.py"),
-    },
-}
-LEGACY_STAGE_COMPATIBILITY_TOKENS = tuple(
-    LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS.keys()
+BANNED_LEGACY_STAGE_TOKENS = (
+    "Stage2Operator",
+    "stage2_operator",
+    "stage2_operator_kind",
+    "stage2_operator_for_components",
+    "SearchPlanCompatibilitySemantics",
+    "search_plan_compatibility_semantics",
+    "same_search_plan_compatibility_semantics",
+    "exact_stage_kind",
+    "reranker_kind",
 )
-LEGACY_STAGE_COMPATIBILITY_PATTERNS = {
-    token: re.compile(rf"\b{re.escape(token)}\b")
-    for token in LEGACY_STAGE_COMPATIBILITY_TOKENS
-}
+DELETED_COMPATIBILITY_MODULES = (
+    Path("kayak/planning/stage2_operator.mojo"),
+    Path("python/kayak_bridge/stage2_operator.py"),
+)
 
 SCAN_ROOTS = (
     Path("kayak"),
@@ -72,58 +45,35 @@ def _iter_production_source_files() -> tuple[Path, ...]:
 
 def _matching_legacy_tokens(relative_path: Path) -> tuple[str, ...]:
     text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
-    return tuple(
-        token
-        for token, pattern in LEGACY_STAGE_COMPATIBILITY_PATTERNS.items()
-        if pattern.search(text)
-    )
+    return tuple(token for token in BANNED_LEGACY_STAGE_TOKENS if token in text)
 
 
 class StageSemanticGuardrailTests(unittest.TestCase):
-    def test_legacy_stage_compatibility_is_quarantined_to_allowlist(self) -> None:
+    def test_legacy_stage_compatibility_is_absent_from_production_source(self) -> None:
         violations: list[str] = []
 
         for relative_path in _iter_production_source_files():
             matching_tokens = _matching_legacy_tokens(relative_path)
             if not matching_tokens:
                 continue
-            leaked_tokens = tuple(
-                token
-                for token in matching_tokens
-                if relative_path
-                not in LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS.get(token, set())
-            )
-            if leaked_tokens:
-                violations.append(
-                    f"{relative_path}: {', '.join(leaked_tokens)}"
-                )
+            violations.append(f"{relative_path}: {', '.join(matching_tokens)}")
 
         self.assertEqual(
             violations,
             [],
-            "legacy combined stage compatibility leaked outside the allowlisted boundary",
+            "legacy combined-stage naming reappeared in production source",
         )
 
-    def test_compatibility_allowlist_stays_minimal_and_real(self) -> None:
-        missing_files = [
+    def test_deleted_compatibility_modules_stay_deleted(self) -> None:
+        stale_modules = [
             str(relative_path)
-            for allowlist in LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS.values()
-            for relative_path in sorted(allowlist)
-            if not (REPO_ROOT / relative_path).exists()
-        ]
-        self.assertEqual(missing_files, [])
-
-        stale_allowlist_entries = [
-            f"{token}: {relative_path}"
-            for token, allowlist in LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS.items()
-            for relative_path in sorted(allowlist)
+            for relative_path in DELETED_COMPATIBILITY_MODULES
             if (REPO_ROOT / relative_path).exists()
-            and token not in _matching_legacy_tokens(relative_path)
         ]
         self.assertEqual(
-            stale_allowlist_entries,
+            stale_modules,
             [],
-            "remove allowlist entries that no longer own compatibility-stage naming",
+            "legacy compatibility modules should stay deleted",
         )
 
 

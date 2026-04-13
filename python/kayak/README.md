@@ -300,10 +300,6 @@ Current public staged refinement pieces:
   - `none`
   - `clause_text`
 
-Compatibility note:
-- `Stage2Operator` and helpers like `exact_late_interaction_clause_text_stage2_operator()`
-  still exist, but they are the legacy combined view over those explicit stages
-
 That is an intentionally narrow first pass.
 It gives Python users a real stage-aware primitive today without pretending the
 full engine-native generator family or every future refinement operator is

@@ -1,8 +1,8 @@
-"""Owns explicit local search plans without hiding staged semantics."""
+"""Owns explicit local search plans without compatibility aliases."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .candidate_generator import (
     CandidateGenerator,
@@ -12,13 +12,6 @@ from .candidate_generator import (
 from .reference_scoring_semantics import (
     ReferenceScoringSemantics,
     exact_late_interaction_reference_scoring_semantics,
-)
-from .stage2_operator import (
-    Stage2Operator,
-    reference_scoring_semantics_for_stage2_operator_kind,
-    stage2_operator_for_components,
-    stage2_reference_operator_for_stage2_operator_kind,
-    stage3_verifier_for_stage2_operator_kind,
 )
 from .stage2_reference_operator import (
     Stage2ReferenceOperator,
@@ -33,34 +26,6 @@ from .stage3_verifier_operator import (
 
 
 @dataclass(frozen=True, slots=True)
-class SearchPlanCompatibilitySemantics:
-    stage2_kind: str
-    stage2_family: str
-    stage2_requires_query_text: bool
-    stage2_required_artifact_families: tuple[str, ...]
-    exact_stage_kind: str
-    reranker_kind: str
-
-
-def search_plan_compatibility_semantics_for_components(
-    *,
-    reference_scoring_semantics: ReferenceScoringSemantics,
-    stage2_operator: Stage2Operator,
-    stage3_verifier: Stage3VerifierOperator,
-) -> SearchPlanCompatibilitySemantics:
-    return SearchPlanCompatibilitySemantics(
-        stage2_kind=stage2_operator.kind,
-        stage2_family=stage2_operator.family,
-        stage2_requires_query_text=stage2_operator.requires_query_text,
-        stage2_required_artifact_families=(
-            stage2_operator.required_artifact_families
-        ),
-        exact_stage_kind=reference_scoring_semantics.kind,
-        reranker_kind=stage3_verifier.kind,
-    )
-
-
-@dataclass(frozen=True, slots=True)
 class SearchPlan:
     candidate_generator: CandidateGenerator
     final_k: int
@@ -68,7 +33,6 @@ class SearchPlan:
     reference_scoring_semantics: ReferenceScoringSemantics
     stage2_reference_operator: Stage2ReferenceOperator
     stage3_verifier: Stage3VerifierOperator
-    stage2_operator: Stage2Operator = field(init=False)
 
     def __post_init__(self) -> None:
         if self.final_k < 0:
@@ -78,25 +42,6 @@ class SearchPlan:
         if self.candidate_k < self.final_k:
             raise ValueError("candidate_k must be greater than or equal to final_k")
 
-        object.__setattr__(
-            self,
-            "stage2_operator",
-            stage2_operator_for_components(
-                self.stage2_reference_operator,
-                self.stage3_verifier,
-            ),
-        )
-
-
-def search_plan_compatibility_semantics(
-    plan: SearchPlan,
-) -> SearchPlanCompatibilitySemantics:
-    return search_plan_compatibility_semantics_for_components(
-        reference_scoring_semantics=plan.reference_scoring_semantics,
-        stage2_operator=plan.stage2_operator,
-        stage3_verifier=plan.stage3_verifier,
-    )
-
 
 def _resolve_stage_components(
     *,
@@ -105,30 +50,11 @@ def _resolve_stage_components(
     default_stage3_verifier: Stage3VerifierOperator,
     stage2_reference_operator: Stage2ReferenceOperator | None,
     stage3_verifier: Stage3VerifierOperator | None,
-    stage2_operator: Stage2Operator | None,
 ) -> tuple[
     ReferenceScoringSemantics,
     Stage2ReferenceOperator,
     Stage3VerifierOperator,
 ]:
-    if stage2_operator is not None and (
-        stage2_reference_operator is not None or stage3_verifier is not None
-    ):
-        raise ValueError(
-            "stage2_operator cannot be mixed with explicit stage2_reference_operator or stage3_verifier"
-        )
-
-    if stage2_operator is not None:
-        return (
-            reference_scoring_semantics_for_stage2_operator_kind(
-                stage2_operator.kind
-            ),
-            stage2_reference_operator_for_stage2_operator_kind(
-                stage2_operator.kind
-            ),
-            stage3_verifier_for_stage2_operator_kind(stage2_operator.kind),
-        )
-
     return (
         default_reference_scoring_semantics,
         default_stage2_reference_operator
@@ -144,7 +70,6 @@ def exact_full_scan_search_plan(
     candidate_k: int | None = None,
     stage2_reference_operator: Stage2ReferenceOperator | None = None,
     stage3_verifier: Stage3VerifierOperator | None = None,
-    stage2_operator: Stage2Operator | None = None,
 ) -> SearchPlan:
     effective_candidate_k = final_k if candidate_k is None else candidate_k
     (
@@ -159,7 +84,6 @@ def exact_full_scan_search_plan(
         default_stage3_verifier=none_stage3_verifier_operator(),
         stage2_reference_operator=stage2_reference_operator,
         stage3_verifier=stage3_verifier,
-        stage2_operator=stage2_operator,
     )
     return SearchPlan(
         candidate_generator=exact_full_scan_candidate_generator(),
@@ -189,7 +113,6 @@ def document_proxy_search_plan(
     document_vector_budget: int = 0,
     stage2_reference_operator: Stage2ReferenceOperator | None = None,
     stage3_verifier: Stage3VerifierOperator | None = None,
-    stage2_operator: Stage2Operator | None = None,
 ) -> SearchPlan:
     (
         reference_scoring_semantics,
@@ -205,7 +128,6 @@ def document_proxy_search_plan(
         default_stage3_verifier=none_stage3_verifier_operator(),
         stage2_reference_operator=stage2_reference_operator,
         stage3_verifier=stage3_verifier,
-        stage2_operator=stage2_operator,
     )
     return SearchPlan(
         candidate_generator=document_proxy_candidate_generator(

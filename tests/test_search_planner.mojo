@@ -205,7 +205,8 @@ def test_search_plan_for_candidate_generator_kind_uses_default_contracts() raise
     )
 
     assert_equal(exact_plan.candidate_generator.is_exact, True)
-    assert_equal(exact_plan.stage2_operator.kind, "noop_topk")
+    assert_equal(exact_plan.stage2_reference_operator.kind, "noop_topk")
+    assert_equal(exact_plan.stage3_verifier.kind, "none")
     assert_equal(exact_plan.faithfulness_policy.kind, "exact_stage1_required")
     assert_equal(gem_plan.candidate_generator.kind, "gem_graph")
     assert_equal(
@@ -213,7 +214,8 @@ def test_search_plan_for_candidate_generator_kind_uses_default_contracts() raise
         7,
     )
     assert_equal(gem_plan.candidate_generator.beam_width, 9)
-    assert_equal(gem_plan.stage2_operator.kind, "exact_late_interaction")
+    assert_equal(gem_plan.stage2_reference_operator.kind, "exact_late_interaction")
+    assert_equal(gem_plan.stage3_verifier.kind, "none")
     assert_equal(gem_plan.faithfulness_policy.kind, "best_effort")
 
 

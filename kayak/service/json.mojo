@@ -14,7 +14,6 @@ from kayak.planning import (
     SearchPlan,
     SearchPlanSelection,
     collection_search_explain_json,
-    search_plan_compatibility_semantics,
 )
 
 from .collection_requests import (
@@ -189,7 +188,6 @@ def append_json_search_artifact_build_policy(
 
 
 def append_json_search_plan_only(mut buffer: String, read plan: SearchPlan):
-    var compatibility = search_plan_compatibility_semantics(plan)
     buffer += "{"
     buffer += "\"candidate_generator_kind\":\""
     buffer += json_escape(plan.candidate_generator.kind)
@@ -258,26 +256,6 @@ def append_json_search_plan_only(mut buffer: String, read plan: SearchPlan):
         buffer,
         plan.stage3_verifier.required_artifact_families,
     )
-    buffer += ","
-    buffer += "\"stage2_kind\":\""
-    buffer += json_escape(compatibility.stage2_kind) + "\","
-    buffer += "\"stage2_family\":\""
-    buffer += json_escape(compatibility.stage2_family) + "\","
-    buffer += "\"stage2_requires_query_text\":"
-    if compatibility.stage2_requires_query_text:
-        buffer += "true,"
-    else:
-        buffer += "false,"
-    buffer += "\"stage2_required_artifact_families\":"
-    append_json_string_list(
-        buffer,
-        compatibility.stage2_required_artifact_families,
-    )
-    buffer += ","
-    buffer += "\"exact_stage_kind\":\""
-    buffer += json_escape(compatibility.exact_stage_kind) + "\","
-    buffer += "\"reranker_kind\":\""
-    buffer += json_escape(compatibility.reranker_kind) + "\""
     buffer += "}"
 
 
@@ -667,8 +645,6 @@ def planned_search_request_json(read request: PlannedSearchRequest) -> String:
     append_json_vector_list(buffer, request.query.token_vectors)
     buffer += ",\"query_text\":\""
     buffer += json_escape(request.query_text) + "\""
-    buffer += ",\"stage2_operator_kind\":\""
-    buffer += json_escape(request.stage2_operator_kind) + "\""
     buffer += ",\"stage2_reference_kind\":\""
     buffer += json_escape(request.stage2_reference_kind) + "\""
     buffer += ",\"stage3_verifier_kind\":\""

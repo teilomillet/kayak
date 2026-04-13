@@ -251,7 +251,7 @@ tests = [
     "tests/test_planner_*.mojo",
     "tests/test_collection_search_plan.mojo",
     "tests/test_centroid_execution_contract.mojo",
-    "tests/test_stage2_operator_contract.mojo",
+    "tests/test_stage_refinement_contract.mojo",
     "tests/test_stage_artifact_materialization.mojo",
     "tests/test_graph_search_counters.mojo",
     "tests/test_planned_stage2_override.mojo",

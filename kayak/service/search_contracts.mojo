@@ -13,8 +13,6 @@ from kayak.planning import (
     SearchPlanSelection,
     SearchPlanSelectionRequest,
     exact_full_scan_search_plan,
-    same_search_plan_compatibility_semantics,
-    search_plan_compatibility_semantics,
 )
 from .planned_search_stage_override import (
     require_valid_planned_search_stage_override,
@@ -148,8 +146,6 @@ struct SearchResponse(Copyable):
 
 
 def same_search_plan(read left: SearchPlan, read right: SearchPlan) -> Bool:
-    var left_compatibility = search_plan_compatibility_semantics(left)
-    var right_compatibility = search_plan_compatibility_semantics(right)
     return (
         left.candidate_generator.kind == right.candidate_generator.kind
         and left.candidate_generator.cluster_top_k_per_query_token
@@ -163,10 +159,6 @@ def same_search_plan(read left: SearchPlan, read right: SearchPlan) -> Bool:
         and left.stage2_reference_operator.kind
         == right.stage2_reference_operator.kind
         and left.stage3_verifier.kind == right.stage3_verifier.kind
-        and same_search_plan_compatibility_semantics(
-            left_compatibility,
-            right_compatibility,
-        )
         and left.faithfulness_policy.kind == right.faithfulness_policy.kind
     )
 
@@ -209,7 +201,6 @@ struct PlannedSearchRequest(Copyable):
     var snapshot_id: SnapshotId
     var query: EncodedQuery
     var query_text: String
-    var stage2_operator_kind: String
     var stage2_reference_kind: String
     var stage3_verifier_kind: String
     var filter_expression: FilterExpression
@@ -223,7 +214,6 @@ struct PlannedSearchRequest(Copyable):
         snapshot_id: SnapshotId,
         query: EncodedQuery,
         var query_text: String,
-        var stage2_operator_kind: String,
         var stage2_reference_kind: String,
         var stage3_verifier_kind: String,
         filter_expression: FilterExpression,
@@ -235,7 +225,6 @@ struct PlannedSearchRequest(Copyable):
         self.snapshot_id = snapshot_id.copy()
         self.query = query.copy()
         self.query_text = query_text^
-        self.stage2_operator_kind = stage2_operator_kind^
         self.stage2_reference_kind = stage2_reference_kind^
         self.stage3_verifier_kind = stage3_verifier_kind^
         self.filter_expression = filter_expression.copy()
@@ -243,7 +232,6 @@ struct PlannedSearchRequest(Copyable):
 
         require_valid_planned_search_stage_override(
             self.query_text,
-            self.stage2_operator_kind,
             self.stage2_reference_kind,
             self.stage3_verifier_kind,
         )
@@ -256,34 +244,6 @@ struct PlannedSearchRequest(Copyable):
         snapshot_id: SnapshotId,
         query: EncodedQuery,
         var query_text: String,
-        var stage2_operator_kind: String,
-        filter_expression: FilterExpression,
-        planning: SearchPlanSelectionRequest,
-    ) raises:
-        self = PlannedSearchRequest(
-            collection_id,
-            tenant_id,
-            namespace_id,
-            snapshot_id,
-            query,
-            query_text^,
-            stage2_operator_kind^,
-            "",
-            "",
-            filter_expression,
-            planning,
-        )
-
-    def __init__(
-        out self,
-        collection_id: CollectionId,
-        tenant_id: TenantId,
-        namespace_id: NamespaceId,
-        snapshot_id: SnapshotId,
-        query: EncodedQuery,
-        var query_text: String,
-        var stage2_reference_kind: String,
-        var stage3_verifier_kind: String,
         filter_expression: FilterExpression,
         planning: SearchPlanSelectionRequest,
     ) raises:
@@ -295,8 +255,7 @@ struct PlannedSearchRequest(Copyable):
             query,
             query_text^,
             "",
-            stage2_reference_kind^,
-            stage3_verifier_kind^,
+            "",
             filter_expression,
             planning,
         )
@@ -317,7 +276,6 @@ struct PlannedSearchRequest(Copyable):
             namespace_id,
             snapshot_id,
             query,
-            "",
             "",
             "",
             "",

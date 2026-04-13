@@ -15,10 +15,8 @@ from .clause_text_stage import candidate_text_corpus_for_hits
 from .collection_hit import CollectionHit
 from .exact_stage import materialize_candidate_index
 from .stage_artifact_materialization import StageArtifactMaterialization
-from .stage2_operator import (
-    STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
-    STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
-)
+from .stage2_reference_operator import STAGE2_REFERENCE_REQUIRED_ARTIFACT_LATE_INTERACTION
+from .stage3_verifier_operator import STAGE3_REQUIRED_ARTIFACT_DOCUMENT_TEXT
 from .stage2_result import Stage2Result
 
 
@@ -93,7 +91,7 @@ def exact_late_interaction_clause_text_rerank_candidates_for_plan[
         final_hits^,
         [
             StageArtifactMaterialization(
-                STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
+                STAGE2_REFERENCE_REQUIRED_ARTIFACT_LATE_INTERACTION,
                 materialized.segment_count,
                 materialized.index.document_count,
                 materialized.token_count,
@@ -101,7 +99,7 @@ def exact_late_interaction_clause_text_rerank_candidates_for_plan[
                 materialized.byte_size,
             ),
             StageArtifactMaterialization(
-                STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
+                STAGE3_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
                 materialized.segment_count,
                 materialized.index.document_count,
                 candidate_texts.token_count,

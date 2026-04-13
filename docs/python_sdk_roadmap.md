@@ -253,10 +253,11 @@ Reason:
   implementation detail
 
 Scope:
-- add an explicit Python `Stage2Operator`
-- make `search_with_plan(...)` carry that operator
-- keep exact late interaction as the default stage-2 operator
-- allow richer operators only when their artifact requirements are explicit
+- expose explicit Python `Stage2ReferenceOperator` and
+  `Stage3VerifierOperator` contracts
+- make `search_with_plan(...)` carry those explicit plan components
+- keep exact late interaction as the default stage-2 reference operator
+- allow richer verification only when artifact requirements are explicit
 - preserve the rule that backend choice stays explicit and non-magical
 
 Constraints:
@@ -267,18 +268,16 @@ Constraints:
 Exit criteria:
 - the Python search-plan API can express stage 2 without hardcoding
   `"exact_late_interaction"` as the only public refinement mode
-- exact late interaction and at least one additional stage-2 operator share the
-  same public plan shape
+- exact late interaction and clause-text verification share the same public plan
+  shape without a combined compatibility alias
 - tests verify that artifact requirements stay explicit in the public API
 
 Architecture note:
 - [docs/architecture/stage2_primitives.md](architecture/stage2_primitives.md)
 
 Verified evidence:
-- public exports now include `Stage2Operator`,
-  `Stage2ReferenceOperator`, `Stage3VerifierOperator`,
-  and `ReferenceScoringSemantics`
-- the public SDK exposes `exact_late_interaction_clause_text_stage2_operator()`
+- public exports now include `Stage2ReferenceOperator`,
+  `Stage3VerifierOperator`, and `ReferenceScoringSemantics`
 - [python/tests/test_search_plan_api.py](../python/tests/test_search_plan_api.py)
 - [python/tests/test_public_api_contract.py](../python/tests/test_public_api_contract.py)
 - [docs/python_sdk.md](python_sdk.md)

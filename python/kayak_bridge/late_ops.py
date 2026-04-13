@@ -13,14 +13,6 @@ from .reference_scoring_semantics import (
     ReferenceScoringSemantics,
     exact_late_interaction_reference_scoring_semantics,
 )
-from .stage2_operator import (
-    Stage2Operator,
-    clause_text_stage2_operator,
-    exact_late_interaction_clause_text_stage2_operator,
-    exact_late_interaction_stage2_operator,
-    noop_topk_stage2_operator,
-    stage2_operator_for_components,
-)
 from .stage2_reference_operator import (
     Stage2ReferenceOperator,
     exact_late_interaction_stage2_reference_operator,

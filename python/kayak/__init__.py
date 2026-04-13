@@ -33,9 +33,7 @@ from kayak_bridge import (
     available_backends,
     backend_info,
     clause_text_stage3_verifier_operator,
-    clause_text_stage2_operator,
     exact_late_interaction_reference_scoring_semantics,
-    exact_late_interaction_clause_text_stage2_operator,
     document_proxy_candidate_generator,
     document_proxy_search_plan,
     documents,
@@ -43,7 +41,6 @@ from kayak_bridge import (
     exact_full_scan_candidate_generator,
     exact_full_scan_search_plan,
     exact_late_interaction_stage2_reference_operator,
-    exact_late_interaction_stage2_operator,
     flat_query_dim128,
     generate_candidates,
     hybrid_flat_dim128_index,
@@ -57,9 +54,6 @@ from kayak_bridge import (
     search,
     search_batch,
     search_with_plan,
-    Stage2Operator,
-    stage2_operator_for_components,
-    noop_topk_stage2_operator,
 )
 
 PUBLIC_API = (
@@ -84,9 +78,7 @@ PUBLIC_API = (
     "available_backends",
     "backend_info",
     "clause_text_stage3_verifier_operator",
-    "clause_text_stage2_operator",
     "exact_late_interaction_reference_scoring_semantics",
-    "exact_late_interaction_clause_text_stage2_operator",
     "document_proxy_candidate_generator",
     "document_proxy_search_plan",
     "documents",
@@ -94,7 +86,6 @@ PUBLIC_API = (
     "exact_full_scan_candidate_generator",
     "exact_full_scan_search_plan",
     "exact_late_interaction_stage2_reference_operator",
-    "exact_late_interaction_stage2_operator",
     "flat_query_dim128",
     "generate_candidates",
     "hybrid_flat_dim128_index",
@@ -102,15 +93,12 @@ PUBLIC_API = (
     "maxsim_batch",
     "none_stage3_verifier_operator",
     "noop_topk_stage2_reference_operator",
-    "noop_topk_stage2_operator",
     "packed_index",
     "query",
     "query_batch",
     "search",
     "search_batch",
     "search_with_plan",
-    "Stage2Operator",
-    "stage2_operator_for_components",
 )
 
 __all__ = [

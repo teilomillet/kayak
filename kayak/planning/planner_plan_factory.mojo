@@ -4,10 +4,16 @@ from .faithfulness import (
     FaithfulnessPolicy,
     exact_stage1_required_faithfulness_policy,
 )
+from .reference_scoring_semantics import (
+    exact_late_interaction_reference_scoring_semantics,
+)
 from .search_plan import SearchPlan
-from .stage2_operator import (
-    exact_late_interaction_stage2_operator,
-    noop_topk_stage2_operator,
+from .stage2_reference_operator import (
+    exact_late_interaction_stage2_reference_operator,
+    noop_topk_stage2_reference_operator,
+)
+from .stage3_verifier_operator import (
+    none_stage3_verifier_operator,
 )
 
 
@@ -36,14 +42,18 @@ def planner_default_search_plan_for_candidate_generator(
             candidate_generator,
             candidate_budget,
             exact_stage1_required_faithfulness_policy(),
-            noop_topk_stage2_operator(),
+            exact_late_interaction_reference_scoring_semantics(),
+            noop_topk_stage2_reference_operator(),
+            none_stage3_verifier_operator(),
         )
 
     return SearchPlan(
         candidate_generator,
         candidate_budget,
         requested_faithfulness_policy,
-        exact_late_interaction_stage2_operator(),
+        exact_late_interaction_reference_scoring_semantics(),
+        exact_late_interaction_stage2_reference_operator(),
+        none_stage3_verifier_operator(),
     )
 
 

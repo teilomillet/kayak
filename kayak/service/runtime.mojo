@@ -288,7 +288,7 @@ def snapshot_load_requirements_for_request(
     var needs_document_metadata = filter_expression_requires_document_metadata(
         request.filter_expression
     )
-    var needs_document_text = request.plan.stage2_operator.requires_artifact_family(
+    var needs_document_text = request.plan.stage3_verifier.requires_artifact_family(
         "document_text"
     )
     var required_artifacts = (
@@ -476,7 +476,6 @@ def search_request_for_planned_request(
 ) raises -> SearchRequest:
     var effective_plan = search_plan_with_planned_search_stage_override(
         plan,
-        request.stage2_operator_kind,
         request.stage2_reference_kind,
         request.stage3_verifier_kind,
     )
@@ -499,7 +498,6 @@ def selection_for_planned_request(
     read selection: SearchPlanSelection,
 ) raises -> SearchPlanSelection:
     if not planned_search_has_stage_override(
-        request.stage2_operator_kind,
         request.stage2_reference_kind,
         request.stage3_verifier_kind,
     ):
@@ -512,7 +510,6 @@ def selection_for_planned_request(
         selection.effective_candidate_generator_order,
         search_plan_with_planned_search_stage_override(
             selection.plan,
-            request.stage2_operator_kind,
             request.stage2_reference_kind,
             request.stage3_verifier_kind,
         ),

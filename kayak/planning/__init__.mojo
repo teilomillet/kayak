@@ -94,20 +94,6 @@ from .faithfulness import (
     oracle_full_recall_required_faithfulness_policy,
     stage1_generator_is_exact,
 )
-from .stage2_operator import (
-    STAGE2_OPERATOR_FAMILY_IDENTITY,
-    STAGE2_OPERATOR_FAMILY_HYBRID,
-    STAGE2_OPERATOR_FAMILY_LATE_INTERACTION,
-    STAGE2_OPERATOR_FAMILY_TEXT,
-    STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
-    STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
-    Stage2Operator,
-    clause_text_stage2_operator,
-    exact_late_interaction_clause_text_stage2_operator,
-    exact_late_interaction_stage2_operator,
-    noop_topk_stage2_operator,
-    stage2_operator_for_components,
-)
 from .stage2_reference_operator import (
     STAGE2_REFERENCE_OPERATOR_FAMILY_IDENTITY,
     STAGE2_REFERENCE_OPERATOR_FAMILY_LATE_INTERACTION,
@@ -146,7 +132,6 @@ from .centroid_postings_stage import centroid_posting_scores_for_segment
 from .centroid_postings_flat_stage import centroid_posting_flat_scores_for_segment
 from .search_plan import (
     SearchPlan,
-    SearchPlanCompatibilitySemantics,
     centroid_heads_search_plan,
     centroid_postings_flat_search_plan,
     centroid_postings_head_auto_search_plan,
@@ -159,9 +144,6 @@ from .search_plan import (
     exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
     gem_graph_search_plan,
-    same_search_plan_compatibility_semantics,
-    search_plan_compatibility_semantics,
-    search_plan_compatibility_semantics_for_components,
 )
 from .planning_goal import (
     SEARCH_PLANNING_GOAL_BALANCED,

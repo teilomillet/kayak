@@ -43,16 +43,19 @@ from kayak import (
     centroid_postings_search_plan,
     collection_search_explain_json,
     document_proxy_search_plan,
+    clause_text_stage3_verifier_operator,
     exact_stage1_required_faithfulness_policy,
     exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
-    exact_late_interaction_clause_text_stage2_operator,
+    exact_late_interaction_reference_scoring_semantics,
+    exact_late_interaction_stage2_reference_operator,
     explain_collection_search,
     gem_graph_search_artifact,
     gem_graph_search_plan,
     loaded_segment_stored_centroid_postings_index,
     load_resolved_collection_snapshot,
-    noop_topk_stage2_operator,
+    none_stage3_verifier_operator,
+    noop_topk_stage2_reference_operator,
     oracle_full_recall_required_faithfulness_policy,
     build_stored_gem_graph_index,
     save_collection_manifest,
@@ -65,7 +68,6 @@ from kayak import (
     save_stored_gem_graph_index,
     save_stored_packed_index,
     SearchPlan,
-    search_plan_compatibility_semantics,
 )
 from kayak.text import DocumentTextCorpus
 from kayak.filters import one_of_filter
@@ -667,8 +669,8 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
     assert_equal(json.find("\"faithfulness_policy_kind\":\"exact_stage1_required\"") != -1, True)
     assert_equal(json.find("\"faithfulness\":") != -1, True)
     assert_equal(json.find("\"stage1_required_artifact_families\":[]") != -1, True)
-    assert_equal(json.find("\"stage2_kind\":\"noop_topk\"") != -1, True)
-    assert_equal(json.find("\"stage2_family\":\"identity\"") != -1, True)
+    assert_equal(json.find("\"stage2_reference_kind\":\"noop_topk\"") != -1, True)
+    assert_equal(json.find("\"stage2_reference_family\":\"identity\"") != -1, True)
 
 
 def test_search_plan_exact_requirement_uses_candidate_generator_contract() raises:
@@ -681,7 +683,9 @@ def test_search_plan_exact_requirement_uses_candidate_generator_contract() raise
         exact_generator,
         CandidateBudget(1, 1),
         exact_stage1_required_faithfulness_policy(),
-        noop_topk_stage2_operator(),
+        exact_late_interaction_reference_scoring_semantics(),
+        noop_topk_stage2_reference_operator(),
+        none_stage3_verifier_operator(),
     )
 
     assert_equal(exact_plan.candidate_generator.kind, "synthetic_exact_contract")
@@ -698,7 +702,9 @@ def test_search_plan_exact_requirement_uses_candidate_generator_contract() raise
             approximate_generator,
             CandidateBudget(1, 1),
             exact_stage1_required_faithfulness_policy(),
-            noop_topk_stage2_operator(),
+            exact_late_interaction_reference_scoring_semantics(),
+            noop_topk_stage2_reference_operator(),
+            none_stage3_verifier_operator(),
         )
     except:
         raised = True
@@ -723,9 +729,10 @@ def test_exact_full_scan_clause_text_stage2_can_refine_exact_candidates() raises
 
     assert_equal(explain.candidate_set.hits[0].doc_id, "doc-context")
     assert_equal(explain.final_hits[0].doc_id, "doc-answer")
-    assert_equal(explain.plan.stage2_operator.kind, "clause_text")
-    assert_equal(explain.plan.stage2_operator.family, "text")
-    assert_equal(explain.plan.stage2_operator.requires_query_text, True)
+    assert_equal(explain.plan.stage2_reference_operator.kind, "noop_topk")
+    assert_equal(explain.plan.stage3_verifier.kind, "clause_text")
+    assert_equal(explain.plan.stage3_verifier.family, "text")
+    assert_equal(explain.plan.stage3_verifier.requires_query_text, True)
     assert_equal(explain.stage2.stage_name, "noop_topk")
     assert_equal(explain.stage3_verifier.stage_name, "clause_text")
     assert_equal(explain.stage2.document_count, 2)
@@ -739,8 +746,9 @@ def test_exact_full_scan_clause_text_stage2_can_refine_exact_candidates() raises
         explain.stage3_verifier.materialized_artifacts[0].family,
         "document_text",
     )
-    assert_equal(json.find("\"stage2_kind\":\"clause_text\"") != -1, True)
-    assert_equal(json.find("\"stage2_requires_query_text\":true") != -1, True)
+    assert_equal(json.find("\"stage2_reference_kind\":\"noop_topk\"") != -1, True)
+    assert_equal(json.find("\"stage3_verifier_kind\":\"clause_text\"") != -1, True)
+    assert_equal(json.find("\"stage3_verifier_requires_query_text\":true") != -1, True)
     assert_equal(json.find("\"materialized_artifacts\":[{") != -1, True)
     assert_equal(json.find("\"family\":\"document_text\"") != -1, True)
 
@@ -753,7 +761,8 @@ def test_hybrid_stage2_materializes_vectors_and_texts() raises:
         1,
         2,
         best_effort_faithfulness_policy(),
-        exact_late_interaction_clause_text_stage2_operator(),
+        exact_late_interaction_stage2_reference_operator(),
+        clause_text_stage3_verifier_operator(),
     )
     var explain = explain_collection_search(
         ExactCpuBackend(),
@@ -767,24 +776,22 @@ def test_hybrid_stage2_materializes_vectors_and_texts() raises:
 
     assert_equal(explain.candidate_set.hits[0].doc_id, "doc-context")
     assert_equal(explain.final_hits[0].doc_id, "doc-answer")
+    assert_equal(explain.plan.stage2_reference_operator.kind, "exact_late_interaction")
+    assert_equal(explain.plan.stage2_reference_operator.family, "late_interaction")
+    assert_equal(explain.plan.stage3_verifier.kind, "clause_text")
+    assert_equal(explain.plan.stage3_verifier.requires_query_text, True)
     assert_equal(
-        explain.plan.stage2_operator.kind,
-        "exact_late_interaction_clause_text",
+        len(explain.plan.stage2_reference_operator.required_artifact_families),
+        1,
     )
-    assert_equal(explain.plan.stage2_operator.family, "hybrid")
-    assert_equal(explain.plan.stage2_operator.requires_query_text, True)
-    assert_equal(len(explain.plan.stage2_operator.required_artifact_families), 2)
     assert_equal(
-        explain.plan.stage2_operator.required_artifact_families[0],
+        explain.plan.stage2_reference_operator.required_artifact_families[0],
         "late_interaction",
     )
     assert_equal(
-        explain.plan.stage2_operator.required_artifact_families[1],
+        explain.plan.stage3_verifier.required_artifact_families[0],
         "document_text",
     )
-    var compatibility = search_plan_compatibility_semantics(explain.plan)
-    assert_equal(compatibility.exact_stage_kind, "exact_late_interaction")
-    assert_equal(compatibility.reranker_kind, "clause_text")
     assert_equal(explain.stage2.stage_name, "exact_late_interaction")
     assert_equal(explain.stage3_verifier.stage_name, "clause_text")
     assert_equal(explain.stage2.document_count, 2)
@@ -803,13 +810,16 @@ def test_hybrid_stage2_materializes_vectors_and_texts() raises:
         explain.stage3_verifier.materialized_artifacts[0].family,
         "document_text",
     )
+    assert_equal(json.find("\"stage2_reference_kind\":\"exact_late_interaction\"") != -1, True)
+    assert_equal(json.find("\"stage2_reference_family\":\"late_interaction\"") != -1, True)
+    assert_equal(json.find("\"stage3_verifier_kind\":\"clause_text\"") != -1, True)
     assert_equal(
-        json.find("\"stage2_kind\":\"exact_late_interaction_clause_text\"") != -1,
+        json.find("\"stage2_reference_required_artifact_families\":[\"late_interaction\"]")
+            != -1,
         True,
     )
-    assert_equal(json.find("\"stage2_family\":\"hybrid\"") != -1, True)
     assert_equal(
-        json.find("\"stage2_required_artifact_families\":[\"late_interaction\",\"document_text\"]")
+        json.find("\"stage3_verifier_required_artifact_families\":[\"document_text\"]")
             != -1,
         True,
     )

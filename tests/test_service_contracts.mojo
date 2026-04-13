@@ -49,11 +49,14 @@ from kayak import (
     VECTOR_SCALAR_NAME,
     FaithfulnessAssessment,
     best_effort_faithfulness_policy,
+    clause_text_stage3_verifier_operator,
     default_exact_search_request,
     document_proxy_search_plan,
     exact_stage1_required_faithfulness_policy,
-    exact_late_interaction_clause_text_stage2_operator,
-    noop_topk_stage2_operator,
+    exact_late_interaction_reference_scoring_semantics,
+    exact_late_interaction_stage2_reference_operator,
+    none_stage3_verifier_operator,
+    noop_topk_stage2_reference_operator,
     oracle_full_recall_required_faithfulness_policy,
 )
 from kayak.filters import match_all_filter
@@ -375,7 +378,8 @@ def test_default_search_request_builds_exact_plan() raises:
     assert_equal(request.snapshot_id.value, "snapshot-0001")
     assert_equal(request.filter_expression.is_match_all(), True)
     assert_equal(request.plan.candidate_generator.kind, "exact_full_scan")
-    assert_equal(request.plan.stage2_operator.kind, "noop_topk")
+    assert_equal(request.plan.stage2_reference_operator.kind, "noop_topk")
+    assert_equal(request.plan.stage3_verifier.kind, "none")
     assert_equal(request.plan.faithfulness_policy.kind, "exact_stage1_required")
     assert_equal(request.plan.candidate_budget.final_k, 3)
     assert_equal(request.debug_mode, True)
@@ -416,7 +420,8 @@ def test_search_request_requires_query_text_for_hybrid_stage2() raises:
                 1,
                 2,
                 best_effort_faithfulness_policy(),
-                exact_late_interaction_clause_text_stage2_operator(),
+                exact_late_interaction_stage2_reference_operator(),
+                clause_text_stage3_verifier_operator(),
             ),
             False,
         )
@@ -440,7 +445,8 @@ def test_search_request_accepts_explicit_query_text_for_text_family_stage2() rai
     )
 
     assert_equal(request.query_text, "founding church artistic director")
-    assert_equal(request.plan.stage2_operator.kind, "clause_text")
+    assert_equal(request.plan.stage2_reference_operator.kind, "noop_topk")
+    assert_equal(request.plan.stage3_verifier.kind, "clause_text")
 
 
 def test_search_request_accepts_query_text_for_hybrid_stage2() raises:
@@ -456,16 +462,17 @@ def test_search_request_accepts_query_text_for_hybrid_stage2() raises:
             1,
             2,
             best_effort_faithfulness_policy(),
-            exact_late_interaction_clause_text_stage2_operator(),
+            exact_late_interaction_stage2_reference_operator(),
+            clause_text_stage3_verifier_operator(),
         ),
         False,
     )
 
     assert_equal(
-        request.plan.stage2_operator.kind,
-        "exact_late_interaction_clause_text",
+        request.plan.stage2_reference_operator.kind,
+        "exact_late_interaction",
     )
-    assert_equal(request.plan.stage2_operator.family, "hybrid")
+    assert_equal(request.plan.stage3_verifier.kind, "clause_text")
 
 
 def test_search_request_rejects_unverifiable_oracle_guardrail_without_debug() raises:
@@ -509,7 +516,9 @@ def test_search_request_accepts_exact_contract_without_debug_even_if_kind_is_cus
             exact_generator,
             CandidateBudget(2, 2),
             exact_stage1_required_faithfulness_policy(),
-            noop_topk_stage2_operator(),
+            exact_late_interaction_reference_scoring_semantics(),
+            noop_topk_stage2_reference_operator(),
+            none_stage3_verifier_operator(),
         ),
         False,
     )
@@ -613,7 +622,6 @@ def test_planned_search_contracts_keep_selection_explicit() raises:
 
     assert_equal(request.planning.goal, "balanced")
     assert_equal(request.query_text, "")
-    assert_equal(request.stage2_operator_kind, "")
     assert_equal(request.stage2_reference_kind, "")
     assert_equal(request.stage3_verifier_kind, "")
     assert_equal(
@@ -636,6 +644,7 @@ def test_planned_search_request_accepts_explicit_stage2_override() raises:
         SnapshotId("snapshot-0001"),
         make_query(),
         "founded in 1984 longest serving employee",
+        "",
         "clause_text",
         match_all_filter(),
         SearchPlanSelectionRequest(
@@ -646,9 +655,8 @@ def test_planned_search_request_accepts_explicit_stage2_override() raises:
     )
 
     assert_equal(request.query_text, "founded in 1984 longest serving employee")
-    assert_equal(request.stage2_operator_kind, "clause_text")
     assert_equal(request.stage2_reference_kind, "")
-    assert_equal(request.stage3_verifier_kind, "")
+    assert_equal(request.stage3_verifier_kind, "clause_text")
 
 
 def test_planned_search_request_accepts_explicit_hybrid_stage2_override() raises:
@@ -659,7 +667,8 @@ def test_planned_search_request_accepts_explicit_hybrid_stage2_override() raises
         SnapshotId("snapshot-0001"),
         make_query(),
         "founded in 1984 longest serving employee",
-        "exact_late_interaction_clause_text",
+        "exact_late_interaction",
+        "clause_text",
         match_all_filter(),
         SearchPlanSelectionRequest(
             2,
@@ -668,12 +677,8 @@ def test_planned_search_request_accepts_explicit_hybrid_stage2_override() raises
         ),
     )
 
-    assert_equal(
-        request.stage2_operator_kind,
-        "exact_late_interaction_clause_text",
-    )
-    assert_equal(request.stage2_reference_kind, "")
-    assert_equal(request.stage3_verifier_kind, "")
+    assert_equal(request.stage2_reference_kind, "exact_late_interaction")
+    assert_equal(request.stage3_verifier_kind, "clause_text")
 
 
 def test_planned_search_request_accepts_explicit_stage_components() raises:
@@ -694,7 +699,6 @@ def test_planned_search_request_accepts_explicit_stage_components() raises:
         ),
     )
 
-    assert_equal(request.stage2_operator_kind, "")
     assert_equal(request.stage2_reference_kind, "noop_topk")
     assert_equal(request.stage3_verifier_kind, "clause_text")
 
@@ -708,6 +712,7 @@ def test_planned_search_request_rejects_text_stage2_without_query_text() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "",
             "",
             "clause_text",
             match_all_filter(),
@@ -733,7 +738,8 @@ def test_planned_search_request_rejects_hybrid_stage2_without_query_text() raise
             SnapshotId("snapshot-0001"),
             make_query(),
             "",
-            "exact_late_interaction_clause_text",
+            "exact_late_interaction",
+            "clause_text",
             match_all_filter(),
             SearchPlanSelectionRequest(
                 2,

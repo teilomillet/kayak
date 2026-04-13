@@ -446,7 +446,10 @@ def test_debug_search_response_json_embeds_explain_payload() raises:
     assert_equal(json.find("\"faithfulness_policy_kind\":\"exact_stage1_required\"") != -1, True)
     assert_equal(json.find("\"faithfulness\":") != -1, True)
     assert_equal(json.find("\"candidate_stage\":") != -1, True)
-    assert_equal(json.find("\"stage2_kind\":\"noop_topk\"") != -1, True)
+    assert_equal(
+        json.find("\"stage2_reference_kind\":\"noop_topk\"") != -1,
+        True,
+    )
     assert_equal(json.find("\"stage2\":") != -1, True)
     assert_equal(json.find("\"stage_name\":\"noop_topk\"") != -1, True)
     assert_equal(json.find("\"tracks_graph_search\":true") != -1, True)
@@ -470,10 +473,6 @@ def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
     assert_equal(request_json.find("\"goal\":\"native_multivector\"") != -1, True)
     assert_equal(
         request_json.find("\"query_text\":\"find the clause evidence\"") != -1,
-        True,
-    )
-    assert_equal(
-        request_json.find("\"stage2_operator_kind\":\"\"") != -1,
         True,
     )
     assert_equal(

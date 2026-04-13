@@ -20,7 +20,7 @@ from .graph_search_counters import GraphSearchCounters
 from .score_histogram import build_score_histogram
 from .stage_profile import SearchStageProfile
 from .stage_artifact_materialization import StageArtifactMaterialization
-from .stage2_operator import STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION
+from .stage2_reference_operator import STAGE2_REFERENCE_REQUIRED_ARTIFACT_LATE_INTERACTION
 from .stage2_result import Stage2Result
 from .topk import insert_descending_collection_hit
 
@@ -164,7 +164,7 @@ def exact_rerank_candidates_for_plan[Backend: ExactScoringBackend](
         final_hits^,
         [
             StageArtifactMaterialization(
-                STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
+                STAGE2_REFERENCE_REQUIRED_ARTIFACT_LATE_INTERACTION,
                 materialized.segment_count,
                 materialized.index.document_count,
                 materialized.token_count,

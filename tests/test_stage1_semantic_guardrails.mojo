@@ -85,14 +85,11 @@ def assert_stage1_contract(
     )
 
 
-def search_plan_semantics_json(
-    read plan: SearchPlan, include_compatibility_fields: Bool = True
-) -> String:
+def search_plan_semantics_json(read plan: SearchPlan) -> String:
     var buffer = "{"
     append_search_plan_semantics_json_fields(
         buffer,
         plan,
-        include_compatibility_fields,
     )
     buffer += "}"
     return buffer
@@ -251,10 +248,7 @@ def test_registered_stage1_generators_keep_explicit_semantic_contracts() raises:
 
 
 def test_search_plan_semantics_json_keeps_stage1_fields_without_compatibility() raises:
-    var exact_json = search_plan_semantics_json(
-        exact_full_scan_search_plan(5, 5),
-        False,
-    )
+    var exact_json = search_plan_semantics_json(exact_full_scan_search_plan(5, 5))
     assert_equal(
         exact_json.find("\"candidate_generator_kind\":\"exact_full_scan\"") != -1,
         True,
@@ -296,7 +290,6 @@ def test_search_plan_semantics_json_keeps_stage1_fields_without_compatibility() 
             4,
             17,
         ),
-        False,
     )
     assert_equal(
         graph_json.find("\"candidate_generator_kind\":\"gem_graph\"") != -1,
