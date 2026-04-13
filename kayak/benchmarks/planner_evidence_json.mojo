@@ -9,8 +9,10 @@ from kayak.planning import (
     SearchPlanSelectionRequest,
     SearchPlannerRegistryEntry,
     SearchPlan,
+    SearchPlanSelectionDecision,
     Stage2ReferenceOperator,
     Stage3VerifierOperator,
+    append_json_search_plan_selection_decision,
     explain_collection_search,
     search_plan_for_candidate_generator_kind,
     search_planner_registry_entry,
@@ -58,7 +60,7 @@ struct PlannerEvidenceSummary(Copyable):
     var stage2_reference_materialized_artifact_families: List[String]
     var stage3_verifier_materialized_artifact_families: List[String]
     var selected_candidate_generator_status: String
-    var selection_reason: String
+    var selection_decision: SearchPlanSelectionDecision
     var available_candidate_generator_kinds: List[String]
     var effective_candidate_generator_order: List[String]
     var selected_is_undominated: Bool
@@ -73,7 +75,7 @@ struct PlannerEvidenceSummary(Copyable):
         read stage2_reference_materialized_artifact_families: List[String],
         read stage3_verifier_materialized_artifact_families: List[String],
         var selected_candidate_generator_status: String,
-        var selection_reason: String,
+        selection_decision: SearchPlanSelectionDecision,
         read available_candidate_generator_kinds: List[String],
         read effective_candidate_generator_order: List[String],
         selected_is_undominated: Bool,
@@ -92,7 +94,7 @@ struct PlannerEvidenceSummary(Copyable):
         self.selected_candidate_generator_status = (
             selected_candidate_generator_status^
         )
-        self.selection_reason = selection_reason^
+        self.selection_decision = selection_decision.copy()
         self.available_candidate_generator_kinds = (
             available_candidate_generator_kinds.copy()
         )
@@ -262,7 +264,7 @@ def build_planner_evidence_summary(
             representative_explain.stage3_verifier.materialized_artifacts
         ),
         selection.selected_candidate_generator_status.copy(),
-        selection.reason.copy(),
+        selection.decision,
         selection.available_candidate_generator_kinds,
         selection.effective_candidate_generator_order,
         dominating_candidate_generator_kind.byte_length() == 0,
@@ -318,7 +320,12 @@ def append_planner_evidence_summary_json(
     buffer += ","
     buffer += "\"selected_candidate_generator_status\":\""
     buffer += json_escape(summary.selected_candidate_generator_status) + "\","
-    buffer += "\"selection_reason\":\"" + json_escape(summary.selection_reason) + "\","
+    buffer += "\"selection_decision\":"
+    append_json_search_plan_selection_decision(
+        buffer,
+        summary.selection_decision,
+    )
+    buffer += ","
     buffer += "\"available_candidate_generator_kinds\":["
     for index in range(len(summary.available_candidate_generator_kinds)):
         if index > 0:

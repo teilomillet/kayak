@@ -30,3 +30,24 @@ def one_of_filter(field_name: String, read values: List[String]) raises -> Filte
     return and_filter(
         [FilterTerm(FilterField(field_name), "one_of", values)]
     )
+
+
+def conjoin_filter_expressions(
+    read left: FilterExpression, read right: FilterExpression
+) raises -> FilterExpression:
+    if left.is_match_all():
+        return right.copy()
+    if right.is_match_all():
+        return left.copy()
+
+    var clauses = List[FilterClause]()
+    for left_clause in left.clauses:
+        for right_clause in right.clauses:
+            var terms = List[FilterTerm]()
+            for term in left_clause.terms:
+                terms.append(term.copy())
+            for term in right_clause.terms:
+                terms.append(term.copy())
+            clauses.append(FilterClause(terms))
+
+    return FilterExpression(clauses)

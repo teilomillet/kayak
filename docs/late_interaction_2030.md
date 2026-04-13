@@ -295,8 +295,13 @@ What Kayak should do:
   paper-shaped engine result that would not survive product constraints
 - make native filter-aware candidate generation concrete instead of aspirational:
   exact `doc_id` and metadata filters should stay on proxy/centroid stage-1
-  paths whenever the required segment sidecars exist, while older snapshots
-  without those sidecars must still degrade cleanly to exact
+  paths whenever the required segment sidecars exist, while filtered new
+  snapshots should also carry internal collection/tenant/namespace scope on that
+  same sidecar path and older snapshots without scope postings should still
+  degrade cleanly to the pre-scope behavior
+- keep the remaining gap explicit:
+  unfiltered shared-pool `match_all` serving still needs a first-class scope
+  path instead of relying on tenant-rooted layout alone
 
 ## Additional Decision Rules
 

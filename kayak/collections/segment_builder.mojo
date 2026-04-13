@@ -134,6 +134,8 @@ def seal_single_segment_from_stored_documents(
         build_stored_document_filter_index(
             collection.collection_id,
             segment_id.copy(),
+            collection.tenant_id,
+            collection.namespace_id,
             metadata_maps,
         ),
     )

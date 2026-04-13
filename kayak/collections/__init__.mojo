@@ -49,6 +49,7 @@ from .document_filter_index import (
     DocumentFilterPosting,
     StoredDocumentFilterIndex,
     build_stored_document_filter_index,
+    stored_document_filter_index_has_logical_scope_postings,
 )
 from .document_filter_index_store import (
     load_stored_document_filter_index,

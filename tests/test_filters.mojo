@@ -1,17 +1,22 @@
 from std.testing import TestSuite, assert_equal
 
 from kayak.filters import (
+    FILTER_FIELD_INTERNAL_TENANT_ID,
     FilterClause,
     FilterExpression,
     FilterField,
     FilterTerm,
     and_filter,
+    conjoin_filter_expressions,
     filter_expression_matches_document,
+    filter_expression_matches_document_in_scope,
     filter_expression_is_exact_doc_id_filter,
     filter_expression_matches_doc_id,
     filter_expression_requires_document_metadata,
+    logical_scope_filter,
     match_all_filter,
     one_of_filter,
+    LogicalFilterScope,
 )
 from kayak import DocumentMetadataEntry, DocumentMetadataMap
 
@@ -88,6 +93,54 @@ def test_filter_expression_matches_document_metadata_exactly() raises:
             DocumentMetadataMap(),
         ),
         False,
+    )
+
+
+def test_conjoined_logical_scope_filters_match_only_the_scoped_documents() raises:
+    var scoped_expression = conjoin_filter_expressions(
+        one_of_filter("source", ["wire"]),
+        logical_scope_filter(
+            LogicalFilterScope("news", "tenant-a", "search")
+        ),
+    )
+    var metadata = DocumentMetadataMap(
+        [DocumentMetadataEntry("source", "wire")]
+    )
+
+    assert_equal(
+        filter_expression_requires_document_metadata(scoped_expression),
+        True,
+    )
+    assert_equal(
+        filter_expression_matches_document_in_scope(
+            scoped_expression,
+            LogicalFilterScope("news", "tenant-a", "search"),
+            "doc-a",
+            metadata,
+        ),
+        True,
+    )
+    assert_equal(
+        filter_expression_matches_document_in_scope(
+            scoped_expression,
+            LogicalFilterScope("news", "tenant-b", "search"),
+            "doc-a",
+            metadata,
+        ),
+        False,
+    )
+    assert_equal(
+        filter_expression_matches_document_in_scope(
+            scoped_expression,
+            LogicalFilterScope("news", "tenant-a", "archive"),
+            "doc-a",
+            metadata,
+        ),
+        False,
+    )
+    assert_equal(
+        scoped_expression.clauses[0].terms[2].field.name,
+        FILTER_FIELD_INTERNAL_TENANT_ID,
     )
 
 

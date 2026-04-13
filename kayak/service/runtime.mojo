@@ -508,7 +508,7 @@ def selection_for_planned_request(
             selection.plan,
             request.stage_override,
         ),
-        selection.reason.copy(),
+        selection.decision,
     )
 
 

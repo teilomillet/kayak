@@ -1,8 +1,15 @@
 from std.testing import TestSuite, assert_equal
 
 from kayak import (
+    FILTER_FIELD_INTERNAL_TENANT_ID,
     SEARCH_PLANNING_GOAL_BALANCED,
     SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
+    SEARCH_PLAN_ORDER_POLICY_CONSTRAINT_OVERRIDE,
+    SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+    SEARCH_PLAN_ORDER_POLICY_PREFERRED_OVERRIDE,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_ORACLE_REQUIRES_DEBUG,
+    SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
     SnapshotSearchArtifactAvailability,
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
@@ -76,8 +83,16 @@ def test_planner_uses_explicit_preferred_order_when_supported() raises:
 
     assert_equal(selection.plan.candidate_generator.kind, "centroid_postings_head_auto")
     assert_equal(
-        selection.reason.find("preferred_candidate_generator_kinds") != -1,
-        True,
+        selection.decision.order_policy_kind,
+        SEARCH_PLAN_ORDER_POLICY_PREFERRED_OVERRIDE,
+    )
+    assert_equal(
+        selection.decision.constraint_kind,
+        SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+    )
+    assert_equal(
+        selection.decision.outcome_kind,
+        SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
     )
 
 
@@ -120,14 +135,24 @@ def test_planner_uses_exact_for_unavailable_structured_filters_and_oracle_guardr
     assert_equal(structured_filter_selection.plan.candidate_budget.candidate_k, 20)
     assert_equal(oracle_selection.plan.candidate_budget.candidate_k, 20)
     assert_equal(
-        structured_filter_selection.reason.find(
-            "default candidate-generator order"
-        ) != -1,
-        True,
+        structured_filter_selection.decision.order_policy_kind,
+        SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
     )
     assert_equal(
-        oracle_selection.reason.find("oracle_full_recall_required") != -1,
-        True,
+        structured_filter_selection.decision.constraint_kind,
+        SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+    )
+    assert_equal(
+        structured_filter_selection.decision.outcome_kind,
+        SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
+    )
+    assert_equal(
+        oracle_selection.decision.order_policy_kind,
+        SEARCH_PLAN_ORDER_POLICY_CONSTRAINT_OVERRIDE,
+    )
+    assert_equal(
+        oracle_selection.decision.constraint_kind,
+        SEARCH_PLAN_SELECTION_CONSTRAINT_ORACLE_REQUIRES_DEBUG,
     )
 
 
@@ -152,8 +177,12 @@ def test_planner_keeps_native_stage1_for_exact_doc_id_filters() raises:
         "centroid_postings_imputed_flat",
     )
     assert_equal(
-        selection.reason.find("default candidate-generator order") != -1,
-        True,
+        selection.decision.order_policy_kind,
+        SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+    )
+    assert_equal(
+        selection.decision.constraint_kind,
+        SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
     )
 
 
@@ -217,6 +246,23 @@ def test_search_plan_for_candidate_generator_kind_uses_default_contracts() raise
     assert_equal(gem_plan.stage2_reference_operator.kind, "exact_late_interaction")
     assert_equal(gem_plan.stage3_verifier.kind, "none")
     assert_equal(gem_plan.faithfulness_policy.kind, "best_effort")
+
+
+def test_search_plan_selection_request_rejects_reserved_internal_scope_filters() raises:
+    var raised = False
+
+    try:
+        _ = SearchPlanSelectionRequest(
+            5,
+            20,
+            best_effort_faithfulness_policy(),
+            one_of_filter(FILTER_FIELD_INTERNAL_TENANT_ID, ["tenant-a"]),
+            SEARCH_PLANNING_GOAL_BALANCED,
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def main() raises:

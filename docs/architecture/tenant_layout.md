@@ -22,10 +22,17 @@ These statements are checked against the current repository.
 3. The current physical model is one tenant-scoped collection root at a time.
 4. Snapshot export/import now preserves tenant and namespace identity inside the
    exported bundle.
-5. The repository still does not have:
-   - metadata sidecars for arbitrary document fields
-   - filter-aware candidate generation
+5. The repository now has:
+   - persisted document metadata sidecars for arbitrary document fields
+   - native filter-aware candidate generation for exact `doc_id` and metadata
+     filters
+   - internal logical-scope postings in `document_filter_index` for new
+     segments, so filtered search can carry collection, tenant, and namespace
+     scope without exposing those fields publicly
+6. The repository still does not have:
    - shared physical segment pools across multiple tenants
+   - explicit `match_all` shared-pool scope pushdown independent of the current
+     tenant-rooted collection layout
 
 ## Source-Backed Inference
 
@@ -108,20 +115,22 @@ What it enables now:
 - low-selectivity and high-selectivity benchmark fixtures
 - future candidate-generation work that can reason about selectivity as an
   engine concern
+- filtered hosted search can now attach internal collection, tenant, and
+  namespace scope to the candidate-generation filter path when a segment carries
+  scope-aware `document_filter_index` postings
 
 What it does not yet enable:
-- actual metadata storage
-- actual metadata evaluation during search
-- shared-index serving without further work
+- unfiltered shared-index serving without further work
+- a public caller-visible scope-filter vocabulary
 
 ## Immediate Follow-On Work
 
 The next tenant-layout work should be:
 
-1. add persisted metadata sidecars for segment-local document fields
-2. wire `FilterExpression` into search planning and candidate-generation
-   contracts
-3. benchmark low-selectivity versus high-selectivity workloads explicitly
-4. only then prototype shared physical segment pools
+1. benchmark low-selectivity versus high-selectivity workloads explicitly on the
+   scope-aware filter sidecar path
+2. extend logical-scope pushdown from filtered requests to explicit shared-pool
+   `match_all` serving
+3. only then prototype shared physical segment pools
 
 That order keeps isolation sound while opening a path to higher density later.

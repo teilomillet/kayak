@@ -6,6 +6,7 @@ from .explain import CollectionSearchExplain
 from .faithfulness import FaithfulnessAssessment
 from .graph_search_counters import GraphSearchCounters
 from .score_histogram import ScoreHistogram
+from .selection_decision import SearchPlanSelectionDecision
 from .stage_artifact_materialization import StageArtifactMaterialization
 from .stage_profile import SearchStageProfile
 
@@ -193,6 +194,22 @@ def append_json_faithfulness_assessment(
     else:
         buffer += "false,"
     buffer += "\"message\":\"" + json_escape(assessment.message) + "\""
+    buffer += "}"
+
+
+def append_json_search_plan_selection_decision(
+    mut buffer: String,
+    read decision: SearchPlanSelectionDecision,
+):
+    buffer += "{"
+    buffer += "\"order_policy_kind\":\""
+    buffer += json_escape(decision.order_policy_kind) + "\","
+    buffer += "\"constraint_kind\":\""
+    buffer += json_escape(decision.constraint_kind) + "\","
+    buffer += "\"outcome_kind\":\""
+    buffer += json_escape(decision.outcome_kind) + "\","
+    buffer += "\"explanation\":\""
+    buffer += json_escape(decision.explanation) + "\""
     buffer += "}"
 
 

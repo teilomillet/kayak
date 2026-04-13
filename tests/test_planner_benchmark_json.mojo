@@ -24,6 +24,10 @@ from kayak.collections import (
 )
 from kayak.planning import (
     SEARCH_PLANNING_GOAL_BALANCED,
+    SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+    SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
+    SearchPlanSelectionDecision,
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
     clause_text_stage3_verifier_operator,
@@ -105,7 +109,12 @@ def test_planner_benchmark_summary_json_contains_selection_fields() raises:
                 best_effort_faithfulness_policy(),
             ),
             "promoted",
-            "planner used the default candidate-generator order for goal balanced",
+            SearchPlanSelectionDecision(
+                SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+                SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+                SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
+                "planner used the default candidate-generator order for goal balanced",
+            ),
             ["exact_full_scan", "document_proxy"],
             ["document_proxy", "exact_full_scan"],
             FaithfulnessFrontierSummary(
@@ -167,6 +176,14 @@ def test_planner_benchmark_summary_json_contains_selection_fields() raises:
         True,
     )
     assert_equal(
+        json.find("\"selection_decision\":") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"order_policy_kind\":\"goal_default\"") != -1,
+        True,
+    )
+    assert_equal(
         json.find("\"effective_candidate_generator_order\":[\"document_proxy\",\"exact_full_scan\"]")
             != -1,
         True,
@@ -221,6 +238,12 @@ def test_build_planner_benchmark_summary_reports_selected_generator() raises:
     assert_equal(summary.plan.stage2_reference_operator.kind, "exact_late_interaction")
     assert_equal(summary.plan.candidate_generator.kind, "centroid_postings_imputed_flat")
     assert_equal(summary.selected_candidate_generator_status, "promoted")
+    assert_equal(summary.selection_decision.order_policy_kind, "goal_default")
+    assert_equal(summary.selection_decision.constraint_kind, "none")
+    assert_equal(
+        summary.selection_decision.outcome_kind,
+        "selected_available_generator",
+    )
     assert_equal(summary.measured.mean_candidate_recall_at_final_k >= 0.0, True)
     assert_equal(summary.measured.stage1_byte_size > 0, True)
 

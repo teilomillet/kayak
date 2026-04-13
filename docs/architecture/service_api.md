@@ -170,6 +170,11 @@ Current verified behavior:
 - the planner chooses a concrete `SearchPlan`
 - the chosen plan is returned explicitly in the selection payload and again in
   the executed search/explain response
+- planner selection now also carries an explicit typed decision object with:
+  - `order_policy_kind`
+  - `constraint_kind`
+  - `outcome_kind`
+  - `explanation`
 - the `PlannedSearchRequest` wire shape can carry:
   - `query_text` for text-family stage-3 verifier overrides
   - `stage2_reference_kind` to override only the stage-2 reference operator
@@ -181,6 +186,10 @@ Current verified behavior:
   stage-2 override can still rerank the intended exact candidate set
 
 Current guardrails:
+- user-facing requests must not reference reserved internal logical-scope
+  filter fields; those are engine-owned and are injected only inside
+  collection-aware execution when a segment carries a `document_filter_index`
+  sidecar
 - exact `doc_id` filters stay native for `document_proxy` and centroid stage 1
 - metadata filters stay native for `document_proxy` and centroid stage 1 when
   every segment has a `document_filter_index` sidecar; older snapshots without
@@ -192,6 +201,9 @@ Current guardrails:
 Current default-order claim is intentionally narrow:
 - the planner exposes goal-shaped default orders
 - callers can override that with explicit preferred generator kinds
+- exact selection is now reported as an explicit outcome rather than hidden in
+  a free-form reason string, so future stage-1 families can reuse the same
+  contract without inheriting WARP- or GEM-specific wording
 - the default order does **not** silently promote `gem_graph`,
   `centroid_postings_head_auto`, or `centroid_postings_blockmax`
   as universal winners, because the current local traces do not justify that
@@ -334,7 +346,8 @@ The next service-adjacent work should be:
 3. reuse collection storage reports and snapshot-bundle export/import in the
    service layer
 4. add an auth and tenant-isolation story once the core request grammar settles
-5. wire filter execution into candidate generation and exact-stage pruning
+5. extend the new filtered logical-scope pushdown into explicit shared-layout
+   `match_all` serving and selectivity reporting
 
 That sequence preserves the current engine contracts and keeps the transport
 thin.

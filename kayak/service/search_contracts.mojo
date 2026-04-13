@@ -5,7 +5,11 @@ from std.collections import List
 from kayak.collections import CollectionId, NamespaceId, SnapshotId, TenantId
 from kayak.collections.validation import require_positive_int
 from kayak.contracts import EncodedQuery
-from kayak.filters import FilterExpression, match_all_filter
+from kayak.filters import (
+    FilterExpression,
+    match_all_filter,
+    require_user_visible_filter_expression,
+)
 from kayak.planning import (
     CollectionHit,
     CollectionSearchExplain,
@@ -49,6 +53,10 @@ struct SearchRequest(Copyable):
         self.snapshot_id = snapshot_id.copy()
         self.query = query.copy()
         self.query_text = query_text^
+        require_user_visible_filter_expression(
+            filter_expression,
+            "search request filter_expression",
+        )
         self.filter_expression = filter_expression.copy()
         self.plan = plan.copy()
         self.debug_mode = debug_mode
@@ -228,6 +236,10 @@ struct PlannedSearchRequest(Copyable):
             self.query_text,
             stage2_reference_kind^,
             stage3_verifier_kind^,
+        )
+        require_user_visible_filter_expression(
+            filter_expression,
+            "planned search request filter_expression",
         )
         self.filter_expression = filter_expression.copy()
         self.planning = planning.copy()

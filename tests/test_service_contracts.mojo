@@ -15,6 +15,7 @@ from kayak import (
     CreateCollectionRequest,
     DebugSearchResponse,
     DeleteDocumentsRequest,
+    DocumentMetadataEntry,
     EncodedDocument,
     EncodedQuery,
     ExecuteReclaimRequest,
@@ -30,6 +31,7 @@ from kayak import (
     ScoreScalar,
     SearchRequest,
     SearchPlanSelection,
+    SearchPlanSelectionDecision,
     SearchPlanSelectionRequest,
     SearchArtifactBuildPolicy,
     document_proxy_build_spec,
@@ -37,6 +39,10 @@ from kayak import (
     ScoreHistogram,
     SearchStageProfile,
     SegmentId,
+    FILTER_FIELD_INTERNAL_TENANT_ID,
+    SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+    SEARCH_PLAN_SELECTION_OUTCOME_EXACT_FALLBACK_UNAVAILABLE,
     SearchPlan,
     SnapshotId,
     SnapshotRetentionDecision,
@@ -59,7 +65,7 @@ from kayak import (
     noop_topk_stage2_reference_operator,
     oracle_full_recall_required_faithfulness_policy,
 )
-from kayak.filters import match_all_filter
+from kayak.filters import match_all_filter, one_of_filter
 from kayak.planning import CandidateSet, exact_full_scan_search_plan
 from kayak.planning import exact_full_scan_clause_text_search_plan
 from kayak.service import (
@@ -597,7 +603,12 @@ def test_planned_search_contracts_keep_selection_explicit() raises:
         ["exact_full_scan", "document_proxy"],
         ["document_proxy", "exact_full_scan"],
         exact_full_scan_search_plan(2, 2),
-        "planner fell back to exact_full_scan for verification",
+        SearchPlanSelectionDecision(
+            SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+            SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+            SEARCH_PLAN_SELECTION_OUTCOME_EXACT_FALLBACK_UNAVAILABLE,
+            "planner fell back to exact_full_scan for verification",
+        ),
     )
     var hits = [CollectionHit("segment-0001", "doc-a", ScoreScalar(1.0))]
     var planned_search = PlannedSearchResponse(
@@ -820,6 +831,70 @@ def test_snapshot_and_status_contracts_hold_service_metadata() raises:
     assert_equal(metrics.vector_count, 80)
     assert_equal(metrics.published_snapshot_count, 0)
     assert_equal(metrics.pending_draft_mutation_count, 0)
+
+
+def test_search_requests_reject_reserved_internal_scope_filters() raises:
+    var raised_search = False
+    var raised_planned = False
+
+    try:
+        _ = SearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            one_of_filter(FILTER_FIELD_INTERNAL_TENANT_ID, ["tenant-a"]),
+            exact_full_scan_search_plan(1, 1),
+            False,
+        )
+    except:
+        raised_search = True
+
+    try:
+        _ = PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            one_of_filter(FILTER_FIELD_INTERNAL_TENANT_ID, ["tenant-a"]),
+            SearchPlanSelectionRequest(
+                1,
+                1,
+                best_effort_faithfulness_policy(),
+                match_all_filter(),
+            ),
+        )
+    except:
+        raised_planned = True
+
+    assert_equal(raised_search, True)
+    assert_equal(raised_planned, True)
+
+
+def test_document_metadata_rejects_reserved_internal_scope_keys() raises:
+    var raised_entry = False
+    var raised_update = False
+
+    try:
+        _ = DocumentMetadataEntry(
+            FILTER_FIELD_INTERNAL_TENANT_ID,
+            "tenant-a",
+        )
+    except:
+        raised_entry = True
+
+    try:
+        _ = DocumentMetadataUpdate(
+            FILTER_FIELD_INTERNAL_TENANT_ID,
+            "tenant-a",
+        )
+    except:
+        raised_update = True
+
+    assert_equal(raised_entry, True)
+    assert_equal(raised_update, True)
 
 
 def main() raises:

@@ -26,6 +26,10 @@ from kayak.collections import (
 from kayak.planning import (
     SEARCH_PLANNING_GOAL_BALANCED,
     SEARCH_PLANNING_GOAL_EXACT_ONLY,
+    SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+    SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
+    SearchPlanSelectionDecision,
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
     clause_text_stage3_verifier_operator,
@@ -109,7 +113,12 @@ def test_planner_evidence_summary_json_contains_candidates_and_advisory() raises
             ["late_interaction"],
             [],
             "promoted",
-            "planner used the default candidate-generator order for goal balanced",
+            SearchPlanSelectionDecision(
+                SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+                SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+                SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
+                "planner used the default candidate-generator order for goal balanced",
+            ),
             ["exact_full_scan", "document_proxy"],
             ["document_proxy", "exact_full_scan"],
             True,
@@ -157,6 +166,14 @@ def test_planner_evidence_summary_json_contains_candidates_and_advisory() raises
     assert_equal(json.find("\"selected_is_undominated\":true") != -1, True)
     assert_equal(json.find("\"candidates\":[") != -1, True)
     assert_equal(
+        json.find("\"selection_decision\":") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"order_policy_kind\":\"goal_default\"") != -1,
+        True,
+    )
+    assert_equal(
         json.find("\"candidate_generator_family\":\"proxy\"") != -1,
         True,
     )
@@ -179,7 +196,12 @@ def test_planner_evidence_summary_json_can_compare_centroid_and_gem_semantics() 
             ["late_interaction"],
             [],
             "promoted",
-            "planner used the default candidate-generator order for goal balanced",
+            SearchPlanSelectionDecision(
+                SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+                SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+                SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
+                "planner used the default candidate-generator order for goal balanced",
+            ),
             ["centroid_postings_imputed_flat", "gem_graph"],
             ["centroid_postings_imputed_flat", "gem_graph"],
             True,
@@ -274,6 +296,12 @@ def test_build_planner_evidence_summary_reports_selected_candidate_and_stage2() 
     assert_equal(summary.plan.stage3_verifier.kind, "none")
     assert_equal(len(summary.stage2_reference_materialized_artifact_families), 1)
     assert_equal(summary.stage2_reference_materialized_artifact_families[0], "late_interaction")
+    assert_equal(summary.selection_decision.order_policy_kind, "goal_default")
+    assert_equal(summary.selection_decision.constraint_kind, "none")
+    assert_equal(
+        summary.selection_decision.outcome_kind,
+        "selected_available_generator",
+    )
     assert_equal(
         summary.plan.candidate_generator.kind,
         "centroid_postings_imputed_flat",

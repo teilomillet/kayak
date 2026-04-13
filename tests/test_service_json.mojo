@@ -21,6 +21,7 @@ from kayak import (
     PlannedDebugSearchResponse,
     PlannedSearchRequest,
     PlannedSearchResponse,
+    SearchPlanSelectionDecision,
     SearchPlanSelection,
     SearchPlanSelectionRequest,
     document_proxy_build_spec,
@@ -33,6 +34,9 @@ from kayak import (
     SearchResponse,
     SearchArtifactBuildPolicy,
     SearchStageProfile,
+    SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+    SEARCH_PLAN_SELECTION_OUTCOME_EXACT_FALLBACK_UNAVAILABLE,
     SegmentId,
     service_metrics_snapshot_json,
     SnapshotId,
@@ -186,7 +190,12 @@ def make_planned_search_response() raises -> PlannedSearchResponse:
             ["exact_full_scan", "document_proxy"],
             ["document_proxy", "exact_full_scan"],
             plan,
-            "planner fell back to exact full scan for verification",
+            SearchPlanSelectionDecision(
+                SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+                SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+                SEARCH_PLAN_SELECTION_OUTCOME_EXACT_FALLBACK_UNAVAILABLE,
+                "planner fell back to exact full scan for verification",
+            ),
         ),
         SearchResponse(
             CollectionId("news"),
@@ -499,6 +508,15 @@ def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
     assert_equal(
         response_json.find("\"effective_candidate_generator_order\":[\"document_proxy\",\"exact_full_scan\"]")
             != -1,
+        True,
+    )
+    assert_equal(response_json.find("\"decision\":") != -1, True)
+    assert_equal(
+        response_json.find("\"order_policy_kind\":\"goal_default\"") != -1,
+        True,
+    )
+    assert_equal(
+        response_json.find("\"outcome_kind\":\"exact_fallback_unavailable\"") != -1,
         True,
     )
     assert_equal(debug_json.find("\"selection\":") != -1, True)

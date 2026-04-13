@@ -6,9 +6,11 @@ from kayak.collections import (
 )
 from kayak.planning import (
     SearchPlan,
+    SearchPlanSelectionDecision,
     SearchPlanSelectionRequest,
     Stage2ReferenceOperator,
     Stage3VerifierOperator,
+    append_json_search_plan_selection_decision,
     select_search_plan_for_availability,
 )
 from kayak.runtime import ExactCpuBackend
@@ -27,7 +29,7 @@ struct PlannerBenchmarkSummary(Copyable):
     var planning_goal: String
     var plan: SearchPlan
     var selected_candidate_generator_status: String
-    var selection_reason: String
+    var selection_decision: SearchPlanSelectionDecision
     var available_candidate_generator_kinds: List[String]
     var effective_candidate_generator_order: List[String]
     var measured: FaithfulnessFrontierSummary
@@ -37,7 +39,7 @@ struct PlannerBenchmarkSummary(Copyable):
         var planning_goal: String,
         plan: SearchPlan,
         var selected_candidate_generator_status: String,
-        var selection_reason: String,
+        selection_decision: SearchPlanSelectionDecision,
         read available_candidate_generator_kinds: List[String],
         read effective_candidate_generator_order: List[String],
         measured: FaithfulnessFrontierSummary,
@@ -47,7 +49,7 @@ struct PlannerBenchmarkSummary(Copyable):
         self.selected_candidate_generator_status = (
             selected_candidate_generator_status^
         )
-        self.selection_reason = selection_reason^
+        self.selection_decision = selection_decision.copy()
         self.available_candidate_generator_kinds = (
             available_candidate_generator_kinds.copy()
         )
@@ -82,7 +84,7 @@ def build_planner_benchmark_summary(
         request.goal.copy(),
         plan,
         selection.selected_candidate_generator_status.copy(),
-        selection.reason.copy(),
+        selection.decision,
         selection.available_candidate_generator_kinds,
         selection.effective_candidate_generator_order,
         build_faithfulness_frontier_summary_for_plan(
@@ -108,7 +110,12 @@ def append_planner_benchmark_summary_json(
     buffer += json_escape(summary.plan.candidate_generator.kind) + "\","
     buffer += "\"selected_candidate_generator_status\":\""
     buffer += json_escape(summary.selected_candidate_generator_status) + "\","
-    buffer += "\"selection_reason\":\"" + json_escape(summary.selection_reason) + "\","
+    buffer += "\"selection_decision\":"
+    append_json_search_plan_selection_decision(
+        buffer,
+        summary.selection_decision,
+    )
+    buffer += ","
     buffer += "\"available_candidate_generator_kinds\":["
     for index in range(len(summary.available_candidate_generator_kinds)):
         if index > 0:

@@ -22,6 +22,7 @@ from .filter_allowlist import (
     document_filter_allowlist_artifact_byte_size_for_segment,
     document_filter_allowlist_for_segment,
 )
+from .filter_scope import effective_filter_expression_for_segment
 from .search_plan import SearchPlan
 from .topk import insert_descending_collection_hit
 
@@ -62,14 +63,19 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
         var allowed_flags = List[Int]()
         var matching_document_count = stored_proxy.index.document_count
         if not filter_expression.is_match_all():
-            byte_size += document_filter_allowlist_artifact_byte_size_for_segment(
+            var effective_filter = effective_filter_expression_for_segment(
+                snapshot.collection,
                 segment,
                 filter_expression,
+            )
+            byte_size += document_filter_allowlist_artifact_byte_size_for_segment(
+                segment,
+                effective_filter,
             )
 
             var allowlist = document_filter_allowlist_for_segment(
                 segment,
-                filter_expression,
+                effective_filter,
             )
             matching_document_count = allowlist.matching_document_count
             allowed_flags = allowlist.flags.copy()

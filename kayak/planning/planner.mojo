@@ -7,6 +7,7 @@ from kayak.filters import (
     filter_expression_is_exact_doc_id_filter,
     filter_expression_requires_document_metadata,
     match_all_filter,
+    require_user_visible_filter_expression,
 )
 from kayak.index import (
     DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
@@ -29,6 +30,18 @@ from .candidate_budget import CandidateBudget
 from .faithfulness import FaithfulnessPolicy
 from .planner_plan_factory import planner_default_search_plan_for_kind
 from .search_plan import SearchPlan, exact_full_scan_search_plan
+from .selection_decision import (
+    SEARCH_PLAN_ORDER_POLICY_CONSTRAINT_OVERRIDE,
+    SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+    SEARCH_PLAN_ORDER_POLICY_PREFERRED_OVERRIDE,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_EXACT_STAGE1_REQUIRED,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_ORACLE_REQUIRES_DEBUG,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_UNSUPPORTED_FILTER,
+    SEARCH_PLAN_SELECTION_OUTCOME_EXACT_FALLBACK_UNAVAILABLE,
+    SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
+    SearchPlanSelectionDecision,
+)
 from .stage1_capabilities import (
     stage1_capabilities_for_candidate_generator_kind,
     stage1_generator_supports_filter_expression,
@@ -150,6 +163,10 @@ struct SearchPlanSelectionRequest(Copyable):
         self.goal = require_search_planning_goal(goal)
         self.candidate_budget = CandidateBudget(final_k, candidate_k)
         self.faithfulness_policy = faithfulness_policy.copy()
+        require_user_visible_filter_expression(
+            filter_expression,
+            "search planning filter_expression",
+        )
         self.filter_expression = filter_expression.copy()
         self.preferred_candidate_generator_kinds = List[String]()
         for candidate_generator_kind in preferred_candidate_generator_kinds:
@@ -170,7 +187,7 @@ struct SearchPlanSelection(Copyable):
     var available_candidate_generator_kinds: List[String]
     var effective_candidate_generator_order: List[String]
     var plan: SearchPlan
-    var reason: String
+    var decision: SearchPlanSelectionDecision
 
     def __init__(
         out self,
@@ -179,7 +196,7 @@ struct SearchPlanSelection(Copyable):
         read available_candidate_generator_kinds: List[String],
         read effective_candidate_generator_order: List[String],
         plan: SearchPlan,
-        var reason: String,
+        decision: SearchPlanSelectionDecision,
     ) raises:
         self.goal = require_search_planning_goal(goal)
         self.selected_candidate_generator_status = require_non_empty_string(
@@ -199,18 +216,50 @@ struct SearchPlanSelection(Copyable):
                 candidate_generator_kind,
             )
         self.plan = plan.copy()
-        self.reason = reason^
+        self.decision = decision.copy()
 
 
 struct CandidateGeneratorOrderDecision(Copyable):
     var order: List[String]
-    var reason: String
+    var order_policy_kind: String
+    var constraint_kind: String
+    var explanation: String
 
-    def __init__(out self, read order: List[String], var reason: String) raises:
+    def __init__(
+        out self,
+        read order: List[String],
+        var order_policy_kind: String,
+        var constraint_kind: String,
+        var explanation: String,
+    ) raises:
         self.order = List[String]()
         for candidate_generator_kind in order:
             append_unique_generator_kind(self.order, candidate_generator_kind)
-        self.reason = reason^
+        self.order_policy_kind = require_non_empty_string(
+            order_policy_kind,
+            "candidate_generator_order_decision.order_policy_kind",
+        )
+        self.constraint_kind = require_non_empty_string(
+            constraint_kind,
+            "candidate_generator_order_decision.constraint_kind",
+        )
+        self.explanation = require_non_empty_string(
+            explanation,
+            "candidate_generator_order_decision.explanation",
+        )
+
+
+def search_plan_selection_decision_for_order_decision(
+    read order_decision: CandidateGeneratorOrderDecision,
+    outcome_kind: String,
+    explanation: String,
+) raises -> SearchPlanSelectionDecision:
+    return SearchPlanSelectionDecision(
+        order_decision.order_policy_kind.copy(),
+        order_decision.constraint_kind.copy(),
+        outcome_kind.copy(),
+        explanation.copy(),
+    )
 
 
 def selected_plan_for_kind(
@@ -247,12 +296,16 @@ def effective_candidate_generator_order(
     ):
         return CandidateGeneratorOrderDecision(
             ["exact_full_scan"],
+            SEARCH_PLAN_ORDER_POLICY_CONSTRAINT_OVERRIDE,
+            SEARCH_PLAN_SELECTION_CONSTRAINT_UNSUPPORTED_FILTER,
             "unsupported non-match_all filters currently require exact stage-1 candidate generation",
         )
 
     if request.faithfulness_policy.kind == "exact_stage1_required":
         return CandidateGeneratorOrderDecision(
             ["exact_full_scan"],
+            SEARCH_PLAN_ORDER_POLICY_CONSTRAINT_OVERRIDE,
+            SEARCH_PLAN_SELECTION_CONSTRAINT_EXACT_STAGE1_REQUIRED,
             "exact_stage1_required faithfulness policy requires exact stage-1 candidate generation",
         )
 
@@ -262,6 +315,8 @@ def effective_candidate_generator_order(
     ):
         return CandidateGeneratorOrderDecision(
             ["exact_full_scan"],
+            SEARCH_PLAN_ORDER_POLICY_CONSTRAINT_OVERRIDE,
+            SEARCH_PLAN_SELECTION_CONSTRAINT_ORACLE_REQUIRES_DEBUG,
             "oracle_full_recall_required without debug_mode falls back to exact stage-1 candidate generation",
         )
 
@@ -273,11 +328,15 @@ def effective_candidate_generator_order(
         append_unique_generator_kind(preferred, "exact_full_scan")
         return CandidateGeneratorOrderDecision(
             preferred,
+            SEARCH_PLAN_ORDER_POLICY_PREFERRED_OVERRIDE,
+            SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
             "planner used explicit preferred_candidate_generator_kinds order",
         )
 
     return CandidateGeneratorOrderDecision(
         search_planning_goal_kinds(request.goal),
+        SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+        SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
         "planner used the default candidate-generator order for goal "
         + request.goal,
     )
@@ -312,7 +371,11 @@ def select_search_plan_for_availability(
             available_kinds,
             decision.order,
             selected_plan_for_kind(candidate_generator_kind, request),
-            decision.reason,
+            search_plan_selection_decision_for_order_decision(
+                decision,
+                SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
+                decision.explanation,
+            ),
         )
 
     return SearchPlanSelection(
@@ -324,6 +387,10 @@ def select_search_plan_for_availability(
             request.candidate_budget.final_k,
             request.candidate_budget.candidate_k,
         ),
-        decision.reason
-        + "; no requested non-exact stage-1 candidate generator was available, so the planner fell back to exact_full_scan",
+        search_plan_selection_decision_for_order_decision(
+            decision,
+            SEARCH_PLAN_SELECTION_OUTCOME_EXACT_FALLBACK_UNAVAILABLE,
+            decision.explanation
+            + "; no requested non-exact stage-1 candidate generator was available, so the planner fell back to exact_full_scan",
+        ),
     )

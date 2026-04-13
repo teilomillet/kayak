@@ -1,5 +1,9 @@
 from std.collections import List
 
+from kayak.filters.logical_scope import (
+    document_metadata_key_is_reserved_for_logical_scope,
+)
+
 from .ids import CollectionId, SegmentId
 from .validation import require_non_empty_string
 
@@ -21,12 +25,26 @@ def require_inline_document_metadata_text(
     return normalized^
 
 
+def require_user_document_metadata_key(
+    key: String, field_name: String
+) raises -> String:
+    var normalized = require_inline_document_metadata_text(key, field_name)
+    if document_metadata_key_is_reserved_for_logical_scope(normalized):
+        raise Error(
+            field_name
+            + " must not use reserved internal logical-scope key: "
+            + normalized
+        )
+
+    return normalized^
+
+
 struct DocumentMetadataEntry(Copyable):
     var key: String
     var value: String
 
     def __init__(out self, key: String, value: String) raises:
-        self.key = require_inline_document_metadata_text(
+        self.key = require_user_document_metadata_key(
             key, "document metadata key"
         )
         self.value = require_inline_document_metadata_text(
@@ -39,7 +57,7 @@ struct DocumentMetadataUpdate(Copyable):
     var value: String
 
     def __init__(out self, key: String, value: String) raises:
-        self.key = require_inline_document_metadata_text(
+        self.key = require_user_document_metadata_key(
             key, "document metadata update key"
         )
         self.value = require_inline_document_metadata_text(

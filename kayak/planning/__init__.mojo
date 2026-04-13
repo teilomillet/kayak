@@ -94,6 +94,11 @@ from .faithfulness import (
     oracle_full_recall_required_faithfulness_policy,
     stage1_generator_is_exact,
 )
+from .filter_scope import (
+    effective_filter_expression_for_segment,
+    logical_filter_scope_for_collection,
+    segment_supports_scoped_filter_pushdown,
+)
 from .stage2_reference_operator import (
     STAGE2_REFERENCE_OPERATOR_FAMILY_IDENTITY,
     STAGE2_REFERENCE_OPERATOR_FAMILY_LATE_INTERACTION,
@@ -113,6 +118,7 @@ from .stage3_verifier_operator import (
 from .stage_artifact_materialization import StageArtifactMaterialization
 from .stage2_result import Stage2Result
 from .json import collection_search_explain_json
+from .json import append_json_search_plan_selection_decision
 from .score_histogram import (
     ScoreHistogram,
     build_score_histogram,
@@ -174,6 +180,18 @@ from .planner import (
     search_plan_for_candidate_generator_kind,
     search_planning_goal_kinds,
     select_search_plan_for_availability,
+)
+from .selection_decision import (
+    SEARCH_PLAN_ORDER_POLICY_CONSTRAINT_OVERRIDE,
+    SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+    SEARCH_PLAN_ORDER_POLICY_PREFERRED_OVERRIDE,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_EXACT_STAGE1_REQUIRED,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_NONE,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_ORACLE_REQUIRES_DEBUG,
+    SEARCH_PLAN_SELECTION_CONSTRAINT_UNSUPPORTED_FILTER,
+    SEARCH_PLAN_SELECTION_OUTCOME_EXACT_FALLBACK_UNAVAILABLE,
+    SEARCH_PLAN_SELECTION_OUTCOME_SELECTED_AVAILABLE,
+    SearchPlanSelectionDecision,
 )
 from .planner_plan_factory import (
     planner_candidate_generator_for_kind,

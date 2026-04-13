@@ -13,6 +13,7 @@ from kayak.planning import (
     CollectionHit,
     SearchPlan,
     SearchPlanSelection,
+    append_json_search_plan_selection_decision,
     collection_search_explain_json,
 )
 
@@ -278,7 +279,12 @@ def append_json_search_plan_selection(
     append_json_string_list(
         buffer, selection.effective_candidate_generator_order
     )
-    buffer += ",\"reason\":\"" + json_escape(selection.reason) + "\","
+    buffer += ",\"decision\":"
+    append_json_search_plan_selection_decision(
+        buffer,
+        selection.decision,
+    )
+    buffer += ","
     buffer += "\"plan\":"
     append_json_search_plan_only(buffer, selection.plan)
     buffer += "}"

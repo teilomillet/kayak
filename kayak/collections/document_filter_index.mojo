@@ -1,12 +1,20 @@
 # Segment-local exact allowlists for structured metadata filters.
 #
 # This module owns the persisted logical representation of field/value -> doc-index
-# postings. It does not own query-time filter evaluation or search-plan policy.
+# postings. It now also carries the engine's internal logical-scope postings for
+# collection, tenant, and namespace identity. It does not own query-time filter
+# evaluation or search-plan policy.
 
 from std.collections import List
 
+from kayak.filters.logical_scope import (
+    FILTER_FIELD_INTERNAL_COLLECTION_ID,
+    FILTER_FIELD_INTERNAL_NAMESPACE_ID,
+    FILTER_FIELD_INTERNAL_TENANT_ID,
+)
+
 from .document_metadata import DocumentMetadataMap
-from .ids import CollectionId, SegmentId
+from .ids import CollectionId, NamespaceId, SegmentId, TenantId
 from .validation import require_non_empty_string, require_non_negative_int
 
 
@@ -88,6 +96,24 @@ struct StoredDocumentFilterIndex(Copyable):
         return List[Int]()
 
 
+def stored_document_filter_index_has_logical_scope_postings(
+    read stored: StoredDocumentFilterIndex
+) -> Bool:
+    var has_collection_scope = False
+    var has_tenant_scope = False
+    var has_namespace_scope = False
+
+    for posting in stored.postings:
+        if posting.field_name == FILTER_FIELD_INTERNAL_COLLECTION_ID:
+            has_collection_scope = True
+        elif posting.field_name == FILTER_FIELD_INTERNAL_TENANT_ID:
+            has_tenant_scope = True
+        elif posting.field_name == FILTER_FIELD_INTERNAL_NAMESPACE_ID:
+            has_namespace_scope = True
+
+    return has_collection_scope and has_tenant_scope and has_namespace_scope
+
+
 def find_document_filter_posting_index(
     read postings: List[DocumentFilterPosting], field_name: String, value: String
 ) -> Int:
@@ -130,6 +156,8 @@ def append_doc_index_to_filter_posting(
 def build_stored_document_filter_index(
     collection_id: CollectionId,
     segment_id: SegmentId,
+    tenant_id: TenantId,
+    namespace_id: NamespaceId,
     read metadata_maps: List[DocumentMetadataMap],
     artifact_byte_size: Int = 0,
 ) raises -> StoredDocumentFilterIndex:
@@ -143,6 +171,24 @@ def build_stored_document_filter_index(
                 entry.value,
                 doc_index,
             )
+        append_doc_index_to_filter_posting(
+            postings,
+            FILTER_FIELD_INTERNAL_COLLECTION_ID,
+            collection_id.value,
+            doc_index,
+        )
+        append_doc_index_to_filter_posting(
+            postings,
+            FILTER_FIELD_INTERNAL_TENANT_ID,
+            tenant_id.value,
+            doc_index,
+        )
+        append_doc_index_to_filter_posting(
+            postings,
+            FILTER_FIELD_INTERNAL_NAMESPACE_ID,
+            namespace_id.value,
+            doc_index,
+        )
 
     return StoredDocumentFilterIndex(
         collection_id,

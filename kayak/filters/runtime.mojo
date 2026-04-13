@@ -4,6 +4,12 @@ from kayak.collections.document_metadata import (
 )
 
 from .expression import FilterExpression
+from .logical_scope import (
+    LogicalFilterScope,
+    filter_field_is_internal_logical_scope,
+    logical_scope_value_for_filter_field,
+    unscoped_logical_filter_scope,
+)
 
 
 def filter_expression_is_exact_doc_id_filter(read expression: FilterExpression) -> Bool:
@@ -45,6 +51,20 @@ def filter_expression_matches_document(
     doc_id: String,
     read metadata: DocumentMetadataMap,
 ) -> Bool:
+    return filter_expression_matches_document_in_scope(
+        expression,
+        unscoped_logical_filter_scope(),
+        doc_id,
+        metadata,
+    )
+
+
+def filter_expression_matches_document_in_scope(
+    read expression: FilterExpression,
+    read scope: LogicalFilterScope,
+    doc_id: String,
+    read metadata: DocumentMetadataMap,
+) -> Bool:
     if expression.is_match_all():
         return True
 
@@ -54,6 +74,11 @@ def filter_expression_matches_document(
             var actual_value = String()
             if term.field.name == "doc_id":
                 actual_value = doc_id.copy()
+            elif filter_field_is_internal_logical_scope(term.field.name):
+                actual_value = logical_scope_value_for_filter_field(
+                    scope,
+                    term.field.name,
+                )
             else:
                 for entry in metadata.entries:
                     if entry.key == term.field.name:

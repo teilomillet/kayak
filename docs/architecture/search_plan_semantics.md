@@ -62,6 +62,21 @@ Reason:
 - filter-aware planning and exact fallback behavior need those ownership
   boundaries to remain visible
 
+`SearchPlanSelection` also reports planner choice semantics explicitly through a
+typed `decision` object:
+
+- `order_policy_kind`
+- `constraint_kind`
+- `outcome_kind`
+- `explanation`
+
+Reason:
+
+- planner selection should stay comparable across future stage-1 engines
+  without encoding today's implementation families into one free-form string
+- exact selection can mean "chosen by default order", "forced by constraint",
+  or "used as a final fallback", and those are materially different semantics
+
 ## Guardrails
 
 The repo now enforces this contract mechanically in production source:
