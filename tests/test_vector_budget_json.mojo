@@ -1,5 +1,6 @@
 from std.testing import TestSuite, assert_equal
 
+from kayak import CandidateGenerator
 from kayak.benchmarks import (
     VectorBudgetSweepSummary,
     standard_document_vector_budget_sizes,
@@ -34,7 +35,7 @@ def test_vector_budget_json_contains_budget_fields() raises:
                 "mock_collection",
                 "snapshot-0001",
                 "mock-model",
-                "document_proxy",
+                CandidateGenerator("document_proxy"),
                 10,
                 40,
                 8,
@@ -53,6 +54,14 @@ def test_vector_budget_json_contains_budget_fields() raises:
     assert_equal(json.find("\"document_vector_budget\":32") != -1, True)
     assert_equal(
         json.find("\"candidate_generator_kind\":\"document_proxy\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_generator_family\":\"proxy\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage1_score_kind\":\"proxy_score\"") != -1,
         True,
     )
 

@@ -5,6 +5,7 @@ from kayak.collections import (
     SnapshotSearchArtifactAvailability,
 )
 from kayak.planning import (
+    CandidateGenerator,
     SearchPlanSelectionRequest,
     SearchPlannerRegistryEntry,
     SearchPlan,
@@ -26,23 +27,26 @@ from .faithfulness_frontier_json import (
 from .json_common import append_json_string_list, json_escape
 from .materialized_artifact_families import materialized_artifact_families
 from .query_text_support import judged_query_text_for_plan
-from .search_plan_semantics_json import append_search_plan_semantics_json_fields
+from .search_plan_semantics_json import (
+    append_candidate_generator_semantics_json_fields,
+    append_search_plan_semantics_json_fields,
+)
 
 
 struct PlannerEvidenceCandidateSummary(Copyable):
-    var candidate_generator_kind: String
+    var candidate_generator: CandidateGenerator
     var planner_status: String
     var is_selected: Bool
     var measured: FaithfulnessFrontierSummary
 
     def __init__(
         out self,
-        var candidate_generator_kind: String,
+        candidate_generator: CandidateGenerator,
         var planner_status: String,
         is_selected: Bool,
         measured: FaithfulnessFrontierSummary,
     ):
-        self.candidate_generator_kind = candidate_generator_kind^
+        self.candidate_generator = candidate_generator.copy()
         self.planner_status = planner_status^
         self.is_selected = is_selected
         self.measured = measured.copy()
@@ -155,7 +159,7 @@ def candidate_summary_for_kind(
         stage3_verifier,
     )
     return PlannerEvidenceCandidateSummary(
-        candidate_generator_kind.copy(),
+        selected_plan.candidate_generator,
         registry_entry.planner_status.copy(),
         candidate_generator_kind == selected_candidate_generator_kind,
         build_faithfulness_frontier_summary_for_plan(
@@ -227,7 +231,7 @@ def build_planner_evidence_summary(
             continue
         if candidate_summary_dominates(candidates[index], candidates[selected_index]):
             dominating_candidate_generator_kind = (
-                candidates[index].candidate_generator_kind.copy()
+                candidates[index].candidate_generator.kind.copy()
             )
             dominance_reason = (
                 "candidate "
@@ -273,8 +277,11 @@ def append_planner_evidence_candidate_summary_json(
     read summary: PlannerEvidenceCandidateSummary,
 ):
     buffer += "{"
-    buffer += "\"candidate_generator_kind\":\""
-    buffer += json_escape(summary.candidate_generator_kind) + "\","
+    append_candidate_generator_semantics_json_fields(
+        buffer,
+        summary.candidate_generator,
+    )
+    buffer += ","
     buffer += "\"planner_status\":\""
     buffer += json_escape(summary.planner_status) + "\","
     buffer += "\"is_selected\":"

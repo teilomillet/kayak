@@ -5,6 +5,7 @@ from std.collections import List
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.eval import JudgedTask, evaluate_query_hits
 from kayak.planning import (
+    CandidateGenerator,
     SearchPlan,
     candidate_generation_for_plan,
     explain_collection_search,
@@ -14,6 +15,9 @@ from kayak.runtime import ExactCpuBackend
 
 from .json_common import json_escape
 from .query_text_support import judged_query_text_for_plan
+from .search_plan_semantics_json import (
+    append_candidate_generator_semantics_json_fields,
+)
 from .vector_budget_json import truncate_query_to_vector_budget
 
 
@@ -22,7 +26,7 @@ struct PostingCapSweepSummary(Copyable):
     var collection_id: String
     var snapshot_id: String
     var model_name: String
-    var candidate_generator_kind: String
+    var candidate_generator: CandidateGenerator
     var final_k: Int
     var candidate_k: Int
     var query_vector_budget: Int
@@ -45,7 +49,7 @@ struct PostingCapSweepSummary(Copyable):
         var collection_id: String,
         var snapshot_id: String,
         var model_name: String,
-        var candidate_generator_kind: String,
+        candidate_generator: CandidateGenerator,
         final_k: Int,
         candidate_k: Int,
         query_vector_budget: Int,
@@ -66,7 +70,7 @@ struct PostingCapSweepSummary(Copyable):
         self.collection_id = collection_id^
         self.snapshot_id = snapshot_id^
         self.model_name = model_name^
-        self.candidate_generator_kind = candidate_generator_kind^
+        self.candidate_generator = candidate_generator.copy()
         self.final_k = final_k
         self.candidate_k = candidate_k
         self.query_vector_budget = query_vector_budget
@@ -180,7 +184,7 @@ def build_posting_cap_sweep_summary_for_plan(
         snapshot.collection.collection_id.value.copy(),
         snapshot.snapshot.snapshot_id.value.copy(),
         model_name,
-        plan.candidate_generator.kind.copy(),
+        plan.candidate_generator,
         task.k,
         plan.candidate_budget.candidate_k,
         query_vector_budget,
@@ -208,8 +212,11 @@ def append_posting_cap_sweep_summary_json(
     buffer += "\"collection_id\":\"" + json_escape(summary.collection_id) + "\","
     buffer += "\"snapshot_id\":\"" + json_escape(summary.snapshot_id) + "\","
     buffer += "\"model_name\":\"" + json_escape(summary.model_name) + "\","
-    buffer += "\"candidate_generator_kind\":\""
-    buffer += json_escape(summary.candidate_generator_kind) + "\","
+    append_candidate_generator_semantics_json_fields(
+        buffer,
+        summary.candidate_generator,
+    )
+    buffer += ","
     buffer += "\"final_k\":" + String(summary.final_k) + ","
     buffer += "\"candidate_k\":" + String(summary.candidate_k) + ","
     buffer += "\"query_vector_budget\":" + String(summary.query_vector_budget) + ","

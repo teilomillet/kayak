@@ -1,5 +1,6 @@
 from std.testing import TestSuite, assert_equal
 
+from kayak import CandidateGenerator
 from kayak.benchmarks import (
     CandidateWindowSweepSummary,
     candidate_window_sweep_summaries_json,
@@ -24,7 +25,7 @@ def test_candidate_window_sweep_json_contains_recall_fields() raises:
                 "mock_collection",
                 "snapshot-0001",
                 "mock-model",
-                "document_proxy",
+                CandidateGenerator("document_proxy"),
                 10,
                 20,
                 8,
@@ -42,6 +43,14 @@ def test_candidate_window_sweep_json_contains_recall_fields() raises:
     )
     assert_equal(
         json.find("\"candidate_generator_kind\":\"document_proxy\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_generator_family\":\"proxy\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage1_interaction_semantics\":\"none\"") != -1,
         True,
     )
     assert_equal(

@@ -3,6 +3,7 @@ from std.pathlib import Path
 from std.testing import TestSuite, assert_equal
 
 from kayak import (
+    CandidateGenerator,
     CollectionId,
     NamespaceId,
     SnapshotId,
@@ -55,18 +56,8 @@ def single_core_backend() -> ExactCpuBackend:
 
 
 def manual_measured_summary(
-    candidate_generator_kind: String,
+    candidate_generator: CandidateGenerator,
 ) raises -> FaithfulnessFrontierSummary:
-    var candidate_generator = document_proxy_search_plan(
-        2,
-        16,
-        best_effort_faithfulness_policy(),
-    ).candidate_generator.copy()
-    if candidate_generator_kind == "exact_full_scan":
-        candidate_generator = (
-            exact_full_scan_search_plan(2, 16).candidate_generator.copy()
-        )
-
     return FaithfulnessFrontierSummary(
         "mock://dataset",
         "mock-model",
@@ -126,16 +117,16 @@ def test_planner_evidence_summary_json_contains_candidates_and_advisory() raises
             "selected candidate is undominated on current evidence",
             [
                 PlannerEvidenceCandidateSummary(
-                    "document_proxy",
+                    CandidateGenerator("document_proxy"),
                     "promoted",
                     True,
-                    manual_measured_summary("document_proxy"),
+                    manual_measured_summary(CandidateGenerator("document_proxy")),
                 ),
                 PlannerEvidenceCandidateSummary(
-                    "exact_full_scan",
+                    CandidateGenerator("exact_full_scan"),
                     "exact_fallback",
                     False,
-                    manual_measured_summary("exact_full_scan"),
+                    manual_measured_summary(CandidateGenerator("exact_full_scan")),
                 ),
             ],
         )
@@ -165,7 +156,75 @@ def test_planner_evidence_summary_json_contains_candidates_and_advisory() raises
     )
     assert_equal(json.find("\"selected_is_undominated\":true") != -1, True)
     assert_equal(json.find("\"candidates\":[") != -1, True)
+    assert_equal(
+        json.find("\"candidate_generator_family\":\"proxy\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage1_interaction_semantics\":\"none\"") != -1,
+        True,
+    )
     assert_equal(json.find("\"planner_status\":\"promoted\"") != -1, True)
+
+
+def test_planner_evidence_summary_json_can_compare_centroid_and_gem_semantics() raises:
+    var json = planner_evidence_summary_json(
+        PlannerEvidenceSummary(
+            "balanced",
+            document_proxy_search_plan(
+                2,
+                16,
+                best_effort_faithfulness_policy(),
+            ),
+            ["late_interaction"],
+            [],
+            "promoted",
+            "planner used the default candidate-generator order for goal balanced",
+            ["centroid_postings_imputed_flat", "gem_graph"],
+            ["centroid_postings_imputed_flat", "gem_graph"],
+            True,
+            "",
+            "selected candidate is undominated on current evidence",
+            [
+                PlannerEvidenceCandidateSummary(
+                    CandidateGenerator("centroid_postings_imputed_flat"),
+                    "promoted",
+                    True,
+                    manual_measured_summary(
+                        CandidateGenerator("centroid_postings_imputed_flat")
+                    ),
+                ),
+                PlannerEvidenceCandidateSummary(
+                    CandidateGenerator("gem_graph", 4, 17),
+                    "experimental",
+                    False,
+                    manual_measured_summary(CandidateGenerator("gem_graph", 4, 17)),
+                ),
+            ],
+        )
+    )
+
+    assert_equal(
+        json.find("\"candidate_generator_kind\":\"centroid_postings_imputed_flat\"")
+            != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_generator_family\":\"centroid\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_generator_kind\":\"gem_graph\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_generator_family\":\"graph\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage1_alignment_granularity\":\"graph_node\"") != -1,
+        True,
+    )
 
 
 def test_build_planner_evidence_summary_reports_selected_candidate_and_stage2() raises:
