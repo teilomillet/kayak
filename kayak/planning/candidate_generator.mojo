@@ -5,6 +5,10 @@ from kayak.index import (
     DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
 )
 
+from .stage1_capabilities import (
+    stage1_capabilities_for_candidate_generator_kind,
+)
+
 
 comptime CANDIDATE_GENERATOR_FAMILY_CENTROID = "centroid"
 comptime CANDIDATE_GENERATOR_FAMILY_EXACT = "exact"
@@ -13,48 +17,14 @@ comptime CANDIDATE_GENERATOR_FAMILY_PROXY = "proxy"
 
 
 def artifact_family_for_generator_kind(kind: String) raises -> String:
-    if kind == "exact_full_scan":
-        return ""
-    if kind == "document_proxy":
-        return "document_proxy"
-    if kind == "centroid_heads":
-        return "centroid_heads"
-    if (
-        kind == "centroid_postings"
-        or kind == "centroid_postings_flat"
-        or kind == "centroid_postings_head"
-        or kind == "centroid_postings_head_auto"
-        or kind == "centroid_postings_blockmax"
-        or kind == "centroid_postings_imputed"
-        or kind == "centroid_postings_imputed_flat"
-    ):
-        return "centroid_postings"
-    if kind == "gem_graph":
-        return "gem_graph"
-
-    raise Error("unknown candidate generator kind: " + kind)
+    var capabilities = stage1_capabilities_for_candidate_generator_kind(kind)
+    if len(capabilities.required_search_artifact_families) == 1:
+        return capabilities.required_search_artifact_families[0].copy()
+    return ""
 
 
 def family_for_generator_kind(kind: String) raises -> String:
-    if kind == "exact_full_scan":
-        return CANDIDATE_GENERATOR_FAMILY_EXACT
-    if kind == "document_proxy":
-        return CANDIDATE_GENERATOR_FAMILY_PROXY
-    if (
-        kind == "centroid_postings"
-        or kind == "centroid_postings_flat"
-        or kind == "centroid_heads"
-        or kind == "centroid_postings_head"
-        or kind == "centroid_postings_head_auto"
-        or kind == "centroid_postings_blockmax"
-        or kind == "centroid_postings_imputed"
-        or kind == "centroid_postings_imputed_flat"
-    ):
-        return CANDIDATE_GENERATOR_FAMILY_CENTROID
-    if kind == "gem_graph":
-        return CANDIDATE_GENERATOR_FAMILY_GRAPH
-
-    raise Error("unknown candidate generator kind: " + kind)
+    return stage1_capabilities_for_candidate_generator_kind(kind).generator_family.copy()
 
 
 struct CandidateGenerator(Copyable):

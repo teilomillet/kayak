@@ -36,6 +36,9 @@ from kayak.filters import (
 from kayak.planning import (
     explain_collection_search,
     search_collection_for_plan,
+    stage1_required_search_artifact_families,
+    stage1_generator_supports_match_all_filter,
+    stage1_generator_supports_structured_filter,
 )
 from kayak.runtime import ExactScoringBackend
 
@@ -67,12 +70,23 @@ from .snapshot_requests import (
 
 
 def require_filter_supported_for_request(read request: SearchRequest) raises:
+    if not stage1_generator_supports_match_all_filter(
+        request.plan.candidate_generator.kind
+    ):
+        raise Error(
+            "candidate generator does not support match_all filters: "
+            + request.plan.candidate_generator.kind
+        )
+
     if request.filter_expression.is_match_all():
         return
 
-    if request.plan.candidate_generator.kind != "exact_full_scan":
+    if not stage1_generator_supports_structured_filter(
+        request.plan.candidate_generator.kind
+    ):
         raise Error(
-            "non-match_all filters currently require exact_full_scan stage-1"
+            "non-match_all filters currently require a stage-1 generator with structured-filter support: "
+            + request.plan.candidate_generator.kind
         )
 
 
@@ -256,20 +270,14 @@ def snapshot_load_requirements_for_request(
     var needs_document_metadata = filter_expression_requires_document_metadata(
         request.filter_expression
     )
-
-    if request.plan.candidate_generator.artifact_family.byte_length() == 0:
-        if needs_document_metadata:
-            return SnapshotLoadRequirements(
-                False,
-                [SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA],
-                False,
-            )
-        return exact_only_snapshot_requirements()
-
-    var required_artifacts = List[String]()
-    required_artifacts.append(request.plan.candidate_generator.artifact_family.copy())
+    var required_artifacts = stage1_required_search_artifact_families(
+        request.plan.candidate_generator.kind
+    )
     if needs_document_metadata:
         required_artifacts.append(SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA)
+
+    if len(required_artifacts) == 0:
+        return exact_only_snapshot_requirements()
 
     return SnapshotLoadRequirements(
         False,

@@ -31,6 +31,7 @@ def publish_collection_snapshot(
         snapshot.generation,
         snapshot.snapshot_id.value.copy(),
         collection.default_keep_latest_inactive_count,
+        collection.search_artifact_build_policy,
     )
     save_collection_manifest(collection_root, published)
     return published^
@@ -49,6 +50,7 @@ def promote_collection_generation(
         generation,
         collection.active_snapshot_id.copy(),
         collection.default_keep_latest_inactive_count,
+        collection.search_artifact_build_policy,
     )
     save_collection_manifest(collection_root, published)
     return published^

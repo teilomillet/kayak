@@ -66,8 +66,9 @@ That combination implies a clear next move:
 - collection-level default retention is now stored in the collection manifest,
   but snapshot-scoped retention metadata and background retention automation do
   not exist yet
-- search-native sidecars still need policy-driven build selection beyond
-  today's baseline registry
+- collection manifests now carry an explicit search-artifact build policy for
+  new sealed segments, but richer family-specific build configuration is still
+  intentionally out of the mainline core
 - hosted execution supports exact metadata filtering, but candidate-pushdown and
   approximate filter-aware stage-1 generation still do not exist
 - service metrics now expose operational counters, but those counters do not
@@ -85,6 +86,13 @@ The next mainline work should optimize for:
 5. filter and metadata readiness
 6. operable metrics and explain surfaces
 7. a cleaner stronger-ceiling hook
+
+Implemented on the current branch:
+
+- collection-scoped default stage-1 sidecar build policy
+- capability-driven stage-1 artifact loading requirements
+- capability-driven filter support checks
+- policy-driven segment sealing for supported config-free sidecar families
 
 ## Optimization Axes
 

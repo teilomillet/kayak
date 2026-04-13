@@ -23,6 +23,8 @@ from kayak import (
     ScoreHistogram,
     ScoreScalar,
     SearchResponse,
+    SearchArtifactBuildPolicy,
+    SearchArtifactBuildSpec,
     SearchStageProfile,
     SegmentId,
     service_metrics_snapshot_json,
@@ -190,6 +192,14 @@ def test_create_collection_request_json_is_machine_readable() raises:
         json.find("\"default_keep_latest_inactive_count\":1") != -1,
         True,
     )
+    assert_equal(
+        json.find("\"search_artifact_build_policy\":[") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"family\":\"document_proxy\"") != -1,
+        True,
+    )
 
 
 def test_lifecycle_and_reclaim_json_are_machine_readable() raises:
@@ -212,6 +222,14 @@ def test_lifecycle_and_reclaim_json_are_machine_readable() raises:
             3,
             "snapshot-0003",
             1,
+            SearchArtifactBuildPolicy(
+                [
+                    SearchArtifactBuildSpec("document_proxy", "document_proxy"),
+                    SearchArtifactBuildSpec(
+                        "centroid_postings", "centroid_postings"
+                    ),
+                ]
+            ),
             0,
             [SnapshotId("snapshot-0001")],
             4,
@@ -255,6 +273,10 @@ def test_lifecycle_and_reclaim_json_are_machine_readable() raises:
     )
     assert_equal(
         lifecycle_response_json.find("\"default_keep_latest_inactive_count\":1") != -1,
+        True,
+    )
+    assert_equal(
+        lifecycle_response_json.find("\"search_artifact_build_policy\":[") != -1,
         True,
     )
     assert_equal(

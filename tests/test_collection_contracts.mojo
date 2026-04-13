@@ -6,6 +6,8 @@ from kayak.collections import (
     CollectionStats,
     CompactionPlan,
     NamespaceId,
+    SearchArtifactBuildPolicy,
+    SearchArtifactBuildSpec,
     SegmentId,
     SegmentStats,
     SealedSegmentManifest,
@@ -46,6 +48,12 @@ def test_collection_contracts_hold_serving_metadata() raises:
         3,
         "snapshot-0001",
         2,
+        SearchArtifactBuildPolicy(
+            [
+                SearchArtifactBuildSpec("document_proxy", "proxy_sidecar"),
+                SearchArtifactBuildSpec("centroid_postings", "postings_sidecar"),
+            ]
+        ),
     )
     var segment_stats = SegmentStats(2, 12, 10, 2048)
     var segment = SealedSegmentManifest(
@@ -90,6 +98,10 @@ def test_collection_contracts_hold_serving_metadata() raises:
     assert_equal(collection.latest_generation, 3)
     assert_equal(collection.active_snapshot_id, "snapshot-0001")
     assert_equal(collection.default_keep_latest_inactive_count, 2)
+    assert_equal(
+        collection.search_artifact_build_policy.stage1_artifacts[0].root,
+        "proxy_sidecar",
+    )
     assert_equal(segment.vector_dim, 128)
     assert_equal(sealed_segment_has_text_corpus(segment), True)
     assert_equal(len(snapshot.segment_ids), 1)
@@ -102,6 +114,28 @@ def test_collection_ids_reject_empty_strings() raises:
 
     try:
         _ = CollectionId("")
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_collection_manifest_rejects_unsupported_stage1_build_family() raises:
+    var raised = False
+
+    try:
+        _ = CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            128,
+            0,
+            SearchArtifactBuildPolicy(
+                [SearchArtifactBuildSpec("gem_graph", "gem_graph")]
+            ),
+        )
     except:
         raised = True
 

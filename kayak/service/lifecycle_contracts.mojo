@@ -5,6 +5,7 @@ from kayak.collections import (
     CollectionReclaimExecutionResult,
     CollectionReclaimPlan,
     NamespaceId,
+    SearchArtifactBuildPolicy,
     SnapshotId,
     SnapshotRetentionPolicy,
     TenantId,
@@ -76,6 +77,7 @@ struct CollectionLifecycleResponse(Copyable):
     var latest_generation: Int
     var active_snapshot_id: String
     var default_keep_latest_inactive_count: Int
+    var search_artifact_build_policy: SearchArtifactBuildPolicy
     var effective_keep_latest_inactive_count: Int
     var effective_pinned_snapshot_ids: List[SnapshotId]
     var draft_document_count: Int
@@ -93,6 +95,7 @@ struct CollectionLifecycleResponse(Copyable):
         latest_generation: Int,
         active_snapshot_id: String,
         default_keep_latest_inactive_count: Int,
+        read search_artifact_build_policy: SearchArtifactBuildPolicy,
         effective_keep_latest_inactive_count: Int,
         read effective_pinned_snapshot_ids: List[SnapshotId],
         draft_document_count: Int,
@@ -115,6 +118,7 @@ struct CollectionLifecycleResponse(Copyable):
             default_keep_latest_inactive_count,
             "default_keep_latest_inactive_count",
         )
+        self.search_artifact_build_policy = search_artifact_build_policy.copy()
         self.effective_keep_latest_inactive_count = require_non_negative_int(
             effective_keep_latest_inactive_count,
             "effective_keep_latest_inactive_count",

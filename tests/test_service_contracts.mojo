@@ -23,6 +23,8 @@ from kayak import (
     NamespaceId,
     ScoreScalar,
     SearchRequest,
+    SearchArtifactBuildPolicy,
+    SearchArtifactBuildSpec,
     SearchResponse,
     ScoreHistogram,
     SearchStageProfile,
@@ -174,6 +176,9 @@ def test_create_collection_request_materializes_manifest() raises:
         "colbertv2",
         VECTOR_SCALAR_NAME,
         128,
+        SearchArtifactBuildPolicy(
+            [SearchArtifactBuildSpec("document_proxy", "proxy_sidecar")]
+        ),
     )
     var manifest = request.to_manifest()
 
@@ -182,6 +187,11 @@ def test_create_collection_request_materializes_manifest() raises:
     assert_equal(manifest.latest_generation, 0)
     assert_equal(manifest.active_snapshot_id, "")
     assert_equal(manifest.default_keep_latest_inactive_count, 1)
+    assert_equal(len(manifest.search_artifact_build_policy.stage1_artifacts), 1)
+    assert_equal(
+        manifest.search_artifact_build_policy.stage1_artifacts[0].root,
+        "proxy_sidecar",
+    )
 
 
 def test_lifecycle_and_reclaim_contracts_keep_policy_explicit() raises:
@@ -205,6 +215,9 @@ def test_lifecycle_and_reclaim_contracts_keep_policy_explicit() raises:
         3,
         "snapshot-0003",
         1,
+        SearchArtifactBuildPolicy(
+            [SearchArtifactBuildSpec("document_proxy", "document_proxy")]
+        ),
         0,
         [SnapshotId("snapshot-0001")],
         4,
@@ -257,6 +270,10 @@ def test_lifecycle_and_reclaim_contracts_keep_policy_explicit() raises:
         "snapshot-0001",
     )
     assert_equal(lifecycle_response.default_keep_latest_inactive_count, 1)
+    assert_equal(
+        lifecycle_response.search_artifact_build_policy.stage1_artifacts[0].family,
+        "document_proxy",
+    )
     assert_equal(lifecycle_response.effective_keep_latest_inactive_count, 0)
     assert_equal(
         lifecycle_response.effective_pinned_snapshot_ids[0].value,

@@ -14,6 +14,11 @@ from .collection import CollectionManifest
 from .ids import CollectionId, NamespaceId, TenantId
 from .manifest_util import load_optional_manifest_value
 from .paths import collection_manifest_path
+from .search_artifact_policy import (
+    SearchArtifactBuildPolicy,
+    SearchArtifactBuildSpec,
+    default_search_artifact_build_policy,
+)
 
 
 def collection_manifest_exists(root: Path) -> Bool:
@@ -41,6 +46,28 @@ def save_collection_manifest(root: Path, read manifest: CollectionManifest) rais
             String(manifest.default_keep_latest_inactive_count),
         )
     )
+    entries.append(
+        ManifestEntry(
+            "search_artifact_build_count",
+            String(len(manifest.search_artifact_build_policy.stage1_artifacts)),
+        )
+    )
+    for index in range(len(manifest.search_artifact_build_policy.stage1_artifacts)):
+        var spec = (
+            manifest.search_artifact_build_policy.stage1_artifacts[index].copy()
+        )
+        entries.append(
+            ManifestEntry(
+                "search_artifact_build_" + String(index) + "_family",
+                spec.family,
+            )
+        )
+        entries.append(
+            ManifestEntry(
+                "search_artifact_build_" + String(index) + "_root",
+                spec.root,
+            )
+        )
     if manifest.active_snapshot_id.byte_length() != 0:
         entries.append(
             ManifestEntry("active_snapshot_id", manifest.active_snapshot_id)
@@ -60,6 +87,28 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
     )
     if default_keep_latest_inactive_count.byte_length() == 0:
         default_keep_latest_inactive_count = "1"
+    var search_artifact_build_policy = default_search_artifact_build_policy()
+    var search_artifact_build_count = load_optional_manifest_value(
+        entries, "search_artifact_build_count"
+    )
+    if search_artifact_build_count.byte_length() != 0:
+        var build_specs = List[SearchArtifactBuildSpec]()
+        for index in range(
+            parse_int(search_artifact_build_count, "search_artifact_build_count")
+        ):
+            build_specs.append(
+                SearchArtifactBuildSpec(
+                    require_manifest_value(
+                        entries,
+                        "search_artifact_build_" + String(index) + "_family",
+                    ),
+                    require_manifest_value(
+                        entries,
+                        "search_artifact_build_" + String(index) + "_root",
+                    ),
+                )
+            )
+        search_artifact_build_policy = SearchArtifactBuildPolicy(build_specs)
 
     return CollectionManifest(
         CollectionId(require_manifest_value(entries, "collection_id")),
@@ -77,4 +126,5 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
             default_keep_latest_inactive_count,
             "default_keep_latest_inactive_count",
         ),
+        search_artifact_build_policy,
     )

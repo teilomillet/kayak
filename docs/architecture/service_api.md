@@ -231,11 +231,15 @@ The repository now has an explicit service-level lifecycle control surface.
 
 Verified behavior:
 - collection manifests persist `default_keep_latest_inactive_count`
+- collection manifests also persist a collection-scoped
+  `search_artifact_build_policy` for default stage-1 sidecar construction
 - the stored default is collection-scoped, not snapshot-scoped
 - lifecycle-report and reclaim-plan requests can optionally carry an ephemeral
   `SnapshotRetentionPolicy` override
 - when no override is present, lifecycle and reclaim operations derive their
   effective policy from the collection manifest
+- stage-1 snapshot loading and filter support are derived from explicit
+  stage-1 capability contracts rather than from ad hoc generator conditionals
 - reclaim execution still requires an explicit plan, which preserves the
   previous stale-plan guardrail instead of introducing implicit background
   deletion
@@ -243,6 +247,9 @@ Verified behavior:
 This choice is intentional:
 - a collection default belongs with collection continuity and hosted-engine
   operations
+- default stage-1 sidecar selection belongs there too, because sealed segments
+  should inherit stable build intent from the collection rather than from
+  whatever the current seal helper happens to hard-code
 - pinned-snapshot overrides remain request-scoped until there is a stronger
   reason to persist them
 - plan-then-execute remains the sound default because it keeps deletion

@@ -104,6 +104,7 @@ def build_collection_lifecycle_report(
         collection.latest_generation,
         collection.active_snapshot_id.copy(),
         collection.default_keep_latest_inactive_count,
+        collection.search_artifact_build_policy,
         policy.keep_latest_inactive_count,
         policy.pinned_snapshot_ids,
         draft_metadata.document_count,
@@ -196,6 +197,7 @@ def update_collection_retention_policy(
         collection.latest_generation,
         collection.active_snapshot_id.copy(),
         request.default_keep_latest_inactive_count,
+        collection.search_artifact_build_policy,
     )
     save_collection_manifest(collection_root, updated)
     return UpdateCollectionRetentionPolicyResponse(

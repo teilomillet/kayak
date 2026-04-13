@@ -19,6 +19,13 @@ from .candidate_generator import (
 )
 from .candidate_set import CandidateSet
 from .graph_search_counters import GraphSearchCounters
+from .stage1_capabilities import (
+    Stage1Capabilities,
+    stage1_capabilities_for_candidate_generator_kind,
+    stage1_generator_supports_match_all_filter,
+    stage1_generator_supports_structured_filter,
+    stage1_required_search_artifact_families,
+)
 from .centroid_primitives import (
     ScoredCentroidSelection,
     accumulate_selected_centroid_scores,

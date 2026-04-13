@@ -1,6 +1,12 @@
 # Collection-level manifest for hosted late-interaction data.
 
 from .ids import CollectionId, NamespaceId, TenantId
+from .search_artifact_policy import (
+    SearchArtifactBuildPolicy,
+    default_search_artifact_build_policy,
+    require_search_artifact_build_policy_layout_safe,
+    require_search_artifact_build_policy_supported_for_segment_sealing,
+)
 from .validation import require_non_empty_string, require_non_negative_int, require_positive_int
 
 
@@ -14,6 +20,7 @@ struct CollectionManifest(Copyable):
     var latest_generation: Int
     var active_snapshot_id: String
     var default_keep_latest_inactive_count: Int
+    var search_artifact_build_policy: SearchArtifactBuildPolicy
 
     def __init__(
         out self,
@@ -35,6 +42,7 @@ struct CollectionManifest(Copyable):
             latest_generation,
             "",
             1,
+            default_search_artifact_build_policy(),
         )
 
     def __init__(
@@ -58,6 +66,7 @@ struct CollectionManifest(Copyable):
             latest_generation,
             "",
             default_keep_latest_inactive_count,
+            default_search_artifact_build_policy(),
         )
 
     def __init__(
@@ -81,6 +90,56 @@ struct CollectionManifest(Copyable):
             latest_generation,
             active_snapshot_id,
             1,
+            default_search_artifact_build_policy(),
+        )
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        latest_generation: Int,
+        read search_artifact_build_policy: SearchArtifactBuildPolicy,
+    ) raises:
+        self = CollectionManifest(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            latest_generation,
+            "",
+            1,
+            search_artifact_build_policy,
+        )
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        latest_generation: Int,
+        default_keep_latest_inactive_count: Int,
+        read search_artifact_build_policy: SearchArtifactBuildPolicy,
+    ) raises:
+        self = CollectionManifest(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            latest_generation,
+            "",
+            default_keep_latest_inactive_count,
+            search_artifact_build_policy,
         )
 
     def __init__(
@@ -94,6 +153,57 @@ struct CollectionManifest(Copyable):
         latest_generation: Int,
         active_snapshot_id: String,
         default_keep_latest_inactive_count: Int,
+    ) raises:
+        self = CollectionManifest(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            latest_generation,
+            active_snapshot_id,
+            default_keep_latest_inactive_count,
+            default_search_artifact_build_policy(),
+        )
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        latest_generation: Int,
+        active_snapshot_id: String,
+        read search_artifact_build_policy: SearchArtifactBuildPolicy,
+    ) raises:
+        self = CollectionManifest(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            latest_generation,
+            active_snapshot_id,
+            1,
+            search_artifact_build_policy,
+        )
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        latest_generation: Int,
+        active_snapshot_id: String,
+        default_keep_latest_inactive_count: Int,
+        read search_artifact_build_policy: SearchArtifactBuildPolicy,
     ) raises:
         self.collection_id = collection_id.copy()
         self.tenant_id = tenant_id.copy()
@@ -110,6 +220,13 @@ struct CollectionManifest(Copyable):
         self.default_keep_latest_inactive_count = require_non_negative_int(
             default_keep_latest_inactive_count,
             "default_keep_latest_inactive_count",
+        )
+        self.search_artifact_build_policy = search_artifact_build_policy.copy()
+        require_search_artifact_build_policy_layout_safe(
+            self.search_artifact_build_policy
+        )
+        require_search_artifact_build_policy_supported_for_segment_sealing(
+            self.search_artifact_build_policy
         )
         if self.active_snapshot_id.byte_length() != 0 and self.latest_generation == 0:
             raise Error(

@@ -154,6 +154,10 @@ def test_snapshot_bundle_export_import_roundtrip() raises:
     assert_equal(exported_collection.latest_generation, 4)
     assert_equal(exported_collection.active_snapshot_id, "snapshot-0004")
     assert_equal(exported_collection.default_keep_latest_inactive_count, 2)
+    assert_equal(
+        len(exported_collection.search_artifact_build_policy.stage1_artifacts),
+        2,
+    )
 
     _ = import_snapshot_bundle(bundle_root, target_root)
 
@@ -165,6 +169,10 @@ def test_snapshot_bundle_export_import_roundtrip() raises:
     assert_equal(imported_collection.latest_generation, 4)
     assert_equal(imported_collection.active_snapshot_id, "snapshot-0004")
     assert_equal(imported_collection.default_keep_latest_inactive_count, 2)
+    assert_equal(
+        len(imported_collection.search_artifact_build_policy.stage1_artifacts),
+        2,
+    )
     assert_equal(len(resolved.segments), 1)
     assert_equal(resolved.segments[0].stored_index.index.document_count, 2)
     assert_equal(resolved.segments[0].has_text_corpus, True)
@@ -238,6 +246,10 @@ def test_snapshot_bundle_import_preserves_existing_collection_retention_default(
     assert_equal(imported_collection.latest_generation, 4)
     assert_equal(imported_collection.active_snapshot_id, "snapshot-0004")
     assert_equal(imported_collection.default_keep_latest_inactive_count, 5)
+    assert_equal(
+        len(imported_collection.search_artifact_build_policy.stage1_artifacts),
+        2,
+    )
 
 
 def main() raises:

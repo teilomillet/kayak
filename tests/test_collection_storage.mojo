@@ -9,6 +9,8 @@ from kayak.collections import (
     DocumentMetadataMap,
     NamespaceId,
     SearchArtifactManifest,
+    SearchArtifactBuildPolicy,
+    SearchArtifactBuildSpec,
     SegmentId,
     SegmentStats,
     SealedSegmentManifest,
@@ -29,6 +31,7 @@ from kayak.collections import (
     save_snapshot_manifest,
     save_stored_document_metadata_corpus,
     save_stored_document_text_corpus,
+    same_search_artifact_build_policy,
 )
 from kayak.numeric import VECTOR_SCALAR_NAME
 from kayak.text import DocumentTextCorpus
@@ -45,6 +48,12 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
     var namespace_id = NamespaceId("search")
     var collection_id = CollectionId("news")
     var segment_id = SegmentId("segment-0001")
+    var build_policy = SearchArtifactBuildPolicy(
+        [
+            SearchArtifactBuildSpec("document_proxy", "proxy_sidecar"),
+            SearchArtifactBuildSpec("centroid_postings", "postings_sidecar"),
+        ]
+    )
 
     save_collection_manifest(
         collection_root,
@@ -58,6 +67,7 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
             4,
             "snapshot-0001",
             2,
+            build_policy,
         ),
     )
     save_sealed_segment_manifest(
@@ -109,6 +119,13 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
     assert_equal(loaded_collection.latest_generation, 4)
     assert_equal(loaded_collection.active_snapshot_id, "snapshot-0001")
     assert_equal(loaded_collection.default_keep_latest_inactive_count, 2)
+    assert_equal(
+        same_search_artifact_build_policy(
+            loaded_collection.search_artifact_build_policy,
+            build_policy,
+        ),
+        True,
+    )
     assert_equal(loaded_segment.packed_index_root, "packed_index")
     assert_equal(loaded_segment.text_corpus_root, "text_corpus")
     assert_equal(loaded_snapshot.stats.segment_count, 1)

@@ -187,6 +187,9 @@ Why this layout is plausible:
 - it allows stage-1 candidate generation artifacts to evolve separately from the exact packed index
 - it makes the text sidecar explicitly optional
 - it preserves exact UTF-8 text in the baseline codec instead of normalizing it into one-line TSV payloads
+- it allows collection-scoped build policy to choose which search-native
+  sidecars each newly sealed segment should materialize, instead of treating
+  today's sidecar pair as a permanent storage law
 
 ## Required Invariants
 
@@ -203,6 +206,9 @@ These are the core storage invariants that should hold across the service.
 6. Text sidecars are optional and versioned separately from vector payloads.
 7. Compaction never mutates the source searchable segment in place; it creates a
    replacement output that a later snapshot can adopt.
+8. Collection manifests may carry a default search-artifact build policy, and
+   each sealed segment should record only the artifacts that were actually
+   materialized for that segment.
 
 ## What This Step Does Not Decide Yet
 

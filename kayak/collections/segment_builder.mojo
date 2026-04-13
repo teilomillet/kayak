@@ -22,9 +22,13 @@ from .document_metadata_store import save_stored_document_metadata_corpus
 from .ids import SegmentId
 from .search_artifact import (
     SearchArtifactManifest,
-    centroid_postings_search_artifact,
+    SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     document_metadata_search_artifact,
-    document_proxy_search_artifact,
+)
+from .search_artifact_policy import (
+    SearchArtifactBuildSpec,
+    build_spec_as_search_artifact_manifest,
 )
 from .segment import SealedSegmentManifest
 from .segment_store import save_sealed_segment_manifest
@@ -70,6 +74,33 @@ def document_metadata_storage_byte_size(
     return total
 
 
+def build_configured_search_artifact(
+    segment_root: Path,
+    read stored_index: StoredPackedIndex,
+    read spec: SearchArtifactBuildSpec,
+) raises -> Int:
+    if spec.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY:
+        _ = ensure_stored_document_proxy_index(
+            segment_root / spec.root,
+            stored_index,
+            0,
+        )
+        return document_proxy_storage_byte_size(segment_root / spec.root)
+
+    if spec.family == SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS:
+        _ = ensure_stored_centroid_posting_index(
+            segment_root / spec.root,
+            stored_index,
+            0,
+        )
+        return centroid_postings_storage_byte_size(segment_root / spec.root)
+
+    raise Error(
+        "segment sealing does not yet support configured build family: "
+        + spec.family
+    )
+
+
 def seal_single_segment(
     collection_root: Path,
     read collection: CollectionManifest,
@@ -102,21 +133,13 @@ def seal_single_segment(
     var byte_size = packed_index_storage_byte_size(packed_index_root)
     var search_artifacts = List[SearchArtifactManifest]()
 
-    _ = ensure_stored_document_proxy_index(
-        segment_root / "document_proxy",
-        stored_index,
-        0,
-    )
-    byte_size += document_proxy_storage_byte_size(segment_root / "document_proxy")
-    search_artifacts.append(document_proxy_search_artifact("document_proxy"))
-
-    _ = ensure_stored_centroid_posting_index(
-        segment_root / "centroid_postings",
-        stored_index,
-        0,
-    )
-    byte_size += centroid_postings_storage_byte_size(segment_root / "centroid_postings")
-    search_artifacts.append(centroid_postings_search_artifact("centroid_postings"))
+    for spec in collection.search_artifact_build_policy.stage1_artifacts:
+        byte_size += build_configured_search_artifact(
+            segment_root,
+            stored_index,
+            spec,
+        )
+        search_artifacts.append(build_spec_as_search_artifact_manifest(spec))
 
     var text_corpus_root_name = ""
     if len(texts) != 0:

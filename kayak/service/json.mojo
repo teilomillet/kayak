@@ -5,6 +5,7 @@ from kayak.collections.reclaim_json import (
     collection_reclaim_execution_result_json,
     collection_reclaim_plan_json,
 )
+from kayak.collections import SearchArtifactBuildPolicy
 from kayak.collections.document_metadata import DocumentMetadataUpdate
 from kayak.filters import FilterClause, FilterExpression, FilterTerm
 from kayak.numeric import VectorScalar
@@ -142,6 +143,25 @@ def append_json_metadata_updates(
     buffer += "]"
 
 
+def append_json_search_artifact_build_policy(
+    mut buffer: String, read policy: SearchArtifactBuildPolicy
+):
+    buffer += "["
+
+    for index in range(len(policy.stage1_artifacts)):
+        if index > 0:
+            buffer += ","
+
+        buffer += "{"
+        buffer += "\"family\":\""
+        buffer += json_escape(policy.stage1_artifacts[index].family) + "\","
+        buffer += "\"root\":\""
+        buffer += json_escape(policy.stage1_artifacts[index].root) + "\""
+        buffer += "}"
+
+    buffer += "]"
+
+
 def append_json_search_plan(mut buffer: String, read request: SearchRequest):
     buffer += "{"
     buffer += "\"candidate_generator_kind\":\""
@@ -223,7 +243,11 @@ def create_collection_request_json(read request: CreateCollectionRequest) -> Str
     buffer += json_escape(request.vector_scalar_name) + "\","
     buffer += "\"vector_dim\":" + String(request.vector_dim) + ","
     buffer += "\"default_keep_latest_inactive_count\":"
-    buffer += String(request.default_keep_latest_inactive_count)
+    buffer += String(request.default_keep_latest_inactive_count) + ","
+    buffer += "\"search_artifact_build_policy\":"
+    append_json_search_artifact_build_policy(
+        buffer, request.search_artifact_build_policy
+    )
     buffer += "}"
     return buffer^
 
@@ -292,6 +316,11 @@ def collection_lifecycle_response_json(
     buffer += json_escape(response.active_snapshot_id) + "\","
     buffer += "\"default_keep_latest_inactive_count\":"
     buffer += String(response.default_keep_latest_inactive_count) + ","
+    buffer += "\"search_artifact_build_policy\":"
+    append_json_search_artifact_build_policy(
+        buffer, response.search_artifact_build_policy
+    )
+    buffer += ","
     buffer += "\"effective_keep_latest_inactive_count\":"
     buffer += String(response.effective_keep_latest_inactive_count) + ","
     buffer += "\"effective_pinned_snapshot_ids\":"
