@@ -1233,7 +1233,7 @@ def test_hosted_collection_runtime_executes_planned_search_with_native_goal() ra
     assert_equal(response.search.hits[0].doc_id, "doc-a")
 
 
-def test_hosted_collection_runtime_planned_debug_search_keeps_metadata_filter_guardrail() raises:
+def test_hosted_collection_runtime_planned_debug_search_keeps_native_metadata_filter_stage1() raises:
     var service_root = unique_service_root("kayak-service-runtime-planned-filter")
 
     _ = create_collection(
@@ -1299,12 +1299,16 @@ def test_hosted_collection_runtime_planned_debug_search_keeps_metadata_filter_gu
         ),
     )
 
-    assert_equal(response.selection.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(
+        response.selection.plan.candidate_generator.kind,
+        "centroid_postings_imputed_flat",
+    )
     assert_equal(response.debug.search.hits[0].doc_id, "doc-a")
     assert_equal(
         response.debug.explain.plan.candidate_generator.kind,
-        "exact_full_scan",
+        "centroid_postings_imputed_flat",
     )
+    assert_equal(response.debug.explain.candidate_set.hits[0].doc_id, "doc-a")
 
 
 def test_hosted_collection_runtime_merges_metadata_and_filters_exactly() raises:
@@ -1386,6 +1390,22 @@ def test_hosted_collection_runtime_merges_metadata_and_filters_exactly() raises:
             False,
         ),
     )
+    var native_proxy_response = execute_search(
+        ExactCpuBackend(),
+        service_root,
+        SearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            one_of_filter("source", ["analysis"]),
+            document_proxy_search_plan(
+                1, 1, best_effort_faithfulness_policy()
+            ),
+            False,
+        ),
+    )
     var removed_field_response = execute_search(
         ExactCpuBackend(),
         service_root,
@@ -1403,6 +1423,8 @@ def test_hosted_collection_runtime_merges_metadata_and_filters_exactly() raises:
 
     assert_equal(len(metadata_response.hits), 1)
     assert_equal(metadata_response.hits[0].doc_id, "doc-a")
+    assert_equal(len(native_proxy_response.hits), 1)
+    assert_equal(native_proxy_response.hits[0].doc_id, "doc-a")
     assert_equal(len(removed_field_response.hits), 0)
 
 

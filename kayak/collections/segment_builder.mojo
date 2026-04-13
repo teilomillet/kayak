@@ -10,15 +10,21 @@ from kayak.storage import (
 from kayak.text import DocumentTextCorpus
 
 from .collection import CollectionManifest
-from .search_artifact_builders import build_search_artifact_for_segment
+from .document_filter_index import build_stored_document_filter_index
+from .document_filter_index_store import (
+    document_filter_index_storage_byte_size,
+    save_stored_document_filter_index,
+)
 from .document_metadata import (
     DocumentMetadataMap,
     StoredDocumentMetadataCorpus,
 )
 from .document_metadata_store import save_stored_document_metadata_corpus
 from .ids import SegmentId
+from .search_artifact_builders import build_search_artifact_for_segment
 from .search_artifact import (
     SearchArtifactManifest,
+    document_filter_index_search_artifact,
     document_metadata_search_artifact,
 )
 from .search_artifact_policy import (
@@ -107,6 +113,22 @@ def seal_single_segment(
             spec,
         )
         search_artifacts.append(build_spec_as_search_artifact_manifest(spec))
+
+    var document_filter_root_name = "document_filter_index"
+    save_stored_document_filter_index(
+        segment_root / document_filter_root_name,
+        build_stored_document_filter_index(
+            collection.collection_id,
+            segment_id.copy(),
+            metadata_maps,
+        ),
+    )
+    byte_size += document_filter_index_storage_byte_size(
+        segment_root / document_filter_root_name
+    )
+    search_artifacts.append(
+        document_filter_index_search_artifact(document_filter_root_name)
+    )
 
     var text_corpus_root_name = ""
     if len(texts) != 0:

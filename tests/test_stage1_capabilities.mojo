@@ -48,7 +48,7 @@ def test_centroid_and_graph_stage1_capabilities_remain_generic() raises:
     )
     assert_equal(centroid_capabilities.stage1_is_exact, False)
     assert_equal(centroid_capabilities.supports_exact_doc_id_filter, True)
-    assert_equal(centroid_capabilities.supports_structured_filter, False)
+    assert_equal(centroid_capabilities.supports_structured_filter, True)
     assert_equal(
         centroid_capabilities.required_search_artifact_families[0],
         "centroid_postings",
@@ -88,7 +88,7 @@ def test_candidate_generator_carries_stage1_contract_metadata() raises:
     assert_equal(generator.is_exact, False)
     assert_equal(generator.supports_match_all_filter, True)
     assert_equal(generator.supports_exact_doc_id_filter, True)
-    assert_equal(generator.supports_structured_filter, False)
+    assert_equal(generator.supports_structured_filter, True)
     assert_equal(generator.requires_artifact_family("document_proxy"), True)
     assert_equal(generator.requires_artifact_family("gem_graph"), False)
 

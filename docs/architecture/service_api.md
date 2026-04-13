@@ -182,7 +182,9 @@ Current verified behavior:
 
 Current guardrails:
 - exact `doc_id` filters stay native for `document_proxy` and centroid stage 1
-- metadata filters currently fall back to exact stage 1
+- metadata filters stay native for `document_proxy` and centroid stage 1 when
+  every segment has a `document_filter_index` sidecar; older snapshots without
+  that sidecar still fall back to exact stage 1
 - `gem_graph` currently supports only `match_all` filters
 - `exact_stage1_required` falls back to exact stage 1
 - `oracle_full_recall_required` without `debug_mode` falls back to exact stage 1

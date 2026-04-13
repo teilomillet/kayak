@@ -5,6 +5,7 @@ from std.pathlib import Path
 
 from kayak.collections import (
     CollectionManifest,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     CollectionStats,
     SegmentId,
@@ -294,7 +295,14 @@ def snapshot_load_requirements_for_request(
         request.plan.candidate_generator.required_search_artifact_families.copy()
     )
     if needs_document_metadata:
-        required_artifacts.append(SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA)
+        if request.plan.candidate_generator.is_exact:
+            required_artifacts.append(SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA)
+        elif request.plan.candidate_generator.supports_structured_filter:
+            required_artifacts.append(
+                SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX
+            )
+        else:
+            required_artifacts.append(SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA)
 
     if len(required_artifacts) == 0:
         return exact_only_snapshot_requirements(needs_document_text)

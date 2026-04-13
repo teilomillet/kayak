@@ -127,6 +127,7 @@ def centroid_posting_imputed_flat_scores_for_segment_generic(
     read query: EncodedQuery,
     read index: CentroidPostingIndex,
     final_k: Int,
+    read allowed_flags: List[Int] = [],
 ) -> List[ScoreScalar]:
     var flat_query_values = List[VectorScalar]()
     var selections = List[ScoredCentroidSelection]()
@@ -160,6 +161,7 @@ def centroid_posting_imputed_flat_scores_for_segment_generic(
             scores,
             active_doc_indices,
             active_flags,
+            allowed_flags,
         )
 
     return scores^
@@ -169,6 +171,7 @@ def centroid_posting_imputed_flat_scores_for_segment_dim128(
     read query: FlatQueryDim128,
     read index: CentroidPostingIndex,
     final_k: Int,
+    read allowed_flags: List[Int] = [],
 ) -> List[ScoreScalar]:
     var selections = List[ScoredCentroidSelection]()
     var base_score = zero_score_scalar()
@@ -194,6 +197,7 @@ def centroid_posting_imputed_flat_scores_for_segment_dim128(
             scores,
             active_doc_indices,
             active_flags,
+            allowed_flags,
         )
 
     return scores^
@@ -203,6 +207,7 @@ def centroid_posting_imputed_flat_scores_for_segment(
     read query: EncodedQuery,
     read index: CentroidPostingIndex,
     final_k: Int,
+    read allowed_flags: List[Int] = [],
 ) raises -> List[ScoreScalar]:
     if query.vector_dim != index.vector_dim:
         raise Error(
@@ -214,8 +219,12 @@ def centroid_posting_imputed_flat_scores_for_segment(
             build_flat_query_dim128(query),
             index,
             final_k,
+            allowed_flags,
         )
 
     return centroid_posting_imputed_flat_scores_for_segment_generic(
-        query, index, final_k
+        query,
+        index,
+        final_k,
+        allowed_flags,
     )

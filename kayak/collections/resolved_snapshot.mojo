@@ -10,6 +10,7 @@ from kayak.storage import (
 )
 
 from .collection import CollectionManifest
+from .document_filter_index import StoredDocumentFilterIndex
 from .document_metadata import (
     DocumentMetadataMap,
     StoredDocumentMetadataCorpus,
@@ -18,6 +19,7 @@ from .document_metadata import (
 from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
@@ -31,6 +33,7 @@ from .text_corpus import StoredDocumentTextCorpus
 struct LoadedSearchArtifact(Copyable):
     var manifest: SearchArtifactManifest
     var stored_centroid_postings_index: StoredCentroidPostingIndex
+    var stored_document_filter_index: StoredDocumentFilterIndex
     var stored_document_metadata_corpus: StoredDocumentMetadataCorpus
     var stored_document_proxy_index: StoredDocumentProxyIndex
     var stored_gem_graph_index: StoredGemGraphIndex
@@ -39,12 +42,14 @@ struct LoadedSearchArtifact(Copyable):
         out self,
         manifest: SearchArtifactManifest,
         stored_centroid_postings_index: StoredCentroidPostingIndex,
+        stored_document_filter_index: StoredDocumentFilterIndex,
         stored_document_metadata_corpus: StoredDocumentMetadataCorpus,
         stored_document_proxy_index: StoredDocumentProxyIndex,
         stored_gem_graph_index: StoredGemGraphIndex,
     ):
         self.manifest = manifest.copy()
         self.stored_centroid_postings_index = stored_centroid_postings_index.copy()
+        self.stored_document_filter_index = stored_document_filter_index.copy()
         self.stored_document_metadata_corpus = (
             stored_document_metadata_corpus.copy()
         )
@@ -87,6 +92,12 @@ def loaded_search_artifact_is_document_metadata(
     return artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA
 
 
+def loaded_search_artifact_is_document_filter_index(
+    read artifact: LoadedSearchArtifact
+) -> Bool:
+    return artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX
+
+
 def loaded_search_artifact_is_gem_graph(read artifact: LoadedSearchArtifact) -> Bool:
     return artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
 
@@ -101,6 +112,18 @@ def loaded_search_artifact_stored_centroid_postings_index(
         )
 
     return artifact.stored_centroid_postings_index.copy()
+
+
+def loaded_search_artifact_stored_document_filter_index(
+    read artifact: LoadedSearchArtifact
+) raises -> StoredDocumentFilterIndex:
+    if not loaded_search_artifact_is_document_filter_index(artifact):
+        raise Error(
+            "loaded search artifact family is not a document filter index artifact: "
+            + artifact.manifest.family
+        )
+
+    return artifact.stored_document_filter_index.copy()
 
 
 def loaded_search_artifact_stored_document_proxy_index(
@@ -222,6 +245,14 @@ def loaded_segment_has_document_metadata(
     )
 
 
+def loaded_segment_has_document_filter_index(
+    read segment: LoadedSealedSegment
+) -> Bool:
+    return loaded_segment_has_search_artifact(
+        segment, SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX
+    )
+
+
 def loaded_segment_has_gem_graph_index(read segment: LoadedSealedSegment) -> Bool:
     return loaded_segment_has_search_artifact(
         segment, SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
@@ -255,6 +286,17 @@ def loaded_segment_stored_document_metadata(
         loaded_segment_search_artifact(
             segment,
             SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
+        )
+    )
+
+
+def loaded_segment_stored_document_filter_index(
+    read segment: LoadedSealedSegment
+) raises -> StoredDocumentFilterIndex:
+    return loaded_search_artifact_stored_document_filter_index(
+        loaded_segment_search_artifact(
+            segment,
+            SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
         )
     )
 

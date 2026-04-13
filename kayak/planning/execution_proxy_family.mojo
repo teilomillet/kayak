@@ -10,8 +10,6 @@ from kayak.collections import (
 from kayak.contracts import EncodedQuery
 from kayak.filters import (
     FilterExpression,
-    filter_expression_is_exact_doc_id_filter,
-    filter_expression_matches_doc_id,
     match_all_filter,
 )
 from kayak.index import build_query_proxy_vector
@@ -20,6 +18,10 @@ from kayak.scoring.dot import dot_product
 
 from .candidate_set import CandidateSet
 from .collection_hit import CollectionHit
+from .filter_allowlist import (
+    document_filter_allowlist_artifact_byte_size_for_segment,
+    document_filter_allowlist_for_segment,
+)
 from .search_plan import SearchPlan
 from .topk import insert_descending_collection_hit
 
@@ -32,14 +34,6 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
     read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     _ = backend
-
-    if (
-        not filter_expression.is_match_all()
-        and not filter_expression_is_exact_doc_id_filter(filter_expression)
-    ):
-        raise Error(
-            "document_proxy stage-1 currently supports only match_all or exact doc_id filters"
-        )
 
     var hits = List[CollectionHit]()
     var query_proxy = build_query_proxy_vector(query, 0)
@@ -65,14 +59,28 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
             * stored_proxy.proxy_vector_count_per_document
         )
         byte_size += stored_proxy.artifact_byte_size
+        var allowed_flags = List[Int]()
+        var matching_document_count = stored_proxy.index.document_count
+        if not filter_expression.is_match_all():
+            byte_size += document_filter_allowlist_artifact_byte_size_for_segment(
+                segment,
+                filter_expression,
+            )
+
+            var allowlist = document_filter_allowlist_for_segment(
+                segment,
+                filter_expression,
+            )
+            matching_document_count = allowlist.matching_document_count
+            allowed_flags = allowlist.flags.copy()
+
+        if matching_document_count == 0:
+            continue
 
         for document_index in range(stored_proxy.index.document_count):
-            var doc_id = stored_proxy.index.doc_ids[document_index]
-            if (
-                not filter_expression.is_match_all()
-                and not filter_expression_matches_doc_id(filter_expression, doc_id)
-            ):
+            if len(allowed_flags) != 0 and allowed_flags[document_index] == 0:
                 continue
+            var doc_id = stored_proxy.index.doc_ids[document_index]
             insert_descending_collection_hit(
                 hits,
                 CollectionHit(

@@ -1,6 +1,7 @@
 from std.collections import List
 
 from kayak.collections import (
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
     SearchArtifactBuildPolicy,
     search_artifact_build_policy_supports_required_families,
 )
@@ -137,6 +138,19 @@ struct Stage1Capabilities(Copyable):
         )
 
 
+def append_unique_required_family(
+    mut families: List[String], family: String
+) raises:
+    var normalized = require_non_empty_string(
+        family, "required_search_artifact family"
+    )
+    for existing in families:
+        if existing == normalized:
+            return
+
+    families.append(normalized)
+
+
 def exact_stage1_capabilities() raises -> Stage1Capabilities:
     return Stage1Capabilities(
         "exact_full_scan",
@@ -163,7 +177,7 @@ def document_proxy_stage1_capabilities() raises -> Stage1Capabilities:
         False,
         True,
         True,
-        False,
+        True,
     )
 
 
@@ -178,7 +192,7 @@ def centroid_heads_stage1_capabilities() raises -> Stage1Capabilities:
         False,
         True,
         True,
-        False,
+        True,
     )
 
 
@@ -193,7 +207,7 @@ def centroid_postings_stage1_capabilities(kind: String) raises -> Stage1Capabili
         False,
         True,
         True,
-        False,
+        True,
     )
 
 
@@ -243,6 +257,28 @@ def stage1_required_search_artifact_families(
     return stage1_capabilities_for_candidate_generator_kind(
         candidate_generator_kind
     ).required_search_artifact_families.copy()
+
+
+def stage1_required_search_artifact_families_for_filter_expression(
+    candidate_generator_kind: String,
+    read filter_expression: FilterExpression,
+) raises -> List[String]:
+    var capabilities = stage1_capabilities_for_candidate_generator_kind(
+        candidate_generator_kind
+    )
+    var required_families = capabilities.required_search_artifact_families.copy()
+
+    if (
+        filter_expression_requires_document_metadata(filter_expression)
+        and capabilities.supports_structured_filter
+        and not capabilities.stage1_is_exact
+    ):
+        append_unique_required_family(
+            required_families,
+            SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
+        )
+
+    return required_families^
 
 
 def stage1_requires_search_artifact_family(

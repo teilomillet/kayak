@@ -85,6 +85,7 @@ def accumulate_token_best_doc_scores_head_auto(
     read query_token: List[VectorScalar], read index: CentroidPostingIndex,
     candidate_k: Int, query_vector_count: Int, mut scores: List[ScoreScalar],
     mut active_doc_indices: List[Int], mut active_flags: List[Int],
+    read allowed_flags: List[Int] = [],
 ):
     var token_best_scores = List[ScoreScalar]()
     var token_active_doc_indices = List[Int]()
@@ -106,6 +107,8 @@ def accumulate_token_best_doc_scores_head_auto(
 
         for posting_index in range(start, stop):
             var doc_index = index.posting_doc_indices[posting_index]
+            if len(allowed_flags) != 0 and allowed_flags[doc_index] == 0:
+                continue
             var weighted_similarity = (
                 similarity * ScoreScalar(index.posting_weights[posting_index])
             )
@@ -129,6 +132,7 @@ def centroid_posting_head_auto_scores_for_segment(
     read query_token_vectors: List[List[VectorScalar]],
     read index: CentroidPostingIndex,
     candidate_k: Int,
+    read allowed_flags: List[Int] = [],
 ) -> List[ScoreScalar]:
     var scores = List[ScoreScalar]()
     var active_flags = List[Int]()
@@ -147,6 +151,7 @@ def centroid_posting_head_auto_scores_for_segment(
             scores,
             active_doc_indices,
             active_flags,
+            allowed_flags,
         )
 
     return scores^

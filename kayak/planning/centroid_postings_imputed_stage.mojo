@@ -141,6 +141,7 @@ def centroid_posting_imputed_scores_for_segment(
     read query_token_vectors: List[List[VectorScalar]],
     read index: CentroidPostingIndex,
     final_k: Int,
+    read allowed_flags: List[Int] = [],
 ) -> List[ScoreScalar]:
     var selections = List[ScoredCentroidSelection]()
     var base_score = zero_score_scalar()
@@ -164,6 +165,7 @@ def centroid_posting_imputed_scores_for_segment(
             scores,
             active_doc_indices,
             active_flags,
+            allowed_flags,
         )
 
     return scores^

@@ -312,7 +312,8 @@ Immediate TODOs:
 - [x] Add per-tenant and cross-tenant segment layout design note
 - [x] Add benchmark fixtures for low-selectivity and high-selectivity filters
 - [x] Keep exact `doc_id` filters on native `document_proxy` and centroid stage-1 paths instead of forcing blanket exact fallback
-- [ ] Extend native candidate generation from exact `doc_id` pushdown to broader metadata-aware and tenant-aware filter selectivity
+- [x] Extend native candidate generation from exact `doc_id` pushdown to broader metadata-aware filter selectivity
+- [ ] Extend native filter-aware candidate generation to real tenant-aware selectivity on shared hosted layouts
 
 ## Priority 4: Observability, Profiling, And Explainability
 

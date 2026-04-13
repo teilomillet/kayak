@@ -16,6 +16,8 @@ from kayak.text import DocumentTextCorpus
 
 from .collection import CollectionManifest
 from .collection_store import load_collection_manifest
+from .document_filter_index import StoredDocumentFilterIndex
+from .document_filter_index_store import load_stored_document_filter_index
 from .document_metadata import StoredDocumentMetadataCorpus
 from .document_metadata_store import load_stored_document_metadata_corpus
 from .ids import CollectionId, SegmentId, SnapshotId
@@ -36,6 +38,7 @@ from .resolved_snapshot import (
 from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
@@ -70,6 +73,18 @@ def empty_stored_document_metadata_corpus(
         collection_id.copy(),
         segment_id.copy(),
         [],
+        [],
+    )
+
+
+def empty_stored_document_filter_index(
+    read collection_id: CollectionId, read segment_id: SegmentId
+) raises -> StoredDocumentFilterIndex:
+    return StoredDocumentFilterIndex(
+        collection_id.copy(),
+        segment_id.copy(),
+        0,
+        0,
         [],
     )
 
@@ -247,6 +262,24 @@ def require_loaded_document_metadata_matches_segment(
             raise Error("document metadata doc_ids do not align with packed index")
 
 
+def require_loaded_document_filter_index_matches_segment(
+    read segment: SealedSegmentManifest,
+    read stored_document_filter_index: StoredDocumentFilterIndex,
+) raises:
+    if stored_document_filter_index.collection_id.value != segment.collection_id.value:
+        raise Error(
+            "document filter index collection_id does not match segment manifest"
+        )
+
+    if stored_document_filter_index.segment_id.value != segment.segment_id.value:
+        raise Error("document filter index segment_id does not match segment manifest")
+
+    if stored_document_filter_index.document_count != segment.stats.document_count:
+        raise Error(
+            "document filter index document_count does not match segment stats"
+        )
+
+
 def require_loaded_centroid_postings_matches_segment(
     read segment: SealedSegmentManifest,
     read stored_centroid_postings_index: StoredCentroidPostingIndex,
@@ -323,6 +356,10 @@ def load_search_artifact_for_segment(
         segment.vector_scalar_name,
         segment.vector_dim,
     )
+    var stored_document_filter_index = empty_stored_document_filter_index(
+        segment.collection_id,
+        segment.segment_id,
+    )
     var stored_document_metadata_corpus = (
         empty_stored_document_metadata_corpus(
             segment.collection_id,
@@ -360,6 +397,17 @@ def load_search_artifact_for_segment(
         )
         require_loaded_centroid_heads_matches_segment(
             segment, stored_centroid_postings_index
+        )
+    elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX:
+        stored_document_filter_index = load_stored_document_filter_index(
+            resolve_segment_artifact_root(
+                segment_root,
+                search_artifact.root,
+                "search_artifact root for " + search_artifact.family,
+            )
+        )
+        require_loaded_document_filter_index_matches_segment(
+            segment, stored_document_filter_index
         )
     elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA:
         stored_document_metadata_corpus = load_stored_document_metadata_corpus(
@@ -405,6 +453,7 @@ def load_search_artifact_for_segment(
     return LoadedSearchArtifact(
         search_artifact,
         stored_centroid_postings_index,
+        stored_document_filter_index,
         stored_document_metadata_corpus,
         stored_document_proxy_index,
         stored_gem_graph_index,

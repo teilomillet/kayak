@@ -88,7 +88,9 @@ def top_centroid_selection_for_flat_query_token_dim128(
 
 
 def centroid_posting_flat_scores_for_segment_generic(
-    read query: EncodedQuery, read index: CentroidPostingIndex
+    read query: EncodedQuery,
+    read index: CentroidPostingIndex,
+    read allowed_flags: List[Int] = [],
 ) -> List[ScoreScalar]:
     var flat_query_values = List[VectorScalar]()
     var scores = List[ScoreScalar]()
@@ -114,13 +116,16 @@ def centroid_posting_flat_scores_for_segment_generic(
             scores,
             active_doc_indices,
             active_flags,
+            allowed_flags,
         )
 
     return scores^
 
 
 def centroid_posting_flat_scores_for_segment_dim128(
-    read query: FlatQueryDim128, read index: CentroidPostingIndex
+    read query: FlatQueryDim128,
+    read index: CentroidPostingIndex,
+    read allowed_flags: List[Int] = [],
 ) -> List[ScoreScalar]:
     var scores = List[ScoreScalar]()
     var active_flags = List[Int]()
@@ -141,13 +146,16 @@ def centroid_posting_flat_scores_for_segment_dim128(
             scores,
             active_doc_indices,
             active_flags,
+            allowed_flags,
         )
 
     return scores^
 
 
 def centroid_posting_flat_scores_for_segment(
-    read query: EncodedQuery, read index: CentroidPostingIndex
+    read query: EncodedQuery,
+    read index: CentroidPostingIndex,
+    read allowed_flags: List[Int] = [],
 ) raises -> List[ScoreScalar]:
     if query.vector_dim != index.vector_dim:
         raise Error("centroid posting flat stage requires matching vector_dim")
@@ -156,6 +164,11 @@ def centroid_posting_flat_scores_for_segment(
         return centroid_posting_flat_scores_for_segment_dim128(
             build_flat_query_dim128(query),
             index,
+            allowed_flags,
         )
 
-    return centroid_posting_flat_scores_for_segment_generic(query, index)
+    return centroid_posting_flat_scores_for_segment_generic(
+        query,
+        index,
+        allowed_flags,
+    )

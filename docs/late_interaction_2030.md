@@ -294,8 +294,9 @@ What Kayak should do:
 - resist the temptation to bypass the service/storage loop in pursuit of a
   paper-shaped engine result that would not survive product constraints
 - make native filter-aware candidate generation concrete instead of aspirational:
-  exact `doc_id` filters can stay on proxy/centroid stage-1 paths, while
-  broader metadata filters still need first-class native support
+  exact `doc_id` and metadata filters should stay on proxy/centroid stage-1
+  paths whenever the required segment sidecars exist, while older snapshots
+  without those sidecars must still degrade cleanly to exact
 
 ## Additional Decision Rules
 

@@ -81,7 +81,9 @@ def top_centroid_indices_for_query_token(
 
 
 def centroid_posting_scores_for_segment(
-    read query_token_vectors: List[List[VectorScalar]], read index: CentroidPostingIndex
+    read query_token_vectors: List[List[VectorScalar]],
+    read index: CentroidPostingIndex,
+    read allowed_flags: List[Int] = [],
 ) -> List[ScoreScalar]:
     var scores = List[ScoreScalar]()
     var active_flags = List[Int]()
@@ -98,6 +100,7 @@ def centroid_posting_scores_for_segment(
             scores,
             active_doc_indices,
             active_flags,
+            allowed_flags,
         )
 
     return scores^

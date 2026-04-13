@@ -26,6 +26,7 @@ def accumulate_selected_centroid_scores(
     mut scores: List[ScoreScalar],
     mut active_doc_indices: List[Int],
     mut active_flags: List[Int],
+    read allowed_flags: List[Int] = [],
 ):
     var token_best_scores = List[ScoreScalar]()
     var token_active_doc_indices = List[Int]()
@@ -43,6 +44,8 @@ def accumulate_selected_centroid_scores(
 
         for posting_index in range(start, stop):
             var doc_index = index.posting_doc_indices[posting_index]
+            if len(allowed_flags) != 0 and allowed_flags[doc_index] == 0:
+                continue
             var approximate_score = (
                 centroid_score * ScoreScalar(index.posting_weights[posting_index])
             )

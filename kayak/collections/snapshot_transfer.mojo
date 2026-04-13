@@ -14,6 +14,7 @@ from .collection_store import (
     load_collection_manifest,
     save_collection_manifest,
 )
+from .document_filter_index_store import save_stored_document_filter_index
 from .document_metadata_store import save_stored_document_metadata_corpus
 from .paths import collection_segment_root, collection_snapshot_root
 from .resolved_snapshot import (
@@ -21,6 +22,7 @@ from .resolved_snapshot import (
     LoadedSealedSegment,
     ResolvedCollectionSnapshot,
     loaded_search_artifact_stored_centroid_postings_index,
+    loaded_search_artifact_stored_document_filter_index,
     loaded_search_artifact_stored_document_metadata,
     loaded_search_artifact_stored_document_proxy_index,
     loaded_search_artifact_stored_gem_graph_index,
@@ -29,6 +31,7 @@ from .resolver import load_resolved_collection_snapshot
 from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
@@ -315,6 +318,13 @@ def write_loaded_search_artifact(
         save_stored_document_proxy_index(
             segment_root / artifact.manifest.root,
             loaded_search_artifact_stored_document_proxy_index(artifact),
+        )
+        return
+
+    if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX:
+        save_stored_document_filter_index(
+            segment_root / artifact.manifest.root,
+            loaded_search_artifact_stored_document_filter_index(artifact),
         )
         return
 

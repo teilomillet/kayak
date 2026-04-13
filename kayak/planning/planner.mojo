@@ -33,6 +33,7 @@ from .stage1_capabilities import (
     stage1_capabilities_for_candidate_generator_kind,
     stage1_generator_supports_filter_expression,
     stage1_required_search_artifact_families,
+    stage1_required_search_artifact_families_for_filter_expression,
 )
 
 
@@ -54,9 +55,11 @@ def search_planning_goal_kinds(goal: String) raises -> List[String]:
 def candidate_generator_kind_is_available(
     read availability: SnapshotSearchArtifactAvailability,
     candidate_generator_kind: String,
+    read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> Bool:
-    var required_families = stage1_required_search_artifact_families(
-        candidate_generator_kind
+    var required_families = stage1_required_search_artifact_families_for_filter_expression(
+        candidate_generator_kind,
+        filter_expression,
     )
     for family in required_families:
         if not availability.has_search_artifact_family_on_all_segments(family):
@@ -76,12 +79,15 @@ def candidate_generator_kind_supports_filter_expression(
 
 
 def available_candidate_generator_kinds(
-    read availability: SnapshotSearchArtifactAvailability
+    read availability: SnapshotSearchArtifactAvailability,
+    read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> List[String]:
     var kinds = List[String]()
     for candidate_generator_kind in registered_search_planner_candidate_generator_kinds():
         if candidate_generator_kind_is_available(
-            availability, candidate_generator_kind
+            availability,
+            candidate_generator_kind,
+            filter_expression,
         ):
             append_unique_generator_kind(kinds, candidate_generator_kind)
 
@@ -235,14 +241,10 @@ def effective_candidate_generator_order(
         and not filter_expression_is_exact_doc_id_filter(
             request.filter_expression
         )
-    ):
-        if filter_expression_requires_document_metadata(
+        and not filter_expression_requires_document_metadata(
             request.filter_expression
-        ):
-            return CandidateGeneratorOrderDecision(
-                ["exact_full_scan"],
-                "metadata filters currently require exact stage-1 candidate generation",
-            )
+        )
+    ):
         return CandidateGeneratorOrderDecision(
             ["exact_full_scan"],
             "unsupported non-match_all filters currently require exact stage-1 candidate generation",
@@ -285,12 +287,17 @@ def select_search_plan_for_availability(
     read availability: SnapshotSearchArtifactAvailability,
     read request: SearchPlanSelectionRequest,
 ) raises -> SearchPlanSelection:
-    var available_kinds = available_candidate_generator_kinds(availability)
+    var available_kinds = available_candidate_generator_kinds(
+        availability,
+        request.filter_expression,
+    )
     var decision = effective_candidate_generator_order(request)
 
     for candidate_generator_kind in decision.order:
         if not candidate_generator_kind_is_available(
-            availability, candidate_generator_kind
+            availability,
+            candidate_generator_kind,
+            request.filter_expression,
         ):
             continue
         if not candidate_generator_kind_supports_filter_expression(

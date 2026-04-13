@@ -45,6 +45,20 @@ from .document_metadata import (
     empty_document_metadata_map,
     merge_document_metadata,
 )
+from .document_filter_index import (
+    DocumentFilterPosting,
+    StoredDocumentFilterIndex,
+    build_stored_document_filter_index,
+)
+from .document_filter_index_store import (
+    load_stored_document_filter_index,
+    save_stored_document_filter_index,
+    stored_document_filter_index_exists,
+)
+from .document_filter_runtime import (
+    DocumentFilterAllowlist,
+    document_filter_allowlist_for_expression,
+)
 from .document_metadata_store import (
     load_stored_document_metadata_corpus,
     save_stored_document_metadata_corpus,
@@ -100,9 +114,11 @@ from .resolved_snapshot import (
     loaded_search_artifact_has_family,
     loaded_search_artifact_root,
     loaded_search_artifact_stored_centroid_postings_index,
+    loaded_search_artifact_stored_document_filter_index,
     loaded_search_artifact_stored_document_metadata,
     loaded_search_artifact_stored_document_proxy_index,
     loaded_search_artifact_stored_gem_graph_index,
+    loaded_segment_has_document_filter_index,
     loaded_segment_document_metadata_for_doc_index,
     loaded_segment_has_centroid_heads_index,
     loaded_segment_has_centroid_postings_index,
@@ -113,6 +129,7 @@ from .resolved_snapshot import (
     loaded_segment_search_artifact,
     loaded_segment_search_artifact_families,
     loaded_segment_stored_centroid_postings_index,
+    loaded_segment_stored_document_filter_index,
     loaded_segment_stored_document_metadata,
     loaded_segment_stored_document_proxy_index,
     loaded_segment_stored_gem_graph_index,
@@ -121,12 +138,14 @@ from .resolver import load_resolved_collection_snapshot
 from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
+    SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
     SearchArtifactManifest,
     centroid_heads_search_artifact,
     centroid_postings_search_artifact,
+    document_filter_index_search_artifact,
     document_metadata_search_artifact,
     document_proxy_search_artifact,
     gem_graph_search_artifact,

@@ -1,7 +1,7 @@
 from std.pathlib import Path
 from std.testing import TestSuite, assert_equal
 
-from kayak import EncodedDocument, VECTOR_SCALAR_NAME, pack_documents
+from kayak import EncodedDocument, VECTOR_SCALAR_NAME, one_of_filter, pack_documents
 from kayak.collections import (
     CollectionId,
     CollectionManifest,
@@ -173,6 +173,27 @@ def test_planner_skips_partial_sidecar_family_on_multi_segment_snapshot() raises
 
     assert_equal(selection.plan.candidate_generator.kind, "document_proxy")
     assert_equal(selection.selected_candidate_generator_status, "promoted")
+
+
+def test_planner_falls_back_to_exact_for_metadata_filters_without_filter_sidecars() raises:
+    var collection_root = write_mixed_sidecar_snapshot_fixture()
+    var availability = load_snapshot_search_artifact_availability(
+        collection_root,
+        SnapshotId("snapshot-0002"),
+    )
+    var selection = select_search_plan_for_availability(
+        availability,
+        SearchPlanSelectionRequest(
+            1,
+            10,
+            best_effort_faithfulness_policy(),
+            one_of_filter("source", ["wire"]),
+            goal=SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
+        ),
+    )
+
+    assert_equal(selection.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(selection.selected_candidate_generator_status, "exact_fallback")
 
 
 def main() raises:

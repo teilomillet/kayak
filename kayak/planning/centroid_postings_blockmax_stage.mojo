@@ -221,6 +221,7 @@ def accumulate_token_best_doc_scores_blockmax(
     candidate_k: Int, mut scores: List[ScoreScalar],
     mut active_doc_indices: List[Int], mut active_flags: List[Int],
     mut profile: MutableCentroidPostingBlockmaxProfile,
+    read allowed_flags: List[Int] = [],
 ):
     var token_best_scores = List[ScoreScalar]()
     var token_active_doc_indices = List[Int]()
@@ -273,6 +274,8 @@ def accumulate_token_best_doc_scores_blockmax(
             for posting_index in range(posting_start, posting_stop):
                 profile.visited_posting_count += 1
                 var doc_index = index.posting_doc_indices[posting_index]
+                if len(allowed_flags) != 0 and allowed_flags[doc_index] == 0:
+                    continue
                 var weighted_similarity = (
                     similarity * ScoreScalar(index.posting_weights[posting_index])
                 )
@@ -303,6 +306,7 @@ def centroid_posting_blockmax_scores_for_segment_profiled(
     read query_token_vectors: List[List[VectorScalar]],
     read index: CentroidPostingIndex,
     candidate_k: Int,
+    read allowed_flags: List[Int] = [],
 ) raises -> CentroidPostingBlockmaxResult:
     var scores = List[ScoreScalar]()
     var active_flags = List[Int]()
@@ -322,6 +326,7 @@ def centroid_posting_blockmax_scores_for_segment_profiled(
             active_doc_indices,
             active_flags,
             profile,
+            allowed_flags,
         )
 
     return CentroidPostingBlockmaxResult(scores^, profile.freeze())
@@ -331,9 +336,11 @@ def centroid_posting_blockmax_scores_for_segment(
     read query_token_vectors: List[List[VectorScalar]],
     read index: CentroidPostingIndex,
     candidate_k: Int,
+    read allowed_flags: List[Int] = [],
 ) raises -> List[ScoreScalar]:
     return centroid_posting_blockmax_scores_for_segment_profiled(
         query_token_vectors,
         index,
         candidate_k,
+        allowed_flags,
     ).scores.copy()

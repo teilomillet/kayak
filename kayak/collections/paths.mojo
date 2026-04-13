@@ -60,6 +60,14 @@ def document_metadata_payload_root(root: Path) -> Path:
     return root / "metadata"
 
 
+def document_filter_index_manifest_path(root: Path) -> Path:
+    return root / "manifest.tsv"
+
+
+def document_filter_index_entries_path(root: Path) -> Path:
+    return root / "entries.tsv"
+
+
 def require_relative_artifact_root(
     artifact_root: String, field_name: String
 ) raises -> String:

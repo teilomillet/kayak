@@ -12,8 +12,6 @@ from kayak.collections import (
 from kayak.contracts import EncodedQuery
 from kayak.filters import (
     FilterExpression,
-    filter_expression_is_exact_doc_id_filter,
-    filter_expression_matches_doc_id,
     match_all_filter,
 )
 from kayak.numeric import ScoreScalar
@@ -52,6 +50,10 @@ from .centroid_postings_imputed_stage import (
 )
 from .centroid_postings_stage import centroid_posting_scores_for_segment
 from .collection_hit import CollectionHit
+from .filter_allowlist import (
+    document_filter_allowlist_artifact_byte_size_for_segment,
+    document_filter_allowlist_for_segment,
+)
 from .search_plan import SearchPlan
 from .topk import insert_descending_collection_hit
 
@@ -80,15 +82,12 @@ def insert_centroid_scores(
     read doc_ids: List[String],
     read scores: List[ScoreScalar],
     candidate_k: Int,
-    read filter_expression: FilterExpression,
+    read allowed_flags: List[Int],
 ):
     for document_index in range(len(scores)):
-        var doc_id = doc_ids[document_index]
-        if (
-            not filter_expression.is_match_all()
-            and not filter_expression_matches_doc_id(filter_expression, doc_id)
-        ):
+        if len(allowed_flags) != 0 and allowed_flags[document_index] == 0:
             continue
+        var doc_id = doc_ids[document_index]
         insert_descending_collection_hit(
             hits,
             CollectionHit(
@@ -108,15 +107,6 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
     read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     _ = backend
-
-    if (
-        not filter_expression.is_match_all()
-        and not filter_expression_is_exact_doc_id_filter(filter_expression)
-    ):
-        raise Error(
-            plan.candidate_generator.kind
-            + " stage-1 currently supports only match_all or exact doc_id filters"
-        )
 
     var hits = List[CollectionHit]()
     var vector_count = 0
@@ -144,6 +134,22 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
         vector_count += stored_centroid.index.centroid_count
         token_count += stored_centroid.index.total_posting_count
         byte_size += stored_centroid.artifact_byte_size
+        var allowed_flags = List[Int]()
+        var matching_document_count = stored_centroid.index.document_count
+        if not filter_expression.is_match_all():
+            byte_size += document_filter_allowlist_artifact_byte_size_for_segment(
+                segment,
+                filter_expression,
+            )
+            var allowlist = document_filter_allowlist_for_segment(
+                segment,
+                filter_expression,
+            )
+            matching_document_count = allowlist.matching_document_count
+            allowed_flags = allowlist.flags.copy()
+
+        if matching_document_count == 0:
+            continue
 
         var shortlist_budget = contract.shortlist_budget(
             plan.candidate_budget.candidate_k,
@@ -152,35 +158,41 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
         var scores = centroid_posting_scores_for_segment(
             query.token_vectors,
             stored_centroid.index,
+            allowed_flags,
         )
         if contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_FLAT:
             scores = centroid_posting_flat_scores_for_segment(
                 query,
                 stored_centroid.index,
+                allowed_flags,
             )
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_HEAD:
             scores = centroid_posting_head_scores_for_segment(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
+                allowed_flags,
             )
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_HEAD_AUTO:
             scores = centroid_posting_head_auto_scores_for_segment(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
+                allowed_flags,
             )
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_BLOCKMAX:
             scores = centroid_posting_blockmax_scores_for_segment(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
+                allowed_flags,
             )
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_IMPUTED:
             scores = centroid_posting_imputed_scores_for_segment(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
+                allowed_flags,
             )
         elif (
             contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_IMPUTED_FLAT
@@ -189,6 +201,7 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
                 query,
                 stored_centroid.index,
                 shortlist_budget,
+                allowed_flags,
             )
         elif contract.score_variant != CENTROID_EXECUTION_SCORE_VARIANT_POSTINGS:
             raise Error(
@@ -202,7 +215,7 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
             segment.stored_index.index.doc_ids,
             scores,
             plan.candidate_budget.candidate_k,
-            filter_expression,
+            allowed_flags,
         )
 
     return CandidateSet(

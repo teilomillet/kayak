@@ -319,6 +319,7 @@ def require_search_artifact_build_policy_layout_safe(
         if (
             spec.root == "packed_index"
             or spec.root == "text_corpus"
+            or spec.root == "document_filter_index"
             or spec.root == "document_metadata"
         ):
             raise Error(
