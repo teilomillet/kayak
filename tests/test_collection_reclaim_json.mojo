@@ -2,12 +2,14 @@ from std.testing import TestSuite, assert_equal
 
 from kayak import (
     CollectionId,
+    CollectionReclaimExecutionResult,
     CollectionReclaimPlan,
     NamespaceId,
     SegmentId,
     SnapshotId,
     SnapshotRetentionDecision,
     TenantId,
+    collection_reclaim_execution_result_json,
     collection_reclaim_plan_json,
 )
 
@@ -61,6 +63,29 @@ def test_collection_reclaim_plan_json_contains_decisions_and_segments() raises:
     assert_equal(json.find("\"snapshot_id\":\"snapshot-0001\"") != -1, True)
     assert_equal(json.find("\"reason\":\"inactive_reclaim_candidate\"") != -1, True)
     assert_equal(json.find("\"reclaimable_unique_segment_ids\":[\"segment-1\",\"segment-2\"]") != -1, True)
+
+
+def test_collection_reclaim_execution_result_json_contains_apply_state() raises:
+    var json = collection_reclaim_execution_result_json(
+        CollectionReclaimExecutionResult(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            True,
+            1,
+            2,
+            2048,
+            [SnapshotId("snapshot-0001")],
+            [SegmentId("segment-1"), SegmentId("segment-2")],
+        )
+    )
+
+    assert_equal(json.find("\"applied\":true") != -1, True)
+    assert_equal(json.find("\"snapshot_count\":1") != -1, True)
+    assert_equal(json.find("\"unique_segment_count\":2") != -1, True)
+    assert_equal(json.find("\"unique_byte_size\":2048") != -1, True)
+    assert_equal(json.find("\"snapshot_ids\":[\"snapshot-0001\"]") != -1, True)
+    assert_equal(json.find("\"unique_segment_ids\":[\"segment-1\",\"segment-2\"]") != -1, True)
 
 
 def main() raises:

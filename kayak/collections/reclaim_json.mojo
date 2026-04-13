@@ -1,7 +1,12 @@
 from std.collections import List
 
 from .ids import SegmentId
-from .reclaim import CollectionReclaimPlan, SnapshotRetentionDecision
+from .reclaim import (
+    CollectionReclaimExecutionResult,
+    CollectionReclaimPlan,
+    SnapshotRetentionDecision,
+)
+from .ids import SnapshotId
 
 
 def json_escape(text: String) -> String:
@@ -52,6 +57,17 @@ def append_segment_ids_json(mut buffer: String, read segment_ids: List[SegmentId
     buffer += "]"
 
 
+def append_snapshot_ids_json(mut buffer: String, read snapshot_ids: List[SnapshotId]):
+    buffer += "["
+    for index in range(len(snapshot_ids)):
+        if index > 0:
+            buffer += ","
+        buffer += "\""
+        buffer += json_escape(snapshot_ids[index].value)
+        buffer += "\""
+    buffer += "]"
+
+
 def collection_reclaim_plan_json(read plan: CollectionReclaimPlan) -> String:
     var buffer = String()
     buffer += "{"
@@ -76,5 +92,29 @@ def collection_reclaim_plan_json(read plan: CollectionReclaimPlan) -> String:
     append_segment_ids_json(buffer, plan.reclaimable_unique_segment_ids)
     buffer += ",\"decisions\":"
     append_snapshot_retention_decisions_json(buffer, plan.decisions)
+    buffer += "}"
+    return buffer^
+
+
+def collection_reclaim_execution_result_json(
+    read result: CollectionReclaimExecutionResult
+) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"collection_id\":\"" + json_escape(result.collection_id.value) + "\","
+    buffer += "\"tenant_id\":\"" + json_escape(result.tenant_id.value) + "\","
+    buffer += "\"namespace_id\":\"" + json_escape(result.namespace_id.value) + "\","
+    buffer += "\"applied\":"
+    if result.applied:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"snapshot_count\":" + String(result.snapshot_count) + ","
+    buffer += "\"unique_segment_count\":" + String(result.unique_segment_count) + ","
+    buffer += "\"unique_byte_size\":" + String(result.unique_byte_size) + ","
+    buffer += "\"snapshot_ids\":"
+    append_snapshot_ids_json(buffer, result.snapshot_ids)
+    buffer += ",\"unique_segment_ids\":"
+    append_segment_ids_json(buffer, result.unique_segment_ids)
     buffer += "}"
     return buffer^

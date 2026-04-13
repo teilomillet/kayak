@@ -54,13 +54,15 @@ That combination implies a clear next move:
 - operational counters for inactive snapshots and pending draft mutations
 - non-destructive reclaim planning for inactive snapshots and unique inactive
   segments
+- explicit plan-driven reclaim execution for inactive snapshots and inactive-only
+  segment roots
 
 ### What is still weak
 
 - publication is only file-atomic, not a transactional multi-file commit across
   segment sealing and snapshot promotion
-- superseded snapshots and inactive segments are measured, but no reclaim or
-  retention execution exists yet
+- reclaim execution exists, but only through an explicit plan-driven path
+- there is no background GC, retention daemon, or service-scheduled cleanup yet
 - retention policy metadata is still explicit only at planning time, not yet
   stored with snapshots
 - search-native sidecars still need policy-driven build selection beyond

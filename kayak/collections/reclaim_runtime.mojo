@@ -1,11 +1,13 @@
 from std.collections import List
+from std.os import remove, rmdir
 from std.pathlib import Path
 
 from .collection import CollectionManifest
 from .collection_store import load_collection_manifest
-from .ids import SegmentId
-from .paths import collection_segment_root
+from .ids import SegmentId, SnapshotId
+from .paths import collection_segment_root, collection_snapshot_root
 from .reclaim import (
+    CollectionReclaimExecutionResult,
     CollectionReclaimPlan,
     SNAPSHOT_RETENTION_REASON_ACTIVE,
     SNAPSHOT_RETENTION_REASON_GENERATION,
@@ -33,6 +35,19 @@ def append_unique_string(mut values: List[String], target: String) -> Bool:
 
     values.append(target.copy())
     return True
+
+
+def remove_tree(path: Path) raises:
+    if not path.exists():
+        return
+
+    if path.is_dir():
+        for child in path.listdir():
+            remove_tree(path / child)
+        rmdir(path)
+        return
+
+    remove(path)
 
 
 def snapshot_id_is_pinned(
@@ -148,6 +163,195 @@ def require_active_snapshot_id(
         raise Error("latest_generation matches multiple stored snapshots")
 
     return active_snapshot_id^
+
+
+def find_snapshot_decision_index(
+    read decisions: List[SnapshotRetentionDecision], snapshot_id: String
+) -> Int:
+    for index in range(len(decisions)):
+        if decisions[index].snapshot_id.value == snapshot_id:
+            return index
+
+    return -1
+
+
+def append_unique_segment_id(mut segment_ids: List[SegmentId], read segment_id: SegmentId) -> Bool:
+    for existing in segment_ids:
+        if existing.value == segment_id.value:
+            return False
+
+    segment_ids.append(segment_id.copy())
+    return True
+
+
+def retain_snapshot_ids_for_plan(read plan: CollectionReclaimPlan) -> List[String]:
+    var retained_snapshot_ids = List[String]()
+    for decision in plan.decisions:
+        if decision.retain:
+            retained_snapshot_ids.append(decision.snapshot_id.value.copy())
+
+    return retained_snapshot_ids^
+
+
+def reclaim_snapshot_ids_for_plan(read plan: CollectionReclaimPlan) -> List[SnapshotId]:
+    var reclaimable_snapshot_ids = List[SnapshotId]()
+    for decision in plan.decisions:
+        if not decision.retain:
+            reclaimable_snapshot_ids.append(decision.snapshot_id.copy())
+
+    return reclaimable_snapshot_ids^
+
+
+def require_collection_matches_reclaim_plan(
+    read collection: CollectionManifest, read plan: CollectionReclaimPlan
+) raises:
+    if collection.collection_id.value != plan.collection_id.value:
+        raise Error("reclaim plan collection_id does not match collection manifest")
+    if collection.tenant_id.value != plan.tenant_id.value:
+        raise Error("reclaim plan tenant_id does not match collection manifest")
+    if collection.namespace_id.value != plan.namespace_id.value:
+        raise Error("reclaim plan namespace_id does not match collection manifest")
+
+
+def require_reclaim_plan_matches_collection_state(
+    collection_root: Path,
+    read collection: CollectionManifest,
+    read plan: CollectionReclaimPlan,
+) raises:
+    require_collection_matches_reclaim_plan(collection, plan)
+
+    var snapshots = load_collection_snapshots(collection_root, collection)
+    var active_snapshot_id = require_active_snapshot_id(collection, snapshots)
+    if active_snapshot_id != plan.active_snapshot_id:
+        raise Error("reclaim plan active_snapshot_id does not match current collection state")
+    if len(snapshots) != plan.total_snapshot_count:
+        raise Error("reclaim plan total_snapshot_count does not match current collection state")
+
+    var retained_snapshot_ids = retain_snapshot_ids_for_plan(plan)
+    var retained_segment_ids = List[String]()
+    var current_reclaimable_segment_ids = List[SegmentId]()
+    var current_reclaimable_byte_size = 0
+    var inactive_snapshot_count = 0
+    var retained_inactive_snapshot_count = 0
+    var reclaimable_snapshot_count = 0
+
+    for snapshot in snapshots:
+        var decision_index = find_snapshot_decision_index(
+            plan.decisions, snapshot.snapshot_id.value
+        )
+        if decision_index == -1:
+            raise Error("reclaim plan is missing a current snapshot decision")
+
+        var decision = plan.decisions[decision_index].copy()
+        if decision.generation != snapshot.generation:
+            raise Error("reclaim plan snapshot generation does not match current state")
+        if decision.segment_count != snapshot.stats.segment_count:
+            raise Error("reclaim plan snapshot segment_count does not match current state")
+        if decision.byte_size != snapshot.stats.byte_size:
+            raise Error("reclaim plan snapshot byte_size does not match current state")
+
+        if decision.snapshot_id.value != active_snapshot_id:
+            inactive_snapshot_count += 1
+            if decision.retain:
+                retained_inactive_snapshot_count += 1
+            else:
+                reclaimable_snapshot_count += 1
+        elif not decision.retain:
+            raise Error("reclaim plan cannot mark the active snapshot reclaimable")
+
+        if string_list_contains(retained_snapshot_ids, snapshot.snapshot_id.value):
+            for segment_id in snapshot.segment_ids:
+                _ = append_unique_string(retained_segment_ids, segment_id.value)
+
+    for snapshot in snapshots:
+        var decision_index = find_snapshot_decision_index(
+            plan.decisions, snapshot.snapshot_id.value
+        )
+        var decision = plan.decisions[decision_index].copy()
+        if decision.retain:
+            continue
+
+        for segment_id in snapshot.segment_ids:
+            if string_list_contains(retained_segment_ids, segment_id.value):
+                continue
+            if append_unique_segment_id(current_reclaimable_segment_ids, segment_id):
+                current_reclaimable_byte_size += load_sealed_segment_manifest(
+                    collection_segment_root(collection_root, segment_id)
+                ).stats.byte_size
+
+    if inactive_snapshot_count != plan.inactive_snapshot_count:
+        raise Error("reclaim plan inactive_snapshot_count does not match current state")
+    if retained_inactive_snapshot_count != plan.retained_inactive_snapshot_count:
+        raise Error(
+            "reclaim plan retained_inactive_snapshot_count does not match current state"
+        )
+    if reclaimable_snapshot_count != plan.reclaimable_snapshot_count:
+        raise Error("reclaim plan reclaimable_snapshot_count does not match current state")
+    if len(current_reclaimable_segment_ids) != plan.reclaimable_unique_segment_count:
+        raise Error(
+            "reclaim plan reclaimable_unique_segment_count does not match current state"
+        )
+    if current_reclaimable_byte_size != plan.reclaimable_unique_byte_size:
+        raise Error(
+            "reclaim plan reclaimable_unique_byte_size does not match current state"
+        )
+    if len(current_reclaimable_segment_ids) != len(plan.reclaimable_unique_segment_ids):
+        raise Error(
+            "reclaim plan reclaimable_unique_segment_ids length does not match current state"
+        )
+
+    for segment_id in current_reclaimable_segment_ids:
+        var found = False
+        for planned_segment_id in plan.reclaimable_unique_segment_ids:
+            if planned_segment_id.value == segment_id.value:
+                found = True
+                break
+        if not found:
+            raise Error(
+                "reclaim plan reclaimable_unique_segment_ids do not match current state"
+            )
+
+
+def execute_collection_reclaim_plan(
+    collection_root: Path,
+    read plan: CollectionReclaimPlan,
+    dry_run: Bool = True,
+) raises -> CollectionReclaimExecutionResult:
+    var collection = load_collection_manifest(collection_root)
+    require_reclaim_plan_matches_collection_state(collection_root, collection, plan)
+
+    var reclaimable_snapshot_ids = reclaim_snapshot_ids_for_plan(plan)
+    var reclaimable_segment_ids = plan.reclaimable_unique_segment_ids.copy()
+
+    if not dry_run:
+        for snapshot_id in reclaimable_snapshot_ids:
+            remove_tree(collection_snapshot_root(collection_root, snapshot_id))
+
+        var remaining_snapshots = load_collection_snapshots(collection_root, collection)
+        var retained_segment_ids = List[String]()
+        for snapshot in remaining_snapshots:
+            for segment_id in snapshot.segment_ids:
+                _ = append_unique_string(retained_segment_ids, segment_id.value)
+
+        for segment_id in reclaimable_segment_ids:
+            if string_list_contains(retained_segment_ids, segment_id.value):
+                raise Error(
+                    "refusing to delete a segment still referenced by a retained snapshot"
+                )
+
+            remove_tree(collection_segment_root(collection_root, segment_id))
+
+    return CollectionReclaimExecutionResult(
+        plan.collection_id,
+        plan.tenant_id,
+        plan.namespace_id,
+        not dry_run,
+        len(reclaimable_snapshot_ids),
+        len(reclaimable_segment_ids),
+        plan.reclaimable_unique_byte_size,
+        reclaimable_snapshot_ids,
+        reclaimable_segment_ids,
+    )
 
 
 def build_collection_reclaim_plan(

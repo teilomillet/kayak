@@ -137,3 +137,50 @@ struct CollectionReclaimPlan(Copyable):
 
     def has_reclaimable_segments(self) -> Bool:
         return self.reclaimable_unique_segment_count > 0
+
+
+struct CollectionReclaimExecutionResult(Copyable):
+    var collection_id: CollectionId
+    var tenant_id: TenantId
+    var namespace_id: NamespaceId
+    var applied: Bool
+    var snapshot_count: Int
+    var unique_segment_count: Int
+    var unique_byte_size: Int
+    var snapshot_ids: List[SnapshotId]
+    var unique_segment_ids: List[SegmentId]
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        applied: Bool,
+        snapshot_count: Int,
+        unique_segment_count: Int,
+        unique_byte_size: Int,
+        read snapshot_ids: List[SnapshotId],
+        read unique_segment_ids: List[SegmentId],
+    ) raises:
+        self.collection_id = collection_id.copy()
+        self.tenant_id = tenant_id.copy()
+        self.namespace_id = namespace_id.copy()
+        self.applied = applied
+        self.snapshot_count = require_non_negative_int(
+            snapshot_count, "snapshot_count"
+        )
+        self.unique_segment_count = require_non_negative_int(
+            unique_segment_count, "unique_segment_count"
+        )
+        self.unique_byte_size = require_non_negative_int(
+            unique_byte_size, "unique_byte_size"
+        )
+        if len(snapshot_ids) != self.snapshot_count:
+            raise Error("snapshot_ids length does not match snapshot_count")
+        if len(unique_segment_ids) != self.unique_segment_count:
+            raise Error(
+                "unique_segment_ids length does not match unique_segment_count"
+            )
+
+        self.snapshot_ids = snapshot_ids.copy()
+        self.unique_segment_ids = unique_segment_ids.copy()
