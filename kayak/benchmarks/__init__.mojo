@@ -18,6 +18,7 @@ from .ceiling_comparison_json import (
     ceiling_comparison_summaries_json,
     ceiling_comparison_summary_json,
 )
+from .gem_frontier_config import frontier_gem_graph_build_config
 from .faithfulness_frontier_json import (
     FaithfulnessFrontierSummary,
     build_faithfulness_frontier_summary_for_plan,

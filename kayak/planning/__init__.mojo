@@ -18,6 +18,7 @@ from .candidate_generator import (
     gem_graph_candidate_generator,
 )
 from .candidate_set import CandidateSet
+from .graph_search_counters import GraphSearchCounters
 from .centroid_primitives import (
     ScoredCentroidSelection,
     accumulate_selected_centroid_scores,

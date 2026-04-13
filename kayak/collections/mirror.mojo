@@ -1,19 +1,30 @@
+from std.collections import List
 from std.pathlib import Path
 
 from kayak.storage import (
     StoredPackedIndex,
+    build_stored_gem_graph_index,
     centroid_heads_storage_byte_size,
     centroid_postings_storage_byte_size,
     ensure_stored_centroid_heads_index,
     ensure_stored_centroid_posting_index,
     document_proxy_storage_byte_size,
     ensure_stored_document_proxy_index,
+    gem_graph_storage_byte_size,
+    save_stored_gem_graph_index,
     save_stored_packed_index,
 )
 
 from .collection import CollectionManifest
 from .collection_store import save_collection_manifest
 from .ids import CollectionId, NamespaceId, SegmentId, SnapshotId, TenantId
+from .search_artifact import (
+    SearchArtifactManifest,
+    centroid_heads_search_artifact,
+    centroid_postings_search_artifact,
+    document_proxy_search_artifact,
+    gem_graph_search_artifact,
+)
 from .segment import SealedSegmentManifest
 from .segment_store import save_sealed_segment_manifest
 from .snapshot import SnapshotManifest
@@ -52,6 +63,9 @@ def ensure_one_segment_collection_mirror(
     document_proxy_vector_budget: Int = 0,
     centroid_postings_vector_budget: Int = 0,
     centroid_head_posting_cap: Int = 0,
+    gem_graph_fine_cluster_count: Int = 0,
+    gem_graph_coarse_cluster_count: Int = 0,
+    gem_graph_cluster_cutoff: Int = 0,
 ) raises -> Path:
     var segment_id = SegmentId("segment-0001")
     var segment_root = collection_root / "segments" / segment_id.value
@@ -85,13 +99,37 @@ def ensure_one_segment_collection_mirror(
             centroid_postings_vector_budget,
             centroid_head_posting_cap,
         )
+    var gem_graph_byte_size = 0
+    if (
+        gem_graph_fine_cluster_count > 0
+        and gem_graph_coarse_cluster_count > 0
+        and gem_graph_cluster_cutoff > 0
+    ):
+        save_stored_gem_graph_index(
+            segment_root / "gem_graph",
+            build_stored_gem_graph_index(
+                stored_index,
+                gem_graph_fine_cluster_count,
+                gem_graph_coarse_cluster_count,
+                gem_graph_cluster_cutoff,
+            ),
+        )
+        gem_graph_byte_size = gem_graph_storage_byte_size(segment_root / "gem_graph")
     var centroid_heads_byte_size = 0
-    var centroid_heads_root = String()
     if centroid_head_posting_cap > 0:
         centroid_heads_byte_size = centroid_heads_storage_byte_size(
             segment_root / "centroid_heads"
         )
-        centroid_heads_root = "centroid_heads"
+
+    var search_artifacts = List[SearchArtifactManifest]()
+    search_artifacts.append(
+        centroid_postings_search_artifact("centroid_postings")
+    )
+    search_artifacts.append(document_proxy_search_artifact("document_proxy"))
+    if centroid_head_posting_cap > 0:
+        search_artifacts.append(centroid_heads_search_artifact("centroid_heads"))
+    if gem_graph_byte_size > 0:
+        search_artifacts.append(gem_graph_search_artifact("gem_graph"))
 
     var segment_stats = SegmentStats(
         stored_index.index.document_count,
@@ -100,7 +138,8 @@ def ensure_one_segment_collection_mirror(
         packed_index_storage_byte_size(segment_root / "packed_index")
             + centroid_postings_storage_byte_size(segment_root / "centroid_postings")
             + document_proxy_storage_byte_size(segment_root / "document_proxy")
-            + centroid_heads_byte_size,
+            + centroid_heads_byte_size
+            + gem_graph_byte_size,
     )
     save_sealed_segment_manifest(
         segment_root,
@@ -114,9 +153,7 @@ def ensure_one_segment_collection_mirror(
             stored_index.vector_scalar_name.copy(),
             stored_index.index.vector_dim,
             "packed_index",
-            "centroid_postings",
-            centroid_heads_root,
-            "document_proxy",
+            search_artifacts^,
             "",
             segment_stats.copy(),
         ),

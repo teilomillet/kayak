@@ -87,6 +87,7 @@ from .planning import (
     ExactStageResult,
     FaithfulnessAssessment,
     FaithfulnessPolicy,
+    GraphSearchCounters,
     ScoreHistogram,
     SearchPlan,
     SearchStageProfile,

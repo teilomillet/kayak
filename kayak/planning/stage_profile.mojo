@@ -1,5 +1,6 @@
 # Counts that make search-stage behavior inspectable.
 
+from .graph_search_counters import GraphSearchCounters
 from .score_histogram import ScoreHistogram
 
 
@@ -12,6 +13,7 @@ struct SearchStageProfile(Copyable):
     var token_count: Int
     var vector_count: Int
     var byte_size: Int
+    var graph_search_counters: GraphSearchCounters
     var score_histogram: ScoreHistogram
 
     def __init__(
@@ -55,4 +57,31 @@ struct SearchStageProfile(Copyable):
         self.token_count = token_count
         self.vector_count = vector_count
         self.byte_size = byte_size
+        self.graph_search_counters = GraphSearchCounters()
         self.score_histogram = score_histogram.copy()
+
+    def __init__(
+        out self,
+        var stage_name: String,
+        input_hit_count: Int,
+        output_hit_count: Int,
+        segment_count: Int,
+        document_count: Int,
+        token_count: Int,
+        vector_count: Int,
+        byte_size: Int,
+        graph_search_counters: GraphSearchCounters,
+        score_histogram: ScoreHistogram,
+    ) raises:
+        self = SearchStageProfile(
+            stage_name^,
+            input_hit_count,
+            output_hit_count,
+            segment_count,
+            document_count,
+            token_count,
+            vector_count,
+            byte_size,
+            score_histogram,
+        )
+        self.graph_search_counters = graph_search_counters.copy()

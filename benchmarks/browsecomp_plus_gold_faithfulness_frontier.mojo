@@ -5,6 +5,7 @@ from std.pathlib import Path
 from kayak.benchmarks import (
     FaithfulnessFrontierSummary,
     build_faithfulness_frontier_summary_for_plan,
+    frontier_gem_graph_build_config,
     faithfulness_frontier_summaries_json,
     standard_candidate_window_sizes,
     standard_posting_cap_sizes,
@@ -21,9 +22,11 @@ from kayak.planning import (
     best_effort_faithfulness_policy,
     centroid_heads_search_plan,
     centroid_postings_head_auto_search_plan,
+    centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
     document_proxy_search_plan,
     exact_full_scan_search_plan,
+    gem_graph_search_plan,
 )
 from kayak.runtime import ExactCpuBackend
 from kayak.scoring import ExactScoringConfig
@@ -73,6 +76,10 @@ def main() raises:
     var task = cache.stored_task.task.copy()
     var full_proxy_budget = task.nominal_document_vector_count
     var full_centroid_budget = cache.stored_index.index.vector_dim
+    var gem_config = frontier_gem_graph_build_config(
+        cache.stored_index,
+        task.nominal_query_vector_count,
+    )
 
     var base_root = ensure_one_segment_collection_mirror(
         Path(".cache/kayak/browsecomp_plus_gold_frontier_base"),
@@ -84,6 +91,10 @@ def main() raises:
         cache.stored_index,
         full_proxy_budget,
         full_centroid_budget,
+        0,
+        gem_config.fine_cluster_count,
+        gem_config.coarse_cluster_count,
+        gem_config.cluster_cutoff,
     )
     var base_snapshot = load_resolved_collection_snapshot(base_root, snapshot_id)
     append_summary(
@@ -135,6 +146,38 @@ def main() raises:
                 0,
             ),
         )
+        append_summary(
+            summaries,
+            build_faithfulness_frontier_summary_for_plan(
+                backend,
+                cache.stored_task,
+                base_snapshot,
+                centroid_postings_imputed_search_plan(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                ),
+                task.nominal_query_vector_count,
+                full_centroid_budget,
+                0,
+            ),
+        )
+        append_summary(
+            summaries,
+            build_faithfulness_frontier_summary_for_plan(
+                backend,
+                cache.stored_task,
+                base_snapshot,
+                gem_graph_search_plan(
+                    task.k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                ),
+                task.nominal_query_vector_count,
+                full_centroid_budget,
+                0,
+            ),
+        )
     for posting_cap in standard_posting_cap_sizes(
         base_snapshot.snapshot.stats.document_count
     ):
@@ -152,6 +195,9 @@ def main() raises:
             full_proxy_budget,
             full_centroid_budget,
             posting_cap,
+            gem_config.fine_cluster_count,
+            gem_config.coarse_cluster_count,
+            gem_config.cluster_cutoff,
         )
         var heads_snapshot = load_resolved_collection_snapshot(
             heads_root,

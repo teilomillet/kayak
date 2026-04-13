@@ -52,6 +52,11 @@ struct FaithfulnessFrontierSummary(Copyable):
     var stage1_byte_size: Int
     var stage1_bytes_per_document: Float64
     var stage1_bytes_per_vector: Float64
+    var mean_stage1_graph_visited_vertex_count: Float64
+    var mean_stage1_graph_expanded_edge_count: Float64
+    var mean_stage1_graph_visited_cluster_count: Float64
+    var mean_stage1_graph_entry_point_count: Float64
+    var mean_stage1_graph_max_frontier_size: Float64
 
     def __init__(
         out self,
@@ -85,6 +90,11 @@ struct FaithfulnessFrontierSummary(Copyable):
         stage1_byte_size: Int,
         stage1_bytes_per_document: Float64,
         stage1_bytes_per_vector: Float64,
+        mean_stage1_graph_visited_vertex_count: Float64,
+        mean_stage1_graph_expanded_edge_count: Float64,
+        mean_stage1_graph_visited_cluster_count: Float64,
+        mean_stage1_graph_entry_point_count: Float64,
+        mean_stage1_graph_max_frontier_size: Float64,
     ):
         self.dataset_id = dataset_id^
         self.model_name = model_name^
@@ -116,6 +126,21 @@ struct FaithfulnessFrontierSummary(Copyable):
         self.stage1_byte_size = stage1_byte_size
         self.stage1_bytes_per_document = stage1_bytes_per_document
         self.stage1_bytes_per_vector = stage1_bytes_per_vector
+        self.mean_stage1_graph_visited_vertex_count = (
+            mean_stage1_graph_visited_vertex_count
+        )
+        self.mean_stage1_graph_expanded_edge_count = (
+            mean_stage1_graph_expanded_edge_count
+        )
+        self.mean_stage1_graph_visited_cluster_count = (
+            mean_stage1_graph_visited_cluster_count
+        )
+        self.mean_stage1_graph_entry_point_count = (
+            mean_stage1_graph_entry_point_count
+        )
+        self.mean_stage1_graph_max_frontier_size = (
+            mean_stage1_graph_max_frontier_size
+        )
 
 
 def density_bytes_per_document(byte_size: Int, document_count: Int) -> Float64:
@@ -154,6 +179,11 @@ def build_faithfulness_frontier_summary_for_plan(
     var stage1_vector_count = 0
     var stage1_token_count = 0
     var stage1_byte_size = 0
+    var stage1_graph_visited_vertex_total = 0.0
+    var stage1_graph_expanded_edge_total = 0.0
+    var stage1_graph_visited_cluster_total = 0.0
+    var stage1_graph_entry_point_total = 0.0
+    var stage1_graph_max_frontier_total = 0.0
     var query_index = 0
 
     def candidate_once() capturing raises:
@@ -229,6 +259,21 @@ def build_faithfulness_frontier_summary_for_plan(
         )
         recall_total += Float64(query_evaluation.recall_at_k)
         success_total += Float64(query_evaluation.success_at_k)
+        stage1_graph_visited_vertex_total += Float64(
+            explain.candidate_stage.graph_search_counters.visited_vertex_count
+        )
+        stage1_graph_expanded_edge_total += Float64(
+            explain.candidate_stage.graph_search_counters.expanded_edge_count
+        )
+        stage1_graph_visited_cluster_total += Float64(
+            explain.candidate_stage.graph_search_counters.visited_cluster_count
+        )
+        stage1_graph_entry_point_total += Float64(
+            explain.candidate_stage.graph_search_counters.entry_point_count
+        )
+        stage1_graph_max_frontier_total += Float64(
+            explain.candidate_stage.graph_search_counters.max_frontier_size
+        )
 
         if stage1_vector_count == 0 and stage1_token_count == 0 and stage1_byte_size == 0:
             stage1_vector_count = explain.candidate_stage.vector_count
@@ -267,6 +312,11 @@ def build_faithfulness_frontier_summary_for_plan(
         stage1_byte_size,
         density_bytes_per_document(stage1_byte_size, snapshot.snapshot.stats.document_count),
         density_bytes_per_vector(stage1_byte_size, stage1_vector_count),
+        stage1_graph_visited_vertex_total / Float64(query_count),
+        stage1_graph_expanded_edge_total / Float64(query_count),
+        stage1_graph_visited_cluster_total / Float64(query_count),
+        stage1_graph_entry_point_total / Float64(query_count),
+        stage1_graph_max_frontier_total / Float64(query_count),
     )
 
 
@@ -312,7 +362,17 @@ def append_faithfulness_frontier_summary_json(
     buffer += "\"stage1_bytes_per_document\":"
     buffer += String(summary.stage1_bytes_per_document) + ","
     buffer += "\"stage1_bytes_per_vector\":"
-    buffer += String(summary.stage1_bytes_per_vector)
+    buffer += String(summary.stage1_bytes_per_vector) + ","
+    buffer += "\"mean_stage1_graph_visited_vertex_count\":"
+    buffer += String(summary.mean_stage1_graph_visited_vertex_count) + ","
+    buffer += "\"mean_stage1_graph_expanded_edge_count\":"
+    buffer += String(summary.mean_stage1_graph_expanded_edge_count) + ","
+    buffer += "\"mean_stage1_graph_visited_cluster_count\":"
+    buffer += String(summary.mean_stage1_graph_visited_cluster_count) + ","
+    buffer += "\"mean_stage1_graph_entry_point_count\":"
+    buffer += String(summary.mean_stage1_graph_entry_point_count) + ","
+    buffer += "\"mean_stage1_graph_max_frontier_size\":"
+    buffer += String(summary.mean_stage1_graph_max_frontier_size)
     buffer += "}"
 
 

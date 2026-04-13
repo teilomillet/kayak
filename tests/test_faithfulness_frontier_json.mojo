@@ -75,6 +75,11 @@ def test_faithfulness_frontier_summary_json_contains_budget_fields() raises:
             4096,
             64.0,
             64.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
         )
     )
 
@@ -85,6 +90,10 @@ def test_faithfulness_frontier_summary_json_contains_budget_fields() raises:
     assert_equal(json.find("\"posting_cap\":8") != -1, True)
     assert_equal(
         json.find("\"stage1_bytes_per_vector\":64.0") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"mean_stage1_graph_visited_vertex_count\":0.0") != -1,
         True,
     )
 
@@ -131,6 +140,7 @@ def test_build_faithfulness_frontier_summary_reports_stage1_shape() raises:
     assert_equal(summary.stage1_vector_count > 0, True)
     assert_equal(summary.stage1_byte_size > 0, True)
     assert_equal(summary.mean_candidate_hit_count >= Float64(profile.final_k), True)
+    assert_equal(summary.mean_stage1_graph_visited_vertex_count, 0.0)
 
 
 def main() raises:

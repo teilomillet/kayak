@@ -18,6 +18,7 @@ from kayak import (
     ExecuteReclaimResponse,
     ExplainResponse,
     FaithfulnessAssessment,
+    GraphSearchCounters,
     NamespaceId,
     ScoreHistogram,
     ScoreScalar,
@@ -67,7 +68,16 @@ def make_debug_response() raises -> DebugSearchResponse:
         "news",
         "snapshot-0001",
         plan,
-        CandidateSet("exact_full_scan", hits.copy(), 1, 1, 1, 1, 16),
+        CandidateSet(
+            "exact_full_scan",
+            hits.copy(),
+            1,
+            1,
+            1,
+            1,
+            16,
+            GraphSearchCounters(3, 5, 2, 1, 4),
+        ),
         SearchStageProfile(
             "candidate_generation",
             1,
@@ -77,6 +87,7 @@ def make_debug_response() raises -> DebugSearchResponse:
             1,
             1,
             16,
+            GraphSearchCounters(3, 5, 2, 1, 4),
             ScoreHistogram(1, 1.0, 1.0, [1]),
         ),
         SearchStageProfile(
@@ -315,6 +326,8 @@ def test_debug_search_response_json_embeds_explain_payload() raises:
     assert_equal(json.find("\"faithfulness_policy_kind\":\"exact_stage1_required\"") != -1, True)
     assert_equal(json.find("\"faithfulness\":") != -1, True)
     assert_equal(json.find("\"candidate_stage\":") != -1, True)
+    assert_equal(json.find("\"graph_search_counters\":") != -1, True)
+    assert_equal(json.find("\"visited_vertex_count\":3") != -1, True)
 
 
 def test_service_health_status_json_contains_counters() raises:

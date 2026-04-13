@@ -6,6 +6,7 @@ from kayak.benchmarks import (
     FaithfulnessFrontierSummary,
     build_faithfulness_frontier_summary_for_plan,
     default_single_core_scale_profiles,
+    frontier_gem_graph_build_config,
     faithfulness_frontier_summaries_json,
     make_single_core_scale_fixture,
     standard_candidate_window_sizes,
@@ -23,9 +24,11 @@ from kayak.planning import (
     best_effort_faithfulness_policy,
     centroid_heads_search_plan,
     centroid_postings_head_auto_search_plan,
+    centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
     document_proxy_search_plan,
     exact_full_scan_search_plan,
+    gem_graph_search_plan,
 )
 from kayak.runtime import ExactCpuBackend
 from kayak.scoring import ExactScoringConfig
@@ -89,6 +92,10 @@ def append_frontier_for_profile(
     var snapshot_id = SnapshotId("snapshot-0001")
     var full_proxy_budget = profile.document_vector_count
     var full_centroid_budget = profile.vector_dim
+    var gem_config = frontier_gem_graph_build_config(
+        fixture.stored_index,
+        profile.query_vector_count,
+    )
     var max_candidate_k = max_frontier_candidate_k(
         profile.document_count,
         profile.query_count,
@@ -105,6 +112,10 @@ def append_frontier_for_profile(
         fixture.stored_index,
         full_proxy_budget,
         full_centroid_budget,
+        0,
+        gem_config.fine_cluster_count,
+        gem_config.coarse_cluster_count,
+        gem_config.cluster_cutoff,
     )
     var exact_snapshot = load_resolved_collection_snapshot(exact_root, snapshot_id)
     append_summary(
@@ -130,6 +141,10 @@ def append_frontier_for_profile(
         fixture.stored_index,
         full_proxy_budget,
         full_centroid_budget,
+        0,
+        gem_config.fine_cluster_count,
+        gem_config.coarse_cluster_count,
+        gem_config.cluster_cutoff,
     )
     var proxy_snapshot = load_resolved_collection_snapshot(proxy_root, snapshot_id)
 
@@ -163,6 +178,10 @@ def append_frontier_for_profile(
         fixture.stored_index,
         full_proxy_budget,
         full_centroid_budget,
+        0,
+        gem_config.fine_cluster_count,
+        gem_config.coarse_cluster_count,
+        gem_config.cluster_cutoff,
     )
     var centroid_snapshot = load_resolved_collection_snapshot(
         centroid_root,
@@ -180,6 +199,38 @@ def append_frontier_for_profile(
                 fixture.stored_task,
                 centroid_snapshot,
                 centroid_postings_search_plan(
+                    profile.final_k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                ),
+                profile.query_vector_count,
+                full_centroid_budget,
+                0,
+            ),
+        )
+        append_summary(
+            summaries,
+            build_faithfulness_frontier_summary_for_plan(
+                backend,
+                fixture.stored_task,
+                centroid_snapshot,
+                centroid_postings_imputed_search_plan(
+                    profile.final_k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                ),
+                profile.query_vector_count,
+                full_centroid_budget,
+                0,
+            ),
+        )
+        append_summary(
+            summaries,
+            build_faithfulness_frontier_summary_for_plan(
+                backend,
+                fixture.stored_task,
+                centroid_snapshot,
+                gem_graph_search_plan(
                     profile.final_k,
                     candidate_k,
                     best_effort_faithfulness_policy(),
@@ -214,6 +265,9 @@ def append_frontier_for_profile(
             full_proxy_budget,
             full_centroid_budget,
             posting_cap,
+            gem_config.fine_cluster_count,
+            gem_config.coarse_cluster_count,
+            gem_config.cluster_cutoff,
         )
         var heads_snapshot = load_resolved_collection_snapshot(
             heads_root,

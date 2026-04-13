@@ -15,6 +15,7 @@ from .execution import (
 )
 from .exact_stage import exact_oracle_hits_for_snapshot
 from .faithfulness import FaithfulnessAssessment, assess_faithfulness
+from .graph_search_counters import GraphSearchCounters
 from .score_histogram import build_score_histogram
 from .search_plan import SearchPlan
 from .stage_profile import SearchStageProfile
@@ -92,6 +93,7 @@ def explain_collection_search[Backend: ExactScoringBackend](
             candidate_set.token_count,
             candidate_set.vector_count,
             candidate_set.byte_size,
+            candidate_set.graph_search_counters,
             build_score_histogram(candidate_set.hits, 8),
         ),
         SearchStageProfile(
@@ -103,6 +105,7 @@ def explain_collection_search[Backend: ExactScoringBackend](
             exact_stage.token_count,
             exact_stage.vector_count,
             exact_stage.byte_size,
+            GraphSearchCounters(),
             build_score_histogram(exact_stage.final_hits, 8),
         ),
         observed_candidate_recall_at_final_k,

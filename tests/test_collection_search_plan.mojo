@@ -990,9 +990,31 @@ def test_gem_graph_search_plan_executes_with_exact_rerank() raises:
             4,
         ),
     )
+    var json = collection_search_explain_json(explain)
 
     assert_equal(len(explain.candidate_set.hits) > 0, True)
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
+    assert_equal(
+        explain.candidate_set.graph_search_counters.visited_vertex_count > 0,
+        True,
+    )
+    assert_equal(
+        explain.candidate_stage.graph_search_counters.expanded_edge_count > 0,
+        True,
+    )
+    assert_equal(
+        explain.candidate_stage.graph_search_counters.visited_cluster_count > 0,
+        True,
+    )
+    assert_equal(
+        explain.candidate_stage.graph_search_counters.entry_point_count > 0,
+        True,
+    )
+    assert_equal(
+        explain.candidate_stage.graph_search_counters.max_frontier_size > 0,
+        True,
+    )
+    assert_equal(json.find("\"graph_search_counters\":") != -1, True)
 
 
 def main() raises:

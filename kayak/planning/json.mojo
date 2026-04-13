@@ -4,6 +4,7 @@ from .candidate_set import CandidateSet
 from .collection_hit import CollectionHit
 from .explain import CollectionSearchExplain
 from .faithfulness import FaithfulnessAssessment
+from .graph_search_counters import GraphSearchCounters
 from .score_histogram import ScoreHistogram
 from .stage_profile import SearchStageProfile
 
@@ -46,8 +47,28 @@ def append_json_stage_profile(
     buffer += "\"token_count\":" + String(profile.token_count) + ","
     buffer += "\"vector_count\":" + String(profile.vector_count) + ","
     buffer += "\"byte_size\":" + String(profile.byte_size) + ","
+    buffer += "\"graph_search_counters\":"
+    append_json_graph_search_counters(buffer, profile.graph_search_counters)
+    buffer += ","
     buffer += "\"score_histogram\":"
     append_json_score_histogram(buffer, profile.score_histogram)
+    buffer += "}"
+
+
+def append_json_graph_search_counters(
+    mut buffer: String, read counters: GraphSearchCounters
+):
+    buffer += "{"
+    buffer += "\"visited_vertex_count\":"
+    buffer += String(counters.visited_vertex_count) + ","
+    buffer += "\"expanded_edge_count\":"
+    buffer += String(counters.expanded_edge_count) + ","
+    buffer += "\"visited_cluster_count\":"
+    buffer += String(counters.visited_cluster_count) + ","
+    buffer += "\"entry_point_count\":"
+    buffer += String(counters.entry_point_count) + ","
+    buffer += "\"max_frontier_size\":"
+    buffer += String(counters.max_frontier_size)
     buffer += "}"
 
 
@@ -75,6 +96,12 @@ def append_json_candidate_set(mut buffer: String, read candidate_set: CandidateS
     buffer += "\"token_count\":" + String(candidate_set.token_count) + ","
     buffer += "\"vector_count\":" + String(candidate_set.vector_count) + ","
     buffer += "\"byte_size\":" + String(candidate_set.byte_size) + ","
+    buffer += "\"graph_search_counters\":"
+    append_json_graph_search_counters(
+        buffer,
+        candidate_set.graph_search_counters,
+    )
+    buffer += ","
     buffer += "\"hit_count\":" + String(len(candidate_set.hits)) + ","
     buffer += "\"hits\":"
     append_json_hit_list(buffer, candidate_set.hits)

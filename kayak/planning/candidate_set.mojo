@@ -3,6 +3,7 @@
 from std.collections import List
 
 from .collection_hit import CollectionHit
+from .graph_search_counters import GraphSearchCounters
 
 
 struct CandidateSet(Copyable):
@@ -13,6 +14,7 @@ struct CandidateSet(Copyable):
     var token_count: Int
     var vector_count: Int
     var byte_size: Int
+    var graph_search_counters: GraphSearchCounters
 
     def __init__(
         out self,
@@ -46,3 +48,26 @@ struct CandidateSet(Copyable):
         self.token_count = token_count
         self.vector_count = vector_count
         self.byte_size = byte_size
+        self.graph_search_counters = GraphSearchCounters()
+
+    def __init__(
+        out self,
+        var generator_kind: String,
+        var hits: List[CollectionHit],
+        segment_count: Int,
+        document_count: Int,
+        token_count: Int,
+        vector_count: Int,
+        byte_size: Int,
+        graph_search_counters: GraphSearchCounters,
+    ) raises:
+        self = CandidateSet(
+            generator_kind^,
+            hits^,
+            segment_count,
+            document_count,
+            token_count,
+            vector_count,
+            byte_size,
+        )
+        self.graph_search_counters = graph_search_counters.copy()
