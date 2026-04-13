@@ -95,17 +95,32 @@ from .search_plan import (
     exact_full_scan_search_plan,
     gem_graph_search_plan,
 )
-from .planner import (
-    CandidateGeneratorOrderDecision,
+from .planning_goal import (
     SEARCH_PLANNING_GOAL_BALANCED,
     SEARCH_PLANNING_GOAL_EXACT_ONLY,
     SEARCH_PLANNING_GOAL_LATENCY_FIRST,
     SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
+    require_search_planning_goal,
+)
+from .planner_registry import (
+    SEARCH_PLANNER_STATUS_BENCHMARK_ONLY,
+    SEARCH_PLANNER_STATUS_EXACT_FALLBACK,
+    SEARCH_PLANNER_STATUS_EXPERIMENTAL,
+    SEARCH_PLANNER_STATUS_PROMOTED,
+    SEARCH_PLANNER_STATUS_REGRESSION_BASELINE,
+    SearchPlannerRegistryEntry,
+    default_candidate_generator_order_for_goal,
+    planner_priority_for_goal,
+    registered_search_planner_candidate_generator_kinds,
+    registered_search_planner_entries,
+    search_planner_registry_entry,
+)
+from .planner import (
+    CandidateGeneratorOrderDecision,
     SearchPlanSelection,
     SearchPlanSelectionRequest,
     available_candidate_generator_kinds,
     candidate_generator_kind_is_available,
-    require_search_planning_goal,
     search_planning_goal_kinds,
     select_search_plan_for_availability,
 )

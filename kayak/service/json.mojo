@@ -234,6 +234,8 @@ def append_json_search_plan_selection(
 ):
     buffer += "{"
     buffer += "\"goal\":\"" + json_escape(selection.goal) + "\","
+    buffer += "\"selected_candidate_generator_status\":\""
+    buffer += json_escape(selection.selected_candidate_generator_status) + "\","
     buffer += "\"available_candidate_generator_kinds\":"
     append_json_string_list(
         buffer, selection.available_candidate_generator_kinds

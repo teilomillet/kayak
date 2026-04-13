@@ -25,6 +25,19 @@ from .faithfulness_frontier_json import (
     faithfulness_frontier_summaries_json,
     faithfulness_frontier_summary_json,
 )
+from .planner_benchmark_json import (
+    PlannerBenchmarkSummary,
+    build_planner_benchmark_summary,
+    planner_benchmark_summaries_json,
+    planner_benchmark_summary_json,
+)
+from .planner_benchmark_runner import (
+    PlannerBenchmarkRunOptions,
+    default_planner_benchmark_run_options,
+    planner_benchmark_summaries_for_options,
+    smoke_planner_benchmark_run_options,
+    write_public_planner_benchmark,
+)
 from .policy_json import (
     BackendPolicyBenchmarkSummary,
     backend_policy_benchmark_summaries_json,

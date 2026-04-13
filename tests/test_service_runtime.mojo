@@ -271,7 +271,6 @@ def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() 
     assert_equal(imported.snapshot_id.value, "snapshot-0001")
     assert_equal(imported_search.hits[0].doc_id, "doc-a")
 
-
 def test_hosted_collection_runtime_supports_text_family_stage2() raises:
     var service_root = unique_service_root("kayak-service-runtime-clause-text")
 
@@ -334,6 +333,96 @@ def test_hosted_collection_runtime_supports_text_family_stage2() raises:
     assert_equal(debug.explain.final_hits[0].doc_id, "doc-answer")
     assert_equal(debug.explain.stage2.stage_name, "clause_text")
     assert_equal(debug.explain.stage2.token_count > 0, True)
+
+
+def test_hosted_collection_runtime_supports_planned_search_after_import() raises:
+    var service_root = unique_service_root("kayak-service-runtime-planned-import")
+    var import_service_root = unique_service_root(
+        "kayak-service-runtime-planned-import-target"
+    )
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+                    "alpha",
+                ),
+                UpsertDocument(
+                    make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]),
+                    "beta",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish import planner fixture",
+        ),
+    )
+    var bundle_root = unique_service_root("kayak-service-runtime-planned-bundle")
+    _ = export_snapshot(
+        service_root,
+        ExportSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+        ),
+        bundle_root,
+    )
+    _ = import_snapshot(
+        import_service_root,
+        ImportSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "file://" + String(bundle_root),
+        ),
+    )
+
+    var response = execute_planned_search(
+        ExactCpuBackend(),
+        import_service_root,
+        PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            match_all_filter(),
+            SearchPlanSelectionRequest(
+                1,
+                2,
+                best_effort_faithfulness_policy(),
+                goal="balanced",
+            ),
+        ),
+    )
+
+    assert_equal(response.selection.plan.candidate_generator.kind, "document_proxy")
+    assert_equal(response.search.hits[0].doc_id, "doc-a")
 
 
 def test_hosted_collection_runtime_compacts_draft_after_snapshot() raises:

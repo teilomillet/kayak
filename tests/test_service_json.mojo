@@ -157,6 +157,7 @@ def make_planned_search_response() raises -> PlannedSearchResponse:
     return PlannedSearchResponse(
         SearchPlanSelection(
             "balanced",
+            "exact_fallback",
             ["exact_full_scan", "document_proxy"],
             ["document_proxy", "exact_full_scan"],
             plan,

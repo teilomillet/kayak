@@ -1,12 +1,25 @@
 from std.collections import List
 
 from kayak.collections import SnapshotSearchArtifactAvailability
+from kayak.collections.validation import require_non_empty_string
 from kayak.filters import FilterExpression, match_all_filter
 from kayak.index import (
     DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
     DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
 )
 
+from .planning_goal import (
+    SEARCH_PLANNING_GOAL_BALANCED,
+    SEARCH_PLANNING_GOAL_EXACT_ONLY,
+    SEARCH_PLANNING_GOAL_LATENCY_FIRST,
+    SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
+    require_search_planning_goal,
+)
+from .planner_registry import (
+    default_candidate_generator_order_for_goal,
+    registered_search_planner_candidate_generator_kinds,
+    search_planner_registry_entry,
+)
 from .candidate_budget import CandidateBudget
 from .faithfulness import FaithfulnessPolicy
 from .search_plan import (
@@ -29,12 +42,6 @@ from .stage1_capabilities import (
 )
 
 
-comptime SEARCH_PLANNING_GOAL_BALANCED = "balanced"
-comptime SEARCH_PLANNING_GOAL_EXACT_ONLY = "exact_only"
-comptime SEARCH_PLANNING_GOAL_LATENCY_FIRST = "latency_first"
-comptime SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR = "native_multivector"
-
-
 def append_unique_generator_kind(
     mut kinds: List[String], candidate_generator_kind: String
 ) raises:
@@ -47,48 +54,7 @@ def append_unique_generator_kind(
 
 
 def search_planning_goal_kinds(goal: String) raises -> List[String]:
-    if goal == SEARCH_PLANNING_GOAL_EXACT_ONLY:
-        return ["exact_full_scan"]
-
-    if goal == SEARCH_PLANNING_GOAL_LATENCY_FIRST:
-        return [
-            "document_proxy",
-            "centroid_postings_flat",
-            "centroid_postings",
-            "centroid_heads",
-            "centroid_postings_imputed_flat",
-            "gem_graph",
-            "exact_full_scan",
-        ]
-
-    if goal == SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR:
-        return [
-            "centroid_postings_imputed_flat",
-            "centroid_postings_flat",
-            "centroid_postings",
-            "gem_graph",
-            "centroid_heads",
-            "document_proxy",
-            "exact_full_scan",
-        ]
-
-    if goal == SEARCH_PLANNING_GOAL_BALANCED:
-        return [
-            "document_proxy",
-            "centroid_postings_flat",
-            "centroid_postings_imputed_flat",
-            "centroid_postings",
-            "gem_graph",
-            "centroid_heads",
-            "exact_full_scan",
-        ]
-
-    raise Error("unknown search planning goal: " + goal)
-
-
-def require_search_planning_goal(goal: String) raises -> String:
-    _ = search_planning_goal_kinds(goal)
-    return goal.copy()
+    return default_candidate_generator_order_for_goal(goal)
 
 
 def candidate_generator_kind_is_available(
@@ -112,25 +78,11 @@ def available_candidate_generator_kinds(
     read availability: SnapshotSearchArtifactAvailability
 ) raises -> List[String]:
     var kinds = List[String]()
-    kinds.append("exact_full_scan")
-
-    if candidate_generator_kind_is_available(availability, "document_proxy"):
-        append_unique_generator_kind(kinds, "document_proxy")
-
-    if candidate_generator_kind_is_available(availability, "centroid_heads"):
-        append_unique_generator_kind(kinds, "centroid_heads")
-
-    if candidate_generator_kind_is_available(availability, "centroid_postings"):
-        append_unique_generator_kind(kinds, "centroid_postings")
-        append_unique_generator_kind(kinds, "centroid_postings_flat")
-        append_unique_generator_kind(kinds, "centroid_postings_head")
-        append_unique_generator_kind(kinds, "centroid_postings_head_auto")
-        append_unique_generator_kind(kinds, "centroid_postings_blockmax")
-        append_unique_generator_kind(kinds, "centroid_postings_imputed")
-        append_unique_generator_kind(kinds, "centroid_postings_imputed_flat")
-
-    if candidate_generator_kind_is_available(availability, "gem_graph"):
-        append_unique_generator_kind(kinds, "gem_graph")
+    for candidate_generator_kind in registered_search_planner_candidate_generator_kinds():
+        if candidate_generator_kind_is_available(
+            availability, candidate_generator_kind
+        ):
+            append_unique_generator_kind(kinds, candidate_generator_kind)
 
     return kinds^
 
@@ -207,6 +159,7 @@ struct SearchPlanSelectionRequest(Copyable):
 
 struct SearchPlanSelection(Copyable):
     var goal: String
+    var selected_candidate_generator_status: String
     var available_candidate_generator_kinds: List[String]
     var effective_candidate_generator_order: List[String]
     var plan: SearchPlan
@@ -215,12 +168,17 @@ struct SearchPlanSelection(Copyable):
     def __init__(
         out self,
         goal: String,
+        var selected_candidate_generator_status: String,
         read available_candidate_generator_kinds: List[String],
         read effective_candidate_generator_order: List[String],
         plan: SearchPlan,
         var reason: String,
     ) raises:
         self.goal = require_search_planning_goal(goal)
+        self.selected_candidate_generator_status = require_non_empty_string(
+            selected_candidate_generator_status,
+            "selected_candidate_generator_status",
+        )
         self.available_candidate_generator_kinds = List[String]()
         self.effective_candidate_generator_order = List[String]()
         for candidate_generator_kind in available_candidate_generator_kinds:
@@ -388,6 +346,7 @@ def select_search_plan_for_availability(
         ):
             return SearchPlanSelection(
                 request.goal,
+                search_planner_registry_entry(candidate_generator_kind).planner_status,
                 available_kinds,
                 decision.order,
                 selected_plan_for_kind(candidate_generator_kind, request),
@@ -396,6 +355,7 @@ def select_search_plan_for_availability(
 
     return SearchPlanSelection(
         request.goal,
+        search_planner_registry_entry("exact_full_scan").planner_status,
         available_kinds,
         decision.order,
         exact_full_scan_search_plan(

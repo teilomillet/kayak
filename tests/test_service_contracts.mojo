@@ -480,6 +480,7 @@ def test_planned_search_contracts_keep_selection_explicit() raises:
     )
     var selection = SearchPlanSelection(
         "balanced",
+        "exact_fallback",
         ["exact_full_scan", "document_proxy"],
         ["document_proxy", "exact_full_scan"],
         exact_full_scan_search_plan(2, 2),
