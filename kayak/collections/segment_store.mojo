@@ -10,6 +10,10 @@ from .artifact_manifest import (
     require_current_vector_scalar_name,
     write_collection_artifact_manifest,
 )
+from .document_representation_transform import (
+    DocumentRepresentationTransformConfigEntry,
+    DocumentRepresentationTransformManifest,
+)
 from .ids import CollectionId, NamespaceId, SegmentId, TenantId
 from .manifest_util import load_optional_manifest_value
 from .paths import require_relative_artifact_root, segment_manifest_path
@@ -95,6 +99,44 @@ def save_sealed_segment_manifest(
     entries.append(ManifestEntry("vector_dim", String(manifest.vector_dim)))
     entries.append(ManifestEntry("packed_index_root", packed_index_root))
     entries.append(
+        ManifestEntry(
+            "document_representation_transform_count",
+            String(len(manifest.document_representation_transforms)),
+        )
+    )
+    for transform_index in range(len(manifest.document_representation_transforms)):
+        var transform = (
+            manifest.document_representation_transforms[transform_index].copy()
+        )
+        entries.append(
+            ManifestEntry(
+                "document_representation_transform_" + String(transform_index) + "_kind",
+                transform.kind,
+            )
+        )
+        entries.append(
+            ManifestEntry(
+                "document_representation_transform_" + String(transform_index)
+                + "_config_count",
+                String(len(transform.config)),
+            )
+        )
+        for config_index in range(len(transform.config)):
+            entries.append(
+                ManifestEntry(
+                    "document_representation_transform_" + String(transform_index)
+                    + "_config_" + String(config_index) + "_key",
+                    transform.config[config_index].key,
+                )
+            )
+            entries.append(
+                ManifestEntry(
+                    "document_representation_transform_" + String(transform_index)
+                    + "_config_" + String(config_index) + "_value",
+                    transform.config[config_index].value,
+                )
+            )
+    entries.append(
         ManifestEntry("search_artifact_count", String(len(validated_search_artifacts)))
     )
     for index in range(len(validated_search_artifacts)):
@@ -147,6 +189,58 @@ def load_sealed_segment_manifest(root: Path) raises -> SealedSegmentManifest:
     var entries = read_collection_artifact_manifest(
         segment_manifest_path(root), "sealed_segment_manifest"
     )
+    var document_representation_transforms = List[
+        DocumentRepresentationTransformManifest
+    ]()
+    var document_representation_transform_count_value = load_optional_manifest_value(
+        entries, "document_representation_transform_count"
+    )
+    if document_representation_transform_count_value.byte_length() != 0:
+        var document_representation_transform_count = parse_int(
+            document_representation_transform_count_value,
+            "document_representation_transform_count",
+        )
+        for transform_index in range(document_representation_transform_count):
+            var config = List[DocumentRepresentationTransformConfigEntry]()
+            var config_count = parse_int(
+                require_manifest_value(
+                    entries,
+                    "document_representation_transform_" + String(transform_index)
+                    + "_config_count",
+                ),
+                "document_representation_transform config_count",
+            )
+            for config_index in range(config_count):
+                config.append(
+                    DocumentRepresentationTransformConfigEntry(
+                        require_manifest_value(
+                            entries,
+                            "document_representation_transform_"
+                            + String(transform_index)
+                            + "_config_"
+                            + String(config_index)
+                            + "_key",
+                        ),
+                        require_manifest_value(
+                            entries,
+                            "document_representation_transform_"
+                            + String(transform_index)
+                            + "_config_"
+                            + String(config_index)
+                            + "_value",
+                        ),
+                    )
+                )
+            document_representation_transforms.append(
+                DocumentRepresentationTransformManifest(
+                    require_manifest_value(
+                        entries,
+                        "document_representation_transform_" + String(transform_index)
+                        + "_kind",
+                    ),
+                    config^,
+                )
+            )
     var search_artifacts = List[SearchArtifactManifest]()
     var search_artifact_count_value = load_optional_manifest_value(
         entries, "search_artifact_count"
@@ -199,6 +293,7 @@ def load_sealed_segment_manifest(root: Path) raises -> SealedSegmentManifest:
         require_current_vector_scalar_name(entries, "sealed segment manifest"),
         parse_int(require_manifest_value(entries, "vector_dim"), "vector_dim"),
         require_manifest_value(entries, "packed_index_root"),
+        document_representation_transforms^,
         search_artifacts^,
         decode_optional_root(load_optional_manifest_value(entries, "text_corpus_root")),
         load_segment_stats_from_manifest(entries),

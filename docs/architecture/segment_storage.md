@@ -204,14 +204,17 @@ These are the core storage invariants that should hold across the service.
 2. Every sealed segment must satisfy that same vector contract.
 3. Search operates on snapshots, not on arbitrary half-built segment directories.
 4. Every segment and collection manifest must keep vector counts explicit.
-5. Search-native sidecars such as `document_proxy` and `centroid_postings` are optional and versioned separately from the exact packed index.
-6. Text sidecars are optional and versioned separately from vector payloads.
-7. Compaction never mutates the source searchable segment in place; it creates a
+5. Every sealed segment must record document-representation-transform
+   provenance for the exact packed representation it stores, even when that
+   transform chain is empty.
+6. Search-native sidecars such as `document_proxy` and `centroid_postings` are optional and versioned separately from the exact packed index.
+7. Text sidecars are optional and versioned separately from vector payloads.
+8. Compaction never mutates the source searchable segment in place; it creates a
    replacement output that a later snapshot can adopt.
-8. Collection manifests may carry a default search-artifact build policy, and
+9. Collection manifests may carry a default search-artifact build policy, and
    each sealed segment should record only the artifacts that were actually
    materialized for that segment.
-9. Family-specific build knobs should travel inside the artifact policy entry
+10. Family-specific build knobs should travel inside the artifact policy entry
    for that family, not as ad hoc top-level fields on the segment or collection
    manifest.
 
@@ -230,21 +233,23 @@ Those choices should follow the collection and segment contracts, not precede th
 
 ## Code Boundary Added In This Step
 
-This step introduces the `kayak/collections/` package as a contract layer only.
+This note began as a Phase A contract draft.
 
-It does not yet add:
-- segment manifest readers and writers
-- collection loaders
-- snapshot resolution logic
-- compaction executors
-- text-sidecar persistence codecs
+Verified now:
 
-That is deliberate.
+- `kayak/collections/` exists as a distinct serving-oriented package
+- the repo now also has:
+  - segment manifest readers and writers
+  - collection and snapshot loaders
+  - snapshot resolution logic
+  - compaction executors
+  - text-sidecar persistence codecs
 
-The repo should first have:
-- explicit names
-- explicit invariants
-- small files that are easy to read
+The architectural point that still stands is narrower:
+
+- those implementations should continue to follow the explicit collection,
+  segment, snapshot, artifact, and now document-representation-transform
+  contracts instead of bypassing them with ad hoc storage assumptions
 
 before it grows another storage implementation surface.
 

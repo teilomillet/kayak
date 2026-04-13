@@ -191,16 +191,20 @@ What should stay stable below this seam:
   document representation
 - the stage-1 and stage-2 plan contracts
 
-What is still missing in repo terms:
+What is now explicit in repo terms:
 
-- a first-class way to record document-representation transforms as segment
-  metadata rather than only as an implicit property of how one packed index was
-  built
+- sealed segment manifests can record an ordered
+  `document_representation_transforms` chain
+- transform kind and transform config are stored separately from:
+  - model identity
+  - search-native stage-1 artifacts
+  - stage-1 engine family
 
-Inference:
+What is still open:
 
-- this is the main seam `kayak` still needs to make more explicit if it wants
-  token-pooling and future pooling/pruning work to plug in cleanly
+- transform execution still needs to be implemented and measured case by case
+- transform-aware evaluation still needs to compare pooled or pruned segments
+  against an untransformed reference when that claim matters
 
 ### 3. Search-Artifact Boundary
 
@@ -398,8 +402,8 @@ paths immediately.
 The sound next step is to preserve and sharpen the generic seams:
 
 1. keep model identity explicit at collection and segment boundaries
-2. add an explicit document-representation-transform concept before multiple
-   pooling/pruning variants arrive
+2. keep the explicit document-representation-transform concept at the segment
+   boundary and build concrete transforms on top of it
 3. keep stage-1 artifact requirements and dispatch family-aware
 4. keep stage-2 explicit and candidate-window-scoped
 5. require benchmark reports to keep:

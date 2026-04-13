@@ -138,13 +138,15 @@ Evidence:
   - stage-1 engine family
   - stage-2 operator
   - stronger evaluation ceiling
-- the main still-missing generic seam is document-representation-transform
-  provenance at the segment boundary; model identity and stage-family seams are
-  already much more explicit
+- the document-representation-transform seam is now explicit at the sealed
+  segment boundary
+- the next open step on that seam is transform execution and measurement, not
+  transform provenance naming
 
 Related strategic note:
 - [docs/late_interaction_2030.md](docs/late_interaction_2030.md)
 - [docs/architecture/extensibility_wall.md](docs/architecture/extensibility_wall.md)
+- [docs/traces/2026-04-13_document_representation_transform_contract.md](docs/traces/2026-04-13_document_representation_transform_contract.md)
 
 ## North Star
 
@@ -224,7 +226,7 @@ Immediate TODOs:
 - [x] Add an explicit optional text-sidecar artifact keyed by `doc_id`
 - [x] Add segment-level stats: doc count, token count, vector count, average vectors/doc, byte size
 - [x] Add snapshot/export/import boundaries
-- [ ] Add a first-class document-representation-transform contract so pooling,
+- [x] Add a first-class document-representation-transform contract so pooling,
   pruning, and future document-side transforms do not remain implicit packed
   index variants
 

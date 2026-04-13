@@ -9,6 +9,8 @@ from kayak.collections import (
     DocumentMetadataMap,
     gem_graph_build_spec,
     NamespaceId,
+    DOCUMENT_REPRESENTATION_TRANSFORM_KIND_PREFIX_PRUNING,
+    DOCUMENT_REPRESENTATION_TRANSFORM_KIND_TOKEN_POOLING,
     SearchArtifactManifest,
     SearchArtifactBuildPolicy,
     SegmentId,
@@ -31,7 +33,12 @@ from kayak.collections import (
     save_snapshot_manifest,
     save_stored_document_metadata_corpus,
     save_stored_document_text_corpus,
+    same_document_representation_transforms,
     same_search_artifact_build_policy,
+    prefix_pruning_document_representation_transform,
+    sealed_segment_has_document_representation_transform_kind,
+    sealed_segment_has_document_representation_transforms,
+    token_pooling_document_representation_transform,
 )
 from kayak.numeric import VECTOR_SCALAR_NAME
 from kayak.text import DocumentTextCorpus
@@ -208,6 +215,124 @@ def test_segment_manifest_roundtrip_preserves_search_artifact_registry() raises:
     assert_equal(loaded_segment.search_artifacts[0].root, "document_proxy")
     assert_equal(loaded_segment.search_artifacts[1].family, "gem_graph")
     assert_equal(loaded_segment.search_artifacts[1].root, "gem_graph")
+
+
+def test_segment_manifest_roundtrip_preserves_document_representation_transforms() raises:
+    var root = Path("/tmp/kayak-segment-transform-roundtrip")
+    var transforms = [
+        token_pooling_document_representation_transform(2),
+        prefix_pruning_document_representation_transform(16),
+    ]
+
+    save_sealed_segment_manifest(
+        root,
+        SealedSegmentManifest(
+            SegmentId("segment-0010"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            9,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            128,
+            "packed_index",
+            [document_proxy_search_artifact("document_proxy")],
+            "text_corpus",
+            SegmentStats(2, 11, 10, 4096),
+            transforms,
+        ),
+    )
+
+    var loaded_segment = load_sealed_segment_manifest(root)
+
+    assert_equal(
+        same_document_representation_transforms(
+            loaded_segment.document_representation_transforms,
+            transforms,
+        ),
+        True,
+    )
+    assert_equal(
+        sealed_segment_has_document_representation_transforms(loaded_segment),
+        True,
+    )
+    assert_equal(
+        sealed_segment_has_document_representation_transform_kind(
+            loaded_segment,
+            DOCUMENT_REPRESENTATION_TRANSFORM_KIND_TOKEN_POOLING,
+        ),
+        True,
+    )
+    assert_equal(
+        sealed_segment_has_document_representation_transform_kind(
+            loaded_segment,
+            DOCUMENT_REPRESENTATION_TRANSFORM_KIND_PREFIX_PRUNING,
+        ),
+        True,
+    )
+
+
+def test_segment_manifest_loader_accepts_old_manifest_without_transform_entries() raises:
+    var root = Path("/tmp/kayak-segment-transform-backcompat")
+
+    save_sealed_segment_manifest(
+        root,
+        SealedSegmentManifest(
+            SegmentId("segment-0011"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            10,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            128,
+            "packed_index",
+            [document_proxy_search_artifact("document_proxy")],
+            "",
+            SegmentStats(1, 2, 2, 512),
+            [
+                token_pooling_document_representation_transform(2),
+            ],
+        ),
+    )
+
+    var manifest_path = root / "manifest.tsv"
+    manifest_path.write_text(
+        manifest_path
+            .read_text()
+            .replace("document_representation_transform_count\t1\n", "")
+            .replace(
+                "document_representation_transform_0_kind\ttoken_pooling\n",
+                "",
+            )
+            .replace(
+                "document_representation_transform_0_config_count\t2\n",
+                "",
+            )
+            .replace(
+                "document_representation_transform_0_config_0_key\tpool_factor\n",
+                "",
+            )
+            .replace(
+                "document_representation_transform_0_config_0_value\t2\n",
+                "",
+            )
+            .replace(
+                "document_representation_transform_0_config_1_key\tpolicy\n",
+                "",
+            )
+            .replace(
+                "document_representation_transform_0_config_1_value\thierarchical\n",
+                "",
+            )
+    )
+
+    var loaded_segment = load_sealed_segment_manifest(root)
+
+    assert_equal(
+        sealed_segment_has_document_representation_transforms(loaded_segment),
+        False,
+    )
 
 
 def test_document_text_corpus_rejects_missing_text_file() raises:

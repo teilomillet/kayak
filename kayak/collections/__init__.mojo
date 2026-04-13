@@ -59,6 +59,23 @@ from .document_filter_runtime import (
     DocumentFilterAllowlist,
     document_filter_allowlist_for_expression,
 )
+from .document_representation_transform import (
+    DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_DOCUMENT_VECTOR_BUDGET,
+    DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POLICY,
+    DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POOL_FACTOR,
+    DOCUMENT_REPRESENTATION_TRANSFORM_KIND_PREFIX_PRUNING,
+    DOCUMENT_REPRESENTATION_TRANSFORM_KIND_TOKEN_POOLING,
+    DocumentRepresentationTransformConfigEntry,
+    DocumentRepresentationTransformManifest,
+    copy_document_representation_transform_config_entries,
+    copy_document_representation_transforms,
+    document_representation_transform_config_value,
+    document_representation_transforms_have_kind,
+    prefix_pruning_document_representation_transform,
+    same_document_representation_transform_config_entries,
+    same_document_representation_transforms,
+    token_pooling_document_representation_transform,
+)
 from .document_metadata_store import (
     load_stored_document_metadata_corpus,
     save_stored_document_metadata_corpus,
@@ -161,6 +178,8 @@ from .segment import (
     sealed_segment_document_proxy_root,
     sealed_segment_has_centroid_heads_index,
     sealed_segment_has_centroid_postings_index,
+    sealed_segment_has_document_representation_transform_kind,
+    sealed_segment_has_document_representation_transforms,
     sealed_segment_has_document_proxy_index,
     sealed_segment_has_search_artifact,
     sealed_segment_search_artifact_root,
