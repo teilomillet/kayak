@@ -170,6 +170,13 @@ Current verified behavior:
 - the planner chooses a concrete `SearchPlan`
 - the chosen plan is returned explicitly in the selection payload and again in
   the executed search/explain response
+- `PlannedSearchRequest` can carry:
+  - `query_text` for text-family stage-2 operators
+  - `stage2_operator_kind` to override the planner's default stage-2 without
+    hiding the chosen stage-1 candidate generator
+- when exact fallback is selected, the planner preserves the requested
+  `candidate_k` window instead of collapsing it to `final_k`, so a later
+  stage-2 override can still rerank the intended exact candidate set
 
 Current guardrails:
 - non-`match_all` filters fall back to exact stage 1

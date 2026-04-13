@@ -367,7 +367,7 @@ def select_search_plan_for_availability(
         decision.order,
         exact_full_scan_search_plan(
             request.candidate_budget.final_k,
-            request.candidate_budget.final_k,
+            request.candidate_budget.candidate_k,
         ),
         decision.reason
         + "; no requested non-exact stage-1 candidate generator was available, so the planner fell back to exact_full_scan",

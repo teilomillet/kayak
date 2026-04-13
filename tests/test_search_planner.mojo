@@ -122,5 +122,27 @@ def test_planner_falls_back_to_exact_for_filters_and_oracle_guardrails() raises:
     )
 
 
+def test_planner_exact_fallback_preserves_requested_candidate_window() raises:
+    var selection = select_search_plan_for_availability(
+        SnapshotSearchArtifactAvailability(
+            1,
+            [],
+            [],
+        ),
+        SearchPlanSelectionRequest(
+            5,
+            20,
+            best_effort_faithfulness_policy(),
+            match_all_filter(),
+            SEARCH_PLANNING_GOAL_BALANCED,
+        ),
+    )
+
+    assert_equal(selection.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(selection.plan.candidate_budget.final_k, 5)
+    assert_equal(selection.plan.candidate_budget.candidate_k, 20)
+    assert_equal(selection.selected_candidate_generator_status, "exact_fallback")
+
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
