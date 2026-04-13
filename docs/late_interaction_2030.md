@@ -168,6 +168,18 @@ It does change how the next steps should be justified:
    - but compression should optimize an explicit serving/storage loop, not
      precede it
 
+6. Keep an explicit implementation wall between models, representation
+   transforms, search artifacts, stage-1 engines, and stage-2 refinement.
+   Therefore:
+   - new papers should be classified by which seam they change
+   - most future work should plug into one seam rather than trigger a planner
+     or storage rewrite
+   - index-time representation changes such as pooling should not be confused
+     with new search-engine families
+
+Evidence:
+- [docs/architecture/extensibility_wall.md](architecture/extensibility_wall.md)
+
 ## What The Q&A Adds
 
 The Q&A sharpens several points that the headline talk alone could leave too
@@ -218,9 +230,13 @@ What Kayak should do:
 - keep encoder/model identity explicit in manifests, sidecars, and search
   requests
 - avoid designing APIs that imply one can safely mix arbitrary encoder families
-  in the same late-interaction space
+- keep model swaps separate from document-representation transforms and
+  separate again from search-engine families
 - treat calibrated multi-encoder or jointly trained interoperability as a
   research milestone, not an assumption
+
+Evidence:
+- [docs/architecture/extensibility_wall.md](architecture/extensibility_wall.md)
 
 ### Pretraining For Late Interaction
 
