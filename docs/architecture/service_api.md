@@ -171,9 +171,11 @@ Current verified behavior:
 - the chosen plan is returned explicitly in the selection payload and again in
   the executed search/explain response
 - `PlannedSearchRequest` can carry:
-  - `query_text` for text-family stage-2 operators
-  - `stage2_operator_kind` to override the planner's default stage-2 without
-    hiding the chosen stage-1 candidate generator
+  - `query_text` for text-family stage-3 verifier overrides
+  - `stage2_reference_kind` to override only the stage-2 reference operator
+  - `stage3_verifier_kind` to override only the stage-3 verifier
+  - `stage2_operator_kind` as a compatibility override when callers still use
+    the legacy combined stage-2 name
 - when exact fallback is selected, the planner preserves the requested
   `candidate_k` window instead of collapsing it to `final_k`, so a later
   stage-2 override can still rerank the intended exact candidate set

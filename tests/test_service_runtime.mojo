@@ -1009,7 +1009,7 @@ def test_hosted_collection_runtime_keeps_native_stage1_for_exact_doc_id_filters(
     assert_equal(response.search.hits[0].doc_id, "doc-b")
 
 
-def test_hosted_collection_runtime_executes_planned_search_with_clause_text_stage2() raises:
+def test_hosted_collection_runtime_executes_planned_search_with_explicit_stage3_verifier_override() raises:
     var service_root = unique_service_root(
         "kayak-service-runtime-planned-clause-text"
     )
@@ -1064,6 +1064,7 @@ def test_hosted_collection_runtime_executes_planned_search_with_clause_text_stag
             SnapshotId("snapshot-0001"),
             EncodedQuery([[1.0, 0.0], [1.0, 0.0]]),
             "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
+            "",
             "clause_text",
             one_of_filter("doc_id", ["doc-context", "doc-answer"]),
             SearchPlanSelectionRequest(
@@ -1080,6 +1081,8 @@ def test_hosted_collection_runtime_executes_planned_search_with_clause_text_stag
 
     assert_equal(response.selection.plan.candidate_generator.kind, "exact_full_scan")
     assert_equal(response.search.plan.stage2_operator.kind, "clause_text")
+    assert_equal(response.search.plan.stage2_reference_operator.kind, "noop_topk")
+    assert_equal(response.search.plan.stage3_verifier.kind, "clause_text")
     assert_equal(response.search.hits[0].doc_id, "doc-answer")
 
 

@@ -50,9 +50,14 @@ text_index = kayak.documents(
         ),
     ],
 ).pack()
-text_plan = kayak.exact_full_scan_clause_text_search_plan(final_k=1, candidate_k=2)
+text_plan = kayak.exact_full_scan_search_plan(
+    final_k=1,
+    candidate_k=2,
+    stage3_verifier=kayak.clause_text_stage3_verifier_operator(),
+)
 text_result = kayak.search_with_plan(text_query, text_index, text_plan)
 
 print("text candidate hits:", text_result.candidate_stage.hits)
 print("text stage2:", text_result.stage2)
+print("text stage3 verifier:", text_result.stage3_verifier)
 print("text final hits:", text_result.hits)

@@ -219,7 +219,11 @@ class SearchPlanApiTests(unittest.TestCase):
 
     def test_clause_text_stage2_can_refine_exact_candidate_window(self) -> None:
         query, index = self._build_clause_text_fixture()
-        plan = kayak.exact_full_scan_clause_text_search_plan(final_k=1, candidate_k=2)
+        plan = kayak.exact_full_scan_search_plan(
+            final_k=1,
+            candidate_k=2,
+            stage3_verifier=kayak.clause_text_stage3_verifier_operator(),
+        )
 
         result = kayak.search_with_plan(query, index, plan)
 
@@ -228,6 +232,8 @@ class SearchPlanApiTests(unittest.TestCase):
         self.assertIsNotNone(result.candidate_index)
         assert result.candidate_index is not None
         self.assertEqual(result.candidate_index.doc_texts, index.doc_texts)
+        self.assertEqual(result.plan.stage2_reference_operator.kind, "noop_topk")
+        self.assertEqual(result.plan.stage3_verifier.kind, "clause_text")
         self.assertEqual(result.stage2.stage_name, "noop_topk")
         self.assertEqual(result.stage3_verifier.stage_name, "clause_text")
         self.assertEqual(result.stage2.query_vector_count, 0)
@@ -247,7 +253,11 @@ class SearchPlanApiTests(unittest.TestCase):
 
     def test_clause_text_stage2_requires_query_text_and_document_texts(self) -> None:
         query, index = self._build_clause_text_fixture()
-        plan = kayak.exact_full_scan_clause_text_search_plan(final_k=1, candidate_k=2)
+        plan = kayak.exact_full_scan_search_plan(
+            final_k=1,
+            candidate_k=2,
+            stage3_verifier=kayak.clause_text_stage3_verifier_operator(),
+        )
 
         with self.assertRaisesRegex(ValueError, "requires query.text"):
             kayak.search_with_plan(query.with_text(None), index, plan)
@@ -255,14 +265,14 @@ class SearchPlanApiTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "requires document texts"):
             kayak.search_with_plan(query, index.with_texts(None), plan)
 
-    def test_hybrid_stage2_materializes_vectors_and_texts(self) -> None:
+    def test_explicit_stage3_verifier_materializes_vectors_and_texts(self) -> None:
         query, index = self._build_hybrid_stage2_fixture()
         plan = kayak.document_proxy_search_plan(
             final_k=1,
             candidate_k=2,
             query_vector_budget=1,
             document_vector_budget=1,
-            stage2_operator=kayak.exact_late_interaction_clause_text_stage2_operator(),
+            stage3_verifier=kayak.clause_text_stage3_verifier_operator(),
         )
 
         result = kayak.search_with_plan(query, index, plan)
@@ -301,14 +311,14 @@ class SearchPlanApiTests(unittest.TestCase):
             ("document_text",),
         )
 
-    def test_hybrid_stage2_requires_query_text_and_document_texts(self) -> None:
+    def test_explicit_stage3_verifier_requires_query_text_and_document_texts(self) -> None:
         query, index = self._build_hybrid_stage2_fixture()
         plan = kayak.document_proxy_search_plan(
             final_k=1,
             candidate_k=2,
             query_vector_budget=1,
             document_vector_budget=1,
-            stage2_operator=kayak.exact_late_interaction_clause_text_stage2_operator(),
+            stage3_verifier=kayak.clause_text_stage3_verifier_operator(),
         )
 
         with self.assertRaisesRegex(ValueError, "requires query.text"):
@@ -316,6 +326,52 @@ class SearchPlanApiTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "requires document texts"):
             kayak.search_with_plan(query, index.with_texts(None), plan)
+
+    def test_plan_builders_reject_mixed_legacy_and_explicit_stage_overrides(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot be mixed"):
+            kayak.exact_full_scan_search_plan(
+                final_k=1,
+                candidate_k=2,
+                stage2_operator=kayak.clause_text_stage2_operator(),
+                stage3_verifier=kayak.clause_text_stage3_verifier_operator(),
+            )
+
+        with self.assertRaisesRegex(ValueError, "cannot be mixed"):
+            kayak.document_proxy_search_plan(
+                final_k=1,
+                candidate_k=2,
+                stage2_operator=(
+                    kayak.exact_late_interaction_clause_text_stage2_operator()
+                ),
+                stage2_reference_operator=(
+                    kayak.exact_late_interaction_stage2_reference_operator()
+                ),
+            )
+
+    def test_stage2_operator_remains_supported_as_compatibility_input(self) -> None:
+        plan = kayak.document_proxy_search_plan(
+            final_k=1,
+            candidate_k=2,
+            stage2_operator=kayak.exact_late_interaction_clause_text_stage2_operator(),
+        )
+
+        self.assertEqual(plan.reference_scoring_semantics.kind, "exact_late_interaction")
+        self.assertEqual(plan.stage2_reference_operator.kind, "exact_late_interaction")
+        self.assertEqual(plan.stage3_verifier.kind, "clause_text")
+        self.assertEqual(plan.stage2_operator.kind, "exact_late_interaction_clause_text")
+
+    def test_clause_text_shorthand_builder_matches_explicit_stage3_override(self) -> None:
+        shorthand = kayak.exact_full_scan_clause_text_search_plan(
+            final_k=1,
+            candidate_k=2,
+        )
+        explicit = kayak.exact_full_scan_search_plan(
+            final_k=1,
+            candidate_k=2,
+            stage3_verifier=kayak.clause_text_stage3_verifier_operator(),
+        )
+
+        self.assertEqual(shorthand, explicit)
 
     def test_index_search_with_plan_matches_top_level_helper(self) -> None:
         query, index = self._build_fixture()

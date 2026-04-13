@@ -614,6 +614,8 @@ def test_planned_search_contracts_keep_selection_explicit() raises:
     assert_equal(request.planning.goal, "balanced")
     assert_equal(request.query_text, "")
     assert_equal(request.stage2_operator_kind, "")
+    assert_equal(request.stage2_reference_kind, "")
+    assert_equal(request.stage3_verifier_kind, "")
     assert_equal(
         request.planning.preferred_candidate_generator_kinds[0],
         "document_proxy",
@@ -645,6 +647,8 @@ def test_planned_search_request_accepts_explicit_stage2_override() raises:
 
     assert_equal(request.query_text, "founded in 1984 longest serving employee")
     assert_equal(request.stage2_operator_kind, "clause_text")
+    assert_equal(request.stage2_reference_kind, "")
+    assert_equal(request.stage3_verifier_kind, "")
 
 
 def test_planned_search_request_accepts_explicit_hybrid_stage2_override() raises:
@@ -668,6 +672,31 @@ def test_planned_search_request_accepts_explicit_hybrid_stage2_override() raises
         request.stage2_operator_kind,
         "exact_late_interaction_clause_text",
     )
+    assert_equal(request.stage2_reference_kind, "")
+    assert_equal(request.stage3_verifier_kind, "")
+
+
+def test_planned_search_request_accepts_explicit_stage_components() raises:
+    var request = PlannedSearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        make_query(),
+        "founded in 1984 longest serving employee",
+        "noop_topk",
+        "clause_text",
+        match_all_filter(),
+        SearchPlanSelectionRequest(
+            2,
+            8,
+            best_effort_faithfulness_policy(),
+        ),
+    )
+
+    assert_equal(request.stage2_operator_kind, "")
+    assert_equal(request.stage2_reference_kind, "noop_topk")
+    assert_equal(request.stage3_verifier_kind, "clause_text")
 
 
 def test_planned_search_request_rejects_text_stage2_without_query_text() raises:
@@ -705,6 +734,31 @@ def test_planned_search_request_rejects_hybrid_stage2_without_query_text() raise
             make_query(),
             "",
             "exact_late_interaction_clause_text",
+            match_all_filter(),
+            SearchPlanSelectionRequest(
+                2,
+                8,
+                best_effort_faithfulness_policy(),
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_planned_search_request_rejects_text_stage3_without_query_text() raises:
+    var raised = False
+    try:
+        _ = PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            "",
+            "noop_topk",
+            "clause_text",
             match_all_filter(),
             SearchPlanSelectionRequest(
                 2,

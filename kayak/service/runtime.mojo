@@ -39,10 +39,8 @@ from kayak.planning import (
     explain_collection_search,
     SearchPlan,
     SearchPlanSelection,
-    search_plan_with_stage2_operator,
     select_search_plan_for_availability,
     search_collection_for_plan,
-    Stage2Operator,
 )
 from kayak.runtime import ExactScoringBackend
 
@@ -59,6 +57,10 @@ from .draft_state import (
 from .paths import (
     draft_state_root,
     service_collection_root,
+)
+from .planned_search_stage_override import (
+    planned_search_has_stage_override,
+    search_plan_with_planned_search_stage_override,
 )
 from .search_contracts import (
     DebugSearchResponse,
@@ -464,12 +466,12 @@ def execute_search[Backend: ExactScoringBackend](
 def search_request_for_planned_request(
     read request: PlannedSearchRequest, plan: SearchPlan
 ) raises -> SearchRequest:
-    var effective_plan = plan.copy()
-    if request.stage2_operator_kind.byte_length() > 0:
-        effective_plan = search_plan_with_stage2_operator(
-            plan,
-            Stage2Operator(request.stage2_operator_kind.copy()),
-        )
+    var effective_plan = search_plan_with_planned_search_stage_override(
+        plan,
+        request.stage2_operator_kind,
+        request.stage2_reference_kind,
+        request.stage3_verifier_kind,
+    )
 
     return SearchRequest(
         request.collection_id,
@@ -488,7 +490,11 @@ def selection_for_planned_request(
     read request: PlannedSearchRequest,
     read selection: SearchPlanSelection,
 ) raises -> SearchPlanSelection:
-    if request.stage2_operator_kind.byte_length() == 0:
+    if not planned_search_has_stage_override(
+        request.stage2_operator_kind,
+        request.stage2_reference_kind,
+        request.stage3_verifier_kind,
+    ):
         return selection.copy()
 
     return SearchPlanSelection(
@@ -496,9 +502,11 @@ def selection_for_planned_request(
         selection.selected_candidate_generator_status.copy(),
         selection.available_candidate_generator_kinds,
         selection.effective_candidate_generator_order,
-        search_plan_with_stage2_operator(
+        search_plan_with_planned_search_stage_override(
             selection.plan,
-            Stage2Operator(request.stage2_operator_kind.copy()),
+            request.stage2_operator_kind,
+            request.stage2_reference_kind,
+            request.stage3_verifier_kind,
         ),
         selection.reason.copy(),
     )

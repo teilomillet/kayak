@@ -240,18 +240,22 @@ Text-family refinement is also explicit and requires both `query.text` and
 document texts:
 
 ```python
-plan = kayak.exact_full_scan_clause_text_search_plan(final_k=1, candidate_k=2)
+plan = kayak.exact_full_scan_search_plan(
+    final_k=1,
+    candidate_k=2,
+    stage3_verifier=kayak.clause_text_stage3_verifier_operator(),
+)
 result = kayak.search_with_plan(query, index, plan)
 
-print(result.stage2.stage_name)  # clause_text
-print(result.stage2.materialized_artifacts[0].family)  # document_text
+print(result.stage2.stage_name)  # noop_topk
+print(result.stage3_verifier.stage_name)  # clause_text
+print(result.stage3_verifier.materialized_artifacts[0].family)  # document_text
 print(result.hits)
 ```
 
-Hybrid refinement stays explicit too. This operator exact-scores the candidate
-window with late interaction and then blends clause-text evidence over that same
-window, so it declares both artifact families instead of pretending to be a
-plain tensor op:
+Hybrid refinement stays explicit too. The default `document_proxy` plan already
+uses exact late interaction as its stage-2 reference operator, so adding a
+stage-3 verifier means specifying only the verifier:
 
 ```python
 plan = kayak.document_proxy_search_plan(
@@ -259,13 +263,16 @@ plan = kayak.document_proxy_search_plan(
     candidate_k=2,
     query_vector_budget=1,
     document_vector_budget=1,
-    stage2_operator=kayak.exact_late_interaction_clause_text_stage2_operator(),
+    stage3_verifier=kayak.clause_text_stage3_verifier_operator(),
 )
 result = kayak.search_with_plan(query, index, plan)
 
-print(result.stage2.stage_name)  # exact_late_interaction_clause_text
+print(result.stage2.stage_name)  # exact_late_interaction
+print(result.stage3_verifier.stage_name)  # clause_text
 print([artifact.family for artifact in result.stage2.materialized_artifacts])
-# ['late_interaction', 'document_text']
+# ['late_interaction']
+print([artifact.family for artifact in result.stage3_verifier.materialized_artifacts])
+# ['document_text']
 print(result.hits)
 ```
 
@@ -285,11 +292,17 @@ Current public stage-1 generators:
 - `exact_full_scan`
 - `document_proxy`
 
-Current public stage-2 operators:
-- `noop_topk`
-- `exact_late_interaction`
-- `exact_late_interaction_clause_text`
-- `clause_text`
+Current public staged refinement pieces:
+- stage-2 reference operators:
+  - `noop_topk`
+  - `exact_late_interaction`
+- stage-3 verifiers:
+  - `none`
+  - `clause_text`
+
+Compatibility note:
+- `Stage2Operator` and helpers like `exact_late_interaction_clause_text_stage2_operator()`
+  still exist, but they are the legacy combined view over those explicit stages
 
 That is an intentionally narrow first pass.
 It gives Python users a real stage-aware primitive today without pretending the

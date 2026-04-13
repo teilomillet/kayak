@@ -47,17 +47,21 @@ What is verified:
 - candidate-window rescoring can stay explicit through `LateIndex.select(...)`
   plus `maxsim(...)` instead of a hidden rerank primitive
 - the public API now exposes explicit local stage-aware primitives through
-  `CandidateGenerator`, `Stage2Operator`, `SearchPlan`,
+  `CandidateGenerator`, `Stage2ReferenceOperator`, `Stage3VerifierOperator`,
+  `SearchPlan`,
   `generate_candidates(...)`, and `search_with_plan(...)`
 - the first public stage-1 generator set is intentionally narrow:
   - `exact_full_scan`
   - `document_proxy`
-- the public stage-2 operator set is intentionally narrow too:
-  - `noop_topk`
-  - `exact_late_interaction`
-  - `clause_text`
+- the public staged refinement set is intentionally narrow too:
+  - stage-2 reference operators:
+    - `noop_topk`
+    - `exact_late_interaction`
+  - stage-3 verifiers:
+    - `none`
+    - `clause_text`
 - the Python object model can carry optional query text and document texts for
-  text-family stage 2 without hiding that evidence behind generic tensors
+  text-family stage 3 without hiding that evidence behind generic tensors
 
 What is not claimed:
 - a published package whose `mojo_exact_cpu` backend works without a local
@@ -301,11 +305,16 @@ The supported public stage-1 generators today are:
 - `exact_full_scan`
 - `document_proxy`
 
-The supported public stage-2 operators today are:
-- `noop_topk`
-- `exact_late_interaction`
-- `exact_late_interaction_clause_text`
-- `clause_text`
+The supported public staged refinement pieces today are:
+- stage-2 reference operators:
+  - `noop_topk`
+  - `exact_late_interaction`
+- stage-3 verifiers:
+  - `none`
+  - `clause_text`
+
+`Stage2Operator` remains part of the public API, but as a compatibility view
+over those explicit stages rather than the primary modeling surface.
 
 Example:
 
@@ -339,6 +348,7 @@ The result keeps the stages inspectable:
 - `result.stage2_scores`
 - `result.hits`
 - `result.stage2`
+- `result.stage3_verifier`
 
 Compatibility note:
 - `result.exact_scores` and `result.exact_stage` are legacy aliases

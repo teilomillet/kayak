@@ -159,6 +159,7 @@ def make_planned_search_request() raises -> PlannedSearchRequest:
         SnapshotId("snapshot-0001"),
         EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
         "find the clause evidence",
+        "",
         "clause_text",
         match_all_filter(),
         SearchPlanSelectionRequest(
@@ -472,7 +473,15 @@ def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
         True,
     )
     assert_equal(
-        request_json.find("\"stage2_operator_kind\":\"clause_text\"") != -1,
+        request_json.find("\"stage2_operator_kind\":\"\"") != -1,
+        True,
+    )
+    assert_equal(
+        request_json.find("\"stage2_reference_kind\":\"\"") != -1,
+        True,
+    )
+    assert_equal(
+        request_json.find("\"stage3_verifier_kind\":\"clause_text\"") != -1,
         True,
     )
     assert_equal(
