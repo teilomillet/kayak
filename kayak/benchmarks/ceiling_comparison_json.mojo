@@ -29,6 +29,16 @@ comptime CEILING_BENCH_MIN_SECONDS = 0.05
 comptime CEILING_BENCH_MAX_SECONDS = 0.25
 comptime CEILING_BENCH_MAX_ITERS = 200
 
+comptime CEILING_COMPARISON_ROLE_REFERENCE_ANCHOR = "reference_anchor"
+comptime CEILING_COMPARISON_ROLE_CANDIDATE_PLAN = "candidate_plan"
+comptime CEILING_COMPARISON_ROLE_LOCAL_STRONGER_CEILING = "local_stronger_ceiling"
+
+comptime CEILING_EXECUTION_PATH_EXACT_LATE_INTERACTION = "exact_late_interaction"
+comptime CEILING_EXECUTION_PATH_PLANNED_STAGE_AWARE = "planned_stage_aware"
+comptime CEILING_EXECUTION_PATH_EXACT_THEN_CLAUSE_TEXT_RERANK = (
+    "exact_then_clause_text_rerank"
+)
+
 
 struct CeilingComparisonSummary(Copyable):
     var dataset_id: String
@@ -36,6 +46,8 @@ struct CeilingComparisonSummary(Copyable):
     var family: String
     var slice_name: String
     var method_kind: String
+    var comparison_role: String
+    var execution_path_kind: String
     var plan: SearchPlan
     var stage2_reference_materialized_artifact_families: List[String]
     var stage3_verifier_materialized_artifact_families: List[String]
@@ -55,6 +67,8 @@ struct CeilingComparisonSummary(Copyable):
         var family: String,
         var slice_name: String,
         var method_kind: String,
+        var comparison_role: String,
+        var execution_path_kind: String,
         plan: SearchPlan,
         read stage2_reference_materialized_artifact_families: List[String],
         read stage3_verifier_materialized_artifact_families: List[String],
@@ -72,6 +86,8 @@ struct CeilingComparisonSummary(Copyable):
         self.family = family^
         self.slice_name = slice_name^
         self.method_kind = method_kind^
+        self.comparison_role = comparison_role^
+        self.execution_path_kind = execution_path_kind^
         self.plan = plan.copy()
         self.stage2_reference_materialized_artifact_families = (
             stage2_reference_materialized_artifact_families.copy()
@@ -201,6 +217,8 @@ def build_exact_full_scan_ceiling_summary(
         task.family.copy(),
         task.slice_name.copy(),
         "exact_full_scan",
+        CEILING_COMPARISON_ROLE_REFERENCE_ANCHOR,
+        CEILING_EXECUTION_PATH_EXACT_LATE_INTERACTION,
         exact_full_scan_search_plan(task.k, task.k),
         [],
         [],
@@ -293,6 +311,8 @@ def build_exact_clause_text_ceiling_summary(
         task.family.copy(),
         task.slice_name.copy(),
         "exact_clause_text_ceiling",
+        CEILING_COMPARISON_ROLE_LOCAL_STRONGER_CEILING,
+        CEILING_EXECUTION_PATH_EXACT_THEN_CLAUSE_TEXT_RERANK,
         exact_full_scan_clause_text_search_plan(task.k, candidate_k),
         [],
         ["document_text"],
@@ -397,6 +417,8 @@ def build_stage_aware_ceiling_summary_for_plan(
         task.family.copy(),
         task.slice_name.copy(),
         "stage_aware",
+        CEILING_COMPARISON_ROLE_CANDIDATE_PLAN,
+        CEILING_EXECUTION_PATH_PLANNED_STAGE_AWARE,
         plan,
         representative_stage2_reference_materialized_artifact_families^,
         representative_stage3_verifier_materialized_artifact_families^,
@@ -420,6 +442,10 @@ def append_ceiling_comparison_summary_json(
     buffer += "\"family\":\"" + json_escape(summary.family) + "\","
     buffer += "\"slice_name\":\"" + json_escape(summary.slice_name) + "\","
     buffer += "\"method_kind\":\"" + json_escape(summary.method_kind) + "\","
+    buffer += "\"comparison_role\":\""
+    buffer += json_escape(summary.comparison_role) + "\","
+    buffer += "\"execution_path_kind\":\""
+    buffer += json_escape(summary.execution_path_kind) + "\","
     append_search_plan_semantics_json_fields(buffer, summary.plan)
     buffer += ","
     buffer += "\"stage2_reference_materialized_artifact_families\":"

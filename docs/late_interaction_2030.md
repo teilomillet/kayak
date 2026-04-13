@@ -123,6 +123,12 @@ Verified after the first version of this note:
   - it keeps query/document vector counts explicit
   - it shows that several approximate stage-1 plans need materially larger
     `candidate_k` windows before exact reranking recovers full recall
+- there is now also one long-document synthetic hard-recall family:
+  - it keeps query width fixed while moving the exact evidence behind a long
+    noisy shared prefix
+  - it exposes a second stage-1 failure mode beyond conjunction ambiguity
+- the benchmark ladder is now written down explicitly with exit criteria per
+  rung instead of being implied by scattered benchmark scripts
 
 Evidence:
 - [docs/traces/2026-04-12_single_core_scale.md](traces/2026-04-12_single_core_scale.md)
@@ -132,10 +138,12 @@ Evidence:
 - [docs/traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md](traces/2026-04-12_browsecomp_plus_gold_vector_pruning.md)
 - [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
 - [docs/traces/2026-04-12_synthetic_hard_recall_stage_aware.md](traces/2026-04-12_synthetic_hard_recall_stage_aware.md)
+- [docs/traces/2026-04-13_benchmark_ladder_and_long_document_hard_recall.md](traces/2026-04-13_benchmark_ladder_and_long_document_hard_recall.md)
 - [docs/traces/2026-04-13_hosted_engine_p0.md](traces/2026-04-13_hosted_engine_p0.md)
 - [docs/traces/2026-04-13_hosted_engine_p1_ops.md](traces/2026-04-13_hosted_engine_p1_ops.md)
 - [docs/traces/2026-04-13_exact_doc_id_filters.md](traces/2026-04-13_exact_doc_id_filters.md)
 - [docs/architecture/search_plan_semantics.md](architecture/search_plan_semantics.md)
+- [docs/benchmark_ladder.md](benchmark_ladder.md)
 - [docs/epistemic_status.md](epistemic_status.md)
 
 ## What Kayak Should Change

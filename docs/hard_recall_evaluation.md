@@ -24,6 +24,8 @@ Verified from repo evidence:
 - the repo now also has one scalable synthetic conjunction-style hard-recall
   family with explicit vector-count control and exact-reference candidate
   recall reporting.
+- the repo now also has one long-document synthetic hard-recall family where
+  the exact matching vectors appear late behind a noisy shared prefix.
 
 ## Selected Hard-Recall Surfaces
 
@@ -41,15 +43,21 @@ The current synthetic hard-recall family is:
 - `synthetic_hard_recall`
   - profile `slots6_values3_docs1530`
   - profile `slots6_values4_docs8288`
+- `long_document_hard_recall`
+  - profile `late_suffix_docs544_vec100`
+  - profile `late_suffix_docs2088_vec133`
 
 Reason:
 - it scales beyond the current tiny public slices
 - it keeps query vectors, document vectors, and candidate budgets explicit
 - it creates measurable candidate-recall collapse before exact reranking
   recovers
+- it now also covers a second failure mode:
+  - long noisy prefixes with late exact evidence
 
 Evidence:
 - [docs/traces/2026-04-12_synthetic_hard_recall_stage_aware.md](traces/2026-04-12_synthetic_hard_recall_stage_aware.md)
+- [docs/traces/2026-04-13_benchmark_ladder_and_long_document_hard_recall.md](traces/2026-04-13_benchmark_ladder_and_long_document_hard_recall.md)
 
 ## Explicit Exclusion
 
@@ -93,6 +101,11 @@ The repo now does have one stronger local comparison path:
 - recorded separately in
   [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
 
+Important boundary:
+- that path is a local stronger ceiling
+- it is not a cross-encoder ceiling
+- it is not a long-context LLM ceiling
+
 For the stage-aware benchmark itself, the verified reference ceiling remains:
 - exact full-scan late interaction on the same collection snapshot
 
@@ -130,12 +143,14 @@ The current synthetic-family benchmark command is:
 
 ```bash
 pixi run bench_synthetic_hard_recall_stage_aware
+pixi run bench_long_document_hard_recall_stage_aware
 ```
 
 It writes:
 
 ```text
 .cache/kayak/synthetic_hard_recall_stage_aware_search.json
+.cache/kayak/long_document_hard_recall_stage_aware_search.json
 ```
 
 The current plan families in that synthetic artifact are:
@@ -156,3 +171,5 @@ This output is the current source of truth for:
   documents while query width stays fixed
 - which tighter native generators fail to beat the current recovery frontier on
   that family
+- how badly budgeted stage-1 sidecars degrade once the relevant concepts move
+  behind long noisy document prefixes

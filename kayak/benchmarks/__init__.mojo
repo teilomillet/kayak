@@ -79,6 +79,12 @@ from .synthetic_hard_recall_fixture import (
     default_synthetic_hard_recall_profiles,
     make_synthetic_hard_recall_fixture,
 )
+from .long_document_hard_recall_fixture import (
+    LongDocumentHardRecallFixture,
+    LongDocumentHardRecallProfile,
+    default_long_document_hard_recall_profiles,
+    make_long_document_hard_recall_fixture,
+)
 from .storage_encoding_json import (
     StorageEncodingSummary,
     build_storage_encoding_summary,

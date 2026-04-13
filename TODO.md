@@ -436,11 +436,11 @@ Required properties:
   reporting surface
 
 Immediate TODOs:
-- [ ] Write a benchmark-ladder note with explicit exit criteria per family
-- [ ] Add one code- or long-document-shaped hard-recall slice through the
+- [x] Write a benchmark-ladder note with explicit exit criteria per family
+- [x] Add one code- or long-document-shaped hard-recall slice through the
   existing stage-aware JSON pipeline
-- [ ] Keep stronger-ceiling artifacts labeled by the actual path used
-- [ ] Avoid calling local clause-text ceilings "cross-encoder" or
+- [x] Keep stronger-ceiling artifacts labeled by the actual path used
+- [x] Avoid calling local clause-text ceilings "cross-encoder" or
   "long-context" ceilings
 
 ## Priority 9: Encoder Boundary And Interoperability

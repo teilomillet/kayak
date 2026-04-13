@@ -83,6 +83,8 @@ def test_ceiling_comparison_summary_json_contains_method_fields() raises:
         "mock",
         "ceiling_fixture",
         "exact_clause_text_ceiling",
+        "local_stronger_ceiling",
+        "exact_then_clause_text_rerank",
         exact_full_scan_clause_text_search_plan(10, 20),
         ["late_interaction"],
         ["document_text"],
@@ -98,6 +100,15 @@ def test_ceiling_comparison_summary_json_contains_method_fields() raises:
     var json = ceiling_comparison_summary_json(summary)
 
     assert_equal(json.find("\"method_kind\":\"exact_clause_text_ceiling\"") != -1, True)
+    assert_equal(
+        json.find("\"comparison_role\":\"local_stronger_ceiling\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"execution_path_kind\":\"exact_then_clause_text_rerank\"")
+            != -1,
+        True,
+    )
     assert_equal(
         json.find("\"reference_scoring_semantics_kind\":\"exact_late_interaction\"")
             != -1,
@@ -139,6 +150,8 @@ def test_build_exact_clause_text_ceiling_summary_reports_candidate_window() rais
     assert_equal(summary.plan.candidate_budget.candidate_k, 2)
     assert_equal(summary.plan.stage2_reference_operator.kind, "noop_topk")
     assert_equal(summary.plan.stage3_verifier.kind, "clause_text")
+    assert_equal(summary.comparison_role, "local_stronger_ceiling")
+    assert_equal(summary.execution_path_kind, "exact_then_clause_text_rerank")
     assert_equal(len(summary.stage2_reference_materialized_artifact_families), 0)
     assert_equal(len(summary.stage3_verifier_materialized_artifact_families), 1)
     assert_equal(summary.stage3_verifier_materialized_artifact_families[0], "document_text")
@@ -209,6 +222,8 @@ def test_build_stage_aware_ceiling_summary_propagates_stage2_materialized_famili
     assert_equal(len(summary.stage2_reference_materialized_artifact_families), 1)
     assert_equal(summary.stage2_reference_materialized_artifact_families[0], "late_interaction")
     assert_equal(summary.plan.stage3_verifier.kind, "none")
+    assert_equal(summary.comparison_role, "candidate_plan")
+    assert_equal(summary.execution_path_kind, "planned_stage_aware")
 
 
 def main() raises:
