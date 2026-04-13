@@ -27,6 +27,7 @@ from kayak.planning import (
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
     clause_text_stage2_operator,
+    document_proxy_search_plan,
     exact_late_interaction_stage2_operator,
 )
 from kayak.runtime import ExactCpuBackend
@@ -59,7 +60,11 @@ def test_planner_benchmark_summary_json_contains_selection_fields() raises:
             "docs_64",
             "mock_collection",
             "snapshot-0001",
-            "document_proxy",
+            document_proxy_search_plan(
+                2,
+                16,
+                best_effort_faithfulness_policy(),
+            ).candidate_generator,
             2,
             16,
             4,
@@ -93,8 +98,12 @@ def test_planner_benchmark_summary_json_contains_selection_fields() raises:
     var json = planner_benchmark_summary_json(
         PlannerBenchmarkSummary(
             "balanced",
-            "exact_late_interaction",
-            "document_proxy",
+            document_proxy_search_plan(
+                2,
+                16,
+                best_effort_faithfulness_policy(),
+                exact_late_interaction_stage2_operator(),
+            ),
             "promoted",
             "planner used the default candidate-generator order for goal balanced",
             ["exact_full_scan", "document_proxy"],
@@ -106,7 +115,11 @@ def test_planner_benchmark_summary_json_contains_selection_fields() raises:
                 "docs_64",
                 "mock_collection",
                 "snapshot-0001",
-                "document_proxy",
+                document_proxy_search_plan(
+                    2,
+                    16,
+                    best_effort_faithfulness_policy(),
+                ).candidate_generator,
                 2,
                 16,
                 4,
@@ -140,7 +153,15 @@ def test_planner_benchmark_summary_json_contains_selection_fields() raises:
     )
 
     assert_equal(json.find("\"planning_goal\":\"balanced\"") != -1, True)
-    assert_equal(json.find("\"stage2_kind\":\"exact_late_interaction\"") != -1, True)
+    assert_equal(
+        json.find("\"reference_scoring_semantics_kind\":\"exact_late_interaction\"")
+            != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage2_reference_kind\":\"exact_late_interaction\"") != -1,
+        True,
+    )
     assert_equal(
         json.find("\"selected_candidate_generator_status\":\"promoted\"") != -1,
         True,
@@ -195,8 +216,9 @@ def test_build_planner_benchmark_summary_reports_selected_generator() raises:
     )
 
     assert_equal(summary.planning_goal, "balanced")
-    assert_equal(summary.stage2_kind, "exact_late_interaction")
-    assert_equal(summary.selected_candidate_generator_kind, "document_proxy")
+    assert_equal(summary.plan.reference_scoring_semantics.kind, "exact_late_interaction")
+    assert_equal(summary.plan.stage2_reference_operator.kind, "exact_late_interaction")
+    assert_equal(summary.plan.candidate_generator.kind, "centroid_postings_imputed_flat")
     assert_equal(summary.selected_candidate_generator_status, "promoted")
     assert_equal(summary.measured.mean_candidate_recall_at_final_k >= 0.0, True)
     assert_equal(summary.measured.stage1_byte_size > 0, True)
@@ -248,8 +270,8 @@ def test_build_planner_benchmark_summary_supports_clause_text_on_mirrored_text_c
         8,
     )
 
-    assert_equal(summary.stage2_kind, "clause_text")
-    assert_equal(summary.selected_candidate_generator_kind, "document_proxy")
+    assert_equal(summary.plan.stage3_verifier.kind, "clause_text")
+    assert_equal(summary.plan.candidate_generator.kind, "centroid_postings_imputed_flat")
     assert_equal(summary.measured.stage1_byte_size > 0, True)
 
 

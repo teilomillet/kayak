@@ -28,6 +28,8 @@ from kayak.planning import (
     SearchPlanSelectionRequest,
     best_effort_faithfulness_policy,
     clause_text_stage2_operator,
+    document_proxy_search_plan,
+    exact_full_scan_search_plan,
     exact_late_interaction_stage2_operator,
 )
 from kayak.runtime import ExactCpuBackend
@@ -53,7 +55,17 @@ def single_core_backend() -> ExactCpuBackend:
 
 def manual_measured_summary(
     candidate_generator_kind: String,
-) -> FaithfulnessFrontierSummary:
+) raises -> FaithfulnessFrontierSummary:
+    var candidate_generator = document_proxy_search_plan(
+        2,
+        16,
+        best_effort_faithfulness_policy(),
+    ).candidate_generator.copy()
+    if candidate_generator_kind == "exact_full_scan":
+        candidate_generator = (
+            exact_full_scan_search_plan(2, 16).candidate_generator.copy()
+        )
+
     return FaithfulnessFrontierSummary(
         "mock://dataset",
         "mock-model",
@@ -61,7 +73,7 @@ def manual_measured_summary(
         "docs_64",
         "mock_collection",
         "snapshot-0001",
-        candidate_generator_kind.copy(),
+        candidate_generator,
         2,
         16,
         4,
@@ -97,11 +109,14 @@ def test_planner_evidence_summary_json_contains_candidates_and_advisory() raises
     var json = planner_evidence_summary_json(
         PlannerEvidenceSummary(
             "balanced",
-            "exact_late_interaction",
-            "late_interaction",
-            False,
+            document_proxy_search_plan(
+                2,
+                16,
+                best_effort_faithfulness_policy(),
+                exact_late_interaction_stage2_operator(),
+            ),
             ["late_interaction"],
-            "document_proxy",
+            [],
             "promoted",
             "planner used the default candidate-generator order for goal balanced",
             ["exact_full_scan", "document_proxy"],
@@ -126,17 +141,21 @@ def test_planner_evidence_summary_json_contains_candidates_and_advisory() raises
         )
     )
 
-    assert_equal(json.find("\"stage2_kind\":\"exact_late_interaction\"") != -1, True)
     assert_equal(
-        json.find("\"stage2_family\":\"late_interaction\"") != -1,
+        json.find("\"reference_scoring_semantics_kind\":\"exact_late_interaction\"")
+            != -1,
         True,
     )
     assert_equal(
-        json.find("\"stage2_requires_query_text\":false") != -1,
+        json.find("\"stage2_reference_kind\":\"exact_late_interaction\"") != -1,
         True,
     )
     assert_equal(
-        json.find("\"stage2_materialized_artifact_families\":[\"late_interaction\"]")
+        json.find("\"stage3_verifier_kind\":\"none\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage2_reference_materialized_artifact_families\":[\"late_interaction\"]")
             != -1,
         True,
     )
@@ -190,13 +209,13 @@ def test_build_planner_evidence_summary_reports_selected_candidate_and_stage2() 
     )
 
     assert_equal(summary.planning_goal, "balanced")
-    assert_equal(summary.stage2_kind, "exact_late_interaction")
-    assert_equal(summary.stage2_family, "late_interaction")
-    assert_equal(summary.stage2_requires_query_text, False)
-    assert_equal(len(summary.stage2_materialized_artifact_families), 1)
-    assert_equal(summary.stage2_materialized_artifact_families[0], "late_interaction")
+    assert_equal(summary.plan.reference_scoring_semantics.kind, "exact_late_interaction")
+    assert_equal(summary.plan.stage2_reference_operator.kind, "exact_late_interaction")
+    assert_equal(summary.plan.stage3_verifier.kind, "none")
+    assert_equal(len(summary.stage2_reference_materialized_artifact_families), 1)
+    assert_equal(summary.stage2_reference_materialized_artifact_families[0], "late_interaction")
     assert_equal(
-        summary.selected_candidate_generator_kind,
+        summary.plan.candidate_generator.kind,
         "centroid_postings_imputed_flat",
     )
     assert_equal(summary.selected_candidate_generator_status, "promoted")
@@ -257,8 +276,8 @@ def test_build_planner_evidence_summary_supports_clause_text_on_mirrored_text_co
     )
 
     assert_equal(summary.planning_goal, "exact_only")
-    assert_equal(summary.stage2_kind, "clause_text")
-    assert_equal(summary.selected_candidate_generator_kind, "exact_full_scan")
+    assert_equal(summary.plan.stage3_verifier.kind, "clause_text")
+    assert_equal(summary.plan.candidate_generator.kind, "exact_full_scan")
     assert_equal(len(summary.candidates) > 0, True)
     assert_equal(summary.candidates[0].measured.stage1_byte_size > 0, True)
 

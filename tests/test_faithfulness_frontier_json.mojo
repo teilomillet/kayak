@@ -51,7 +51,11 @@ def test_faithfulness_frontier_summary_json_contains_budget_fields() raises:
             "docs_64",
             "mock_collection",
             "snapshot-0001",
-            "centroid_heads",
+            centroid_heads_search_plan(
+                2,
+                16,
+                best_effort_faithfulness_policy(),
+            ).candidate_generator,
             2,
             16,
             4,
@@ -90,6 +94,15 @@ def test_faithfulness_frontier_summary_json_contains_budget_fields() raises:
     assert_equal(json.find("\"posting_cap\":8") != -1, True)
     assert_equal(
         json.find("\"stage1_bytes_per_vector\":64.0") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"candidate_generator_family\":\"centroid\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage1_interaction_semantics\":\"approximate_late_interaction\"")
+            != -1,
         True,
     )
     assert_equal(

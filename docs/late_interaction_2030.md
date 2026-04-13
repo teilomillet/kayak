@@ -111,6 +111,13 @@ Verified after the first version of this note:
   - exact full scan plus `clause_text` reranking can outperform exact MaxSim
   - it is also much more expensive than the current stage-aware vector-only
     path
+- benchmark and evidence output now report staged late-interaction semantics
+  explicitly:
+  - stage-1 generator provenance is emitted from the real candidate generator
+  - reference scoring semantics, stage-2 reference execution, and stage-3
+    verifier semantics are emitted separately
+  - exact-oracle storage counts are reported separately instead of being
+    aliased to the stage-2 reference stage
 - there is now one scalable synthetic hard-recall family beyond the current
   small public slices:
   - it keeps query/document vector counts explicit
@@ -128,6 +135,7 @@ Evidence:
 - [docs/traces/2026-04-13_hosted_engine_p0.md](traces/2026-04-13_hosted_engine_p0.md)
 - [docs/traces/2026-04-13_hosted_engine_p1_ops.md](traces/2026-04-13_hosted_engine_p1_ops.md)
 - [docs/traces/2026-04-13_exact_doc_id_filters.md](traces/2026-04-13_exact_doc_id_filters.md)
+- [docs/architecture/search_plan_semantics.md](architecture/search_plan_semantics.md)
 - [docs/epistemic_status.md](epistemic_status.md)
 
 ## What Kayak Should Change

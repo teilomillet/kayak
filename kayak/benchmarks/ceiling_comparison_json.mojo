@@ -8,6 +8,8 @@ from kayak.numeric import MetricScalar, zero_metric_scalar
 from kayak.planning import (
     SearchPlan,
     explain_collection_search,
+    exact_full_scan_clause_text_search_plan,
+    exact_full_scan_search_plan,
     final_hits_to_search_hits,
     search_collection_for_plan,
 )
@@ -20,6 +22,7 @@ from kayak.verifier import default_clause_text_rerank_config, rerank_hits_clause
 from .json_common import append_json_string_list, json_escape
 from .materialized_artifact_families import materialized_artifact_families
 from .query_text_support import judged_query_text_for_plan
+from .search_plan_semantics_json import append_search_plan_semantics_json_fields
 
 
 comptime CEILING_BENCH_MIN_SECONDS = 0.05
@@ -33,14 +36,9 @@ struct CeilingComparisonSummary(Copyable):
     var family: String
     var slice_name: String
     var method_kind: String
-    var candidate_generator_kind: String
-    var stage2_kind: String
-    var stage2_family: String
-    var stage2_requires_query_text: Bool
-    var stage2_materialized_artifact_families: List[String]
-    var reranker_kind: String
-    var candidate_k: Int
-    var final_k: Int
+    var plan: SearchPlan
+    var stage2_reference_materialized_artifact_families: List[String]
+    var stage3_verifier_materialized_artifact_families: List[String]
     var primary_metric: String
     var primary_value: Float64
     var mean_candidate_recall_at_final_k: Float64
@@ -57,14 +55,9 @@ struct CeilingComparisonSummary(Copyable):
         var family: String,
         var slice_name: String,
         var method_kind: String,
-        var candidate_generator_kind: String,
-        var stage2_kind: String,
-        var stage2_family: String,
-        stage2_requires_query_text: Bool,
-        var stage2_materialized_artifact_families: List[String],
-        var reranker_kind: String,
-        candidate_k: Int,
-        final_k: Int,
+        plan: SearchPlan,
+        read stage2_reference_materialized_artifact_families: List[String],
+        read stage3_verifier_materialized_artifact_families: List[String],
         var primary_metric: String,
         primary_value: Float64,
         mean_candidate_recall_at_final_k: Float64,
@@ -79,16 +72,13 @@ struct CeilingComparisonSummary(Copyable):
         self.family = family^
         self.slice_name = slice_name^
         self.method_kind = method_kind^
-        self.candidate_generator_kind = candidate_generator_kind^
-        self.stage2_kind = stage2_kind^
-        self.stage2_family = stage2_family^
-        self.stage2_requires_query_text = stage2_requires_query_text
-        self.stage2_materialized_artifact_families = (
-            stage2_materialized_artifact_families^
+        self.plan = plan.copy()
+        self.stage2_reference_materialized_artifact_families = (
+            stage2_reference_materialized_artifact_families.copy()
         )
-        self.reranker_kind = reranker_kind^
-        self.candidate_k = candidate_k
-        self.final_k = final_k
+        self.stage3_verifier_materialized_artifact_families = (
+            stage3_verifier_materialized_artifact_families.copy()
+        )
         self.primary_metric = primary_metric^
         self.primary_value = primary_value
         self.mean_candidate_recall_at_final_k = mean_candidate_recall_at_final_k
@@ -211,14 +201,9 @@ def build_exact_full_scan_ceiling_summary(
         task.family.copy(),
         task.slice_name.copy(),
         "exact_full_scan",
-        "exact_full_scan",
-        "noop_topk",
-        "identity",
-        False,
+        exact_full_scan_search_plan(task.k, task.k),
         [],
-        "none",
-        task.k,
-        task.k,
+        [],
         evaluation.primary_metric.copy(),
         Float64(evaluation.primary_value),
         1.0,
@@ -308,14 +293,9 @@ def build_exact_clause_text_ceiling_summary(
         task.family.copy(),
         task.slice_name.copy(),
         "exact_clause_text_ceiling",
-        "exact_full_scan",
-        "clause_text",
-        "text",
-        True,
+        exact_full_scan_clause_text_search_plan(task.k, candidate_k),
+        [],
         ["document_text"],
-        "clause_text",
-        candidate_k,
-        task.k,
         evaluation.primary_metric.copy(),
         Float64(evaluation.primary_value),
         1.0,
@@ -340,7 +320,8 @@ def build_stage_aware_ceiling_summary_for_plan(
     var recall_total = zero_metric_scalar()
     var success_total = zero_metric_scalar()
     var candidate_recall_total = 0.0
-    var representative_stage2_materialized_artifact_families = List[String]()
+    var representative_stage2_reference_materialized_artifact_families = List[String]()
+    var representative_stage3_verifier_materialized_artifact_families = List[String]()
 
     for judged_query in task.queries:
         var query_text = judged_query_text_for_plan(
@@ -354,10 +335,16 @@ def build_stage_aware_ceiling_summary_for_plan(
             plan,
             query_text=query_text,
         )
-        if len(representative_stage2_materialized_artifact_families) == 0:
-            representative_stage2_materialized_artifact_families = (
+        if len(representative_stage2_reference_materialized_artifact_families) == 0:
+            representative_stage2_reference_materialized_artifact_families = (
                 materialized_artifact_families(
                     explain.stage2.materialized_artifacts
+                )
+            )
+        if len(representative_stage3_verifier_materialized_artifact_families) == 0:
+            representative_stage3_verifier_materialized_artifact_families = (
+                materialized_artifact_families(
+                    explain.stage3_verifier.materialized_artifacts
                 )
             )
         var query_evaluation = evaluate_query_hits(
@@ -410,14 +397,9 @@ def build_stage_aware_ceiling_summary_for_plan(
         task.family.copy(),
         task.slice_name.copy(),
         "stage_aware",
-        plan.candidate_generator.kind.copy(),
-        plan.stage2_operator.kind.copy(),
-        plan.stage2_operator.family.copy(),
-        plan.stage2_operator.requires_query_text,
-        representative_stage2_materialized_artifact_families^,
-        plan.reranker_kind.copy(),
-        plan.candidate_budget.candidate_k,
-        task.k,
+        plan,
+        representative_stage2_reference_materialized_artifact_families^,
+        representative_stage3_verifier_materialized_artifact_families^,
         evaluation.primary_metric.copy(),
         Float64(evaluation.primary_value),
         candidate_recall_total / Float64(len(task.queries)),
@@ -438,24 +420,20 @@ def append_ceiling_comparison_summary_json(
     buffer += "\"family\":\"" + json_escape(summary.family) + "\","
     buffer += "\"slice_name\":\"" + json_escape(summary.slice_name) + "\","
     buffer += "\"method_kind\":\"" + json_escape(summary.method_kind) + "\","
-    buffer += "\"candidate_generator_kind\":\""
-    buffer += json_escape(summary.candidate_generator_kind) + "\","
-    buffer += "\"stage2_kind\":\"" + json_escape(summary.stage2_kind) + "\","
-    buffer += "\"stage2_family\":\"" + json_escape(summary.stage2_family) + "\","
-    buffer += "\"stage2_requires_query_text\":"
-    if summary.stage2_requires_query_text:
-        buffer += "true,"
-    else:
-        buffer += "false,"
-    buffer += "\"stage2_materialized_artifact_families\":"
+    append_search_plan_semantics_json_fields(buffer, summary.plan)
+    buffer += ","
+    buffer += "\"stage2_reference_materialized_artifact_families\":"
     append_json_string_list(
         buffer,
-        summary.stage2_materialized_artifact_families,
+        summary.stage2_reference_materialized_artifact_families,
     )
     buffer += ","
-    buffer += "\"reranker_kind\":\"" + json_escape(summary.reranker_kind) + "\","
-    buffer += "\"candidate_k\":" + String(summary.candidate_k) + ","
-    buffer += "\"final_k\":" + String(summary.final_k) + ","
+    buffer += "\"stage3_verifier_materialized_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        summary.stage3_verifier_materialized_artifact_families,
+    )
+    buffer += ","
     buffer += "\"primary_metric\":\"" + json_escape(summary.primary_metric) + "\","
     buffer += "\"primary_value\":" + String(summary.primary_value) + ","
     buffer += "\"mean_candidate_recall_at_final_k\":"

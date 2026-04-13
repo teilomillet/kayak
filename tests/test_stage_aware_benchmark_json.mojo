@@ -25,6 +25,7 @@ from kayak import (
     search_collection_for_plan,
 )
 from kayak.benchmarks import (
+    StageDensitySummary,
     StageAwareSearchSummary,
     build_stage_aware_search_summary,
     build_stage_aware_search_summary_from_measurement,
@@ -51,12 +52,11 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
             "gold",
             "mock_collection",
             "snapshot-0001",
-            "document_proxy",
-            "exact_late_interaction",
-            "late_interaction",
-            False,
-            ["late_interaction"],
-            "best_effort",
+            document_proxy_search_plan(
+                10,
+                100,
+                best_effort_faithfulness_policy(),
+            ),
             "ndcg",
             0.4,
             0.4,
@@ -76,24 +76,46 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
             4096,
             32.0,
             8.0,
-            100,
-            400,
-            400,
-            3200,
-            32.0,
-            8.0,
+            StageDensitySummary(
+                100,
+                400,
+                400,
+                3200,
+                32.0,
+                8.0,
+            ),
             True,
             12.0,
             24.0,
             3.0,
             2.0,
             6.0,
-            10,
-            80,
-            80,
-            640,
-            64.0,
-            8.0,
+            ["late_interaction"],
+            StageDensitySummary(
+                10,
+                80,
+                80,
+                640,
+                64.0,
+                8.0,
+            ),
+            [],
+            StageDensitySummary(
+                10,
+                10,
+                10,
+                80,
+                8.0,
+                8.0,
+            ),
+            StageDensitySummary(
+                128,
+                512,
+                512,
+                4096,
+                32.0,
+                8.0,
+            ),
             128,
         )
     )
@@ -103,20 +125,21 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
         True,
     )
     assert_equal(
-        json.find("\"stage2_kind\":\"exact_late_interaction\"") != -1,
-        True,
-    )
-    assert_equal(
-        json.find("\"stage2_family\":\"late_interaction\"") != -1,
-        True,
-    )
-    assert_equal(
-        json.find("\"stage2_materialized_artifact_families\":[\"late_interaction\"]")
+        json.find("\"reference_scoring_semantics_kind\":\"exact_late_interaction\"")
             != -1,
         True,
     )
     assert_equal(
-        json.find("\"faithfulness_policy_kind\":\"best_effort\"") != -1,
+        json.find("\"stage2_reference_kind\":\"exact_late_interaction\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage2_reference_materialized_artifact_families\":[\"late_interaction\"]")
+            != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage3_verifier_kind\":\"none\"") != -1,
         True,
     )
     assert_equal(
@@ -141,7 +164,7 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
         True,
     )
     assert_equal(
-        json.find("\"stage2_document_count\":10") != -1,
+        json.find("\"stage2_reference_document_count\":10") != -1,
         True,
     )
 
@@ -223,21 +246,12 @@ def test_build_stage_aware_search_summary_reports_proxy_recall_gap() raises:
         task,
         snapshot,
         plan,
-        ["late_interaction"],
-        explain.candidate_stage.document_count,
-        explain.candidate_stage.token_count,
-        explain.candidate_stage.vector_count,
-        explain.candidate_stage.byte_size,
-        explain.candidate_stage.tracks_graph_search,
+        explain,
         0.0,
         0.0,
         0.0,
         0.0,
         0.0,
-        explain.stage2.document_count,
-        explain.stage2.token_count,
-        explain.stage2.vector_count,
-        explain.stage2.byte_size,
         Float64(evaluation.primary_value),
         Float64(evaluation.ndcg_at_k),
         Float64(evaluation.reciprocal_rank_at_k),
@@ -247,22 +261,24 @@ def test_build_stage_aware_search_summary_reports_proxy_recall_gap() raises:
         0.0,
     )
 
-    assert_equal(summary.candidate_generator_kind, "document_proxy")
-    assert_equal(summary.faithfulness_policy_kind, "best_effort")
+    assert_equal(summary.plan.candidate_generator.kind, "document_proxy")
+    assert_equal(summary.plan.faithfulness_policy.kind, "best_effort")
     assert_equal(summary.mean_candidate_recall_at_final_k, 0.0)
     assert_equal(summary.mean_recall_at_k, 0.0)
     assert_equal(summary.document_count, 3)
     assert_equal(summary.vector_count, 6)
     assert_equal(summary.nominal_query_vector_count, 2)
     assert_equal(summary.nominal_document_vector_count, 2)
-    assert_equal(summary.candidate_stage_document_count, 3)
-    assert_equal(summary.candidate_stage_vector_count, 3)
+    assert_equal(summary.candidate_stage.document_count, 3)
+    assert_equal(summary.candidate_stage.vector_count, 3)
     assert_equal(summary.candidate_stage_tracks_graph_search, False)
     assert_equal(summary.mean_candidate_stage_graph_visited_vertex_count, 0.0)
-    assert_equal(len(summary.stage2_materialized_artifact_families), 1)
-    assert_equal(summary.stage2_materialized_artifact_families[0], "late_interaction")
-    assert_equal(summary.stage2_document_count, 1)
-    assert_equal(summary.stage2_vector_count, 2)
+    assert_equal(len(summary.stage2_reference_materialized_artifact_families), 1)
+    assert_equal(summary.stage2_reference_materialized_artifact_families[0], "late_interaction")
+    assert_equal(summary.stage2_reference.document_count, 1)
+    assert_equal(summary.stage2_reference.vector_count, 2)
+    assert_equal(summary.exact_oracle.document_count, 3)
+    assert_equal(summary.exact_oracle.vector_count, 6)
 
 
 def test_build_stage_aware_search_summary_propagates_materialized_artifact_families() raises:
@@ -328,8 +344,8 @@ def test_build_stage_aware_search_summary_propagates_materialized_artifact_famil
         plan,
     )
 
-    assert_equal(len(summary.stage2_materialized_artifact_families), 1)
-    assert_equal(summary.stage2_materialized_artifact_families[0], "late_interaction")
+    assert_equal(len(summary.stage2_reference_materialized_artifact_families), 1)
+    assert_equal(summary.stage2_reference_materialized_artifact_families[0], "late_interaction")
 
 
 def main() raises:

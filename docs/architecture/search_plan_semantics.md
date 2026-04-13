@@ -71,16 +71,45 @@ thesis more honestly:
 - `document_proxy` remains the latency-first baseline
 - `gem_graph` remains experimental
 
+## Benchmark And Report Semantics
+
+The benchmark layer now mirrors the same split explicitly instead of collapsing
+everything back into one legacy `stage2_kind`.
+
+Current benchmark and evidence JSON emit:
+
+- stage-1 generator semantics from the real `CandidateGenerator`
+- `reference_scoring_semantics_*`
+- `stage2_reference_*`
+- `stage3_verifier_*`
+- exact-oracle storage and vector counts as a separate section where relevant
+
+Compatibility fields are still emitted, but only under explicit
+`compatibility_*` names. The benchmark surfaces no longer present those legacy
+combined names as the primary contract.
+
+This matters for comparing stage-1 engines like centroid-family WARP-style
+paths and GEM:
+
+- the comparison can now be phrased directly in retrieval semantics
+- the reporting no longer implies that every difference is "just stage 2"
+- exact-oracle counts are no longer aliased to the stage-2 reference stage
+
 ## Verification status
 
 This contract was verified locally against:
 
 - `tests/test_stage1_capabilities.mojo`
+- `tests/test_faithfulness_frontier_json.mojo`
+- `tests/test_stage_aware_benchmark_json.mojo`
+- `tests/test_single_core_scale_fixture.mojo`
+- `tests/test_synthetic_hard_recall_fixture.mojo`
 - `tests/test_collection_search_plan.mojo`
 - `tests/test_service_contracts.mojo`
 - `tests/test_service_json.mojo`
 - `tests/test_service_runtime.mojo`
 - `tests/test_planner_registry.mojo`
+- `tests/test_planner_benchmark_json.mojo`
 - `tests/test_planner_evidence_json.mojo`
 - `tests/test_ceiling_comparison_json.mojo`
 - `python/tests/test_search_plan_api.py`
@@ -89,8 +118,8 @@ This contract was verified locally against:
 
 ## Next steps
 
-- Add semantic fields to planner benchmark summaries where only legacy
-  `stage2_*` names are still emitted.
+- Move remaining downstream consumers from `compatibility_*` fields to the
+  explicit semantic keys.
 - Extend the same contract to future native stage-1 engines beyond the current
   centroid and GEM families.
 - Keep `stage2_operator` compatibility until downstream consumers move to the

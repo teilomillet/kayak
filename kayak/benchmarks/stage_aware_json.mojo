@@ -5,6 +5,7 @@ from std.collections import List
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.eval import evaluate_query_hits
 from kayak.planning import (
+    CollectionSearchExplain,
     SearchPlan,
     explain_collection_search,
     final_hits_to_search_hits,
@@ -16,6 +17,32 @@ from kayak.storage import StoredJudgedTask
 from .json_common import append_json_string_list, json_escape
 from .materialized_artifact_families import materialized_artifact_families
 from .query_text_support import judged_query_text_for_plan
+from .search_plan_semantics_json import append_search_plan_semantics_json_fields
+
+
+struct StageDensitySummary(Copyable):
+    var document_count: Int
+    var token_count: Int
+    var vector_count: Int
+    var byte_size: Int
+    var bytes_per_document: Float64
+    var bytes_per_vector: Float64
+
+    def __init__(
+        out self,
+        document_count: Int,
+        token_count: Int,
+        vector_count: Int,
+        byte_size: Int,
+        bytes_per_document: Float64,
+        bytes_per_vector: Float64,
+    ):
+        self.document_count = document_count
+        self.token_count = token_count
+        self.vector_count = vector_count
+        self.byte_size = byte_size
+        self.bytes_per_document = bytes_per_document
+        self.bytes_per_vector = bytes_per_vector
 
 
 struct StageAwareSearchSummary(Copyable):
@@ -25,12 +52,7 @@ struct StageAwareSearchSummary(Copyable):
     var slice_name: String
     var collection_id: String
     var snapshot_id: String
-    var candidate_generator_kind: String
-    var stage2_kind: String
-    var stage2_family: String
-    var stage2_requires_query_text: Bool
-    var stage2_materialized_artifact_families: List[String]
-    var faithfulness_policy_kind: String
+    var plan: SearchPlan
     var primary_metric: String
     var primary_value: Float64
     var mean_ndcg_at_k: Float64
@@ -50,24 +72,18 @@ struct StageAwareSearchSummary(Copyable):
     var byte_size: Int
     var bytes_per_document: Float64
     var bytes_per_vector: Float64
-    var candidate_stage_document_count: Int
-    var candidate_stage_token_count: Int
-    var candidate_stage_vector_count: Int
-    var candidate_stage_byte_size: Int
-    var candidate_stage_bytes_per_document: Float64
-    var candidate_stage_bytes_per_vector: Float64
+    var candidate_stage: StageDensitySummary
     var candidate_stage_tracks_graph_search: Bool
     var mean_candidate_stage_graph_visited_vertex_count: Float64
     var mean_candidate_stage_graph_expanded_edge_count: Float64
     var mean_candidate_stage_graph_visited_cluster_count: Float64
     var mean_candidate_stage_graph_entry_point_count: Float64
     var mean_candidate_stage_graph_max_frontier_size: Float64
-    var stage2_document_count: Int
-    var stage2_token_count: Int
-    var stage2_vector_count: Int
-    var stage2_byte_size: Int
-    var stage2_bytes_per_document: Float64
-    var stage2_bytes_per_vector: Float64
+    var stage2_reference_materialized_artifact_families: List[String]
+    var stage2_reference: StageDensitySummary
+    var stage3_verifier_materialized_artifact_families: List[String]
+    var stage3_verifier: StageDensitySummary
+    var exact_oracle: StageDensitySummary
     var vector_dim: Int
 
     def __init__(
@@ -78,12 +94,7 @@ struct StageAwareSearchSummary(Copyable):
         var slice_name: String,
         var collection_id: String,
         var snapshot_id: String,
-        var candidate_generator_kind: String,
-        var stage2_kind: String,
-        var stage2_family: String,
-        stage2_requires_query_text: Bool,
-        var stage2_materialized_artifact_families: List[String],
-        var faithfulness_policy_kind: String,
+        plan: SearchPlan,
         var primary_metric: String,
         primary_value: Float64,
         mean_ndcg_at_k: Float64,
@@ -103,24 +114,18 @@ struct StageAwareSearchSummary(Copyable):
         byte_size: Int,
         bytes_per_document: Float64,
         bytes_per_vector: Float64,
-        candidate_stage_document_count: Int,
-        candidate_stage_token_count: Int,
-        candidate_stage_vector_count: Int,
-        candidate_stage_byte_size: Int,
-        candidate_stage_bytes_per_document: Float64,
-        candidate_stage_bytes_per_vector: Float64,
+        candidate_stage: StageDensitySummary,
         candidate_stage_tracks_graph_search: Bool,
         mean_candidate_stage_graph_visited_vertex_count: Float64,
         mean_candidate_stage_graph_expanded_edge_count: Float64,
         mean_candidate_stage_graph_visited_cluster_count: Float64,
         mean_candidate_stage_graph_entry_point_count: Float64,
         mean_candidate_stage_graph_max_frontier_size: Float64,
-        stage2_document_count: Int,
-        stage2_token_count: Int,
-        stage2_vector_count: Int,
-        stage2_byte_size: Int,
-        stage2_bytes_per_document: Float64,
-        stage2_bytes_per_vector: Float64,
+        read stage2_reference_materialized_artifact_families: List[String],
+        stage2_reference: StageDensitySummary,
+        read stage3_verifier_materialized_artifact_families: List[String],
+        stage3_verifier: StageDensitySummary,
+        exact_oracle: StageDensitySummary,
         vector_dim: Int,
     ):
         self.dataset_id = dataset_id^
@@ -129,14 +134,7 @@ struct StageAwareSearchSummary(Copyable):
         self.slice_name = slice_name^
         self.collection_id = collection_id^
         self.snapshot_id = snapshot_id^
-        self.candidate_generator_kind = candidate_generator_kind^
-        self.stage2_kind = stage2_kind^
-        self.stage2_family = stage2_family^
-        self.stage2_requires_query_text = stage2_requires_query_text
-        self.stage2_materialized_artifact_families = (
-            stage2_materialized_artifact_families^
-        )
-        self.faithfulness_policy_kind = faithfulness_policy_kind^
+        self.plan = plan.copy()
         self.primary_metric = primary_metric^
         self.primary_value = primary_value
         self.mean_ndcg_at_k = mean_ndcg_at_k
@@ -156,14 +154,7 @@ struct StageAwareSearchSummary(Copyable):
         self.byte_size = byte_size
         self.bytes_per_document = bytes_per_document
         self.bytes_per_vector = bytes_per_vector
-        self.candidate_stage_document_count = candidate_stage_document_count
-        self.candidate_stage_token_count = candidate_stage_token_count
-        self.candidate_stage_vector_count = candidate_stage_vector_count
-        self.candidate_stage_byte_size = candidate_stage_byte_size
-        self.candidate_stage_bytes_per_document = (
-            candidate_stage_bytes_per_document
-        )
-        self.candidate_stage_bytes_per_vector = candidate_stage_bytes_per_vector
+        self.candidate_stage = candidate_stage.copy()
         self.candidate_stage_tracks_graph_search = candidate_stage_tracks_graph_search
         self.mean_candidate_stage_graph_visited_vertex_count = (
             mean_candidate_stage_graph_visited_vertex_count
@@ -180,12 +171,15 @@ struct StageAwareSearchSummary(Copyable):
         self.mean_candidate_stage_graph_max_frontier_size = (
             mean_candidate_stage_graph_max_frontier_size
         )
-        self.stage2_document_count = stage2_document_count
-        self.stage2_token_count = stage2_token_count
-        self.stage2_vector_count = stage2_vector_count
-        self.stage2_byte_size = stage2_byte_size
-        self.stage2_bytes_per_document = stage2_bytes_per_document
-        self.stage2_bytes_per_vector = stage2_bytes_per_vector
+        self.stage2_reference_materialized_artifact_families = (
+            stage2_reference_materialized_artifact_families.copy()
+        )
+        self.stage2_reference = stage2_reference.copy()
+        self.stage3_verifier_materialized_artifact_families = (
+            stage3_verifier_materialized_artifact_families.copy()
+        )
+        self.stage3_verifier = stage3_verifier.copy()
+        self.exact_oracle = exact_oracle.copy()
         self.vector_dim = vector_dim
 
 
@@ -203,25 +197,32 @@ def density_bytes_per_vector(byte_size: Int, vector_count: Int) -> Float64:
     return Float64(byte_size) / Float64(vector_count)
 
 
+def build_stage_density_summary(
+    document_count: Int,
+    token_count: Int,
+    vector_count: Int,
+    byte_size: Int,
+) -> StageDensitySummary:
+    return StageDensitySummary(
+        document_count,
+        token_count,
+        vector_count,
+        byte_size,
+        density_bytes_per_document(byte_size, document_count),
+        density_bytes_per_vector(byte_size, vector_count),
+    )
+
+
 def build_stage_aware_search_summary_from_measurement(
     read stored_task: StoredJudgedTask,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
-    var stage2_materialized_artifact_families: List[String],
-    candidate_stage_document_count: Int,
-    candidate_stage_token_count: Int,
-    candidate_stage_vector_count: Int,
-    candidate_stage_byte_size: Int,
-    candidate_stage_tracks_graph_search: Bool,
+    read representative_explain: CollectionSearchExplain,
     mean_candidate_stage_graph_visited_vertex_count: Float64,
     mean_candidate_stage_graph_expanded_edge_count: Float64,
     mean_candidate_stage_graph_visited_cluster_count: Float64,
     mean_candidate_stage_graph_entry_point_count: Float64,
     mean_candidate_stage_graph_max_frontier_size: Float64,
-    stage2_document_count: Int,
-    stage2_token_count: Int,
-    stage2_vector_count: Int,
-    stage2_byte_size: Int,
     primary_value: Float64,
     mean_ndcg_at_k: Float64,
     mean_reciprocal_rank: Float64,
@@ -240,12 +241,7 @@ def build_stage_aware_search_summary_from_measurement(
         task.slice_name.copy(),
         snapshot.collection.collection_id.value.copy(),
         snapshot.snapshot.snapshot_id.value.copy(),
-        plan.candidate_generator.kind.copy(),
-        plan.stage2_operator.kind.copy(),
-        plan.stage2_operator.family.copy(),
-        plan.stage2_operator.requires_query_text,
-        stage2_materialized_artifact_families^,
-        plan.faithfulness_policy.kind.copy(),
+        plan,
         task.primary_metric.copy(),
         primary_value,
         mean_ndcg_at_k,
@@ -265,30 +261,42 @@ def build_stage_aware_search_summary_from_measurement(
         stats.byte_size,
         density_bytes_per_document(stats.byte_size, stats.document_count),
         density_bytes_per_vector(stats.byte_size, stats.total_vector_count),
-        candidate_stage_document_count,
-        candidate_stage_token_count,
-        candidate_stage_vector_count,
-        candidate_stage_byte_size,
-        density_bytes_per_document(
-            candidate_stage_byte_size, candidate_stage_document_count
+        build_stage_density_summary(
+            representative_explain.candidate_stage.document_count,
+            representative_explain.candidate_stage.token_count,
+            representative_explain.candidate_stage.vector_count,
+            representative_explain.candidate_stage.byte_size,
         ),
-        density_bytes_per_vector(
-            candidate_stage_byte_size, candidate_stage_vector_count
-        ),
-        candidate_stage_tracks_graph_search,
+        representative_explain.candidate_stage.tracks_graph_search,
         mean_candidate_stage_graph_visited_vertex_count,
         mean_candidate_stage_graph_expanded_edge_count,
         mean_candidate_stage_graph_visited_cluster_count,
         mean_candidate_stage_graph_entry_point_count,
         mean_candidate_stage_graph_max_frontier_size,
-        stage2_document_count,
-        stage2_token_count,
-        stage2_vector_count,
-        stage2_byte_size,
-        density_bytes_per_document(
-            stage2_byte_size, stage2_document_count
+        materialized_artifact_families(
+            representative_explain.stage2.materialized_artifacts
         ),
-        density_bytes_per_vector(stage2_byte_size, stage2_vector_count),
+        build_stage_density_summary(
+            representative_explain.stage2.document_count,
+            representative_explain.stage2.token_count,
+            representative_explain.stage2.vector_count,
+            representative_explain.stage2.byte_size,
+        ),
+        materialized_artifact_families(
+            representative_explain.stage3_verifier.materialized_artifacts
+        ),
+        build_stage_density_summary(
+            representative_explain.stage3_verifier.document_count,
+            representative_explain.stage3_verifier.token_count,
+            representative_explain.stage3_verifier.vector_count,
+            representative_explain.stage3_verifier.byte_size,
+        ),
+        build_stage_density_summary(
+            representative_explain.exact_stage.document_count,
+            representative_explain.exact_stage.token_count,
+            representative_explain.exact_stage.vector_count,
+            representative_explain.exact_stage.byte_size,
+        ),
         snapshot.collection.vector_dim,
     )
 def build_stage_aware_search_summary(
@@ -434,23 +442,12 @@ def build_stage_aware_search_summary(
         stored_task,
         snapshot,
         plan,
-        materialized_artifact_families(
-            representative_explain.stage2.materialized_artifacts
-        ),
-        representative_explain.candidate_stage.document_count,
-        representative_explain.candidate_stage.token_count,
-        representative_explain.candidate_stage.vector_count,
-        representative_explain.candidate_stage.byte_size,
-        representative_explain.candidate_stage.tracks_graph_search,
+        representative_explain,
         candidate_stage_graph_visited_vertex_total / Float64(query_count),
         candidate_stage_graph_expanded_edge_total / Float64(query_count),
         candidate_stage_graph_visited_cluster_total / Float64(query_count),
         candidate_stage_graph_entry_point_total / Float64(query_count),
         candidate_stage_graph_max_frontier_total / Float64(query_count),
-        representative_explain.stage2.document_count,
-        representative_explain.stage2.token_count,
-        representative_explain.stage2.vector_count,
-        representative_explain.stage2.byte_size,
         primary_total / Float64(query_count),
         ndcg_total / Float64(query_count),
         reciprocal_rank_total / Float64(query_count),
@@ -491,25 +488,20 @@ def append_stage_aware_search_summary_json(
     buffer += "\"slice_name\":\"" + json_escape(summary.slice_name) + "\","
     buffer += "\"collection_id\":\"" + json_escape(summary.collection_id) + "\","
     buffer += "\"snapshot_id\":\"" + json_escape(summary.snapshot_id) + "\","
-    buffer += "\"candidate_generator_kind\":\""
-    buffer += json_escape(summary.candidate_generator_kind) + "\","
-    buffer += "\"stage2_kind\":\""
-    buffer += json_escape(summary.stage2_kind) + "\","
-    buffer += "\"stage2_family\":\""
-    buffer += json_escape(summary.stage2_family) + "\","
-    buffer += "\"stage2_requires_query_text\":"
-    if summary.stage2_requires_query_text:
-        buffer += "true,"
-    else:
-        buffer += "false,"
-    buffer += "\"stage2_materialized_artifact_families\":"
+    append_search_plan_semantics_json_fields(buffer, summary.plan)
+    buffer += ","
+    buffer += "\"stage2_reference_materialized_artifact_families\":"
     append_json_string_list(
         buffer,
-        summary.stage2_materialized_artifact_families,
+        summary.stage2_reference_materialized_artifact_families,
     )
     buffer += ","
-    buffer += "\"faithfulness_policy_kind\":\""
-    buffer += json_escape(summary.faithfulness_policy_kind) + "\","
+    buffer += "\"stage3_verifier_materialized_artifact_families\":"
+    append_json_string_list(
+        buffer,
+        summary.stage3_verifier_materialized_artifact_families,
+    )
+    buffer += ","
     buffer += "\"primary_metric\":\"" + json_escape(summary.primary_metric) + "\","
     buffer += "\"primary_value\":" + String(summary.primary_value) + ","
     buffer += "\"mean_ndcg_at_k\":" + String(summary.mean_ndcg_at_k) + ","
@@ -519,8 +511,6 @@ def append_stage_aware_search_summary_json(
     buffer += "\"mean_candidate_recall_at_final_k\":"
     buffer += String(summary.mean_candidate_recall_at_final_k) + ","
     buffer += "\"mean_search_seconds\":" + String(summary.mean_search_seconds) + ","
-    buffer += "\"final_k\":" + String(summary.final_k) + ","
-    buffer += "\"candidate_k\":" + String(summary.candidate_k) + ","
     buffer += "\"query_count\":" + String(summary.query_count) + ","
     buffer += "\"nominal_query_vector_count\":"
     buffer += String(summary.nominal_query_vector_count) + ","
@@ -534,17 +524,17 @@ def append_stage_aware_search_summary_json(
     buffer += String(summary.bytes_per_document) + ","
     buffer += "\"bytes_per_vector\":" + String(summary.bytes_per_vector) + ","
     buffer += "\"candidate_stage_document_count\":"
-    buffer += String(summary.candidate_stage_document_count) + ","
+    buffer += String(summary.candidate_stage.document_count) + ","
     buffer += "\"candidate_stage_token_count\":"
-    buffer += String(summary.candidate_stage_token_count) + ","
+    buffer += String(summary.candidate_stage.token_count) + ","
     buffer += "\"candidate_stage_vector_count\":"
-    buffer += String(summary.candidate_stage_vector_count) + ","
+    buffer += String(summary.candidate_stage.vector_count) + ","
     buffer += "\"candidate_stage_byte_size\":"
-    buffer += String(summary.candidate_stage_byte_size) + ","
+    buffer += String(summary.candidate_stage.byte_size) + ","
     buffer += "\"candidate_stage_bytes_per_document\":"
-    buffer += String(summary.candidate_stage_bytes_per_document) + ","
+    buffer += String(summary.candidate_stage.bytes_per_document) + ","
     buffer += "\"candidate_stage_bytes_per_vector\":"
-    buffer += String(summary.candidate_stage_bytes_per_vector) + ","
+    buffer += String(summary.candidate_stage.bytes_per_vector) + ","
     buffer += "\"candidate_stage_tracks_graph_search\":"
     if summary.candidate_stage_tracks_graph_search:
         buffer += "true,"
@@ -560,30 +550,42 @@ def append_stage_aware_search_summary_json(
     buffer += String(summary.mean_candidate_stage_graph_entry_point_count) + ","
     buffer += "\"mean_candidate_stage_graph_max_frontier_size\":"
     buffer += String(summary.mean_candidate_stage_graph_max_frontier_size) + ","
-    buffer += "\"stage2_document_count\":"
-    buffer += String(summary.stage2_document_count) + ","
-    buffer += "\"stage2_token_count\":"
-    buffer += String(summary.stage2_token_count) + ","
-    buffer += "\"stage2_vector_count\":"
-    buffer += String(summary.stage2_vector_count) + ","
-    buffer += "\"stage2_byte_size\":"
-    buffer += String(summary.stage2_byte_size) + ","
-    buffer += "\"stage2_bytes_per_document\":"
-    buffer += String(summary.stage2_bytes_per_document) + ","
-    buffer += "\"stage2_bytes_per_vector\":"
-    buffer += String(summary.stage2_bytes_per_vector) + ","
-    buffer += "\"exact_stage_document_count\":"
-    buffer += String(summary.stage2_document_count) + ","
-    buffer += "\"exact_stage_token_count\":"
-    buffer += String(summary.stage2_token_count) + ","
-    buffer += "\"exact_stage_vector_count\":"
-    buffer += String(summary.stage2_vector_count) + ","
-    buffer += "\"exact_stage_byte_size\":"
-    buffer += String(summary.stage2_byte_size) + ","
-    buffer += "\"exact_stage_bytes_per_document\":"
-    buffer += String(summary.stage2_bytes_per_document) + ","
-    buffer += "\"exact_stage_bytes_per_vector\":"
-    buffer += String(summary.stage2_bytes_per_vector) + ","
+    buffer += "\"stage2_reference_document_count\":"
+    buffer += String(summary.stage2_reference.document_count) + ","
+    buffer += "\"stage2_reference_token_count\":"
+    buffer += String(summary.stage2_reference.token_count) + ","
+    buffer += "\"stage2_reference_vector_count\":"
+    buffer += String(summary.stage2_reference.vector_count) + ","
+    buffer += "\"stage2_reference_byte_size\":"
+    buffer += String(summary.stage2_reference.byte_size) + ","
+    buffer += "\"stage2_reference_bytes_per_document\":"
+    buffer += String(summary.stage2_reference.bytes_per_document) + ","
+    buffer += "\"stage2_reference_bytes_per_vector\":"
+    buffer += String(summary.stage2_reference.bytes_per_vector) + ","
+    buffer += "\"stage3_verifier_document_count\":"
+    buffer += String(summary.stage3_verifier.document_count) + ","
+    buffer += "\"stage3_verifier_token_count\":"
+    buffer += String(summary.stage3_verifier.token_count) + ","
+    buffer += "\"stage3_verifier_vector_count\":"
+    buffer += String(summary.stage3_verifier.vector_count) + ","
+    buffer += "\"stage3_verifier_byte_size\":"
+    buffer += String(summary.stage3_verifier.byte_size) + ","
+    buffer += "\"stage3_verifier_bytes_per_document\":"
+    buffer += String(summary.stage3_verifier.bytes_per_document) + ","
+    buffer += "\"stage3_verifier_bytes_per_vector\":"
+    buffer += String(summary.stage3_verifier.bytes_per_vector) + ","
+    buffer += "\"exact_oracle_document_count\":"
+    buffer += String(summary.exact_oracle.document_count) + ","
+    buffer += "\"exact_oracle_token_count\":"
+    buffer += String(summary.exact_oracle.token_count) + ","
+    buffer += "\"exact_oracle_vector_count\":"
+    buffer += String(summary.exact_oracle.vector_count) + ","
+    buffer += "\"exact_oracle_byte_size\":"
+    buffer += String(summary.exact_oracle.byte_size) + ","
+    buffer += "\"exact_oracle_bytes_per_document\":"
+    buffer += String(summary.exact_oracle.bytes_per_document) + ","
+    buffer += "\"exact_oracle_bytes_per_vector\":"
+    buffer += String(summary.exact_oracle.bytes_per_vector) + ","
     buffer += "\"vector_dim\":" + String(summary.vector_dim)
     buffer += "}"
 

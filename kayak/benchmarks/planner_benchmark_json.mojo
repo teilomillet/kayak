@@ -5,6 +5,7 @@ from kayak.collections import (
     SnapshotSearchArtifactAvailability,
 )
 from kayak.planning import (
+    SearchPlan,
     SearchPlanSelectionRequest,
     Stage2Operator,
     search_plan_with_stage2_operator,
@@ -19,12 +20,12 @@ from .faithfulness_frontier_json import (
     faithfulness_frontier_summary_json,
 )
 from .json_common import json_escape
+from .search_plan_semantics_json import append_search_plan_semantics_json_fields
 
 
 struct PlannerBenchmarkSummary(Copyable):
     var planning_goal: String
-    var stage2_kind: String
-    var selected_candidate_generator_kind: String
+    var plan: SearchPlan
     var selected_candidate_generator_status: String
     var selection_reason: String
     var available_candidate_generator_kinds: List[String]
@@ -34,8 +35,7 @@ struct PlannerBenchmarkSummary(Copyable):
     def __init__(
         out self,
         var planning_goal: String,
-        var stage2_kind: String,
-        var selected_candidate_generator_kind: String,
+        plan: SearchPlan,
         var selected_candidate_generator_status: String,
         var selection_reason: String,
         read available_candidate_generator_kinds: List[String],
@@ -43,10 +43,7 @@ struct PlannerBenchmarkSummary(Copyable):
         measured: FaithfulnessFrontierSummary,
     ):
         self.planning_goal = planning_goal^
-        self.stage2_kind = stage2_kind^
-        self.selected_candidate_generator_kind = (
-            selected_candidate_generator_kind^
-        )
+        self.plan = plan.copy()
         self.selected_candidate_generator_status = (
             selected_candidate_generator_status^
         )
@@ -75,8 +72,7 @@ def build_planner_benchmark_summary(
     var plan = search_plan_with_stage2_operator(selection.plan, stage2_operator)
     return PlannerBenchmarkSummary(
         request.goal.copy(),
-        stage2_operator.kind.copy(),
-        selection.plan.candidate_generator.kind.copy(),
+        plan,
         selection.selected_candidate_generator_status.copy(),
         selection.reason.copy(),
         selection.available_candidate_generator_kinds,
@@ -98,9 +94,10 @@ def append_planner_benchmark_summary_json(
 ):
     buffer += "{"
     buffer += "\"planning_goal\":\"" + json_escape(summary.planning_goal) + "\","
-    buffer += "\"stage2_kind\":\"" + json_escape(summary.stage2_kind) + "\","
+    append_search_plan_semantics_json_fields(buffer, summary.plan)
+    buffer += ","
     buffer += "\"selected_candidate_generator_kind\":\""
-    buffer += json_escape(summary.selected_candidate_generator_kind) + "\","
+    buffer += json_escape(summary.plan.candidate_generator.kind) + "\","
     buffer += "\"selected_candidate_generator_status\":\""
     buffer += json_escape(summary.selected_candidate_generator_status) + "\","
     buffer += "\"selection_reason\":\"" + json_escape(summary.selection_reason) + "\","

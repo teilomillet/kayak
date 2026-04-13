@@ -7,6 +7,15 @@ This note records the current repository state after a fresh code scan and
 captures the stage-2 boundary that has now been implemented from first
 principles.
 
+Historical note:
+- this document predates the later `SearchPlan` semantic split into
+  `reference_scoring_semantics`, `stage2_reference_operator`, and
+  `stage3_verifier`
+- the current canonical contract lives in
+  [docs/architecture/search_plan_semantics.md](search_plan_semantics.md)
+- the sections below remain useful mainly for the multi-artifact motivation and
+  the cautions about hiding refinement semantics behind one opaque reranker
+
 The purpose was not to replace the current exact rerank path immediately.
 The implemented goal was to make the stage-2 contract explicit enough that:
 
@@ -62,13 +71,17 @@ These statements are checked against the current codebase.
    - [kayak/planning/candidate_generator.mojo](../../kayak/planning/candidate_generator.mojo)
    - [kayak/planning/execution.mojo](../../kayak/planning/execution.mojo)
 
-2. `SearchPlan` now owns an explicit stage-2 contract.
+2. `SearchPlan` now owns an explicit refinement contract, but this note uses
+   the older combined terminology.
    Evidence:
    - [kayak/planning/search_plan.mojo](../../kayak/planning/search_plan.mojo)
    - [kayak/planning/stage2_operator.mojo](../../kayak/planning/stage2_operator.mojo)
    - [kayak/planning/execution_stage2.mojo](../../kayak/planning/execution_stage2.mojo)
-   - compatibility fields still exist, but they are now derived from
-     `stage2_operator`
+   - the current canonical split is:
+   - `reference_scoring_semantics`
+   - `stage2_reference_operator`
+   - `stage3_verifier`
+   - `stage2_operator` now exists mainly as a compatibility view
 
 3. The implemented stage-2 boundary already supports multiple explicit
    operators.
@@ -254,25 +267,27 @@ That keeps stage 2 measurable even when it is not vector-only.
 
 ## SearchPlan Migration
 
-The current `SearchPlan` fields:
+This section is superseded by
+[docs/architecture/search_plan_semantics.md](search_plan_semantics.md).
 
-- `exact_stage_kind`
-- `reranker_kind`
-
-should eventually collapse into one explicit stage-2 operator field.
-
-Recommended target shape:
+The implemented target shape is now:
 
 - `candidate_generator`
 - `candidate_budget`
-- `stage2_operator`
+- `reference_scoring_semantics`
+- `stage2_reference_operator`
+- `stage3_verifier`
 - `faithfulness_policy`
 
 Reason:
 
-- this matches the real plan geometry better
-- it avoids the current split where one exact stage is "inside" the plan but
-  richer refinement is "outside" the plan
+- the repo needed to distinguish truth semantics from the stage that realizes
+  them
+- exact late interaction and text verification are not the same kind of
+  operation
+- compatibility fields like `stage2_operator`, `exact_stage_kind`, and
+  `reranker_kind` still exist, but they are no longer the primary semantic
+  story
 
 ## Python SDK Implication
 

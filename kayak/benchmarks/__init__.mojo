@@ -119,6 +119,7 @@ from .json_report import (
     real_slice_benchmark_summaries_json,
 )
 from .stage_aware_json import (
+    StageDensitySummary,
     StageAwareSearchSummary,
     build_stage_aware_search_summary_from_measurement,
     build_stage_aware_search_summary,
