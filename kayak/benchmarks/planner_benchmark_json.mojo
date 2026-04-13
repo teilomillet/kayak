@@ -9,7 +9,6 @@ from kayak.planning import (
     SearchPlanSelectionRequest,
     Stage2ReferenceOperator,
     Stage3VerifierOperator,
-    search_plan_with_stage_components,
     select_search_plan_for_availability,
 )
 from kayak.runtime import ExactCpuBackend
@@ -71,8 +70,11 @@ def build_planner_benchmark_summary(
     posting_cap: Int = 0,
 ) raises -> PlannerBenchmarkSummary:
     var selection = select_search_plan_for_availability(availability, request)
-    var plan = search_plan_with_stage_components(
-        selection.plan,
+    var plan = SearchPlan(
+        selection.plan.candidate_generator,
+        selection.plan.candidate_budget,
+        selection.plan.faithfulness_policy,
+        selection.plan.reference_scoring_semantics,
         stage2_reference_operator,
         stage3_verifier,
     )

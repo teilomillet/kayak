@@ -1,12 +1,12 @@
 from std.testing import TestSuite, assert_equal
 
 from kayak import (
+    SearchPlan,
     best_effort_faithfulness_policy,
     clause_text_stage3_verifier_operator,
     document_proxy_search_plan,
     exact_late_interaction_stage2_reference_operator,
     search_plan_compatibility_semantics,
-    search_plan_with_stage_components,
     Stage2Operator,
     clause_text_stage2_operator,
     exact_late_interaction_clause_text_stage2_operator,
@@ -94,14 +94,17 @@ def test_search_plan_compatibility_semantics_are_derived_from_explicit_component
     assert_equal(compatibility.reranker_kind, "clause_text")
 
 
-def test_search_plan_with_stage_components_preserves_reference_semantics() raises:
+def test_explicit_search_plan_construction_preserves_reference_semantics() raises:
     var plan = document_proxy_search_plan(
         1,
         2,
         best_effort_faithfulness_policy(),
     )
-    var overridden = search_plan_with_stage_components(
-        plan,
+    var overridden = SearchPlan(
+        plan.candidate_generator,
+        plan.candidate_budget,
+        plan.faithfulness_policy,
+        plan.reference_scoring_semantics,
         exact_late_interaction_stage2_reference_operator(),
         clause_text_stage3_verifier_operator(),
     )

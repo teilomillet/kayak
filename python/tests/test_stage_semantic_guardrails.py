@@ -26,12 +26,6 @@ LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS = {
         Path("kayak/service/runtime.mojo"),
         Path("kayak/service/search_contracts.mojo"),
     },
-    "search_plan_with_stage2_operator": {
-        Path("kayak/__init__.mojo"),
-        Path("kayak/planning/__init__.mojo"),
-        Path("kayak/planning/search_plan.mojo"),
-        Path("kayak/service/planned_search_stage_override.mojo"),
-    },
     "exact_stage_kind": {
         Path("kayak/benchmarks/search_plan_semantics_json.mojo"),
         Path("kayak/planning/json.mojo"),

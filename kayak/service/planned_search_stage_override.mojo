@@ -6,7 +6,6 @@ from kayak.planning import (
     Stage2Operator,
     Stage2ReferenceOperator,
     Stage3VerifierOperator,
-    search_plan_with_stage2_operator,
     stage2_operator_for_components,
 )
 
@@ -121,8 +120,10 @@ def search_plan_with_planned_search_stage_override(
     )
 
     if stage2_operator_kind.byte_length() > 0:
-        return search_plan_with_stage2_operator(
-            plan,
+        return SearchPlan(
+            plan.candidate_generator,
+            plan.candidate_budget,
+            plan.faithfulness_policy,
             Stage2Operator(stage2_operator_kind.copy()),
         )
 

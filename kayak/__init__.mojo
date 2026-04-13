@@ -210,8 +210,6 @@ from .planning import (
     search_plan_compatibility_semantics,
     search_plan_compatibility_semantics_for_components,
     search_plan_for_candidate_generator_kind,
-    search_plan_with_stage2_operator,
-    search_plan_with_stage_components,
     search_planner_registry_entry,
     search_planning_goal_kinds,
     select_search_plan_for_availability,

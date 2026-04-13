@@ -12,7 +12,6 @@ from kayak.planning import (
     Stage3VerifierOperator,
     explain_collection_search,
     search_plan_for_candidate_generator_kind,
-    search_plan_with_stage_components,
     search_planner_registry_entry,
     select_search_plan_for_availability,
 )
@@ -143,11 +142,15 @@ def candidate_summary_for_kind(
     var registry_entry: SearchPlannerRegistryEntry = search_planner_registry_entry(
         candidate_generator_kind
     )
-    var plan = search_plan_with_stage_components(
-        search_plan_for_candidate_generator_kind(
-            candidate_generator_kind,
-            request,
-        ),
+    var selected_plan = search_plan_for_candidate_generator_kind(
+        candidate_generator_kind,
+        request,
+    )
+    var plan = SearchPlan(
+        selected_plan.candidate_generator,
+        selected_plan.candidate_budget,
+        selected_plan.faithfulness_policy,
+        selected_plan.reference_scoring_semantics,
         stage2_reference_operator,
         stage3_verifier,
     )
@@ -180,8 +183,11 @@ def build_planner_evidence_summary(
     posting_cap: Int = 0,
 ) raises -> PlannerEvidenceSummary:
     var selection = select_search_plan_for_availability(availability, request)
-    var selected_plan = search_plan_with_stage_components(
-        selection.plan,
+    var selected_plan = SearchPlan(
+        selection.plan.candidate_generator,
+        selection.plan.candidate_budget,
+        selection.plan.faithfulness_policy,
+        selection.plan.reference_scoring_semantics,
         stage2_reference_operator,
         stage3_verifier,
     )

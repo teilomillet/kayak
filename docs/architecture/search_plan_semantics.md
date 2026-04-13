@@ -133,7 +133,7 @@ The repo also now has a compatibility-boundary guardrail:
 - legacy combined stage naming is only allowed in explicitly allowlisted
   compatibility modules
 - new production files that introduce `Stage2Operator`,
-  `stage2_operator_kind`, `search_plan_with_stage2_operator`,
+  `stage2_operator_kind`,
   `exact_stage_kind`, or `reranker_kind` outside that allowlist should fail the
   guardrail test
 

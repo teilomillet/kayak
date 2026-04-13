@@ -162,8 +162,6 @@ from .search_plan import (
     same_search_plan_compatibility_semantics,
     search_plan_compatibility_semantics,
     search_plan_compatibility_semantics_for_components,
-    search_plan_with_stage2_operator,
-    search_plan_with_stage_components,
 )
 from .planning_goal import (
     SEARCH_PLANNING_GOAL_BALANCED,
