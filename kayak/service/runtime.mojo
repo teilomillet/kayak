@@ -476,8 +476,7 @@ def search_request_for_planned_request(
 ) raises -> SearchRequest:
     var effective_plan = search_plan_with_planned_search_stage_override(
         plan,
-        request.stage2_reference_kind,
-        request.stage3_verifier_kind,
+        request.stage_override,
     )
 
     return SearchRequest(
@@ -497,10 +496,7 @@ def selection_for_planned_request(
     read request: PlannedSearchRequest,
     read selection: SearchPlanSelection,
 ) raises -> SearchPlanSelection:
-    if not planned_search_has_stage_override(
-        request.stage2_reference_kind,
-        request.stage3_verifier_kind,
-    ):
+    if not planned_search_has_stage_override(request.stage_override):
         return selection.copy()
 
     return SearchPlanSelection(
@@ -510,8 +506,7 @@ def selection_for_planned_request(
         selection.effective_candidate_generator_order,
         search_plan_with_planned_search_stage_override(
             selection.plan,
-            request.stage2_reference_kind,
-            request.stage3_verifier_kind,
+            request.stage_override,
         ),
         selection.reason.copy(),
     )

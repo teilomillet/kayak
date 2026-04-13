@@ -646,9 +646,13 @@ def planned_search_request_json(read request: PlannedSearchRequest) -> String:
     buffer += ",\"query_text\":\""
     buffer += json_escape(request.query_text) + "\""
     buffer += ",\"stage2_reference_kind\":\""
-    buffer += json_escape(request.stage2_reference_kind) + "\""
+    if request.stage_override.has_stage2_reference_override:
+        buffer += json_escape(request.stage_override.stage2_reference_operator.kind)
+    buffer += "\""
     buffer += ",\"stage3_verifier_kind\":\""
-    buffer += json_escape(request.stage3_verifier_kind) + "\""
+    if request.stage_override.has_stage3_verifier_override:
+        buffer += json_escape(request.stage_override.stage3_verifier.kind)
+    buffer += "\""
     buffer += ",\"filter_expression\":"
     append_json_filter_expression(buffer, request.filter_expression)
     buffer += ",\"planning\":"

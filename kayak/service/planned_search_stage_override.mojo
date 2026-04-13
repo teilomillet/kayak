@@ -5,70 +5,80 @@ from kayak.planning import (
     SearchPlan,
     Stage2ReferenceOperator,
     Stage3VerifierOperator,
+    noop_topk_stage2_reference_operator,
+    none_stage3_verifier_operator,
 )
 
 
+struct PlannedSearchStageOverride(Copyable):
+    var has_stage2_reference_override: Bool
+    var stage2_reference_operator: Stage2ReferenceOperator
+    var has_stage3_verifier_override: Bool
+    var stage3_verifier: Stage3VerifierOperator
+
+    def __init__(out self) raises:
+        self.has_stage2_reference_override = False
+        self.stage2_reference_operator = noop_topk_stage2_reference_operator()
+        self.has_stage3_verifier_override = False
+        self.stage3_verifier = none_stage3_verifier_operator()
+
+    def __init__(
+        out self,
+        query_text: String,
+        var stage2_reference_kind: String,
+        var stage3_verifier_kind: String,
+    ) raises:
+        self = PlannedSearchStageOverride()
+
+        if stage2_reference_kind.byte_length() > 0:
+            self.has_stage2_reference_override = True
+            self.stage2_reference_operator = Stage2ReferenceOperator(
+                stage2_reference_kind^
+            )
+
+        if stage3_verifier_kind.byte_length() > 0:
+            self.has_stage3_verifier_override = True
+            self.stage3_verifier = Stage3VerifierOperator(stage3_verifier_kind^)
+            if (
+                self.stage3_verifier.requires_query_text
+                and query_text.byte_length() == 0
+            ):
+                raise Error(
+                    "planned stage3 verifier "
+                    + self.stage3_verifier.kind
+                    + " requires non-empty query_text"
+                )
+
+
 def planned_search_has_component_stage_override(
-    stage2_reference_kind: String,
-    stage3_verifier_kind: String,
+    read stage_override: PlannedSearchStageOverride
 ) -> Bool:
     return (
-        stage2_reference_kind.byte_length() > 0
-        or stage3_verifier_kind.byte_length() > 0
+        stage_override.has_stage2_reference_override
+        or stage_override.has_stage3_verifier_override
     )
 
 
 def planned_search_has_stage_override(
-    stage2_reference_kind: String,
-    stage3_verifier_kind: String,
+    read stage_override: PlannedSearchStageOverride
 ) -> Bool:
-    return planned_search_has_component_stage_override(
-        stage2_reference_kind,
-        stage3_verifier_kind,
-    )
-
-
-def require_valid_planned_search_stage_override(
-    query_text: String,
-    stage2_reference_kind: String,
-    stage3_verifier_kind: String,
-) raises:
-    if stage2_reference_kind.byte_length() > 0:
-        _ = Stage2ReferenceOperator(stage2_reference_kind.copy())
-
-    if stage3_verifier_kind.byte_length() > 0:
-        var stage3_verifier = Stage3VerifierOperator(stage3_verifier_kind.copy())
-        if (
-            stage3_verifier.requires_query_text
-            and query_text.byte_length() == 0
-        ):
-            raise Error(
-                "planned stage3 verifier "
-                + stage3_verifier.kind
-                + " requires non-empty query_text"
-            )
+    return planned_search_has_component_stage_override(stage_override)
 
 
 def search_plan_with_planned_search_stage_override(
     read plan: SearchPlan,
-    stage2_reference_kind: String,
-    stage3_verifier_kind: String,
+    read stage_override: PlannedSearchStageOverride,
 ) raises -> SearchPlan:
-    if not planned_search_has_component_stage_override(
-        stage2_reference_kind,
-        stage3_verifier_kind,
-    ):
+    if not planned_search_has_component_stage_override(stage_override):
         return plan.copy()
 
     var stage2_reference_operator = plan.stage2_reference_operator.copy()
-    if stage2_reference_kind.byte_length() > 0:
-        stage2_reference_operator = Stage2ReferenceOperator(
-            stage2_reference_kind.copy()
-        )
+    if stage_override.has_stage2_reference_override:
+        stage2_reference_operator = stage_override.stage2_reference_operator.copy()
 
     var stage3_verifier = plan.stage3_verifier.copy()
-    if stage3_verifier_kind.byte_length() > 0:
-        stage3_verifier = Stage3VerifierOperator(stage3_verifier_kind.copy())
+    if stage_override.has_stage3_verifier_override:
+        stage3_verifier = stage_override.stage3_verifier.copy()
 
     return SearchPlan(
         plan.candidate_generator,

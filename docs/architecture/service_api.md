@@ -170,10 +170,12 @@ Current verified behavior:
 - the planner chooses a concrete `SearchPlan`
 - the chosen plan is returned explicitly in the selection payload and again in
   the executed search/explain response
-- `PlannedSearchRequest` can carry:
+- the `PlannedSearchRequest` wire shape can carry:
   - `query_text` for text-family stage-3 verifier overrides
   - `stage2_reference_kind` to override only the stage-2 reference operator
   - `stage3_verifier_kind` to override only the stage-3 verifier
+- after parsing, the repo stores those as typed override components rather than
+  continuing to thread raw strings through execution
 - when exact fallback is selected, the planner preserves the requested
   `candidate_k` window instead of collapsing it to `final_k`, so a later
   stage-2 override can still rerank the intended exact candidate set

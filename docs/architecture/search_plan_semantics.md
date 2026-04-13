@@ -46,10 +46,14 @@ That contract is reflected in:
 
 ## Planner and service implications
 
-`PlannedSearchRequest` overrides stage behavior explicitly:
+`PlannedSearchRequest` overrides stage behavior explicitly.
+
+Its wire/request shape still uses:
 
 - `stage2_reference_kind`
 - `stage3_verifier_kind`
+
+Its in-repo contract stores typed override components instead of raw strings.
 
 Reason:
 

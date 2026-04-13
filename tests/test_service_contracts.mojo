@@ -622,8 +622,8 @@ def test_planned_search_contracts_keep_selection_explicit() raises:
 
     assert_equal(request.planning.goal, "balanced")
     assert_equal(request.query_text, "")
-    assert_equal(request.stage2_reference_kind, "")
-    assert_equal(request.stage3_verifier_kind, "")
+    assert_equal(request.stage_override.has_stage2_reference_override, False)
+    assert_equal(request.stage_override.has_stage3_verifier_override, False)
     assert_equal(
         request.planning.preferred_candidate_generator_kinds[0],
         "document_proxy",
@@ -655,8 +655,9 @@ def test_planned_search_request_accepts_explicit_stage2_override() raises:
     )
 
     assert_equal(request.query_text, "founded in 1984 longest serving employee")
-    assert_equal(request.stage2_reference_kind, "")
-    assert_equal(request.stage3_verifier_kind, "clause_text")
+    assert_equal(request.stage_override.has_stage2_reference_override, False)
+    assert_equal(request.stage_override.has_stage3_verifier_override, True)
+    assert_equal(request.stage_override.stage3_verifier.kind, "clause_text")
 
 
 def test_planned_search_request_accepts_explicit_hybrid_stage2_override() raises:
@@ -677,8 +678,13 @@ def test_planned_search_request_accepts_explicit_hybrid_stage2_override() raises
         ),
     )
 
-    assert_equal(request.stage2_reference_kind, "exact_late_interaction")
-    assert_equal(request.stage3_verifier_kind, "clause_text")
+    assert_equal(request.stage_override.has_stage2_reference_override, True)
+    assert_equal(
+        request.stage_override.stage2_reference_operator.kind,
+        "exact_late_interaction",
+    )
+    assert_equal(request.stage_override.has_stage3_verifier_override, True)
+    assert_equal(request.stage_override.stage3_verifier.kind, "clause_text")
 
 
 def test_planned_search_request_accepts_explicit_stage_components() raises:
@@ -699,8 +705,13 @@ def test_planned_search_request_accepts_explicit_stage_components() raises:
         ),
     )
 
-    assert_equal(request.stage2_reference_kind, "noop_topk")
-    assert_equal(request.stage3_verifier_kind, "clause_text")
+    assert_equal(request.stage_override.has_stage2_reference_override, True)
+    assert_equal(
+        request.stage_override.stage2_reference_operator.kind,
+        "noop_topk",
+    )
+    assert_equal(request.stage_override.has_stage3_verifier_override, True)
+    assert_equal(request.stage_override.stage3_verifier.kind, "clause_text")
 
 
 def test_planned_search_request_rejects_text_stage2_without_query_text() raises:

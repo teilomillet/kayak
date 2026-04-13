@@ -15,7 +15,7 @@ from kayak.planning import (
     exact_full_scan_search_plan,
 )
 from .planned_search_stage_override import (
-    require_valid_planned_search_stage_override,
+    PlannedSearchStageOverride,
 )
 
 
@@ -201,8 +201,7 @@ struct PlannedSearchRequest(Copyable):
     var snapshot_id: SnapshotId
     var query: EncodedQuery
     var query_text: String
-    var stage2_reference_kind: String
-    var stage3_verifier_kind: String
+    var stage_override: PlannedSearchStageOverride
     var filter_expression: FilterExpression
     var planning: SearchPlanSelectionRequest
 
@@ -225,16 +224,13 @@ struct PlannedSearchRequest(Copyable):
         self.snapshot_id = snapshot_id.copy()
         self.query = query.copy()
         self.query_text = query_text^
-        self.stage2_reference_kind = stage2_reference_kind^
-        self.stage3_verifier_kind = stage3_verifier_kind^
+        self.stage_override = PlannedSearchStageOverride(
+            self.query_text,
+            stage2_reference_kind^,
+            stage3_verifier_kind^,
+        )
         self.filter_expression = filter_expression.copy()
         self.planning = planning.copy()
-
-        require_valid_planned_search_stage_override(
-            self.query_text,
-            self.stage2_reference_kind,
-            self.stage3_verifier_kind,
-        )
 
     def __init__(
         out self,
