@@ -3,6 +3,8 @@ from std.testing import TestSuite, assert_equal
 from kayak import (
     BuildReclaimPlanRequest,
     BuildReclaimPlanResponse,
+    CandidateBudget,
+    CandidateGenerator,
     CollectionHit,
     CollectionId,
     CollectionLifecycleRequest,
@@ -35,6 +37,7 @@ from kayak import (
     ScoreHistogram,
     SearchStageProfile,
     SegmentId,
+    SearchPlan,
     SnapshotId,
     SnapshotRetentionDecision,
     SnapshotRetentionPolicy,
@@ -48,6 +51,8 @@ from kayak import (
     best_effort_faithfulness_policy,
     default_exact_search_request,
     document_proxy_search_plan,
+    exact_stage1_required_faithfulness_policy,
+    noop_topk_stage2_operator,
     oracle_full_recall_required_faithfulness_policy,
 )
 from kayak.filters import match_all_filter
@@ -96,6 +101,17 @@ def make_explain() raises -> CollectionSearchExplain:
         ),
         SearchStageProfile(
             "exact_late_interaction",
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            16,
+            ScoreHistogram(1, 1.0, 1.0, [1]),
+        ),
+        SearchStageProfile(
+            "exact_oracle",
             1,
             1,
             1,
@@ -412,6 +428,32 @@ def test_search_request_rejects_unverifiable_oracle_guardrail_without_debug() ra
         raised = True
 
     assert_equal(raised, True)
+
+
+def test_search_request_accepts_exact_contract_without_debug_even_if_kind_is_custom() raises:
+    var exact_generator = CandidateGenerator()
+    exact_generator.kind = "synthetic_exact_contract"
+    exact_generator.family = "exact"
+    exact_generator.is_exact = True
+
+    var request = SearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        make_query(),
+        match_all_filter(),
+        SearchPlan(
+            exact_generator,
+            CandidateBudget(2, 2),
+            exact_stage1_required_faithfulness_policy(),
+            noop_topk_stage2_operator(),
+        ),
+        False,
+    )
+
+    assert_equal(request.plan.candidate_generator.kind, "synthetic_exact_contract")
+    assert_equal(request.plan.candidate_generator.is_exact, True)
 
 
 def test_search_request_allows_best_effort_approximate_search_without_debug() raises:

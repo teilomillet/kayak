@@ -61,9 +61,6 @@ def candidate_generator_kind_is_available(
     read availability: SnapshotSearchArtifactAvailability,
     candidate_generator_kind: String,
 ) raises -> Bool:
-    if candidate_generator_kind == "exact_full_scan":
-        return True
-
     var required_families = stage1_required_search_artifact_families(
         candidate_generator_kind
     )

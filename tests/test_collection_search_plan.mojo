@@ -11,6 +11,8 @@ from kayak import (
     pack_documents,
 )
 from kayak import (
+    CandidateBudget,
+    CandidateGenerator,
     CollectionId,
     CollectionManifest,
     CollectionStats,
@@ -41,6 +43,7 @@ from kayak import (
     centroid_postings_search_plan,
     collection_search_explain_json,
     document_proxy_search_plan,
+    exact_stage1_required_faithfulness_policy,
     exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
     explain_collection_search,
@@ -48,6 +51,7 @@ from kayak import (
     gem_graph_search_plan,
     loaded_segment_stored_centroid_postings_index,
     load_resolved_collection_snapshot,
+    noop_topk_stage2_operator,
     oracle_full_recall_required_faithfulness_policy,
     build_stored_gem_graph_index,
     save_collection_manifest,
@@ -59,6 +63,7 @@ from kayak import (
     save_stored_document_proxy_index,
     save_stored_gem_graph_index,
     save_stored_packed_index,
+    SearchPlan,
 )
 from kayak.text import DocumentTextCorpus
 
@@ -564,6 +569,41 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
     assert_equal(json.find("\"stage1_required_artifact_families\":[]") != -1, True)
     assert_equal(json.find("\"stage2_kind\":\"noop_topk\"") != -1, True)
     assert_equal(json.find("\"stage2_family\":\"identity\"") != -1, True)
+
+
+def test_search_plan_exact_requirement_uses_candidate_generator_contract() raises:
+    var exact_generator = CandidateGenerator()
+    exact_generator.kind = "synthetic_exact_contract"
+    exact_generator.family = "exact"
+    exact_generator.is_exact = True
+
+    var exact_plan = SearchPlan(
+        exact_generator,
+        CandidateBudget(1, 1),
+        exact_stage1_required_faithfulness_policy(),
+        noop_topk_stage2_operator(),
+    )
+
+    assert_equal(exact_plan.candidate_generator.kind, "synthetic_exact_contract")
+    assert_equal(exact_plan.candidate_generator.is_exact, True)
+
+    var approximate_generator = CandidateGenerator()
+    approximate_generator.kind = "synthetic_approx_contract"
+    approximate_generator.family = "proxy"
+    approximate_generator.is_exact = False
+
+    var raised = False
+    try:
+        _ = SearchPlan(
+            approximate_generator,
+            CandidateBudget(1, 1),
+            exact_stage1_required_faithfulness_policy(),
+            noop_topk_stage2_operator(),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def test_exact_full_scan_clause_text_stage2_can_refine_exact_candidates() raises:

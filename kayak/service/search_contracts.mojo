@@ -53,7 +53,7 @@ struct SearchRequest(Copyable):
 
         if (
             self.plan.faithfulness_policy.kind == "oracle_full_recall_required"
-            and self.plan.candidate_generator.kind != "exact_full_scan"
+            and not self.plan.candidate_generator.is_exact
             and not self.debug_mode
         ):
             raise Error(

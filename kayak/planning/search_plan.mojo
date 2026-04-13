@@ -46,7 +46,7 @@ struct SearchPlan(Copyable):
     ) raises:
         if (
             faithfulness_policy.kind == "exact_stage1_required"
-            and candidate_generator.kind != "exact_full_scan"
+            and not candidate_generator.is_exact
         ):
             raise Error(
                 "exact_stage1_required faithfulness policy is incompatible with non-exact candidate generation"
