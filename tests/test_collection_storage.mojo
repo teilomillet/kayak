@@ -57,6 +57,7 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
             128,
             4,
             "snapshot-0001",
+            2,
         ),
     )
     save_sealed_segment_manifest(
@@ -107,6 +108,7 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
 
     assert_equal(loaded_collection.latest_generation, 4)
     assert_equal(loaded_collection.active_snapshot_id, "snapshot-0001")
+    assert_equal(loaded_collection.default_keep_latest_inactive_count, 2)
     assert_equal(loaded_segment.packed_index_root, "packed_index")
     assert_equal(loaded_segment.text_corpus_root, "text_corpus")
     assert_equal(loaded_snapshot.stats.segment_count, 1)

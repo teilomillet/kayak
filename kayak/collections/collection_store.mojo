@@ -35,6 +35,12 @@ def save_collection_manifest(root: Path, read manifest: CollectionManifest) rais
     entries.append(
         ManifestEntry("latest_generation", String(manifest.latest_generation))
     )
+    entries.append(
+        ManifestEntry(
+            "default_keep_latest_inactive_count",
+            String(manifest.default_keep_latest_inactive_count),
+        )
+    )
     if manifest.active_snapshot_id.byte_length() != 0:
         entries.append(
             ManifestEntry("active_snapshot_id", manifest.active_snapshot_id)
@@ -49,6 +55,11 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
     var entries = read_collection_artifact_manifest(
         collection_manifest_path(root), "collection_manifest"
     )
+    var default_keep_latest_inactive_count = load_optional_manifest_value(
+        entries, "default_keep_latest_inactive_count"
+    )
+    if default_keep_latest_inactive_count.byte_length() == 0:
+        default_keep_latest_inactive_count = "1"
 
     return CollectionManifest(
         CollectionId(require_manifest_value(entries, "collection_id")),
@@ -62,4 +73,8 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
             "latest_generation",
         ),
         load_optional_manifest_value(entries, "active_snapshot_id"),
+        parse_int(
+            default_keep_latest_inactive_count,
+            "default_keep_latest_inactive_count",
+        ),
     )

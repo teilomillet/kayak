@@ -63,8 +63,9 @@ That combination implies a clear next move:
   segment sealing and snapshot promotion
 - reclaim execution exists, but only through an explicit plan-driven path
 - there is no background GC, retention daemon, or service-scheduled cleanup yet
-- retention policy metadata is still explicit only at planning time, not yet
-  stored with snapshots
+- collection-level default retention is now stored in the collection manifest,
+  but snapshot-scoped retention metadata and background retention automation do
+  not exist yet
 - search-native sidecars still need policy-driven build selection beyond
   today's baseline registry
 - hosted execution supports exact metadata filtering, but candidate-pushdown and

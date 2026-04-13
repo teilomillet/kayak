@@ -1,14 +1,22 @@
 from std.testing import TestSuite, assert_equal
 
 from kayak import (
+    BuildReclaimPlanRequest,
+    BuildReclaimPlanResponse,
     CollectionHit,
     CollectionId,
+    CollectionLifecycleRequest,
+    CollectionLifecycleResponse,
+    CollectionReclaimExecutionResult,
+    CollectionReclaimPlan,
     CollectionSearchExplain,
     CreateCollectionRequest,
     DebugSearchResponse,
     DeleteDocumentsRequest,
     EncodedDocument,
     EncodedQuery,
+    ExecuteReclaimRequest,
+    ExecuteReclaimResponse,
     ExplainRequest,
     ExplainResponse,
     DocumentMetadataUpdate,
@@ -20,7 +28,11 @@ from kayak import (
     SearchStageProfile,
     SegmentId,
     SnapshotId,
+    SnapshotRetentionDecision,
+    SnapshotRetentionPolicy,
     TenantId,
+    UpdateCollectionRetentionPolicyRequest,
+    UpdateCollectionRetentionPolicyResponse,
     UpsertDocument,
     UpsertDocumentsRequest,
     VECTOR_SCALAR_NAME,
@@ -98,6 +110,62 @@ def make_explain() raises -> CollectionSearchExplain:
     )
 
 
+def sample_reclaim_plan() raises -> CollectionReclaimPlan:
+    return CollectionReclaimPlan(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "snapshot-0003",
+        3,
+        2,
+        1,
+        1,
+        1,
+        1024,
+        [
+            SnapshotRetentionDecision(
+                SnapshotId("snapshot-0003"),
+                3,
+                1,
+                1024,
+                True,
+                "active_snapshot",
+            ),
+            SnapshotRetentionDecision(
+                SnapshotId("snapshot-0002"),
+                2,
+                1,
+                1024,
+                True,
+                "retained_inactive_by_generation",
+            ),
+            SnapshotRetentionDecision(
+                SnapshotId("snapshot-0001"),
+                1,
+                1,
+                1024,
+                False,
+                "inactive_reclaim_candidate",
+            ),
+        ],
+        [SegmentId("segment-1")],
+    )
+
+
+def sample_reclaim_execution_result() raises -> CollectionReclaimExecutionResult:
+    return CollectionReclaimExecutionResult(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        True,
+        1,
+        1,
+        1024,
+        [SnapshotId("snapshot-0001")],
+        [SegmentId("segment-1")],
+    )
+
+
 def test_create_collection_request_materializes_manifest() raises:
     var request = CreateCollectionRequest(
         CollectionId("news"),
@@ -113,6 +181,96 @@ def test_create_collection_request_materializes_manifest() raises:
     assert_equal(manifest.tenant_id.value, "tenant-a")
     assert_equal(manifest.latest_generation, 0)
     assert_equal(manifest.active_snapshot_id, "")
+    assert_equal(manifest.default_keep_latest_inactive_count, 1)
+
+
+def test_lifecycle_and_reclaim_contracts_keep_policy_explicit() raises:
+    var override = SnapshotRetentionPolicy(
+        0,
+        [SnapshotId("snapshot-0001")],
+    )
+    var lifecycle_request = CollectionLifecycleRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        override,
+    )
+    var lifecycle_response = CollectionLifecycleResponse(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        128,
+        3,
+        "snapshot-0003",
+        1,
+        0,
+        [SnapshotId("snapshot-0001")],
+        4,
+        1,
+        sample_reclaim_plan(),
+    )
+    var build_request = BuildReclaimPlanRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        override,
+    )
+    var build_response = BuildReclaimPlanResponse(
+        sample_reclaim_plan(),
+        0,
+        [SnapshotId("snapshot-0001")],
+    )
+    var execute_request = ExecuteReclaimRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        sample_reclaim_plan(),
+        False,
+    )
+    var execute_response = ExecuteReclaimResponse(
+        sample_reclaim_execution_result()
+    )
+    var update_request = UpdateCollectionRetentionPolicyRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        2,
+    )
+    var update_response = UpdateCollectionRetentionPolicyResponse(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        3,
+        "snapshot-0003",
+        2,
+    )
+
+    assert_equal(lifecycle_request.has_policy_override, True)
+    assert_equal(
+        lifecycle_request.policy_override.keep_latest_inactive_count,
+        0,
+    )
+    assert_equal(
+        lifecycle_request.policy_override.pinned_snapshot_ids[0].value,
+        "snapshot-0001",
+    )
+    assert_equal(lifecycle_response.default_keep_latest_inactive_count, 1)
+    assert_equal(lifecycle_response.effective_keep_latest_inactive_count, 0)
+    assert_equal(
+        lifecycle_response.effective_pinned_snapshot_ids[0].value,
+        "snapshot-0001",
+    )
+    assert_equal(build_request.has_policy_override, True)
+    assert_equal(build_response.plan.reclaimable_snapshot_count, 1)
+    assert_equal(build_response.effective_keep_latest_inactive_count, 0)
+    assert_equal(execute_request.dry_run, False)
+    assert_equal(execute_response.result.applied, True)
+    assert_equal(update_request.default_keep_latest_inactive_count, 2)
+    assert_equal(update_response.latest_generation, 3)
+    assert_equal(update_response.active_snapshot_id, "snapshot-0003")
+    assert_equal(update_response.default_keep_latest_inactive_count, 2)
 
 
 def test_document_mutation_requests_keep_text_sidecar_explicit() raises:

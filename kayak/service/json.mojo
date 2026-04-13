@@ -1,12 +1,29 @@
 from std.collections import List
 
+from kayak.collections.reclaim_json import (
+    append_snapshot_ids_json,
+    collection_reclaim_execution_result_json,
+    collection_reclaim_plan_json,
+)
 from kayak.collections.document_metadata import DocumentMetadataUpdate
 from kayak.filters import FilterClause, FilterExpression, FilterTerm
 from kayak.numeric import VectorScalar
 from kayak.planning import CollectionHit, collection_search_explain_json
 
-from .collection_requests import CreateCollectionRequest
+from .collection_requests import (
+    CreateCollectionRequest,
+    UpdateCollectionRetentionPolicyRequest,
+)
 from .document_requests import DeleteDocumentsRequest, UpsertDocument, UpsertDocumentsRequest
+from .lifecycle_contracts import (
+    BuildReclaimPlanRequest,
+    BuildReclaimPlanResponse,
+    CollectionLifecycleRequest,
+    CollectionLifecycleResponse,
+    ExecuteReclaimRequest,
+    ExecuteReclaimResponse,
+    UpdateCollectionRetentionPolicyResponse,
+)
 from .search_contracts import (
     DebugSearchResponse,
     ExplainRequest,
@@ -204,7 +221,170 @@ def create_collection_request_json(read request: CreateCollectionRequest) -> Str
     buffer += "\"model_name\":\"" + json_escape(request.model_name) + "\","
     buffer += "\"vector_scalar_name\":\""
     buffer += json_escape(request.vector_scalar_name) + "\","
-    buffer += "\"vector_dim\":" + String(request.vector_dim)
+    buffer += "\"vector_dim\":" + String(request.vector_dim) + ","
+    buffer += "\"default_keep_latest_inactive_count\":"
+    buffer += String(request.default_keep_latest_inactive_count)
+    buffer += "}"
+    return buffer^
+
+
+def append_json_policy_override(
+    mut buffer: String, read request: CollectionLifecycleRequest
+):
+    buffer += "\"has_policy_override\":"
+    if request.has_policy_override:
+        buffer += "true"
+        buffer += ",\"policy_override_keep_latest_inactive_count\":"
+        buffer += String(request.policy_override.keep_latest_inactive_count)
+        buffer += ",\"policy_override_pinned_snapshot_ids\":"
+        append_snapshot_ids_json(
+            buffer, request.policy_override.pinned_snapshot_ids
+        )
+        return
+
+    buffer += "false"
+
+
+def append_json_build_reclaim_policy_override(
+    mut buffer: String, read request: BuildReclaimPlanRequest
+):
+    buffer += "\"has_policy_override\":"
+    if request.has_policy_override:
+        buffer += "true"
+        buffer += ",\"policy_override_keep_latest_inactive_count\":"
+        buffer += String(request.policy_override.keep_latest_inactive_count)
+        buffer += ",\"policy_override_pinned_snapshot_ids\":"
+        append_snapshot_ids_json(
+            buffer, request.policy_override.pinned_snapshot_ids
+        )
+        return
+
+    buffer += "false"
+
+
+def collection_lifecycle_request_json(
+    read request: CollectionLifecycleRequest
+) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"collection_id\":\"" + json_escape(request.collection_id.value) + "\","
+    buffer += "\"tenant_id\":\"" + json_escape(request.tenant_id.value) + "\","
+    buffer += "\"namespace_id\":\"" + json_escape(request.namespace_id.value) + "\","
+    append_json_policy_override(buffer, request)
+    buffer += "}"
+    return buffer^
+
+
+def collection_lifecycle_response_json(
+    read response: CollectionLifecycleResponse
+) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"collection_id\":\"" + json_escape(response.collection_id.value) + "\","
+    buffer += "\"tenant_id\":\"" + json_escape(response.tenant_id.value) + "\","
+    buffer += "\"namespace_id\":\"" + json_escape(response.namespace_id.value) + "\","
+    buffer += "\"model_name\":\"" + json_escape(response.model_name) + "\","
+    buffer += "\"vector_scalar_name\":\""
+    buffer += json_escape(response.vector_scalar_name) + "\","
+    buffer += "\"vector_dim\":" + String(response.vector_dim) + ","
+    buffer += "\"latest_generation\":" + String(response.latest_generation) + ","
+    buffer += "\"active_snapshot_id\":\""
+    buffer += json_escape(response.active_snapshot_id) + "\","
+    buffer += "\"default_keep_latest_inactive_count\":"
+    buffer += String(response.default_keep_latest_inactive_count) + ","
+    buffer += "\"effective_keep_latest_inactive_count\":"
+    buffer += String(response.effective_keep_latest_inactive_count) + ","
+    buffer += "\"effective_pinned_snapshot_ids\":"
+    append_snapshot_ids_json(buffer, response.effective_pinned_snapshot_ids)
+    buffer += ",\"draft_document_count\":"
+    buffer += String(response.draft_document_count) + ","
+    buffer += "\"pending_draft_mutation_count\":"
+    buffer += String(response.pending_draft_mutation_count) + ","
+    buffer += "\"reclaim_plan\":"
+    buffer += collection_reclaim_plan_json(response.reclaim_plan)
+    buffer += "}"
+    return buffer^
+
+
+def build_reclaim_plan_request_json(read request: BuildReclaimPlanRequest) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"collection_id\":\"" + json_escape(request.collection_id.value) + "\","
+    buffer += "\"tenant_id\":\"" + json_escape(request.tenant_id.value) + "\","
+    buffer += "\"namespace_id\":\"" + json_escape(request.namespace_id.value) + "\","
+    append_json_build_reclaim_policy_override(buffer, request)
+    buffer += "}"
+    return buffer^
+
+
+def build_reclaim_plan_response_json(
+    read response: BuildReclaimPlanResponse
+) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"effective_keep_latest_inactive_count\":"
+    buffer += String(response.effective_keep_latest_inactive_count) + ","
+    buffer += "\"effective_pinned_snapshot_ids\":"
+    append_snapshot_ids_json(buffer, response.effective_pinned_snapshot_ids)
+    buffer += ",\"plan\":"
+    buffer += collection_reclaim_plan_json(response.plan)
+    buffer += "}"
+    return buffer^
+
+
+def execute_reclaim_request_json(read request: ExecuteReclaimRequest) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"collection_id\":\"" + json_escape(request.collection_id.value) + "\","
+    buffer += "\"tenant_id\":\"" + json_escape(request.tenant_id.value) + "\","
+    buffer += "\"namespace_id\":\"" + json_escape(request.namespace_id.value) + "\","
+    buffer += "\"dry_run\":"
+    if request.dry_run:
+        buffer += "true"
+    else:
+        buffer += "false"
+    buffer += ",\"plan\":"
+    buffer += collection_reclaim_plan_json(request.plan)
+    buffer += "}"
+    return buffer^
+
+
+def execute_reclaim_response_json(read response: ExecuteReclaimResponse) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"result\":"
+    buffer += collection_reclaim_execution_result_json(response.result)
+    buffer += "}"
+    return buffer^
+
+
+def update_collection_retention_policy_request_json(
+    read request: UpdateCollectionRetentionPolicyRequest
+) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"collection_id\":\"" + json_escape(request.collection_id.value) + "\","
+    buffer += "\"tenant_id\":\"" + json_escape(request.tenant_id.value) + "\","
+    buffer += "\"namespace_id\":\"" + json_escape(request.namespace_id.value) + "\","
+    buffer += "\"default_keep_latest_inactive_count\":"
+    buffer += String(request.default_keep_latest_inactive_count)
+    buffer += "}"
+    return buffer^
+
+
+def update_collection_retention_policy_response_json(
+    read response: UpdateCollectionRetentionPolicyResponse
+) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"collection_id\":\"" + json_escape(response.collection_id.value) + "\","
+    buffer += "\"tenant_id\":\"" + json_escape(response.tenant_id.value) + "\","
+    buffer += "\"namespace_id\":\"" + json_escape(response.namespace_id.value) + "\","
+    buffer += "\"latest_generation\":" + String(response.latest_generation) + ","
+    buffer += "\"active_snapshot_id\":\""
+    buffer += json_escape(response.active_snapshot_id) + "\","
+    buffer += "\"default_keep_latest_inactive_count\":"
+    buffer += String(response.default_keep_latest_inactive_count)
     buffer += "}"
     return buffer^
 

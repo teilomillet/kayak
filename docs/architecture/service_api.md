@@ -50,11 +50,15 @@ HTTP/JSON adapter can stay simple and reuse the typed contracts directly.
 
 The minimum service surface is:
 - create collection
+- update collection retention policy
 - upsert documents
 - delete documents
 - create snapshot
 - export snapshot
 - import snapshot
+- collection lifecycle report
+- build reclaim plan
+- execute reclaim plan
 - search
 - explain search
 - health
@@ -75,6 +79,7 @@ The typed request and response objects are deliberately small.
 
 Collection and mutation requests:
 - [`CreateCollectionRequest`](../../kayak/service/collection_requests.mojo)
+- [`UpdateCollectionRetentionPolicyRequest`](../../kayak/service/collection_requests.mojo)
 - [`UpsertDocument`](../../kayak/service/document_requests.mojo)
 - [`UpsertDocumentsRequest`](../../kayak/service/document_requests.mojo)
 - [`DeleteDocumentsRequest`](../../kayak/service/document_requests.mojo)
@@ -99,6 +104,15 @@ Filter grammar:
 Health and metrics:
 - [`ServiceHealthStatus`](../../kayak/service/service_status.mojo)
 - [`ServiceMetricsSnapshot`](../../kayak/service/service_status.mojo)
+
+Lifecycle and reclaim:
+- [`CollectionLifecycleRequest`](../../kayak/service/lifecycle_contracts.mojo)
+- [`CollectionLifecycleResponse`](../../kayak/service/lifecycle_contracts.mojo)
+- [`BuildReclaimPlanRequest`](../../kayak/service/lifecycle_contracts.mojo)
+- [`BuildReclaimPlanResponse`](../../kayak/service/lifecycle_contracts.mojo)
+- [`ExecuteReclaimRequest`](../../kayak/service/lifecycle_contracts.mojo)
+- [`ExecuteReclaimResponse`](../../kayak/service/lifecycle_contracts.mojo)
+- [`UpdateCollectionRetentionPolicyResponse`](../../kayak/service/lifecycle_contracts.mojo)
 
 ## Why The Search Contract Is Typed First
 
@@ -137,11 +151,15 @@ Recommended first projection:
 
 ```text
 POST /v1/collections
+PUT  /v1/collections/{tenant}/{namespace}/{collection}/retention
 POST /v1/collections/{tenant}/{namespace}/{collection}/documents:upsert
 POST /v1/collections/{tenant}/{namespace}/{collection}/documents:delete
 POST /v1/collections/{tenant}/{namespace}/{collection}/snapshots
 POST /v1/collections/{tenant}/{namespace}/{collection}/snapshots/{snapshot}:export
 POST /v1/collections/{tenant}/{namespace}/{collection}/snapshots:import
+GET  /v1/collections/{tenant}/{namespace}/{collection}:lifecycle
+POST /v1/collections/{tenant}/{namespace}/{collection}/reclaim:plan
+POST /v1/collections/{tenant}/{namespace}/{collection}/reclaim:execute
 POST /v1/collections/{tenant}/{namespace}/{collection}/search
 POST /v1/collections/{tenant}/{namespace}/{collection}/search:explain
 GET  /healthz
@@ -206,6 +224,29 @@ Inference:
   correctness and portability
 - a later ingest transport can add binary payloads or multipart upload without
   changing the canonical typed contracts
+
+## Retention And Lifecycle Semantics
+
+The repository now has an explicit service-level lifecycle control surface.
+
+Verified behavior:
+- collection manifests persist `default_keep_latest_inactive_count`
+- the stored default is collection-scoped, not snapshot-scoped
+- lifecycle-report and reclaim-plan requests can optionally carry an ephemeral
+  `SnapshotRetentionPolicy` override
+- when no override is present, lifecycle and reclaim operations derive their
+  effective policy from the collection manifest
+- reclaim execution still requires an explicit plan, which preserves the
+  previous stale-plan guardrail instead of introducing implicit background
+  deletion
+
+This choice is intentional:
+- a collection default belongs with collection continuity and hosted-engine
+  operations
+- pinned-snapshot overrides remain request-scoped until there is a stronger
+  reason to persist them
+- plan-then-execute remains the sound default because it keeps deletion
+  behavior auditable and testable
 
 ## Open Choices
 

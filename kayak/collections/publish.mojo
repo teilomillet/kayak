@@ -30,6 +30,7 @@ def publish_collection_snapshot(
         collection.vector_dim,
         snapshot.generation,
         snapshot.snapshot_id.value.copy(),
+        collection.default_keep_latest_inactive_count,
     )
     save_collection_manifest(collection_root, published)
     return published^
@@ -47,6 +48,7 @@ def promote_collection_generation(
         collection.vector_dim,
         generation,
         collection.active_snapshot_id.copy(),
+        collection.default_keep_latest_inactive_count,
     )
     save_collection_manifest(collection_root, published)
     return published^

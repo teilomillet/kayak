@@ -1,6 +1,18 @@
 from kayak.collections.document_metadata import DocumentMetadataUpdate
 
-from .collection_requests import CreateCollectionRequest
+from .collection_requests import (
+    CreateCollectionRequest,
+    UpdateCollectionRetentionPolicyRequest,
+)
+from .lifecycle_contracts import (
+    BuildReclaimPlanRequest,
+    BuildReclaimPlanResponse,
+    CollectionLifecycleRequest,
+    CollectionLifecycleResponse,
+    ExecuteReclaimRequest,
+    ExecuteReclaimResponse,
+    UpdateCollectionRetentionPolicyResponse,
+)
 from .document_requests import (
     DeleteDocumentsRequest,
     UpsertDocument,
@@ -19,6 +31,12 @@ from .json import (
     create_snapshot_request_json,
     debug_search_response_json,
     delete_documents_request_json,
+    build_reclaim_plan_request_json,
+    build_reclaim_plan_response_json,
+    collection_lifecycle_request_json,
+    collection_lifecycle_response_json,
+    execute_reclaim_request_json,
+    execute_reclaim_response_json,
     explain_request_json,
     explain_response_json,
     export_snapshot_request_json,
@@ -27,7 +45,15 @@ from .json import (
     search_response_json,
     service_health_status_json,
     service_metrics_snapshot_json,
+    update_collection_retention_policy_request_json,
+    update_collection_retention_policy_response_json,
     upsert_documents_request_json,
+)
+from .lifecycle_runtime import (
+    build_collection_lifecycle_report,
+    build_reclaim_plan,
+    execute_reclaim,
+    update_collection_retention_policy,
 )
 from .metrics_runtime import (
     build_service_health_status,

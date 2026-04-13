@@ -70,6 +70,7 @@ def build_source_collection(root: Path) raises:
             VECTOR_SCALAR_NAME,
             2,
             7,
+            2,
         ),
     )
 
@@ -152,6 +153,7 @@ def test_snapshot_bundle_export_import_roundtrip() raises:
     assert_equal(bundle.segment_count, 1)
     assert_equal(exported_collection.latest_generation, 4)
     assert_equal(exported_collection.active_snapshot_id, "snapshot-0004")
+    assert_equal(exported_collection.default_keep_latest_inactive_count, 2)
 
     _ = import_snapshot_bundle(bundle_root, target_root)
 
@@ -162,6 +164,7 @@ def test_snapshot_bundle_export_import_roundtrip() raises:
 
     assert_equal(imported_collection.latest_generation, 4)
     assert_equal(imported_collection.active_snapshot_id, "snapshot-0004")
+    assert_equal(imported_collection.default_keep_latest_inactive_count, 2)
     assert_equal(len(resolved.segments), 1)
     assert_equal(resolved.segments[0].stored_index.index.document_count, 2)
     assert_equal(resolved.segments[0].has_text_corpus, True)
@@ -203,6 +206,38 @@ def test_snapshot_bundle_import_rejects_collection_mismatch() raises:
         raised = True
 
     assert_equal(raised, True)
+
+
+def test_snapshot_bundle_import_preserves_existing_collection_retention_default() raises:
+    var source_root = unique_root("kayak-snapshot-bundle-retention-source")
+    var bundle_root = unique_root("kayak-snapshot-bundle-retention-export")
+    var target_root = unique_root("kayak-snapshot-bundle-retention-target")
+
+    build_source_collection(source_root)
+    _ = export_snapshot_bundle(source_root, SnapshotId("snapshot-0004"), bundle_root)
+
+    save_collection_manifest(
+        target_root,
+        CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            0,
+            "",
+            5,
+        ),
+    )
+
+    _ = import_snapshot_bundle(bundle_root, target_root)
+
+    var imported_collection = load_collection_manifest(target_root)
+
+    assert_equal(imported_collection.latest_generation, 4)
+    assert_equal(imported_collection.active_snapshot_id, "snapshot-0004")
+    assert_equal(imported_collection.default_keep_latest_inactive_count, 5)
 
 
 def main() raises:

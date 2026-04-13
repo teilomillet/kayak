@@ -128,6 +128,7 @@ def merged_collection_manifest_for_import(
         existing.vector_dim,
         latest_generation,
         active_snapshot_id,
+        existing.default_keep_latest_inactive_count,
     )
 
 
@@ -214,6 +215,7 @@ def collection_manifest_for_snapshot_bundle(
         resolved.collection.vector_dim,
         resolved.snapshot.generation,
         resolved.snapshot.snapshot_id.value.copy(),
+        resolved.collection.default_keep_latest_inactive_count,
     )
 
 

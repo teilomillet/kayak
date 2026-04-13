@@ -13,6 +13,7 @@ struct CollectionManifest(Copyable):
     var vector_dim: Int
     var latest_generation: Int
     var active_snapshot_id: String
+    var default_keep_latest_inactive_count: Int
 
     def __init__(
         out self,
@@ -33,6 +34,30 @@ struct CollectionManifest(Copyable):
             vector_dim,
             latest_generation,
             "",
+            1,
+        )
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        latest_generation: Int,
+        default_keep_latest_inactive_count: Int,
+    ) raises:
+        self = CollectionManifest(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            latest_generation,
+            "",
+            default_keep_latest_inactive_count,
         )
 
     def __init__(
@@ -46,6 +71,30 @@ struct CollectionManifest(Copyable):
         latest_generation: Int,
         active_snapshot_id: String,
     ) raises:
+        self = CollectionManifest(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            latest_generation,
+            active_snapshot_id,
+            1,
+        )
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        latest_generation: Int,
+        active_snapshot_id: String,
+        default_keep_latest_inactive_count: Int,
+    ) raises:
         self.collection_id = collection_id.copy()
         self.tenant_id = tenant_id.copy()
         self.namespace_id = namespace_id.copy()
@@ -58,6 +107,10 @@ struct CollectionManifest(Copyable):
             latest_generation, "latest_generation"
         )
         self.active_snapshot_id = active_snapshot_id.copy()
+        self.default_keep_latest_inactive_count = require_non_negative_int(
+            default_keep_latest_inactive_count,
+            "default_keep_latest_inactive_count",
+        )
         if self.active_snapshot_id.byte_length() != 0 and self.latest_generation == 0:
             raise Error(
                 "active_snapshot_id requires a positive latest_generation"

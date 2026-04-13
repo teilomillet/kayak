@@ -3,23 +3,30 @@ from std.pathlib import Path
 from std.testing import TestSuite, assert_equal
 
 from kayak import (
+    BuildReclaimPlanRequest,
     CollectionId,
+    CollectionLifecycleRequest,
     CreateCollectionRequest,
     CreateSnapshotRequest,
     DeleteDocumentsRequest,
     DocumentMetadataUpdate,
     EncodedDocument,
     EncodedQuery,
+    ExecuteReclaimRequest,
     ExactCpuBackend,
     ExportSnapshotRequest,
     ImportSnapshotRequest,
     NamespaceId,
     SnapshotId,
+    SnapshotRetentionPolicy,
     TenantId,
+    UpdateCollectionRetentionPolicyRequest,
     UpsertDocument,
     UpsertDocumentsRequest,
     VECTOR_SCALAR_NAME,
     best_effort_faithfulness_policy,
+    build_collection_lifecycle_report,
+    build_reclaim_plan,
     build_service_health_status,
     build_service_metrics_snapshot,
     create_collection,
@@ -28,6 +35,7 @@ from kayak import (
     delete_documents,
     document_proxy_search_plan,
     execute_debug_search,
+    execute_reclaim,
     execute_search,
     exact_full_scan_search_plan,
     export_snapshot,
@@ -35,6 +43,7 @@ from kayak import (
     load_collection_manifest,
     one_of_filter,
     SearchRequest,
+    update_collection_retention_policy,
     upsert_documents,
 )
 
@@ -57,6 +66,82 @@ def make_document(
     doc_id: String, read vectors: List[List[Float32]]
 ) raises -> EncodedDocument:
     return EncodedDocument(doc_id, vectors.copy())
+
+
+def build_three_snapshot_service_fixture(
+    service_root: Path,
+    default_keep_latest_inactive_count: Int = 1,
+) raises -> Path:
+    var collection_root = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            default_keep_latest_inactive_count,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]), "alpha")],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish first snapshot",
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]), "beta")],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0002"),
+            "publish second snapshot",
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-c", [[1.0, 0.0], [1.0, 0.0]]), "gamma")],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0003"),
+            "publish third snapshot",
+        ),
+    )
+    return collection_root
 
 
 def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() raises:
@@ -637,6 +722,145 @@ def test_hosted_collection_runtime_merges_metadata_and_filters_exactly() raises:
     assert_equal(len(metadata_response.hits), 1)
     assert_equal(metadata_response.hits[0].doc_id, "doc-a")
     assert_equal(len(removed_field_response.hits), 0)
+
+
+def test_hosted_collection_lifecycle_report_uses_default_and_override_policy() raises:
+    var service_root = unique_service_root("kayak-service-runtime-lifecycle")
+    _ = build_three_snapshot_service_fixture(service_root, 1)
+
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-d", [[0.0, 1.0], [0.0, 1.0]]), "delta")],
+        ),
+    )
+
+    var default_report = build_collection_lifecycle_report(
+        service_root,
+        CollectionLifecycleRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+        ),
+    )
+    var override_report = build_collection_lifecycle_report(
+        service_root,
+        CollectionLifecycleRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotRetentionPolicy(0, [SnapshotId("snapshot-0001")]),
+        ),
+    )
+
+    assert_equal(default_report.latest_generation, 3)
+    assert_equal(default_report.active_snapshot_id, "snapshot-0003")
+    assert_equal(default_report.default_keep_latest_inactive_count, 1)
+    assert_equal(default_report.effective_keep_latest_inactive_count, 1)
+    assert_equal(default_report.reclaim_plan.reclaimable_snapshot_count, 1)
+    assert_equal(default_report.draft_document_count, 4)
+    assert_equal(default_report.pending_draft_mutation_count, 1)
+    assert_equal(override_report.effective_keep_latest_inactive_count, 0)
+    assert_equal(
+        override_report.effective_pinned_snapshot_ids[0].value,
+        "snapshot-0001",
+    )
+    assert_equal(override_report.reclaim_plan.reclaimable_snapshot_count, 1)
+    assert_equal(
+        override_report.reclaim_plan.decisions[1].reason,
+        "inactive_reclaim_candidate",
+    )
+    assert_equal(
+        override_report.reclaim_plan.decisions[2].reason,
+        "pinned_snapshot",
+    )
+
+
+def test_hosted_reclaim_service_builds_and_executes_plan() raises:
+    var service_root = unique_service_root("kayak-service-runtime-reclaim")
+    var collection_root = build_three_snapshot_service_fixture(service_root, 1)
+
+    var plan_response = build_reclaim_plan(
+        service_root,
+        BuildReclaimPlanRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+        ),
+    )
+    var dry_run = execute_reclaim(
+        service_root,
+        ExecuteReclaimRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            plan_response.plan,
+        ),
+    )
+    assert_equal(plan_response.plan.reclaimable_snapshot_count, 1)
+    assert_equal(plan_response.effective_keep_latest_inactive_count, 1)
+    assert_equal(dry_run.result.applied, False)
+    assert_equal((collection_root / "snapshots" / "snapshot-0001").exists(), True)
+    assert_equal((collection_root / "segments" / "segment-1").exists(), True)
+
+    var applied = execute_reclaim(
+        service_root,
+        ExecuteReclaimRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            plan_response.plan,
+            False,
+        ),
+    )
+    var after = build_reclaim_plan(
+        service_root,
+        BuildReclaimPlanRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+        ),
+    )
+
+    assert_equal(applied.result.applied, True)
+    assert_equal(applied.result.snapshot_ids[0].value, "snapshot-0001")
+    assert_equal((collection_root / "snapshots" / "snapshot-0001").exists(), False)
+    assert_equal((collection_root / "segments" / "segment-1").exists(), False)
+    assert_equal(after.plan.total_snapshot_count, 2)
+    assert_equal(after.plan.reclaimable_snapshot_count, 0)
+
+
+def test_retention_policy_update_persists_into_lifecycle_operations() raises:
+    var service_root = unique_service_root("kayak-service-runtime-retention")
+    var collection_root = build_three_snapshot_service_fixture(service_root, 1)
+
+    var updated = update_collection_retention_policy(
+        service_root,
+        UpdateCollectionRetentionPolicyRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            2,
+        ),
+    )
+    var manifest = load_collection_manifest(collection_root)
+    var report = build_collection_lifecycle_report(
+        service_root,
+        CollectionLifecycleRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+        ),
+    )
+
+    assert_equal(updated.default_keep_latest_inactive_count, 2)
+    assert_equal(manifest.default_keep_latest_inactive_count, 2)
+    assert_equal(report.default_keep_latest_inactive_count, 2)
+    assert_equal(report.effective_keep_latest_inactive_count, 2)
+    assert_equal(report.reclaim_plan.reclaimable_snapshot_count, 0)
 
 
 def main() raises:
