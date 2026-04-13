@@ -30,6 +30,7 @@ class PublicApiContractTests(unittest.TestCase):
             "document_proxy_candidate_generator",
             "document_proxy_search_plan",
             "documents",
+            "exact_late_interaction_clause_text_stage2_operator",
             "exact_full_scan_clause_text_search_plan",
             "exact_full_scan_candidate_generator",
             "exact_full_scan_search_plan",

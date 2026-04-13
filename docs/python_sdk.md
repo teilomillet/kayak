@@ -329,8 +329,9 @@ The result keeps the stages inspectable:
 - `result.stage2`
 
 Compatibility note:
-- `result.exact_scores` still aliases `result.stage2_scores`
-- `result.exact_stage` still aliases `result.stage2`
+- `result.exact_scores` and `result.exact_stage` are legacy aliases
+- use `result.plan.stage2_operator.is_exact_reference` to decide whether stage 2
+  is actually an exact-reference operator
 
 The stage profiles keep query and document vector counts explicit when the
 operator is vector-based, and document-text counts explicit when the operator

@@ -46,6 +46,7 @@ from kayak import (
     exact_stage1_required_faithfulness_policy,
     exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
+    exact_late_interaction_clause_text_stage2_operator,
     explain_collection_search,
     gem_graph_search_artifact,
     gem_graph_search_plan,
@@ -219,6 +220,102 @@ def make_clause_text_collection_root() raises -> Path:
             "",
             "",
             "",
+            "text_corpus",
+            SegmentStats(
+                packed_index.document_count,
+                packed_index.total_vector_count,
+                packed_index.total_vector_count,
+                512,
+            ),
+        ),
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0001",
+        SnapshotManifest(
+            SnapshotId("snapshot-0001"),
+            CollectionId("search-plan"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 2, 4, 4, 512),
+        ),
+    )
+    return root^
+
+
+def make_hybrid_stage2_collection_root() raises -> Path:
+    var root = Path("/tmp/kayak-collection-hybrid-stage2")
+    save_collection_manifest(
+        root,
+        CollectionManifest(
+            CollectionId("search-plan"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            1,
+        ),
+    )
+
+    var segment_root = root / "segments" / "segment-0001"
+    var documents = [
+        EncodedDocument("doc-context", [[1.0, 0.0], [1.0, 0.0]]),
+        EncodedDocument("doc-answer", [[1.0, 0.0], [0.0, 1.0]]),
+    ]
+    var packed_index = pack_documents(documents)
+
+    save_stored_packed_index(
+        segment_root / "packed_index",
+        StoredPackedIndex(
+            "collection://hybrid-stage2",
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            packed_index.copy(),
+        ),
+    )
+    save_stored_document_proxy_index(
+        segment_root / "document_proxy",
+        build_stored_document_proxy_index(
+            StoredPackedIndex(
+                "collection://hybrid-stage2",
+                "colbertv2",
+                VECTOR_SCALAR_NAME,
+                packed_index.copy(),
+            ),
+            0,
+        ),
+    )
+    save_stored_document_text_corpus(
+        segment_root / "text_corpus",
+        StoredDocumentTextCorpus(
+            CollectionId("search-plan"),
+            SegmentId("segment-0001"),
+            DocumentTextCorpus(
+                ["doc-context", "doc-answer"],
+                [
+                    "Gugulethu township logo emblem heritage schools history",
+                    "Zama Dance School was founded in 1984 in a church and the longest serving employee is the artistic director.",
+                ],
+            ),
+        ),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("search-plan"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            "packed_index",
+            "",
+            "",
+            "document_proxy",
             "text_corpus",
             SegmentStats(
                 packed_index.document_count,
@@ -640,6 +737,71 @@ def test_exact_full_scan_clause_text_stage2_can_refine_exact_candidates() raises
     assert_equal(json.find("\"stage2_requires_query_text\":true") != -1, True)
     assert_equal(json.find("\"materialized_artifacts\":[{") != -1, True)
     assert_equal(json.find("\"family\":\"document_text\"") != -1, True)
+
+
+def test_hybrid_stage2_materializes_vectors_and_texts() raises:
+    var root = make_hybrid_stage2_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var plan = document_proxy_search_plan(
+        1,
+        2,
+        best_effort_faithfulness_policy(),
+        exact_late_interaction_clause_text_stage2_operator(),
+    )
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        plan,
+        query_text=
+            "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
+    )
+    var json = collection_search_explain_json(explain)
+
+    assert_equal(explain.candidate_set.hits[0].doc_id, "doc-context")
+    assert_equal(explain.final_hits[0].doc_id, "doc-answer")
+    assert_equal(
+        explain.plan.stage2_operator.kind,
+        "exact_late_interaction_clause_text",
+    )
+    assert_equal(explain.plan.stage2_operator.family, "hybrid")
+    assert_equal(explain.plan.stage2_operator.requires_query_text, True)
+    assert_equal(len(explain.plan.stage2_operator.required_artifact_families), 2)
+    assert_equal(
+        explain.plan.stage2_operator.required_artifact_families[0],
+        "late_interaction",
+    )
+    assert_equal(
+        explain.plan.stage2_operator.required_artifact_families[1],
+        "document_text",
+    )
+    assert_equal(explain.plan.exact_stage_kind, "none")
+    assert_equal(explain.plan.reranker_kind, "clause_text")
+    assert_equal(explain.stage2.stage_name, "exact_late_interaction_clause_text")
+    assert_equal(explain.stage2.document_count, 2)
+    assert_equal(explain.stage2.vector_count, 4)
+    assert_equal(explain.stage2.token_count > 4, True)
+    assert_equal(explain.stage2.byte_size > 16, True)
+    assert_equal(len(explain.stage2.materialized_artifacts), 2)
+    assert_equal(
+        explain.stage2.materialized_artifacts[0].family,
+        "late_interaction",
+    )
+    assert_equal(
+        explain.stage2.materialized_artifacts[1].family,
+        "document_text",
+    )
+    assert_equal(
+        json.find("\"stage2_kind\":\"exact_late_interaction_clause_text\"") != -1,
+        True,
+    )
+    assert_equal(json.find("\"stage2_family\":\"hybrid\"") != -1, True)
+    assert_equal(
+        json.find("\"stage2_required_artifact_families\":[\"late_interaction\",\"document_text\"]")
+            != -1,
+        True,
+    )
 
 
 def test_candidate_budget_rejects_candidate_k_below_final_k() raises:

@@ -77,9 +77,10 @@ These statements are checked against the current codebase.
    - [kayak/planning/clause_text_stage.mojo](../../kayak/planning/clause_text_stage.mojo)
    - [kayak/planning/stage2_operator.mojo](../../kayak/planning/stage2_operator.mojo)
    - current built-ins are:
-     - `noop_topk`
-     - `exact_late_interaction`
-     - `clause_text`
+   - `noop_topk`
+   - `exact_late_interaction`
+   - `exact_late_interaction_clause_text`
+   - `clause_text`
 
 4. The current clause-text refinement path is now routed through the same
    `SearchPlan` contract instead of living only in a side verifier path.
@@ -216,6 +217,7 @@ Minimal fields the repo should eventually carry:
 Initial operator kinds that fit the current repo:
 
 - `exact_late_interaction`
+- `exact_late_interaction_clause_text`
 - `clause_text`
 - `noop_topk`
 
@@ -364,6 +366,25 @@ Deliverables:
 Exit criterion:
 
 - the Python SDK reflects the same stage-2 semantics as the engine contract
+
+### Phase S2-5
+
+Implement one real multi-artifact stage-2 operator.
+
+Deliverables:
+
+- one hybrid stage-2 operator that exact-scores the candidate window and then
+  applies text-family rescoring over that same window
+- explicit materialization of both `late_interaction` and `document_text`
+  artifacts
+- compatibility reporting that does not falsely collapse the whole hybrid stage
+  into one legacy `reranker_kind` or `exact_stage_kind`
+
+Exit criterion:
+
+- engine, service, Python SDK, and benchmark reporting can all represent one
+  candidate-window refinement that consumes multiple artifact families without
+  hiding that fact
 
 ## Conclusion
 

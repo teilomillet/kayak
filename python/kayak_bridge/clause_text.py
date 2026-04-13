@@ -215,6 +215,7 @@ def clause_text_scores(
     hits: tuple[SearchHit, ...],
     doc_texts: tuple[str, ...],
     *,
+    backend: str = "clause_text",
     config: ClauseTextStageConfig = ClauseTextStageConfig(),
 ) -> LateScores:
     if len(hits) != len(doc_texts):
@@ -227,7 +228,7 @@ def clause_text_scores(
         )
 
     return LateScores.from_values(
-        "clause_text",
+        backend,
         tuple(hit.doc_id for hit in hits),
         values,
     )

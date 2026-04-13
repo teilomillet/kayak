@@ -44,6 +44,7 @@ from kayak import (
     execute_search,
     exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
+    exact_late_interaction_clause_text_stage2_operator,
     export_snapshot,
     gem_graph_build_spec,
     gem_graph_search_plan,
@@ -333,6 +334,82 @@ def test_hosted_collection_runtime_supports_text_family_stage2() raises:
     assert_equal(debug.explain.final_hits[0].doc_id, "doc-answer")
     assert_equal(debug.explain.stage2.stage_name, "clause_text")
     assert_equal(debug.explain.stage2.token_count > 0, True)
+
+
+def test_hosted_collection_runtime_supports_hybrid_stage2() raises:
+    var service_root = unique_service_root("kayak-service-runtime-hybrid-stage2")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-context", [[1.0, 0.0], [1.0, 0.0]]),
+                    "Gugulethu township logo emblem heritage schools history",
+                ),
+                UpsertDocument(
+                    make_document("doc-answer", [[1.0, 0.0], [0.0, 1.0]]),
+                    "Zama Dance School was founded in 1984 in a church and the longest serving employee is the artistic director.",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish hybrid stage2 fixture",
+        ),
+    )
+
+    var request = SearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
+        "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
+        match_all_filter(),
+        document_proxy_search_plan(
+            1,
+            2,
+            best_effort_faithfulness_policy(),
+            exact_late_interaction_clause_text_stage2_operator(),
+        ),
+        True,
+    )
+    var response = execute_search(ExactCpuBackend(), service_root, request)
+    var debug = execute_debug_search(ExactCpuBackend(), service_root, request)
+
+    assert_equal(
+        response.plan.stage2_operator.kind,
+        "exact_late_interaction_clause_text",
+    )
+    assert_equal(response.hits[0].doc_id, "doc-answer")
+    assert_equal(debug.explain.candidate_set.hits[0].doc_id, "doc-context")
+    assert_equal(debug.explain.final_hits[0].doc_id, "doc-answer")
+    assert_equal(
+        debug.explain.stage2.stage_name,
+        "exact_late_interaction_clause_text",
+    )
+    assert_equal(len(debug.explain.stage2.materialized_artifacts), 2)
 
 
 def test_hosted_collection_runtime_supports_planned_search_after_import() raises:
@@ -924,6 +1001,80 @@ def test_hosted_collection_runtime_executes_planned_search_with_clause_text_stag
 
     assert_equal(response.selection.plan.candidate_generator.kind, "exact_full_scan")
     assert_equal(response.search.plan.stage2_operator.kind, "clause_text")
+    assert_equal(response.search.hits[0].doc_id, "doc-answer")
+
+
+def test_hosted_collection_runtime_executes_planned_search_with_hybrid_stage2() raises:
+    var service_root = unique_service_root(
+        "kayak-service-runtime-planned-hybrid-stage2"
+    )
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [
+                UpsertDocument(
+                    make_document("doc-context", [[1.0, 0.0], [1.0, 0.0]]),
+                    "Gugulethu township logo emblem heritage schools history",
+                ),
+                UpsertDocument(
+                    make_document("doc-answer", [[1.0, 0.0], [0.0, 1.0]]),
+                    "Zama Dance School was founded in 1984 in a church and the longest serving employee is the artistic director.",
+                ),
+            ],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish planned hybrid fixture",
+        ),
+    )
+
+    var response = execute_planned_search(
+        ExactCpuBackend(),
+        service_root,
+        PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
+            "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
+            "exact_late_interaction_clause_text",
+            match_all_filter(),
+            SearchPlanSelectionRequest(
+                1,
+                2,
+                best_effort_faithfulness_policy(),
+                match_all_filter(),
+            ),
+        ),
+    )
+
+    assert_equal(response.selection.plan.candidate_generator.kind, "document_proxy")
+    assert_equal(
+        response.search.plan.stage2_operator.kind,
+        "exact_late_interaction_clause_text",
+    )
     assert_equal(response.search.hits[0].doc_id, "doc-answer")
 
 

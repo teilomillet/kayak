@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 
 STAGE2_OPERATOR_FAMILY_IDENTITY = "identity"
+STAGE2_OPERATOR_FAMILY_HYBRID = "hybrid"
 STAGE2_OPERATOR_FAMILY_LATE_INTERACTION = "late_interaction"
 STAGE2_OPERATOR_FAMILY_TEXT = "text"
 
@@ -31,6 +32,14 @@ class Stage2Operator:
             family = STAGE2_OPERATOR_FAMILY_IDENTITY
             required_artifacts = ()
             requires_query_text = False
+            is_exact_reference = False
+        elif self.kind == "exact_late_interaction_clause_text":
+            family = STAGE2_OPERATOR_FAMILY_HYBRID
+            required_artifacts = (
+                STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
+                STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
+            )
+            requires_query_text = True
             is_exact_reference = False
         elif self.kind == "exact_late_interaction":
             family = STAGE2_OPERATOR_FAMILY_LATE_INTERACTION
@@ -62,6 +71,10 @@ def noop_topk_stage2_operator() -> Stage2Operator:
 
 def exact_late_interaction_stage2_operator() -> Stage2Operator:
     return Stage2Operator("exact_late_interaction")
+
+
+def exact_late_interaction_clause_text_stage2_operator() -> Stage2Operator:
+    return Stage2Operator("exact_late_interaction_clause_text")
 
 
 def clause_text_stage2_operator() -> Stage2Operator:

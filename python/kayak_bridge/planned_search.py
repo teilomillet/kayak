@@ -65,6 +65,13 @@ def _noop_stage2_scores(candidate_stage: CandidateStageResult) -> LateScores:
     )
 
 
+def _hits_for_scores(scores: LateScores) -> tuple[SearchHit, ...]:
+    return tuple(
+        SearchHit(doc_id=doc_id, score=float(score))
+        for doc_id, score in zip(scores.doc_ids, scores.values, strict=True)
+    )
+
+
 def search_with_plan(
     query: "LateQuery",
     index: "LateIndex",
@@ -141,6 +148,54 @@ def search_with_plan(
             stage2=stage2,
         )
 
+    if plan.stage2_operator.kind == "exact_late_interaction_clause_text":
+        if not query.text:
+            raise ValueError(
+                "exact_late_interaction_clause_text stage-2 requires query.text"
+            )
+        if candidate_index.doc_texts is None:
+            raise ValueError(
+                "exact_late_interaction_clause_text stage-2 requires document texts on the candidate index"
+            )
+
+        exact_scores = candidate_index.maxsim(query, backend=backend)
+        stage2_scores = clause_text_scores(
+            query.text,
+            _hits_for_scores(exact_scores),
+            candidate_index.doc_texts,
+            backend="exact_late_interaction_clause_text",
+        )
+        hits = stage2_scores.topk(plan.final_k)
+        stage2 = SearchStageProfile(
+            stage_name=plan.stage2_operator.kind,
+            input_hit_count=len(candidate_stage.hits),
+            output_hit_count=len(hits),
+            query_vector_count=query.vector_count,
+            document_count=candidate_index.document_count,
+            document_vector_count=candidate_index.total_vector_count,
+            document_text_count=len(candidate_index.doc_texts),
+            materialized_artifacts=(
+                StageArtifactMaterialization(
+                    family=STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
+                    document_count=candidate_index.document_count,
+                    document_vector_count=candidate_index.total_vector_count,
+                ),
+                StageArtifactMaterialization(
+                    family=STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
+                    document_count=candidate_index.document_count,
+                    document_text_count=len(candidate_index.doc_texts),
+                ),
+            ),
+        )
+        return SearchPlanResult(
+            plan=plan,
+            candidate_stage=candidate_stage,
+            candidate_index=candidate_index,
+            stage2_scores=stage2_scores,
+            hits=hits,
+            stage2=stage2,
+        )
+
     if plan.stage2_operator.kind == "clause_text":
         if not query.text:
             raise ValueError("clause_text stage-2 requires query.text")
@@ -153,6 +208,7 @@ def search_with_plan(
             query.text,
             candidate_stage.hits,
             candidate_index.doc_texts,
+            backend="clause_text",
         )
         hits = stage2_scores.topk(plan.final_k)
         stage2 = SearchStageProfile(

@@ -52,6 +52,7 @@ from kayak import (
     default_exact_search_request,
     document_proxy_search_plan,
     exact_stage1_required_faithfulness_policy,
+    exact_late_interaction_clause_text_stage2_operator,
     noop_topk_stage2_operator,
     oracle_full_recall_required_faithfulness_policy,
 )
@@ -389,6 +390,31 @@ def test_search_request_requires_query_text_for_text_family_stage2() raises:
     assert_equal(raised, True)
 
 
+def test_search_request_requires_query_text_for_hybrid_stage2() raises:
+    var raised = False
+
+    try:
+        _ = SearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            match_all_filter(),
+            document_proxy_search_plan(
+                1,
+                2,
+                best_effort_faithfulness_policy(),
+                exact_late_interaction_clause_text_stage2_operator(),
+            ),
+            False,
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
 def test_search_request_accepts_explicit_query_text_for_text_family_stage2() raises:
     var request = SearchRequest(
         CollectionId("news"),
@@ -404,6 +430,31 @@ def test_search_request_accepts_explicit_query_text_for_text_family_stage2() rai
 
     assert_equal(request.query_text, "founding church artistic director")
     assert_equal(request.plan.stage2_operator.kind, "clause_text")
+
+
+def test_search_request_accepts_query_text_for_hybrid_stage2() raises:
+    var request = SearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        make_query(),
+        "founding church artistic director",
+        match_all_filter(),
+        document_proxy_search_plan(
+            1,
+            2,
+            best_effort_faithfulness_policy(),
+            exact_late_interaction_clause_text_stage2_operator(),
+        ),
+        False,
+    )
+
+    assert_equal(
+        request.plan.stage2_operator.kind,
+        "exact_late_interaction_clause_text",
+    )
+    assert_equal(request.plan.stage2_operator.family, "hybrid")
 
 
 def test_search_request_rejects_unverifiable_oracle_guardrail_without_debug() raises:
@@ -585,6 +636,29 @@ def test_planned_search_request_accepts_explicit_stage2_override() raises:
     assert_equal(request.stage2_operator_kind, "clause_text")
 
 
+def test_planned_search_request_accepts_explicit_hybrid_stage2_override() raises:
+    var request = PlannedSearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        make_query(),
+        "founded in 1984 longest serving employee",
+        "exact_late_interaction_clause_text",
+        match_all_filter(),
+        SearchPlanSelectionRequest(
+            2,
+            8,
+            best_effort_faithfulness_policy(),
+        ),
+    )
+
+    assert_equal(
+        request.stage2_operator_kind,
+        "exact_late_interaction_clause_text",
+    )
+
+
 def test_planned_search_request_rejects_text_stage2_without_query_text() raises:
     var raised = False
     try:
@@ -596,6 +670,30 @@ def test_planned_search_request_rejects_text_stage2_without_query_text() raises:
             make_query(),
             "",
             "clause_text",
+            match_all_filter(),
+            SearchPlanSelectionRequest(
+                2,
+                8,
+                best_effort_faithfulness_policy(),
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_planned_search_request_rejects_hybrid_stage2_without_query_text() raises:
+    var raised = False
+    try:
+        _ = PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            "",
+            "exact_late_interaction_clause_text",
             match_all_filter(),
             SearchPlanSelectionRequest(
                 2,

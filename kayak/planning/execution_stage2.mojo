@@ -10,6 +10,9 @@ from .candidate_set import CandidateSet
 from .clause_text_stage import clause_text_rerank_candidates_for_plan
 from .collection_hit import CollectionHit
 from .exact_stage import exact_rerank_candidates_for_plan
+from .exact_late_interaction_clause_text_stage import (
+    exact_late_interaction_clause_text_rerank_candidates_for_plan,
+)
 from .search_plan import SearchPlan
 from .stage2_result import Stage2Result
 
@@ -69,6 +72,16 @@ def stage2_result_for_plan[Backend: ExactScoringBackend](
         return exact_rerank_candidates_for_plan(
             backend,
             query,
+            snapshot,
+            candidate_set.hits,
+            plan.candidate_budget.final_k,
+        )
+
+    if plan.stage2_operator.kind == "exact_late_interaction_clause_text":
+        return exact_late_interaction_clause_text_rerank_candidates_for_plan(
+            backend,
+            query,
+            query_text,
             snapshot,
             candidate_set.hits,
             plan.candidate_budget.final_k,

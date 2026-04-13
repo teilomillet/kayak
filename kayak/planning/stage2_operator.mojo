@@ -4,6 +4,7 @@ from std.collections import List
 
 
 comptime STAGE2_OPERATOR_FAMILY_IDENTITY = "identity"
+comptime STAGE2_OPERATOR_FAMILY_HYBRID = "hybrid"
 comptime STAGE2_OPERATOR_FAMILY_LATE_INTERACTION = "late_interaction"
 comptime STAGE2_OPERATOR_FAMILY_TEXT = "text"
 
@@ -14,6 +15,8 @@ comptime STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION = "late_interaction"
 def stage2_family_for_kind(kind: String) raises -> String:
     if kind == "noop_topk":
         return STAGE2_OPERATOR_FAMILY_IDENTITY
+    if kind == "exact_late_interaction_clause_text":
+        return STAGE2_OPERATOR_FAMILY_HYBRID
     if kind == "exact_late_interaction":
         return STAGE2_OPERATOR_FAMILY_LATE_INTERACTION
     if kind == "clause_text":
@@ -27,6 +30,11 @@ def required_artifact_families_for_stage2_kind(
 ) raises -> List[String]:
     if kind == "noop_topk":
         return List[String]()
+    if kind == "exact_late_interaction_clause_text":
+        return [
+            STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
+            STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
+        ]
     if kind == "exact_late_interaction":
         return [STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION]
     if kind == "clause_text":
@@ -36,6 +44,8 @@ def required_artifact_families_for_stage2_kind(
 
 
 def stage2_operator_requires_query_text(kind: String) raises -> Bool:
+    if kind == "exact_late_interaction_clause_text":
+        return True
     if kind == "clause_text":
         return True
     if kind == "noop_topk" or kind == "exact_late_interaction":
@@ -47,7 +57,11 @@ def stage2_operator_requires_query_text(kind: String) raises -> Bool:
 def stage2_operator_is_exact_reference(kind: String) raises -> Bool:
     if kind == "exact_late_interaction":
         return True
-    if kind == "noop_topk" or kind == "clause_text":
+    if (
+        kind == "noop_topk"
+        or kind == "clause_text"
+        or kind == "exact_late_interaction_clause_text"
+    ):
         return False
 
     raise Error("unknown stage2 operator kind: " + kind)
@@ -58,7 +72,15 @@ def compatibility_exact_stage_kind_for_stage2_operator(
 ) raises -> String:
     if kind == "exact_late_interaction":
         return kind
-    if kind == "noop_topk" or kind == "clause_text":
+    # Hybrid stage-2 operators may execute an exact sub-step internally, but
+    # this compatibility field names the whole stage-2 operator, not internal
+    # sub-steps. Returning exact_late_interaction here would overstate what the
+    # final stage profile represents.
+    if (
+        kind == "noop_topk"
+        or kind == "clause_text"
+        or kind == "exact_late_interaction_clause_text"
+    ):
         return "none"
 
     raise Error("unknown stage2 operator kind: " + kind)
@@ -67,6 +89,8 @@ def compatibility_exact_stage_kind_for_stage2_operator(
 def compatibility_reranker_kind_for_stage2_operator(
     kind: String
 ) raises -> String:
+    if kind == "exact_late_interaction_clause_text":
+        return "clause_text"
     if kind == "clause_text":
         return kind
     if kind == "noop_topk" or kind == "exact_late_interaction":
@@ -112,6 +136,10 @@ def noop_topk_stage2_operator() raises -> Stage2Operator:
 
 def exact_late_interaction_stage2_operator() raises -> Stage2Operator:
     return Stage2Operator("exact_late_interaction")
+
+
+def exact_late_interaction_clause_text_stage2_operator() raises -> Stage2Operator:
+    return Stage2Operator("exact_late_interaction_clause_text")
 
 
 def clause_text_stage2_operator() raises -> Stage2Operator:

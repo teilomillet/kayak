@@ -82,11 +82,12 @@ def test_ceiling_comparison_summary_json_contains_method_fields() raises:
         "mock",
         "ceiling_fixture",
         "exact_clause_text_ceiling",
-        "exact_full_scan",
-        "clause_text",
-        "text",
+        "document_proxy",
+        "exact_late_interaction_clause_text",
+        "hybrid",
         True,
-        ["document_text"],
+        ["late_interaction", "document_text"],
+        "clause_text",
         20,
         10,
         "mrr",
@@ -101,12 +102,16 @@ def test_ceiling_comparison_summary_json_contains_method_fields() raises:
     var json = ceiling_comparison_summary_json(summary)
 
     assert_equal(json.find("\"method_kind\":\"exact_clause_text_ceiling\"") != -1, True)
-    assert_equal(json.find("\"stage2_kind\":\"clause_text\"") != -1, True)
     assert_equal(
-        json.find("\"stage2_materialized_artifact_families\":[\"document_text\"]")
+        json.find("\"stage2_kind\":\"exact_late_interaction_clause_text\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage2_materialized_artifact_families\":[\"late_interaction\",\"document_text\"]")
             != -1,
         True,
     )
+    assert_equal(json.find("\"stage2_family\":\"hybrid\"") != -1, True)
     assert_equal(json.find("\"reranker_kind\":\"clause_text\"") != -1, True)
     assert_equal(json.find("\"candidate_k\":20") != -1, True)
 
@@ -136,6 +141,7 @@ def test_build_exact_clause_text_ceiling_summary_reports_candidate_window() rais
     assert_equal(summary.stage2_requires_query_text, True)
     assert_equal(len(summary.stage2_materialized_artifact_families), 1)
     assert_equal(summary.stage2_materialized_artifact_families[0], "document_text")
+    assert_equal(summary.reranker_kind, "clause_text")
     assert_equal(summary.mean_candidate_recall_at_final_k, 1.0)
     assert_equal(summary.mean_search_seconds >= 0.0, True)
 
@@ -202,6 +208,7 @@ def test_build_stage_aware_ceiling_summary_propagates_stage2_materialized_famili
 
     assert_equal(len(summary.stage2_materialized_artifact_families), 1)
     assert_equal(summary.stage2_materialized_artifact_families[0], "late_interaction")
+    assert_equal(summary.reranker_kind, "none")
 
 
 def main() raises:

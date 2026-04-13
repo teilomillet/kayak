@@ -12,6 +12,7 @@ from .candidate_stage import CandidateStageResult
 from .stage2_operator import (
     Stage2Operator,
     clause_text_stage2_operator,
+    exact_late_interaction_clause_text_stage2_operator,
     exact_late_interaction_stage2_operator,
     noop_topk_stage2_operator,
 )

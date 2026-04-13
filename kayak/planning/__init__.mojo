@@ -48,6 +48,9 @@ from .stage1_capabilities import (
     stage1_supported_by_search_artifact_build_policy,
 )
 from .clause_text_stage import clause_text_rerank_candidates_for_plan
+from .exact_late_interaction_clause_text_stage import (
+    exact_late_interaction_clause_text_rerank_candidates_for_plan,
+)
 from .centroid_primitives import (
     ScoredCentroidSelection,
     accumulate_selected_centroid_scores,
@@ -73,12 +76,14 @@ from .faithfulness import (
 )
 from .stage2_operator import (
     STAGE2_OPERATOR_FAMILY_IDENTITY,
+    STAGE2_OPERATOR_FAMILY_HYBRID,
     STAGE2_OPERATOR_FAMILY_LATE_INTERACTION,
     STAGE2_OPERATOR_FAMILY_TEXT,
     STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
     STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
     Stage2Operator,
     clause_text_stage2_operator,
+    exact_late_interaction_clause_text_stage2_operator,
     exact_late_interaction_stage2_operator,
     noop_topk_stage2_operator,
 )

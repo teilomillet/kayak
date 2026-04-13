@@ -248,6 +248,27 @@ print(result.stage2.materialized_artifacts[0].family)  # document_text
 print(result.hits)
 ```
 
+Hybrid refinement stays explicit too. This operator exact-scores the candidate
+window with late interaction and then blends clause-text evidence over that same
+window, so it declares both artifact families instead of pretending to be a
+plain tensor op:
+
+```python
+plan = kayak.document_proxy_search_plan(
+    final_k=1,
+    candidate_k=2,
+    query_vector_budget=1,
+    document_vector_budget=1,
+    stage2_operator=kayak.exact_late_interaction_clause_text_stage2_operator(),
+)
+result = kayak.search_with_plan(query, index, plan)
+
+print(result.stage2.stage_name)  # exact_late_interaction_clause_text
+print([artifact.family for artifact in result.stage2.materialized_artifacts])
+# ['late_interaction', 'document_text']
+print(result.hits)
+```
+
 Stage-aware search plans are explicit too:
 
 ```python
@@ -267,6 +288,7 @@ Current public stage-1 generators:
 Current public stage-2 operators:
 - `noop_topk`
 - `exact_late_interaction`
+- `exact_late_interaction_clause_text`
 - `clause_text`
 
 That is an intentionally narrow first pass.

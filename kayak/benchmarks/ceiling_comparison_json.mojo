@@ -38,6 +38,7 @@ struct CeilingComparisonSummary(Copyable):
     var stage2_family: String
     var stage2_requires_query_text: Bool
     var stage2_materialized_artifact_families: List[String]
+    var reranker_kind: String
     var candidate_k: Int
     var final_k: Int
     var primary_metric: String
@@ -61,6 +62,7 @@ struct CeilingComparisonSummary(Copyable):
         var stage2_family: String,
         stage2_requires_query_text: Bool,
         var stage2_materialized_artifact_families: List[String],
+        var reranker_kind: String,
         candidate_k: Int,
         final_k: Int,
         var primary_metric: String,
@@ -84,6 +86,7 @@ struct CeilingComparisonSummary(Copyable):
         self.stage2_materialized_artifact_families = (
             stage2_materialized_artifact_families^
         )
+        self.reranker_kind = reranker_kind^
         self.candidate_k = candidate_k
         self.final_k = final_k
         self.primary_metric = primary_metric^
@@ -213,6 +216,7 @@ def build_exact_full_scan_ceiling_summary(
         "identity",
         False,
         [],
+        "none",
         task.k,
         task.k,
         evaluation.primary_metric.copy(),
@@ -309,6 +313,7 @@ def build_exact_clause_text_ceiling_summary(
         "text",
         True,
         ["document_text"],
+        "clause_text",
         candidate_k,
         task.k,
         evaluation.primary_metric.copy(),
@@ -410,6 +415,7 @@ def build_stage_aware_ceiling_summary_for_plan(
         plan.stage2_operator.family.copy(),
         plan.stage2_operator.requires_query_text,
         representative_stage2_materialized_artifact_families^,
+        plan.reranker_kind.copy(),
         plan.candidate_budget.candidate_k,
         task.k,
         evaluation.primary_metric.copy(),
@@ -447,7 +453,7 @@ def append_ceiling_comparison_summary_json(
         summary.stage2_materialized_artifact_families,
     )
     buffer += ","
-    buffer += "\"reranker_kind\":\"" + json_escape(summary.stage2_kind) + "\","
+    buffer += "\"reranker_kind\":\"" + json_escape(summary.reranker_kind) + "\","
     buffer += "\"candidate_k\":" + String(summary.candidate_k) + ","
     buffer += "\"final_k\":" + String(summary.final_k) + ","
     buffer += "\"primary_metric\":\"" + json_escape(summary.primary_metric) + "\","
