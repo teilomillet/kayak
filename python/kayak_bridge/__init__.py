@@ -9,6 +9,7 @@ from ``kayak`` instead.
 from .late_documents import LateDocuments
 from .late_index import LateIndex
 from .late_query_batch import LateQueryBatch
+from .stage_artifact_materialization import StageArtifactMaterialization
 from .late_ops import (
     BackendInfo,
     CandidateGenerator,
@@ -81,6 +82,7 @@ __all__ = [
     "SearchPlan",
     "SearchPlanResult",
     "SearchStageProfile",
+    "StageArtifactMaterialization",
     "search_with_plan",
     "Stage2Operator",
 ]

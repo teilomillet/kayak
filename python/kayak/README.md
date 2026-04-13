@@ -232,6 +232,7 @@ result = kayak.search_with_plan(query, index, plan)
 
 print(result.candidate_stage.hits)
 print(result.stage2.stage_name)  # exact_late_interaction
+print(result.stage2.materialized_artifacts[0].family)  # late_interaction
 print(result.hits)
 ```
 
@@ -243,6 +244,7 @@ plan = kayak.exact_full_scan_clause_text_search_plan(final_k=1, candidate_k=2)
 result = kayak.search_with_plan(query, index, plan)
 
 print(result.stage2.stage_name)  # clause_text
+print(result.stage2.materialized_artifacts[0].family)  # document_text
 print(result.hits)
 ```
 
@@ -358,6 +360,7 @@ Main exports:
 - `SearchPlan`
 - `SearchPlanResult`
 - `SearchStageProfile`
+- `StageArtifactMaterialization`
 - `available_backends`
 - `backend_info`
 - `document_proxy_candidate_generator`

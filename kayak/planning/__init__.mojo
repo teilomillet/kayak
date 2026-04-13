@@ -82,6 +82,7 @@ from .stage2_operator import (
     exact_late_interaction_stage2_operator,
     noop_topk_stage2_operator,
 )
+from .stage_artifact_materialization import StageArtifactMaterialization
 from .stage2_result import Stage2Result
 from .json import collection_search_explain_json
 from .score_histogram import (

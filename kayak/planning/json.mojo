@@ -6,6 +6,7 @@ from .explain import CollectionSearchExplain
 from .faithfulness import FaithfulnessAssessment
 from .graph_search_counters import GraphSearchCounters
 from .score_histogram import ScoreHistogram
+from .stage_artifact_materialization import StageArtifactMaterialization
 from .stage_profile import SearchStageProfile
 
 
@@ -68,6 +69,12 @@ def append_json_stage_profile(
     buffer += ","
     buffer += "\"score_histogram\":"
     append_json_score_histogram(buffer, profile.score_histogram)
+    buffer += ","
+    buffer += "\"materialized_artifacts\":"
+    append_json_stage_artifact_materialization_list(
+        buffer,
+        profile.materialized_artifacts,
+    )
     buffer += "}"
 
 
@@ -102,6 +109,33 @@ def append_json_score_histogram(
         buffer += String(histogram.counts[index])
     buffer += "]"
     buffer += "}"
+
+
+def append_json_stage_artifact_materialization(
+    mut buffer: String, read materialization: StageArtifactMaterialization
+):
+    buffer += "{"
+    buffer += "\"family\":\"" + json_escape(materialization.family) + "\","
+    buffer += "\"segment_count\":" + String(materialization.segment_count) + ","
+    buffer += "\"document_count\":" + String(materialization.document_count) + ","
+    buffer += "\"token_count\":" + String(materialization.token_count) + ","
+    buffer += "\"vector_count\":" + String(materialization.vector_count) + ","
+    buffer += "\"byte_size\":" + String(materialization.byte_size)
+    buffer += "}"
+
+
+def append_json_stage_artifact_materialization_list(
+    mut buffer: String, read materializations: List[StageArtifactMaterialization]
+):
+    buffer += "["
+    for index in range(len(materializations)):
+        if index > 0:
+            buffer += ","
+        append_json_stage_artifact_materialization(
+            buffer,
+            materializations[index],
+        )
+    buffer += "]"
 
 
 def append_json_candidate_set(mut buffer: String, read candidate_set: CandidateSet):

@@ -550,6 +550,7 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
     assert_equal(explain.exact_stage.vector_count, 8)
     assert_equal(explain.exact_stage.byte_size > 0, True)
     assert_equal(explain.candidate_stage.score_histogram.bin_count, 8)
+    assert_equal(len(explain.stage2.materialized_artifacts), 0)
     assert_equal(
         explain.stage2.score_histogram.counts[0]
             + explain.stage2.score_histogram.counts[1]
@@ -630,8 +631,15 @@ def test_exact_full_scan_clause_text_stage2_can_refine_exact_candidates() raises
     assert_equal(explain.stage2.document_count, 2)
     assert_equal(explain.stage2.token_count > 0, True)
     assert_equal(explain.stage2.byte_size > 0, True)
+    assert_equal(len(explain.stage2.materialized_artifacts), 1)
+    assert_equal(
+        explain.stage2.materialized_artifacts[0].family,
+        "document_text",
+    )
     assert_equal(json.find("\"stage2_kind\":\"clause_text\"") != -1, True)
     assert_equal(json.find("\"stage2_requires_query_text\":true") != -1, True)
+    assert_equal(json.find("\"materialized_artifacts\":[{") != -1, True)
+    assert_equal(json.find("\"family\":\"document_text\"") != -1, True)
 
 
 def test_candidate_budget_rejects_candidate_k_below_final_k() raises:
@@ -1162,6 +1170,11 @@ def test_gem_graph_search_plan_executes_with_exact_rerank() raises:
     assert_equal(explain.candidate_set.tracks_graph_search, True)
     assert_equal(explain.candidate_stage.tracks_graph_search, True)
     assert_equal(explain.stage2.tracks_graph_search, False)
+    assert_equal(len(explain.stage2.materialized_artifacts), 1)
+    assert_equal(
+        explain.stage2.materialized_artifacts[0].family,
+        "late_interaction",
+    )
     assert_equal(
         explain.candidate_set.graph_search_counters.visited_vertex_count > 0,
         True,
@@ -1184,6 +1197,7 @@ def test_gem_graph_search_plan_executes_with_exact_rerank() raises:
     )
     assert_equal(json.find("\"tracks_graph_search\":true") != -1, True)
     assert_equal(json.find("\"graph_search_counters\":") != -1, True)
+    assert_equal(json.find("\"family\":\"late_interaction\"") != -1, True)
 
 
 def main() raises:

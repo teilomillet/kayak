@@ -11,6 +11,8 @@ from kayak.verifier import (
 )
 
 from .collection_hit import CollectionHit, to_search_hit
+from .stage_artifact_materialization import StageArtifactMaterialization
+from .stage2_operator import STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT
 from .stage2_result import Stage2Result
 
 
@@ -167,6 +169,16 @@ def clause_text_rerank_candidates_for_plan(
 
     return Stage2Result(
         final_hits^,
+        [
+            StageArtifactMaterialization(
+                STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
+                count_unique_segment_ids_in_hits(hits),
+                len(hits),
+                candidate_texts.token_count,
+                0,
+                candidate_texts.byte_size,
+            )
+        ],
         count_unique_segment_ids_in_hits(hits),
         len(hits),
         candidate_texts.token_count,

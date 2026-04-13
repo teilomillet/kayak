@@ -120,6 +120,7 @@ from .planning import (
     STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
     STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
     Stage2Operator,
+    StageArtifactMaterialization,
     Stage2Result,
     assess_faithfulness,
     available_candidate_generator_kinds,

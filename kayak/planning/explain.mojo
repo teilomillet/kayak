@@ -116,6 +116,7 @@ def explain_collection_search[Backend: ExactScoringBackend](
         stage2_result.vector_count,
         stage2_result.byte_size,
         stage2_score_histogram,
+        stage2_result.materialized_artifacts.copy(),
     )
 
     return CollectionSearchExplain(

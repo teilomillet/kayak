@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .stage_artifact_materialization import StageArtifactMaterialization
+
 
 @dataclass(frozen=True, slots=True)
 class SearchStageProfile:
@@ -14,6 +16,7 @@ class SearchStageProfile:
     document_count: int
     document_vector_count: int
     document_text_count: int = 0
+    materialized_artifacts: tuple[StageArtifactMaterialization, ...] = ()
 
     def __post_init__(self) -> None:
         if self.input_hit_count < 0:

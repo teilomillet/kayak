@@ -21,6 +21,7 @@ class PublicApiContractTests(unittest.TestCase):
             "SearchPlan",
             "SearchPlanResult",
             "SearchStageProfile",
+            "StageArtifactMaterialization",
             "MOJO_EXACT_CPU_BACKEND",
             "NUMPY_REFERENCE_BACKEND",
             "available_backends",

@@ -1,7 +1,10 @@
 # Counts that make search-stage behavior inspectable.
 
+from std.collections import List
+
 from .graph_search_counters import GraphSearchCounters
 from .score_histogram import ScoreHistogram
+from .stage_artifact_materialization import StageArtifactMaterialization
 
 
 struct SearchStageProfile(Copyable):
@@ -16,6 +19,7 @@ struct SearchStageProfile(Copyable):
     var tracks_graph_search: Bool
     var graph_search_counters: GraphSearchCounters
     var score_histogram: ScoreHistogram
+    var materialized_artifacts: List[StageArtifactMaterialization]
 
     def __init__(
         out self,
@@ -61,6 +65,33 @@ struct SearchStageProfile(Copyable):
         self.tracks_graph_search = False
         self.graph_search_counters = GraphSearchCounters()
         self.score_histogram = score_histogram.copy()
+        self.materialized_artifacts = List[StageArtifactMaterialization]()
+
+    def __init__(
+        out self,
+        var stage_name: String,
+        input_hit_count: Int,
+        output_hit_count: Int,
+        segment_count: Int,
+        document_count: Int,
+        token_count: Int,
+        vector_count: Int,
+        byte_size: Int,
+        score_histogram: ScoreHistogram,
+        var materialized_artifacts: List[StageArtifactMaterialization],
+    ) raises:
+        self = SearchStageProfile(
+            stage_name^,
+            input_hit_count,
+            output_hit_count,
+            segment_count,
+            document_count,
+            token_count,
+            vector_count,
+            byte_size,
+            score_histogram,
+        )
+        self.materialized_artifacts = materialized_artifacts^
 
     def __init__(
         out self,

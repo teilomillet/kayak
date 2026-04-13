@@ -9,7 +9,12 @@ from .clause_text import clause_text_scores
 from .late_scores import LateScores, SearchHit
 from .layouts import NUMPY_REFERENCE_BACKEND
 from .search_plan import SearchPlan
+from .stage_artifact_materialization import StageArtifactMaterialization
 from .search_stage_profile import SearchStageProfile
+from .stage2_operator import (
+    STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
+    STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +124,13 @@ def search_with_plan(
             document_count=candidate_index.document_count,
             document_vector_count=candidate_index.total_vector_count,
             document_text_count=0,
+            materialized_artifacts=(
+                StageArtifactMaterialization(
+                    family=STAGE2_REQUIRED_ARTIFACT_LATE_INTERACTION,
+                    document_count=candidate_index.document_count,
+                    document_vector_count=candidate_index.total_vector_count,
+                ),
+            ),
         )
         return SearchPlanResult(
             plan=plan,
@@ -151,6 +163,13 @@ def search_with_plan(
             document_count=candidate_index.document_count,
             document_vector_count=0,
             document_text_count=len(candidate_index.doc_texts),
+            materialized_artifacts=(
+                StageArtifactMaterialization(
+                    family=STAGE2_REQUIRED_ARTIFACT_DOCUMENT_TEXT,
+                    document_count=candidate_index.document_count,
+                    document_text_count=len(candidate_index.doc_texts),
+                ),
+            ),
         )
         return SearchPlanResult(
             plan=plan,

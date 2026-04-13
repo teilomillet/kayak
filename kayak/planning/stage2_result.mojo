@@ -3,10 +3,12 @@
 from std.collections import List
 
 from .collection_hit import CollectionHit
+from .stage_artifact_materialization import StageArtifactMaterialization
 
 
 struct Stage2Result(Copyable):
     var final_hits: List[CollectionHit]
+    var materialized_artifacts: List[StageArtifactMaterialization]
     var segment_count: Int
     var document_count: Int
     var token_count: Int
@@ -38,8 +40,29 @@ struct Stage2Result(Copyable):
             raise Error("stage2 result byte_size must be non-negative")
 
         self.final_hits = final_hits^
+        self.materialized_artifacts = List[StageArtifactMaterialization]()
         self.segment_count = segment_count
         self.document_count = document_count
         self.token_count = token_count
         self.vector_count = vector_count
         self.byte_size = byte_size
+
+    def __init__(
+        out self,
+        var final_hits: List[CollectionHit],
+        var materialized_artifacts: List[StageArtifactMaterialization],
+        segment_count: Int,
+        document_count: Int,
+        token_count: Int,
+        vector_count: Int,
+        byte_size: Int,
+    ) raises:
+        self = Stage2Result(
+            final_hits^,
+            segment_count,
+            document_count,
+            token_count,
+            vector_count,
+            byte_size,
+        )
+        self.materialized_artifacts = materialized_artifacts^

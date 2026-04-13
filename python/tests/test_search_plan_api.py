@@ -150,6 +150,15 @@ class SearchPlanApiTests(unittest.TestCase):
         self.assertEqual(result.exact_stage.document_count, 2)
         self.assertEqual(result.exact_stage.document_vector_count, 4)
         self.assertEqual(result.stage2.stage_name, "exact_late_interaction")
+        self.assertEqual(len(result.stage2.materialized_artifacts), 1)
+        self.assertEqual(
+            result.stage2.materialized_artifacts[0].family,
+            "late_interaction",
+        )
+        self.assertEqual(
+            result.stage2.materialized_artifacts[0].document_vector_count,
+            4,
+        )
         self.assertIs(result.exact_stage, result.stage2)
         self.assertIs(result.exact_scores, result.stage2_scores)
 
@@ -165,6 +174,7 @@ class SearchPlanApiTests(unittest.TestCase):
         self.assertEqual(result.stage2.stage_name, "noop_topk")
         self.assertEqual(result.stage2.query_vector_count, 0)
         self.assertEqual(result.stage2.document_vector_count, 0)
+        self.assertEqual(result.stage2.materialized_artifacts, ())
 
     def test_clause_text_stage2_can_refine_exact_candidate_window(self) -> None:
         query, index = self._build_clause_text_fixture()
@@ -181,6 +191,15 @@ class SearchPlanApiTests(unittest.TestCase):
         self.assertEqual(result.stage2.query_vector_count, 0)
         self.assertEqual(result.stage2.document_vector_count, 0)
         self.assertEqual(result.stage2.document_text_count, 2)
+        self.assertEqual(len(result.stage2.materialized_artifacts), 1)
+        self.assertEqual(
+            result.stage2.materialized_artifacts[0].family,
+            "document_text",
+        )
+        self.assertEqual(
+            result.stage2.materialized_artifacts[0].document_text_count,
+            2,
+        )
 
     def test_clause_text_stage2_requires_query_text_and_document_texts(self) -> None:
         query, index = self._build_clause_text_fixture()

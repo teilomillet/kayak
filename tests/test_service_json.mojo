@@ -428,6 +428,7 @@ def test_debug_search_response_json_embeds_explain_payload() raises:
     assert_equal(json.find("\"stage_name\":\"noop_topk\"") != -1, True)
     assert_equal(json.find("\"tracks_graph_search\":true") != -1, True)
     assert_equal(json.find("\"tracks_graph_search\":false") != -1, True)
+    assert_equal(json.find("\"materialized_artifacts\":[]") != -1, True)
     assert_equal(json.find("\"graph_search_counters\":") != -1, True)
     assert_equal(json.find("\"visited_vertex_count\":3") != -1, True)
 
