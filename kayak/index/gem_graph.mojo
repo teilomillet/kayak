@@ -1459,6 +1459,67 @@ def approximate_cluster_neighbor_candidates(
     return result_ids^
 
 
+def select_neighbors_by_cluster_heuristic(
+    document_index: Int,
+    read candidate_ids: List[Int],
+    degree_limit: Int,
+    read histograms_by_doc: List[QuantizedCodeHistogram],
+    read histogram_totals_by_doc: List[Int],
+    read distance_matrix: List[MetricScalar],
+    centroid_count: Int,
+) raises -> List[Int]:
+    if degree_limit <= 0:
+        raise Error("cluster heuristic degree_limit must be positive")
+
+    var ranked_ids = List[Int]()
+    var ranked_distances = List[MetricScalar]()
+    for candidate_doc in candidate_ids:
+        if candidate_doc == document_index:
+            continue
+        insert_ascending_metric(
+            ranked_ids,
+            ranked_distances,
+            candidate_doc,
+            qemd_distance_between_documents(
+                histograms_by_doc,
+                histogram_totals_by_doc,
+                document_index,
+                candidate_doc,
+                distance_matrix,
+                centroid_count,
+            ),
+            len(candidate_ids),
+        )
+
+    if len(ranked_ids) <= degree_limit:
+        return ranked_ids^
+
+    var selected_ids = List[Int]()
+    for ranked_index in range(len(ranked_ids)):
+        if len(selected_ids) >= degree_limit:
+            break
+        var candidate_doc = ranked_ids[ranked_index]
+        var candidate_distance = ranked_distances[ranked_index]
+        var keep_candidate = True
+        for selected_doc in selected_ids:
+            if (
+                qemd_distance_between_documents(
+                    histograms_by_doc,
+                    histogram_totals_by_doc,
+                    selected_doc,
+                    candidate_doc,
+                    distance_matrix,
+                    centroid_count,
+                )
+                < candidate_distance
+            ):
+                keep_candidate = False
+                break
+        if keep_candidate:
+            selected_ids.append(candidate_doc)
+    return selected_ids^
+
+
 def insert_neighbor_with_degree_limit(
     mut neighbor_ids_by_doc: List[List[Int]],
     document_index: Int,
@@ -1476,25 +1537,15 @@ def insert_neighbor_with_degree_limit(
     for existing_neighbor in neighbor_ids_by_doc[document_index]:
         insert_unique_int(candidate_ids, existing_neighbor)
     insert_unique_int(candidate_ids, neighbor_doc)
-
-    var selected_ids = List[Int]()
-    var selected_distances = List[MetricScalar]()
-    for candidate_doc in candidate_ids:
-        insert_ascending_metric(
-            selected_ids,
-            selected_distances,
-            candidate_doc,
-            qemd_distance_between_documents(
-                histograms_by_doc,
-                histogram_totals_by_doc,
-                document_index,
-                candidate_doc,
-                distance_matrix,
-                centroid_count,
-            ),
-            degree_limit,
-        )
-    neighbor_ids_by_doc[document_index] = selected_ids^
+    neighbor_ids_by_doc[document_index] = select_neighbors_by_cluster_heuristic(
+        document_index,
+        candidate_ids,
+        degree_limit,
+        histograms_by_doc,
+        histogram_totals_by_doc,
+        distance_matrix,
+        centroid_count,
+    )
 
 
 def add_mutual_connection(
@@ -1601,8 +1652,17 @@ def merge_bridge_neighbors(
             break
         insert_unique_int(selected_ids, candidate_doc)
 
-    var final_selected_ids = selected_ids.copy()
-    neighbor_ids_by_doc[document_index] = selected_ids^
+    var heuristic_selected_ids = select_neighbors_by_cluster_heuristic(
+        document_index,
+        selected_ids,
+        degree_limit,
+        histograms_by_doc,
+        histogram_totals_by_doc,
+        distance_matrix,
+        centroid_count,
+    )
+    var final_selected_ids = heuristic_selected_ids.copy()
+    neighbor_ids_by_doc[document_index] = heuristic_selected_ids^
     for neighbor_doc in final_selected_ids:
         insert_neighbor_with_degree_limit(
             neighbor_ids_by_doc,
@@ -1935,20 +1995,7 @@ def build_gem_graph_index_with_config(
         if len(cluster_members[cluster_index]) == 0:
             entry_doc_indices.append(-1)
             continue
-        var best_doc = cluster_members[cluster_index][0]
-        var best_score = min_score_scalar()
-        for document_index in cluster_members[cluster_index]:
-            var score = profile_score_for_cluster_arrays(
-                doc_profile_offsets,
-                doc_profile_cluster_ids,
-                doc_profile_scores,
-                document_index,
-                cluster_index,
-            )
-            if score > best_score:
-                best_score = score
-                best_doc = document_index
-        entry_doc_indices.append(best_doc)
+        entry_doc_indices.append(cluster_members[cluster_index][0])
 
     var histograms_by_doc = List[QuantizedCodeHistogram]()
     var histogram_totals_by_doc = List[Int]()
@@ -1994,9 +2041,21 @@ def build_gem_graph_index_with_config(
             if len(new_neighbors) == 0:
                 new_neighbors.append(entry_doc)
 
+            var selected_new_neighbors = select_neighbors_by_cluster_heuristic(
+                cluster_doc,
+                new_neighbors,
+                config.degree_limit,
+                histograms_by_doc,
+                histogram_totals_by_doc,
+                distance_matrix,
+                len(quantization_centroids),
+            )
+            if len(selected_new_neighbors) == 0:
+                selected_new_neighbors.append(new_neighbors[0])
+
             if not inserted_globally[cluster_doc]:
                 inserted_globally[cluster_doc] = True
-                for neighbor_doc in new_neighbors:
+                for neighbor_doc in selected_new_neighbors:
                     add_mutual_connection(
                         neighbor_ids_by_doc,
                         cluster_doc,
@@ -2011,7 +2070,7 @@ def build_gem_graph_index_with_config(
                 merge_bridge_neighbors(
                     neighbor_ids_by_doc,
                     cluster_doc,
-                    new_neighbors,
+                    selected_new_neighbors,
                     doc_profile_offsets,
                     doc_profile_cluster_ids,
                     config.degree_limit,

@@ -11,7 +11,11 @@ from kayak import (
     build_gem_graph_index_with_config,
     pack_documents,
 )
-from kayak.index.gem_graph import inject_shortcuts
+from kayak.index.gem_graph import (
+    QuantizedCodeHistogram,
+    inject_shortcuts,
+    select_neighbors_by_cluster_heuristic,
+)
 
 
 def neighbor_doc_indices_for(
@@ -46,6 +50,59 @@ def test_bridge_document_keeps_neighbors_from_both_clusters() raises:
     assert_equal(len(bridge_neighbors), 2)
     assert_equal(bridge_neighbors[0] == 0 or bridge_neighbors[1] == 0, True)
     assert_equal(bridge_neighbors[0] == 1 or bridge_neighbors[1] == 1, True)
+
+
+def test_cluster_entry_uses_first_cluster_member_like_reference() raises:
+    var index = build_gem_graph_index(
+        pack_documents(
+            [
+                EncodedDocument("doc-a", [[1.0, 0.0]]),
+                EncodedDocument("doc-b", [[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]]),
+            ]
+        ),
+        1,
+        1,
+        1,
+        1,
+        2,
+    )
+
+    assert_equal(index.cluster_count, 1)
+    assert_equal(index.entry_doc_indices[0], 0)
+
+
+def test_cluster_heuristic_matches_reference_diversification_rule() raises:
+    var histograms_by_doc = List[QuantizedCodeHistogram]()
+    histograms_by_doc.append(QuantizedCodeHistogram([0], [1]))
+    histograms_by_doc.append(QuantizedCodeHistogram([1], [1]))
+    histograms_by_doc.append(QuantizedCodeHistogram([1], [1]))
+    histograms_by_doc.append(QuantizedCodeHistogram([2], [1]))
+    var histogram_totals_by_doc = [1, 1, 1, 1]
+    var distance_matrix = [
+        0.0,
+        1.0,
+        2.0,
+        1.0,
+        0.0,
+        2.0,
+        2.0,
+        2.0,
+        0.0,
+    ]
+
+    var selected = select_neighbors_by_cluster_heuristic(
+        0,
+        [1, 2, 3],
+        2,
+        histograms_by_doc,
+        histogram_totals_by_doc,
+        distance_matrix,
+        3,
+    )
+
+    assert_equal(len(selected), 2)
+    assert_equal(selected[0] == 1 or selected[1] == 1, True)
+    assert_equal(selected[0] == 3 or selected[1] == 3, True)
 
 
 def test_adaptive_cutoff_can_keep_more_clusters_than_fixed_cutoff() raises:
