@@ -263,6 +263,8 @@ def test_snapshot_and_status_contracts_hold_service_metadata() raises:
     assert_equal(import_request.source_uri, "file:///tmp/news-snapshot.tar")
     assert_equal(health.status, "ok")
     assert_equal(metrics.vector_count, 80)
+    assert_equal(metrics.published_snapshot_count, 0)
+    assert_equal(metrics.pending_draft_mutation_count, 0)
 
 
 def main() raises:

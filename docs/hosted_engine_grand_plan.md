@@ -47,16 +47,23 @@ That combination implies a clear next move:
 - generic search-artifact manifests exercised by the mainline seal path
 - published-state service metrics
 - executable live-snapshot compaction and replacement
+- file-atomic manifest and sidecar writes on the hosted path
+- explicit `active_snapshot_id` publication semantics
+- compacted draft baselines plus mutation replay after snapshot publication
+- exact metadata filtering on the hosted exact path
+- operational counters for inactive snapshots and pending draft mutations
 
 ### What is still weak
 
-- draft mutation compaction and cleanup are not implemented yet
-- snapshot publication is explicit, but not yet atomic across crash boundaries
-- search-native sidecars still need policy-driven build selection and metadata
-  sidecars beyond today's baseline registry
-- hosted execution now supports only a narrow exact `doc_id` filter path;
-  metadata and candidate-pushdown filters still do not exist
-- service health and metrics contracts exist, but operational metrics do not
+- publication is only file-atomic, not a transactional multi-file commit across
+  segment sealing and snapshot promotion
+- superseded snapshots and inactive segments are measured, but no reclaim or
+  retention policy exists yet
+- search-native sidecars still need policy-driven build selection beyond
+  today's baseline registry
+- hosted execution supports exact metadata filtering, but candidate-pushdown and
+  approximate filter-aware stage-1 generation still do not exist
+- service metrics now expose operational counters, but those counters do not
   yet drive runtime behavior
 - current stronger ceiling support is still narrow and benchmark-oriented
 

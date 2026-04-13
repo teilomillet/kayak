@@ -5,11 +5,14 @@ from kayak.collections import (
     CollectionManifest,
     collection_manifest_exists,
     load_collection_manifest,
+    load_sealed_segment_manifest,
     load_snapshot_manifest,
     snapshot_manifest_exists,
 )
+from kayak.collections.paths import collection_segment_root
 
-from .paths import service_collections_root
+from .draft_state import load_draft_state_metadata
+from .paths import draft_state_root, service_collections_root
 from .service_status import ServiceHealthStatus, ServiceMetricsSnapshot
 
 
@@ -52,6 +55,43 @@ def require_snapshot_matches_collection(
 
     if snapshot.namespace_id.value != collection.namespace_id.value:
         raise Error("live snapshot namespace_id does not match collection manifest")
+
+
+def string_list_contains(read values: List[String], target: String) -> Bool:
+    for value in values:
+        if value == target:
+            return True
+
+    return False
+
+
+def append_unique_string(mut values: List[String], target: String) -> Bool:
+    if string_list_contains(values, target):
+        return False
+
+    values.append(target.copy())
+    return True
+
+
+def snapshot_roots_for_collection(
+    collection_root: Path, read collection: CollectionManifest
+) raises -> List[Path]:
+    var snapshot_roots = List[Path]()
+    var snapshots_root = collection_root / "snapshots"
+    if not snapshots_root.exists() or not snapshots_root.is_dir():
+        return snapshot_roots^
+
+    for snapshot_entry in snapshots_root.listdir():
+        var snapshot_root = snapshots_root / snapshot_entry
+        if not snapshot_root.is_dir():
+            continue
+        if not snapshot_manifest_exists(snapshot_root):
+            continue
+
+        require_snapshot_matches_collection(collection, snapshot_root)
+        snapshot_roots.append(snapshot_root)
+
+    return snapshot_roots^
 
 
 def live_snapshot_root_for_collection(
@@ -111,20 +151,65 @@ def build_service_metrics_snapshot(service_root: Path) raises -> ServiceMetricsS
     var document_count = 0
     var vector_count = 0
     var byte_size = 0
+    var published_snapshot_count = 0
+    var inactive_snapshot_count = 0
+    var inactive_unique_segment_count = 0
+    var inactive_unique_byte_size = 0
+    var pending_draft_collection_count = 0
+    var pending_draft_mutation_count = 0
 
     for collection_root in service_collection_roots(service_root):
         collection_count += 1
         var collection = load_collection_manifest(collection_root)
-        if collection.latest_generation == 0:
-            continue
-
-        var live_snapshot = load_snapshot_manifest(
-            live_snapshot_root_for_collection(collection_root, collection)
+        var draft_metadata = load_draft_state_metadata(
+            draft_state_root(collection_root), collection
         )
-        segment_count += live_snapshot.stats.segment_count
-        document_count += live_snapshot.stats.document_count
-        vector_count += live_snapshot.stats.total_vector_count
-        byte_size += live_snapshot.stats.byte_size
+        if draft_metadata.mutation_count > 0:
+            pending_draft_collection_count += 1
+            pending_draft_mutation_count += draft_metadata.mutation_count
+
+        var active_snapshot_root = Path("")
+        var active_segment_ids = List[String]()
+        if collection.latest_generation == 0:
+            _ = active_segment_ids
+        else:
+            active_snapshot_root = live_snapshot_root_for_collection(
+                collection_root, collection
+            )
+            var live_snapshot = load_snapshot_manifest(active_snapshot_root)
+            segment_count += live_snapshot.stats.segment_count
+            document_count += live_snapshot.stats.document_count
+            vector_count += live_snapshot.stats.total_vector_count
+            byte_size += live_snapshot.stats.byte_size
+            for segment_id in live_snapshot.segment_ids:
+                active_segment_ids.append(segment_id.value.copy())
+
+        var inactive_unique_segment_ids = List[String]()
+        for snapshot_root in snapshot_roots_for_collection(collection_root, collection):
+            published_snapshot_count += 1
+            var is_active_snapshot = False
+            if collection.latest_generation != 0:
+                is_active_snapshot = (
+                    snapshot_root.__fspath__() == active_snapshot_root.__fspath__()
+                )
+
+            if is_active_snapshot:
+                continue
+
+            inactive_snapshot_count += 1
+            var snapshot = load_snapshot_manifest(snapshot_root)
+            for segment_id in snapshot.segment_ids:
+                if string_list_contains(active_segment_ids, segment_id.value):
+                    continue
+
+                if append_unique_string(
+                    inactive_unique_segment_ids, segment_id.value
+                ):
+                    var segment = load_sealed_segment_manifest(
+                        collection_segment_root(collection_root, segment_id)
+                    )
+                    inactive_unique_segment_count += 1
+                    inactive_unique_byte_size += segment.stats.byte_size
 
     return ServiceMetricsSnapshot(
         collection_count,
@@ -132,6 +217,12 @@ def build_service_metrics_snapshot(service_root: Path) raises -> ServiceMetricsS
         document_count,
         vector_count,
         byte_size,
+        published_snapshot_count,
+        inactive_snapshot_count,
+        inactive_unique_segment_count,
+        inactive_unique_byte_size,
+        pending_draft_collection_count,
+        pending_draft_mutation_count,
     )
 
 

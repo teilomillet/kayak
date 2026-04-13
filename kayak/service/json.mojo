@@ -360,6 +360,18 @@ def service_metrics_snapshot_json(read metrics: ServiceMetricsSnapshot) -> Strin
     buffer += "\"segment_count\":" + String(metrics.segment_count) + ","
     buffer += "\"document_count\":" + String(metrics.document_count) + ","
     buffer += "\"vector_count\":" + String(metrics.vector_count) + ","
-    buffer += "\"byte_size\":" + String(metrics.byte_size)
+    buffer += "\"byte_size\":" + String(metrics.byte_size) + ","
+    buffer += "\"published_snapshot_count\":"
+    buffer += String(metrics.published_snapshot_count) + ","
+    buffer += "\"inactive_snapshot_count\":"
+    buffer += String(metrics.inactive_snapshot_count) + ","
+    buffer += "\"inactive_unique_segment_count\":"
+    buffer += String(metrics.inactive_unique_segment_count) + ","
+    buffer += "\"inactive_unique_byte_size\":"
+    buffer += String(metrics.inactive_unique_byte_size) + ","
+    buffer += "\"pending_draft_collection_count\":"
+    buffer += String(metrics.pending_draft_collection_count) + ","
+    buffer += "\"pending_draft_mutation_count\":"
+    buffer += String(metrics.pending_draft_mutation_count)
     buffer += "}"
     return buffer^

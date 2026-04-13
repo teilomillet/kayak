@@ -370,6 +370,91 @@ def test_hosted_service_metrics_aggregate_visible_snapshots() raises:
         metrics.byte_size,
         news_snapshot.stats.byte_size + blogs_snapshot.stats.byte_size,
     )
+    assert_equal(metrics.published_snapshot_count, 2)
+    assert_equal(metrics.inactive_snapshot_count, 0)
+    assert_equal(metrics.inactive_unique_segment_count, 0)
+    assert_equal(metrics.inactive_unique_byte_size, 0)
+    assert_equal(metrics.pending_draft_collection_count, 0)
+    assert_equal(metrics.pending_draft_mutation_count, 0)
+
+
+def test_hosted_service_metrics_track_inactive_snapshots_and_pending_drafts() raises:
+    var service_root = unique_service_root("kayak-service-runtime-operational")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]), "alpha")],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish first snapshot",
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]), "beta")],
+        ),
+    )
+    var active_snapshot = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0002"),
+            "publish second snapshot",
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-c", [[1.0, 0.0], [1.0, 0.0]]), "gamma")],
+        ),
+    )
+
+    var metrics = build_service_metrics_snapshot(service_root)
+
+    assert_equal(metrics.collection_count, 1)
+    assert_equal(metrics.segment_count, active_snapshot.stats.segment_count)
+    assert_equal(metrics.document_count, active_snapshot.stats.document_count)
+    assert_equal(
+        metrics.vector_count, active_snapshot.stats.total_vector_count
+    )
+    assert_equal(metrics.byte_size, active_snapshot.stats.byte_size)
+    assert_equal(metrics.published_snapshot_count, 2)
+    assert_equal(metrics.inactive_snapshot_count, 1)
+    assert_equal(metrics.inactive_unique_segment_count, 1)
+    assert_equal(metrics.inactive_unique_byte_size > 0, True)
+    assert_equal(metrics.pending_draft_collection_count, 1)
+    assert_equal(metrics.pending_draft_mutation_count, 1)
 
 
 def test_hosted_collection_runtime_supports_exact_doc_id_filters() raises:

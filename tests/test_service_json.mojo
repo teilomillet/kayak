@@ -15,6 +15,7 @@ from kayak import (
     ScoreScalar,
     SearchResponse,
     SearchStageProfile,
+    service_metrics_snapshot_json,
     SnapshotId,
     TenantId,
     VECTOR_SCALAR_NAME,
@@ -27,7 +28,7 @@ from kayak import (
 )
 from kayak.filters import match_all_filter
 from kayak.planning import CandidateSet, exact_full_scan_search_plan
-from kayak.service import ServiceHealthStatus
+from kayak.service import ServiceHealthStatus, ServiceMetricsSnapshot
 
 
 def make_debug_response() raises -> DebugSearchResponse:
@@ -115,6 +116,19 @@ def test_service_health_status_json_contains_counters() raises:
 
     assert_equal(json.find("\"status\":\"ok\"") != -1, True)
     assert_equal(json.find("\"live_snapshot_count\":3") != -1, True)
+
+
+def test_service_metrics_snapshot_json_contains_operational_counters() raises:
+    var json = service_metrics_snapshot_json(
+        ServiceMetricsSnapshot(2, 3, 10, 80, 4096, 4, 2, 3, 1024, 1, 5)
+    )
+
+    assert_equal(json.find("\"published_snapshot_count\":4") != -1, True)
+    assert_equal(json.find("\"inactive_snapshot_count\":2") != -1, True)
+    assert_equal(json.find("\"inactive_unique_segment_count\":3") != -1, True)
+    assert_equal(json.find("\"inactive_unique_byte_size\":1024") != -1, True)
+    assert_equal(json.find("\"pending_draft_collection_count\":1") != -1, True)
+    assert_equal(json.find("\"pending_draft_mutation_count\":5") != -1, True)
 
 
 def test_upsert_documents_request_json_contains_metadata_updates() raises:

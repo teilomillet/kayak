@@ -37,6 +37,12 @@ struct ServiceMetricsSnapshot(Copyable):
     var document_count: Int
     var vector_count: Int
     var byte_size: Int
+    var published_snapshot_count: Int
+    var inactive_snapshot_count: Int
+    var inactive_unique_segment_count: Int
+    var inactive_unique_byte_size: Int
+    var pending_draft_collection_count: Int
+    var pending_draft_mutation_count: Int
 
     def __init__(
         out self,
@@ -45,6 +51,34 @@ struct ServiceMetricsSnapshot(Copyable):
         document_count: Int,
         vector_count: Int,
         byte_size: Int,
+    ) raises:
+        self = ServiceMetricsSnapshot(
+            collection_count,
+            segment_count,
+            document_count,
+            vector_count,
+            byte_size,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+
+    def __init__(
+        out self,
+        collection_count: Int,
+        segment_count: Int,
+        document_count: Int,
+        vector_count: Int,
+        byte_size: Int,
+        published_snapshot_count: Int,
+        inactive_snapshot_count: Int,
+        inactive_unique_segment_count: Int,
+        inactive_unique_byte_size: Int,
+        pending_draft_collection_count: Int,
+        pending_draft_mutation_count: Int,
     ) raises:
         self.collection_count = require_non_negative_int(
             collection_count, "collection_count"
@@ -59,3 +93,21 @@ struct ServiceMetricsSnapshot(Copyable):
             vector_count, "vector_count"
         )
         self.byte_size = require_non_negative_int(byte_size, "byte_size")
+        self.published_snapshot_count = require_non_negative_int(
+            published_snapshot_count, "published_snapshot_count"
+        )
+        self.inactive_snapshot_count = require_non_negative_int(
+            inactive_snapshot_count, "inactive_snapshot_count"
+        )
+        self.inactive_unique_segment_count = require_non_negative_int(
+            inactive_unique_segment_count, "inactive_unique_segment_count"
+        )
+        self.inactive_unique_byte_size = require_non_negative_int(
+            inactive_unique_byte_size, "inactive_unique_byte_size"
+        )
+        self.pending_draft_collection_count = require_non_negative_int(
+            pending_draft_collection_count, "pending_draft_collection_count"
+        )
+        self.pending_draft_mutation_count = require_non_negative_int(
+            pending_draft_mutation_count, "pending_draft_mutation_count"
+        )
