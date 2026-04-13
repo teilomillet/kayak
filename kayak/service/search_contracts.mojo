@@ -13,6 +13,8 @@ from kayak.planning import (
     SearchPlanSelection,
     SearchPlanSelectionRequest,
     exact_full_scan_search_plan,
+    same_search_plan_compatibility_semantics,
+    search_plan_compatibility_semantics,
 )
 from .planned_search_stage_override import (
     require_valid_planned_search_stage_override,
@@ -146,6 +148,8 @@ struct SearchResponse(Copyable):
 
 
 def same_search_plan(read left: SearchPlan, read right: SearchPlan) -> Bool:
+    var left_compatibility = search_plan_compatibility_semantics(left)
+    var right_compatibility = search_plan_compatibility_semantics(right)
     return (
         left.candidate_generator.kind == right.candidate_generator.kind
         and left.candidate_generator.cluster_top_k_per_query_token
@@ -159,9 +163,10 @@ def same_search_plan(read left: SearchPlan, read right: SearchPlan) -> Bool:
         and left.stage2_reference_operator.kind
         == right.stage2_reference_operator.kind
         and left.stage3_verifier.kind == right.stage3_verifier.kind
-        and left.stage2_operator.kind == right.stage2_operator.kind
-        and left.exact_stage_kind == right.exact_stage_kind
-        and left.reranker_kind == right.reranker_kind
+        and same_search_plan_compatibility_semantics(
+            left_compatibility,
+            right_compatibility,
+        )
         and left.faithfulness_policy.kind == right.faithfulness_policy.kind
     )
 

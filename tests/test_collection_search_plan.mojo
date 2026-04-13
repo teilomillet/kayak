@@ -65,6 +65,7 @@ from kayak import (
     save_stored_gem_graph_index,
     save_stored_packed_index,
     SearchPlan,
+    search_plan_compatibility_semantics,
 )
 from kayak.text import DocumentTextCorpus
 from kayak.filters import one_of_filter
@@ -781,8 +782,9 @@ def test_hybrid_stage2_materializes_vectors_and_texts() raises:
         explain.plan.stage2_operator.required_artifact_families[1],
         "document_text",
     )
-    assert_equal(explain.plan.exact_stage_kind, "exact_late_interaction")
-    assert_equal(explain.plan.reranker_kind, "clause_text")
+    var compatibility = search_plan_compatibility_semantics(explain.plan)
+    assert_equal(compatibility.exact_stage_kind, "exact_late_interaction")
+    assert_equal(compatibility.reranker_kind, "clause_text")
     assert_equal(explain.stage2.stage_name, "exact_late_interaction")
     assert_equal(explain.stage3_verifier.stage_name, "clause_text")
     assert_equal(explain.stage2.document_count, 2)

@@ -418,12 +418,16 @@ pixi run demo_python_sdk_mojo
 Run tests:
 
 ```bash
+pixi run test_semantic_guardrails
 pixi run test_index
 pixi run test_maxsim
 pixi run test_eval
 pixi run test_proxies
 pixi run test_python_bridge
 pixi run test_python_api
+pixi run test_repo_semantic_inventory
+pixi run test_stage_semantic_guardrails
+pixi run test_stage1_semantic_guardrails
 pixi run test_storage
 pixi run test_storage_compat
 pixi run test_storage_invariants

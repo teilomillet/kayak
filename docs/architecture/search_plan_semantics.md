@@ -88,14 +88,15 @@ Compatibility fields are still emitted, but only under explicit
 `compatibility_*` names. The benchmark surfaces no longer present those legacy
 combined names as the primary contract.
 
-The active benchmark setup surfaces now follow the same split:
+`exact_stage_kind` and `reranker_kind` should now be understood as compatibility
+projection fields, not as canonical stored planner state.
 
-- `build_planner_benchmark_summary(...)` takes
-  `stage2_reference_operator` plus `stage3_verifier`
-- `build_planner_evidence_summary(...)` takes
-  `stage2_reference_operator` plus `stage3_verifier`
-- `PlannerBenchmarkRunOptions` now names the text verifier toggle as
-  `include_clause_text_stage3_when_text_available`
+Reason:
+- the actual semantic state lives in:
+  - `reference_scoring_semantics`
+  - `stage2_reference_operator`
+  - `stage3_verifier`
+- compatibility naming is now derived from those components when projected
 
 This matters for comparing stage-1 engines like centroid-family WARP-style
 paths and GEM:
@@ -136,6 +137,19 @@ The repo also now has a compatibility-boundary guardrail:
   `exact_stage_kind`, or `reranker_kind` outside that allowlist should fail the
   guardrail test
 
+The compatibility view is also now derived from one planner-owned surface:
+
+- `SearchPlanCompatibilitySemantics`
+- `search_plan_compatibility_semantics(...)`
+
+Reason:
+- service JSON, explain JSON, and equality checks should not each rediscover
+  compatibility stage naming independently
+- one helper reduces the chance that compatibility names drift from the real
+  explicit stage components
+- `SearchPlan` itself no longer stores cached `exact_stage_kind` or
+  `reranker_kind` fields
+
 The repo also now has a stage-1 contract guardrail:
 
 - registered candidate generators are checked against an explicit semantic
@@ -143,6 +157,18 @@ The repo also now has a stage-1 contract guardrail:
   filter support
 - the shared search-plan semantics JSON helper must continue to emit the
   explicit stage-1 fields even when compatibility stage-2 fields are disabled
+
+The intended fast semantic merge gate is now:
+
+- `pixi run test_semantic_guardrails`
+
+That guardrail is now token-specific rather than one broad file allowlist.
+
+Reason:
+- `stage2_operator_kind` in request-override parsing is a different ownership
+  surface from `exact_stage_kind` in JSON projection
+- helper names like `...for_stage2_operator_kind` should not be mistaken for a
+  compatibility leak
 
 ## Next steps
 

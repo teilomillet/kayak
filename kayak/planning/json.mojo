@@ -6,6 +6,7 @@ from .explain import CollectionSearchExplain
 from .faithfulness import FaithfulnessAssessment
 from .graph_search_counters import GraphSearchCounters
 from .score_histogram import ScoreHistogram
+from .search_plan import search_plan_compatibility_semantics
 from .stage_artifact_materialization import StageArtifactMaterialization
 from .stage_profile import SearchStageProfile
 
@@ -200,6 +201,7 @@ def collection_search_explain_json(
     read explain: CollectionSearchExplain
 ) -> String:
     var buffer = String()
+    var compatibility = search_plan_compatibility_semantics(explain.plan)
     buffer += "{"
     buffer += "\"collection_id\":\"" + json_escape(explain.collection_id) + "\","
     buffer += "\"snapshot_id\":\"" + json_escape(explain.snapshot_id) + "\","
@@ -279,22 +281,22 @@ def collection_search_explain_json(
     )
     buffer += ","
     buffer += "\"stage2_kind\":\""
-    buffer += json_escape(explain.plan.stage2_operator.kind) + "\","
+    buffer += json_escape(compatibility.stage2_kind) + "\","
     buffer += "\"stage2_family\":\""
-    buffer += json_escape(explain.plan.stage2_operator.family) + "\","
+    buffer += json_escape(compatibility.stage2_family) + "\","
     buffer += "\"stage2_requires_query_text\":"
-    if explain.plan.stage2_operator.requires_query_text:
+    if compatibility.stage2_requires_query_text:
         buffer += "true,"
     else:
         buffer += "false,"
     buffer += "\"stage2_required_artifact_families\":"
     append_json_string_list(
         buffer,
-        explain.plan.stage2_operator.required_artifact_families,
+        compatibility.stage2_required_artifact_families,
     )
     buffer += ","
-    buffer += "\"exact_stage_kind\":\"" + json_escape(explain.plan.exact_stage_kind) + "\","
-    buffer += "\"reranker_kind\":\"" + json_escape(explain.plan.reranker_kind) + "\""
+    buffer += "\"exact_stage_kind\":\"" + json_escape(compatibility.exact_stage_kind) + "\","
+    buffer += "\"reranker_kind\":\"" + json_escape(compatibility.reranker_kind) + "\""
     buffer += "},"
     buffer += "\"candidate_set\":"
     append_json_candidate_set(buffer, explain.candidate_set)

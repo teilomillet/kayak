@@ -146,6 +146,7 @@ from .centroid_postings_stage import centroid_posting_scores_for_segment
 from .centroid_postings_flat_stage import centroid_posting_flat_scores_for_segment
 from .search_plan import (
     SearchPlan,
+    SearchPlanCompatibilitySemantics,
     centroid_heads_search_plan,
     centroid_postings_flat_search_plan,
     centroid_postings_head_auto_search_plan,
@@ -158,8 +159,11 @@ from .search_plan import (
     exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
     gem_graph_search_plan,
-    search_plan_with_stage_components,
+    same_search_plan_compatibility_semantics,
+    search_plan_compatibility_semantics,
+    search_plan_compatibility_semantics_for_components,
     search_plan_with_stage2_operator,
+    search_plan_with_stage_components,
 )
 from .planning_goal import (
     SEARCH_PLANNING_GOAL_BALANCED,

@@ -1,6 +1,12 @@
 from std.testing import TestSuite, assert_equal
 
 from kayak import (
+    best_effort_faithfulness_policy,
+    clause_text_stage3_verifier_operator,
+    document_proxy_search_plan,
+    exact_late_interaction_stage2_reference_operator,
+    search_plan_compatibility_semantics,
+    search_plan_with_stage_components,
     Stage2Operator,
     clause_text_stage2_operator,
     exact_late_interaction_clause_text_stage2_operator,
@@ -61,6 +67,57 @@ def test_hybrid_and_text_stage2_operators_keep_query_and_reranker_contracts() ra
     assert_equal(text.is_exact_reference, False)
     assert_equal(text.compatibility_exact_stage_kind, "none")
     assert_equal(text.compatibility_reranker_kind, "clause_text")
+
+
+def test_search_plan_compatibility_semantics_are_derived_from_explicit_components() raises:
+    var plan = document_proxy_search_plan(
+        1,
+        2,
+        best_effort_faithfulness_policy(),
+        exact_late_interaction_clause_text_stage2_operator(),
+    )
+    var compatibility = search_plan_compatibility_semantics(plan)
+
+    assert_equal(compatibility.stage2_kind, "exact_late_interaction_clause_text")
+    assert_equal(compatibility.stage2_family, "hybrid")
+    assert_equal(compatibility.stage2_requires_query_text, True)
+    assert_equal(len(compatibility.stage2_required_artifact_families), 2)
+    assert_equal(
+        compatibility.stage2_required_artifact_families[0],
+        "late_interaction",
+    )
+    assert_equal(
+        compatibility.stage2_required_artifact_families[1],
+        "document_text",
+    )
+    assert_equal(compatibility.exact_stage_kind, "exact_late_interaction")
+    assert_equal(compatibility.reranker_kind, "clause_text")
+
+
+def test_search_plan_with_stage_components_preserves_reference_semantics() raises:
+    var plan = document_proxy_search_plan(
+        1,
+        2,
+        best_effort_faithfulness_policy(),
+    )
+    var overridden = search_plan_with_stage_components(
+        plan,
+        exact_late_interaction_stage2_reference_operator(),
+        clause_text_stage3_verifier_operator(),
+    )
+    var compatibility = search_plan_compatibility_semantics(overridden)
+
+    assert_equal(
+        overridden.reference_scoring_semantics.kind,
+        plan.reference_scoring_semantics.kind,
+    )
+    assert_equal(
+        overridden.stage2_reference_operator.kind,
+        "exact_late_interaction",
+    )
+    assert_equal(overridden.stage3_verifier.kind, "clause_text")
+    assert_equal(compatibility.exact_stage_kind, "exact_late_interaction")
+    assert_equal(compatibility.reranker_kind, "clause_text")
 
 
 def main() raises:

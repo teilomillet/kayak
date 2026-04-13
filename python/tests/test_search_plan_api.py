@@ -5,6 +5,7 @@ import unittest
 import numpy as np
 
 import kayak
+from kayak_bridge.search_plan import search_plan_compatibility_semantics
 
 
 def _dim128_vector(*entries: tuple[int, float]) -> np.ndarray:
@@ -354,11 +355,21 @@ class SearchPlanApiTests(unittest.TestCase):
             candidate_k=2,
             stage2_operator=kayak.exact_late_interaction_clause_text_stage2_operator(),
         )
+        compatibility = search_plan_compatibility_semantics(plan)
 
         self.assertEqual(plan.reference_scoring_semantics.kind, "exact_late_interaction")
         self.assertEqual(plan.stage2_reference_operator.kind, "exact_late_interaction")
         self.assertEqual(plan.stage3_verifier.kind, "clause_text")
         self.assertEqual(plan.stage2_operator.kind, "exact_late_interaction_clause_text")
+        self.assertEqual(compatibility.stage2_kind, plan.stage2_operator.kind)
+        self.assertEqual(compatibility.stage2_family, plan.stage2_operator.family)
+        self.assertTrue(compatibility.stage2_requires_query_text)
+        self.assertEqual(
+            compatibility.stage2_required_artifact_families,
+            ("late_interaction", "document_text"),
+        )
+        self.assertEqual(compatibility.exact_stage_kind, "exact_late_interaction")
+        self.assertEqual(compatibility.reranker_kind, "clause_text")
 
     def test_clause_text_shorthand_builder_matches_explicit_stage3_override(self) -> None:
         shorthand = kayak.exact_full_scan_clause_text_search_plan(

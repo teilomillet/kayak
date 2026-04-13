@@ -1,4 +1,8 @@
-from kayak.planning import CandidateGenerator, SearchPlan
+from kayak.planning import (
+    CandidateGenerator,
+    SearchPlan,
+    search_plan_compatibility_semantics,
+)
 
 from .json_common import append_json_string_list, json_escape
 
@@ -34,6 +38,7 @@ def append_search_plan_semantics_json_fields(
     read plan: SearchPlan,
     include_compatibility_fields: Bool = True,
 ):
+    var compatibility = search_plan_compatibility_semantics(plan)
     append_candidate_generator_semantics_json_fields(
         buffer,
         plan.candidate_generator,
@@ -90,21 +95,21 @@ def append_search_plan_semantics_json_fields(
 
     buffer += ","
     buffer += "\"compatibility_stage2_kind\":\""
-    buffer += json_escape(plan.stage2_operator.kind) + "\","
+    buffer += json_escape(compatibility.stage2_kind) + "\","
     buffer += "\"compatibility_stage2_family\":\""
-    buffer += json_escape(plan.stage2_operator.family) + "\","
+    buffer += json_escape(compatibility.stage2_family) + "\","
     buffer += "\"compatibility_stage2_requires_query_text\":"
-    if plan.stage2_operator.requires_query_text:
+    if compatibility.stage2_requires_query_text:
         buffer += "true,"
     else:
         buffer += "false,"
     buffer += "\"compatibility_stage2_required_artifact_families\":"
     append_json_string_list(
         buffer,
-        plan.stage2_operator.required_artifact_families,
+        compatibility.stage2_required_artifact_families,
     )
     buffer += ","
     buffer += "\"compatibility_exact_stage_kind\":\""
-    buffer += json_escape(plan.exact_stage_kind) + "\","
+    buffer += json_escape(compatibility.exact_stage_kind) + "\","
     buffer += "\"compatibility_reranker_kind\":\""
-    buffer += json_escape(plan.reranker_kind) + "\""
+    buffer += json_escape(compatibility.reranker_kind) + "\""

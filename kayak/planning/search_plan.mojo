@@ -1,5 +1,7 @@
 # Explicit multi-stage search plan contract.
 
+from std.collections import List
+
 from .candidate_budget import CandidateBudget
 from .candidate_generator import (
     CandidateGenerator,
@@ -40,6 +42,42 @@ from .stage3_verifier_operator import (
 )
 
 
+struct SearchPlanCompatibilitySemantics(Copyable):
+    var stage2_kind: String
+    var stage2_family: String
+    var stage2_requires_query_text: Bool
+    var stage2_required_artifact_families: List[String]
+    var exact_stage_kind: String
+    var reranker_kind: String
+
+    def __init__(
+        out self,
+        read reference_scoring_semantics: ReferenceScoringSemantics,
+        read stage2_operator: Stage2Operator,
+        read stage3_verifier: Stage3VerifierOperator,
+    ):
+        self.stage2_kind = stage2_operator.kind.copy()
+        self.stage2_family = stage2_operator.family.copy()
+        self.stage2_requires_query_text = stage2_operator.requires_query_text
+        self.stage2_required_artifact_families = (
+            stage2_operator.required_artifact_families.copy()
+        )
+        self.exact_stage_kind = reference_scoring_semantics.kind.copy()
+        self.reranker_kind = stage3_verifier.kind.copy()
+
+
+def search_plan_compatibility_semantics_for_components(
+    read reference_scoring_semantics: ReferenceScoringSemantics,
+    read stage2_operator: Stage2Operator,
+    read stage3_verifier: Stage3VerifierOperator,
+) -> SearchPlanCompatibilitySemantics:
+    return SearchPlanCompatibilitySemantics(
+        reference_scoring_semantics,
+        stage2_operator,
+        stage3_verifier,
+    )
+
+
 struct SearchPlan(Copyable):
     var candidate_generator: CandidateGenerator
     var candidate_budget: CandidateBudget
@@ -47,8 +85,6 @@ struct SearchPlan(Copyable):
     var stage2_reference_operator: Stage2ReferenceOperator
     var stage3_verifier: Stage3VerifierOperator
     var stage2_operator: Stage2Operator
-    var exact_stage_kind: String
-    var reranker_kind: String
     var faithfulness_policy: FaithfulnessPolicy
 
     def __init__(
@@ -77,8 +113,6 @@ struct SearchPlan(Copyable):
             self.stage2_reference_operator,
             self.stage3_verifier,
         )
-        self.exact_stage_kind = self.reference_scoring_semantics.kind.copy()
-        self.reranker_kind = self.stage3_verifier.kind.copy()
         self.faithfulness_policy = faithfulness_policy.copy()
 
     def __init__(
@@ -112,9 +146,42 @@ struct SearchPlan(Copyable):
             stage2_operator.kind
         )
         self.stage2_operator = stage2_operator.copy()
-        self.exact_stage_kind = self.reference_scoring_semantics.kind.copy()
-        self.reranker_kind = self.stage3_verifier.kind.copy()
         self.faithfulness_policy = faithfulness_policy.copy()
+
+
+def search_plan_compatibility_semantics(
+    read plan: SearchPlan
+) -> SearchPlanCompatibilitySemantics:
+    return search_plan_compatibility_semantics_for_components(
+        plan.reference_scoring_semantics,
+        plan.stage2_operator,
+        plan.stage3_verifier,
+    )
+
+
+def same_search_plan_compatibility_semantics(
+    read left: SearchPlanCompatibilitySemantics,
+    read right: SearchPlanCompatibilitySemantics,
+) -> Bool:
+    if left.stage2_kind != right.stage2_kind:
+        return False
+    if left.stage2_family != right.stage2_family:
+        return False
+    if left.stage2_requires_query_text != right.stage2_requires_query_text:
+        return False
+    if len(left.stage2_required_artifact_families) != len(
+        right.stage2_required_artifact_families
+    ):
+        return False
+    for index in range(len(left.stage2_required_artifact_families)):
+        if (
+            left.stage2_required_artifact_families[index]
+            != right.stage2_required_artifact_families[index]
+        ):
+            return False
+    if left.exact_stage_kind != right.exact_stage_kind:
+        return False
+    return left.reranker_kind == right.reranker_kind
 
 
 def search_plan_with_stage2_operator(
@@ -134,6 +201,8 @@ def search_plan_with_stage_components(
     read stage2_reference_operator: Stage2ReferenceOperator,
     read stage3_verifier: Stage3VerifierOperator,
 ) raises -> SearchPlan:
+    # Keep the reference oracle explicit while allowing benchmark and service
+    # surfaces to override the executable stage-2/stage-3 components.
     return SearchPlan(
         plan.candidate_generator,
         plan.candidate_budget,

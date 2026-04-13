@@ -33,6 +33,34 @@ from .stage3_verifier_operator import (
 
 
 @dataclass(frozen=True, slots=True)
+class SearchPlanCompatibilitySemantics:
+    stage2_kind: str
+    stage2_family: str
+    stage2_requires_query_text: bool
+    stage2_required_artifact_families: tuple[str, ...]
+    exact_stage_kind: str
+    reranker_kind: str
+
+
+def search_plan_compatibility_semantics_for_components(
+    *,
+    reference_scoring_semantics: ReferenceScoringSemantics,
+    stage2_operator: Stage2Operator,
+    stage3_verifier: Stage3VerifierOperator,
+) -> SearchPlanCompatibilitySemantics:
+    return SearchPlanCompatibilitySemantics(
+        stage2_kind=stage2_operator.kind,
+        stage2_family=stage2_operator.family,
+        stage2_requires_query_text=stage2_operator.requires_query_text,
+        stage2_required_artifact_families=(
+            stage2_operator.required_artifact_families
+        ),
+        exact_stage_kind=reference_scoring_semantics.kind,
+        reranker_kind=stage3_verifier.kind,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class SearchPlan:
     candidate_generator: CandidateGenerator
     final_k: int
@@ -41,8 +69,6 @@ class SearchPlan:
     stage2_reference_operator: Stage2ReferenceOperator
     stage3_verifier: Stage3VerifierOperator
     stage2_operator: Stage2Operator = field(init=False)
-    exact_stage_kind: str = field(init=False)
-    reranker_kind: str = field(init=False)
 
     def __post_init__(self) -> None:
         if self.final_k < 0:
@@ -60,10 +86,16 @@ class SearchPlan:
                 self.stage3_verifier,
             ),
         )
-        object.__setattr__(
-            self, "exact_stage_kind", self.reference_scoring_semantics.kind
-        )
-        object.__setattr__(self, "reranker_kind", self.stage3_verifier.kind)
+
+
+def search_plan_compatibility_semantics(
+    plan: SearchPlan,
+) -> SearchPlanCompatibilitySemantics:
+    return search_plan_compatibility_semantics_for_components(
+        reference_scoring_semantics=plan.reference_scoring_semantics,
+        stage2_operator=plan.stage2_operator,
+        stage3_verifier=plan.stage3_verifier,
+    )
 
 
 def _resolve_stage_components(

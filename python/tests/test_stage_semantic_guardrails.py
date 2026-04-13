@@ -1,38 +1,58 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import unittest
 
 from kayak_bridge.cache_paths import REPO_ROOT
 
 
-LEGACY_STAGE_COMPATIBILITY_TOKENS = (
-    "Stage2Operator",
-    "stage2_operator_kind",
-    "search_plan_with_stage2_operator",
-    "exact_stage_kind",
-    "reranker_kind",
+LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS = {
+    "Stage2Operator": {
+        Path("kayak/__init__.mojo"),
+        Path("kayak/planning/__init__.mojo"),
+        Path("kayak/planning/search_plan.mojo"),
+        Path("kayak/planning/stage2_operator.mojo"),
+        Path("kayak/service/planned_search_stage_override.mojo"),
+        Path("python/kayak/__init__.py"),
+        Path("python/kayak_bridge/__init__.py"),
+        Path("python/kayak_bridge/late_ops.py"),
+        Path("python/kayak_bridge/search_plan.py"),
+        Path("python/kayak_bridge/stage2_operator.py"),
+    },
+    "stage2_operator_kind": {
+        Path("kayak/service/json.mojo"),
+        Path("kayak/service/planned_search_stage_override.mojo"),
+        Path("kayak/service/runtime.mojo"),
+        Path("kayak/service/search_contracts.mojo"),
+    },
+    "search_plan_with_stage2_operator": {
+        Path("kayak/__init__.mojo"),
+        Path("kayak/planning/__init__.mojo"),
+        Path("kayak/planning/search_plan.mojo"),
+        Path("kayak/service/planned_search_stage_override.mojo"),
+    },
+    "exact_stage_kind": {
+        Path("kayak/benchmarks/search_plan_semantics_json.mojo"),
+        Path("kayak/planning/json.mojo"),
+        Path("kayak/planning/search_plan.mojo"),
+        Path("kayak/service/json.mojo"),
+        Path("python/kayak_bridge/search_plan.py"),
+    },
+    "reranker_kind": {
+        Path("kayak/benchmarks/search_plan_semantics_json.mojo"),
+        Path("kayak/planning/json.mojo"),
+        Path("kayak/planning/search_plan.mojo"),
+        Path("kayak/service/json.mojo"),
+        Path("python/kayak_bridge/search_plan.py"),
+    },
+}
+LEGACY_STAGE_COMPATIBILITY_TOKENS = tuple(
+    LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS.keys()
 )
-
-# These files currently own the compatibility boundary. Any new production file
-# that starts using the legacy combined stage naming should fail this test until
-# we explicitly decide that it belongs at the compatibility edge too.
-LEGACY_STAGE_COMPATIBILITY_ALLOWLIST = {
-    Path("kayak/__init__.mojo"),
-    Path("kayak/benchmarks/search_plan_semantics_json.mojo"),
-    Path("kayak/planning/__init__.mojo"),
-    Path("kayak/planning/json.mojo"),
-    Path("kayak/planning/search_plan.mojo"),
-    Path("kayak/planning/stage2_operator.mojo"),
-    Path("kayak/service/json.mojo"),
-    Path("kayak/service/planned_search_stage_override.mojo"),
-    Path("kayak/service/runtime.mojo"),
-    Path("kayak/service/search_contracts.mojo"),
-    Path("python/kayak/__init__.py"),
-    Path("python/kayak_bridge/__init__.py"),
-    Path("python/kayak_bridge/late_ops.py"),
-    Path("python/kayak_bridge/search_plan.py"),
-    Path("python/kayak_bridge/stage2_operator.py"),
+LEGACY_STAGE_COMPATIBILITY_PATTERNS = {
+    token: re.compile(rf"\b{re.escape(token)}\b")
+    for token in LEGACY_STAGE_COMPATIBILITY_TOKENS
 }
 
 SCAN_ROOTS = (
@@ -60,8 +80,8 @@ def _matching_legacy_tokens(relative_path: Path) -> tuple[str, ...]:
     text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
     return tuple(
         token
-        for token in LEGACY_STAGE_COMPATIBILITY_TOKENS
-        if token in text
+        for token, pattern in LEGACY_STAGE_COMPATIBILITY_PATTERNS.items()
+        if pattern.search(text)
     )
 
 
@@ -73,11 +93,16 @@ class StageSemanticGuardrailTests(unittest.TestCase):
             matching_tokens = _matching_legacy_tokens(relative_path)
             if not matching_tokens:
                 continue
-            if relative_path in LEGACY_STAGE_COMPATIBILITY_ALLOWLIST:
-                continue
-            violations.append(
-                f"{relative_path}: {', '.join(matching_tokens)}"
+            leaked_tokens = tuple(
+                token
+                for token in matching_tokens
+                if relative_path
+                not in LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS.get(token, set())
             )
+            if leaked_tokens:
+                violations.append(
+                    f"{relative_path}: {', '.join(leaked_tokens)}"
+                )
 
         self.assertEqual(
             violations,
@@ -88,16 +113,18 @@ class StageSemanticGuardrailTests(unittest.TestCase):
     def test_compatibility_allowlist_stays_minimal_and_real(self) -> None:
         missing_files = [
             str(relative_path)
-            for relative_path in sorted(LEGACY_STAGE_COMPATIBILITY_ALLOWLIST)
+            for allowlist in LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS.values()
+            for relative_path in sorted(allowlist)
             if not (REPO_ROOT / relative_path).exists()
         ]
         self.assertEqual(missing_files, [])
 
         stale_allowlist_entries = [
-            str(relative_path)
-            for relative_path in sorted(LEGACY_STAGE_COMPATIBILITY_ALLOWLIST)
+            f"{token}: {relative_path}"
+            for token, allowlist in LEGACY_STAGE_COMPATIBILITY_ALLOWLISTS.items()
+            for relative_path in sorted(allowlist)
             if (REPO_ROOT / relative_path).exists()
-            and not _matching_legacy_tokens(relative_path)
+            and token not in _matching_legacy_tokens(relative_path)
         ]
         self.assertEqual(
             stale_allowlist_entries,
