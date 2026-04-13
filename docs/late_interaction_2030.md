@@ -76,6 +76,10 @@ Verified since the first version of this note:
     draft packed index
   - snapshot resolution can load only the sidecars required by a given plan
   - snapshot creation now has explicit seal and publish boundaries
+- the next hosted-engine operational tranche is now implemented:
+  - service health and storage counters aggregate the published manifest tree
+  - live-snapshot compaction can publish a replacement snapshot without
+    mutating the old one in place
 
 Those are substrate wins, not proof of the stronger efficiency thesis.
 
@@ -118,6 +122,7 @@ Evidence:
 - [docs/traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md](traces/2026-04-12_browsecomp_plus_gold_ceiling_comparison.md)
 - [docs/traces/2026-04-12_synthetic_hard_recall_stage_aware.md](traces/2026-04-12_synthetic_hard_recall_stage_aware.md)
 - [docs/traces/2026-04-13_hosted_engine_p0.md](traces/2026-04-13_hosted_engine_p0.md)
+- [docs/traces/2026-04-13_hosted_engine_p1_ops.md](traces/2026-04-13_hosted_engine_p1_ops.md)
 - [docs/epistemic_status.md](epistemic_status.md)
 
 ## What Kayak Should Change

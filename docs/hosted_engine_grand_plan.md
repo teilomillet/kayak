@@ -45,6 +45,8 @@ That combination implies a clear next move:
 - explicit seal and publish helpers in the hosted snapshot path
 - capability-aware snapshot resolution
 - generic search-artifact manifests exercised by the mainline seal path
+- published-state service metrics
+- executable live-snapshot compaction and replacement
 
 ### What is still weak
 

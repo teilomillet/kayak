@@ -7,6 +7,10 @@ from .collection_store import (
     save_collection_manifest,
 )
 from .compaction import CompactionPlan
+from .compaction_runtime import (
+    build_compaction_plan_for_snapshot,
+    execute_compaction_plan,
+)
 from .publish import publish_snapshot_manifest, promote_collection_generation
 from .ids import CollectionId, NamespaceId, SegmentId, SnapshotId, TenantId
 from .mirror import ensure_one_segment_collection_mirror

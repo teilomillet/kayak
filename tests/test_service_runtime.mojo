@@ -18,6 +18,8 @@ from kayak import (
     UpsertDocument,
     UpsertDocumentsRequest,
     VECTOR_SCALAR_NAME,
+    build_service_health_status,
+    build_service_metrics_snapshot,
     create_collection,
     create_snapshot,
     default_exact_search_request,
@@ -242,6 +244,98 @@ def test_hosted_collection_runtime_persists_append_only_draft_mutations() raises
     assert_equal(document_count_after_delete, 1)
     assert_equal(snapshot.stats.document_count, 1)
     assert_equal(snapshot.segment_ids[0].value, "segment-1")
+
+
+def test_hosted_service_metrics_aggregate_visible_snapshots() raises:
+    var service_root = unique_service_root("kayak-service-runtime-metrics")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("blogs"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]), "alpha")],
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("blogs"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]), "beta")],
+        ),
+    )
+
+    var news_snapshot = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish news",
+        ),
+    )
+    var blogs_snapshot = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("blogs"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish blogs",
+        ),
+    )
+
+    var health = build_service_health_status(service_root)
+    var metrics = build_service_metrics_snapshot(service_root)
+
+    assert_equal(health.status, "ok")
+    assert_equal(health.collection_count, 2)
+    assert_equal(health.live_snapshot_count, 2)
+    assert_equal(health.pending_compaction_count, 0)
+    assert_equal(metrics.collection_count, 2)
+    assert_equal(
+        metrics.segment_count,
+        news_snapshot.stats.segment_count + blogs_snapshot.stats.segment_count,
+    )
+    assert_equal(
+        metrics.document_count,
+        news_snapshot.stats.document_count + blogs_snapshot.stats.document_count,
+    )
+    assert_equal(
+        metrics.vector_count,
+        news_snapshot.stats.total_vector_count + blogs_snapshot.stats.total_vector_count,
+    )
+    assert_equal(
+        metrics.byte_size,
+        news_snapshot.stats.byte_size + blogs_snapshot.stats.byte_size,
+    )
 
 
 def main() raises:

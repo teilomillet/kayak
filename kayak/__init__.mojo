@@ -130,6 +130,8 @@ from .planning import (
 )
 from .runtime import ExactCpuBackend, ExactScoringBackend
 from .service import (
+    build_service_health_status,
+    build_service_metrics_snapshot,
     CreateCollectionRequest,
     CreateSnapshotRequest,
     DebugSearchResponse,
@@ -208,6 +210,7 @@ from .collections import (
     StoredDocumentTextCorpus,
     TenantId,
     build_collection_storage_report,
+    build_compaction_plan_for_snapshot,
     build_segment_storage_report,
     centroid_heads_search_artifact,
     centroid_postings_search_artifact,
@@ -216,6 +219,7 @@ from .collections import (
     document_proxy_search_artifact,
     exact_only_snapshot_requirements,
     ensure_one_segment_collection_mirror,
+    execute_compaction_plan,
     export_snapshot_bundle,
     gem_graph_search_artifact,
     has_search_artifact,

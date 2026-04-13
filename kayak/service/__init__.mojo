@@ -27,6 +27,10 @@ from .json import (
     service_metrics_snapshot_json,
     upsert_documents_request_json,
 )
+from .metrics_runtime import (
+    build_service_health_status,
+    build_service_metrics_snapshot,
+)
 from .service_status import ServiceHealthStatus, ServiceMetricsSnapshot
 from .snapshot_requests import (
     CreateSnapshotRequest,
