@@ -119,6 +119,17 @@ Evidence:
   public-slice frontier, not only by synthetic asymptotics
 - the next harder hard-recall family should be selected explicitly instead of
   pretending the current small public slices are already sufficient
+- heterogeneous encoder late interaction should be treated as unsupported by
+  default unless there is explicit joint training or calibration evidence
+- the benchmark ladder should stay explicit:
+  - trivial sanity tasks
+  - harder public text tasks
+  - scalable synthetic hard-recall tasks
+  - stronger local ceilings
+  - later, code- or multimodal-shaped families through the same stage-aware
+    reporting surface
+- hosted deployment claims should be justified with measured storage, latency,
+  and quality numbers rather than with algorithm-level intuition alone
 
 Related strategic note:
 - [docs/late_interaction_2030.md](docs/late_interaction_2030.md)
@@ -368,6 +379,67 @@ Immediate TODOs:
 - [x] Keep backend boundaries explicit in `runtime/`
 - [x] Design stage interfaces so GPU kernels can replace CPU kernels cleanly
 - [x] Delay distributed sharding design until segment and tenancy contracts are settled
+
+## Priority 8: Harder Task Ladder And Stronger Ceilings
+
+This is the next strategic evaluation priority after the current stage and
+hosted-engine substrate.
+
+Reason:
+- the 2030 talk argues that the field undersamples genuinely hard retrieval
+  tasks because it assumes retrieve-and-rerank up front
+- the Q&A makes the point sharper:
+  - text is not the only future modality
+  - code and beyond-text retrieval are plausible high-value directions
+  - stronger ceilings must be measured and labeled honestly
+
+Decision:
+- Kayak should keep one explicit benchmark ladder rather than accumulating
+  disconnected evals
+
+Required properties:
+- one trivial sanity family
+- one harder public text family
+- one scalable synthetic hard-recall family
+- one stronger local ceiling path with explicit cost accounting
+- later, one code- or multimodal-shaped family through the same stage-aware
+  reporting surface
+
+Immediate TODOs:
+- [ ] Write a benchmark-ladder note with explicit exit criteria per family
+- [ ] Add one code- or long-document-shaped hard-recall slice through the
+  existing stage-aware JSON pipeline
+- [ ] Keep stronger-ceiling artifacts labeled by the actual path used
+- [ ] Avoid calling local clause-text ceilings "cross-encoder" or
+  "long-context" ceilings
+
+## Priority 9: Encoder Boundary And Interoperability
+
+This is important because the Q&A makes clear that model-agnostic late
+interaction is not something we should assume.
+
+Reason:
+- arbitrary heterogeneous encoder interactions are likely unsound without
+  explicit joint training or calibration
+- Kayak is a hosted engine and needs to be honest about what one collection or
+  one search space actually means
+
+Decision:
+- encoder identity is a first-class engine contract
+- heterogeneous late interaction is a research feature, not a default product
+  assumption
+
+Required properties:
+- explicit encoder identity in collection and segment metadata
+- explicit refusal to mix incompatible late-interaction spaces by accident
+- room for future calibrated or jointly trained interoperability without
+  rewriting the engine
+
+Immediate TODOs:
+- [ ] Add one design note for multi-encoder interoperability and non-goals
+- [ ] Keep collection and snapshot contracts explicit about one encoder space
+- [ ] Add one negative test or validation path that rejects unsound mixed-model
+  search assumptions if the current code surface permits them
 
 ## Execution Plan
 

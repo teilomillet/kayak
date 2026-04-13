@@ -168,6 +168,143 @@ It does change how the next steps should be justified:
    - but compression should optimize an explicit serving/storage loop, not
      precede it
 
+## What The Q&A Adds
+
+The Q&A sharpens several points that the headline talk alone could leave too
+implicit.
+
+### Multimodal, Tabular, And Code Retrieval
+
+Interpretation:
+- the late-interaction framing likely extends beyond plain text
+- but text remains the current proving ground because it is the most mature
+  substrate in this repository and in the broader IR community
+
+What Kayak should do:
+- keep stage, storage, and artifact contracts modality-aware rather than
+  text-hardcoded
+- avoid adding modality-specific shortcuts that bypass `SearchPlan`,
+  `CandidateSet`, and artifact accounting
+- treat code retrieval as a particularly valuable next hard-recall family once
+  the current text-side engine loop is stable
+
+What Kayak should **not** do:
+- claim multimodal or tabular late-interaction support just because the
+  contracts are generic enough to permit it
+
+### Generative Retrieval
+
+Interpretation:
+- end-to-end generative indexing is interesting, but it is not yet a reliable
+  replacement for explicit late-interaction engine primitives
+- the repo should not assume that "the model is the index" removes the need for
+  stage-aware search contracts
+
+What Kayak should do:
+- treat generative retrieval as an adjacent research branch, not the current
+  engine default
+- preserve explicit storage, candidate-generation, and explain surfaces even if
+  a future learned index is explored
+
+### Model-Agnostic Late Interaction
+
+Interpretation:
+- heterogeneous encoders should be treated as **unsupported by default**
+- the Q&A answer is directionally clear: late interaction across different
+  encoders is not something we should expect to "just work" without explicit
+  joint training or calibration
+
+What Kayak should do:
+- keep encoder/model identity explicit in manifests, sidecars, and search
+  requests
+- avoid designing APIs that imply one can safely mix arbitrary encoder families
+  in the same late-interaction space
+- treat calibrated multi-encoder or jointly trained interoperability as a
+  research milestone, not an assumption
+
+### Pretraining For Late Interaction
+
+Interpretation:
+- pretraining specifically for late interaction remains an open question
+- this is strategically important, but the talk does not provide a settled
+  recipe and neither does this repository
+
+What Kayak should do:
+- keep the encoder boundary swappable
+- avoid baking token layout, vector budget, or pruning assumptions too deeply
+  into the storage or serving model
+- let the engine measure new encoder/pretraining choices without requiring a
+  rewrite of serving contracts
+
+### Hosted Deployment Numbers, Not Vibes
+
+Interpretation:
+- the strongest infra claim in the Q&A is not "late interaction is always
+  cheap"
+- it is "the common deployment comparison is often methodologically weak, and
+  we need concrete numbers"
+
+What Kayak should do:
+- keep measuring:
+  - stage-1 recall
+  - final quality
+  - storage
+  - latency
+  - artifact costs
+- compare native late-interaction paths against:
+  - exact full scan
+  - simple single-vector baselines where useful
+  - stronger local ceilings where justified
+- avoid claiming broad production wins until those numbers exist on the hosted
+  path
+
+### Feature-Complete Search Engine Requirement
+
+Interpretation:
+- WARP, PLAID, and GEM-style kernels are not enough by themselves
+- adoption depends on updates, filters, snapshots, metrics, explainability, and
+  hosted continuity
+
+What Kayak should do:
+- continue treating hosted-engine continuity as a first-class track
+- resist the temptation to bypass the service/storage loop in pursuit of a
+  paper-shaped engine result that would not survive product constraints
+
+## Additional Decision Rules
+
+The Q&A implies five extra decision rules for Kayak:
+
+1. Do not let a benchmark result substitute for a product invariant.
+   Example:
+   - a faster candidate engine is not a strategic win if it ignores updates,
+     filters, or snapshot continuity
+
+2. Do not let a generic API overstate heterogenous model support.
+   Example:
+   - one search API may accept many encoder IDs
+   - that does **not** imply arbitrary cross-encoder late interaction is sound
+
+3. Keep the benchmark ladder explicit.
+   It should include:
+   - trivial sanity tasks such as `LIMIT-small`
+   - harder public text tasks such as `BrowseComp-Plus`
+   - scalable synthetic hard-recall families
+   - stronger local ceilings
+   - later, one code- or multimodal-shaped family through the same stage-aware
+     reporting surface
+
+4. Keep stronger ceilings labeled by what they really are.
+   Example:
+   - a clause-text reranker is a local stronger ceiling
+   - it is not a cross-encoder or long-context LLM ceiling
+
+5. Treat unresolved 2030 claims as research work items, not as premises.
+   Example:
+   - `sqrt(m)` vector laws
+   - `~6 bytes/vector`
+   - broad model-agnostic late interaction
+   - multi-billion-token latency claims
+
 ## What The Repo Still Has Not Proved
 
 The strongest claims implied by the talk are still open.
