@@ -117,9 +117,9 @@ def test_single_core_scale_stage_aware_summary_reports_stage_density() raises:
     assert_equal(summary.candidate_stage_document_count, profile.document_count)
     assert_equal(summary.candidate_stage_vector_count > 0, True)
     assert_equal(summary.candidate_stage_byte_size > 0, True)
-    assert_equal(summary.exact_stage_document_count, profile.candidate_k)
+    assert_equal(summary.stage2_document_count, profile.candidate_k)
     assert_equal(
-        summary.exact_stage_vector_count,
+        summary.stage2_vector_count,
         profile.candidate_k * profile.document_vector_count,
     )
 

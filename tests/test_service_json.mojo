@@ -104,7 +104,7 @@ def make_debug_response() raises -> DebugSearchResponse:
             ScoreHistogram(1, 1.0, 1.0, [1]),
         ),
         SearchStageProfile(
-            "exact_late_interaction",
+            "noop_topk",
             1,
             1,
             1,
@@ -420,6 +420,9 @@ def test_debug_search_response_json_embeds_explain_payload() raises:
     assert_equal(json.find("\"faithfulness_policy_kind\":\"exact_stage1_required\"") != -1, True)
     assert_equal(json.find("\"faithfulness\":") != -1, True)
     assert_equal(json.find("\"candidate_stage\":") != -1, True)
+    assert_equal(json.find("\"stage2_kind\":\"noop_topk\"") != -1, True)
+    assert_equal(json.find("\"stage2\":") != -1, True)
+    assert_equal(json.find("\"stage_name\":\"noop_topk\"") != -1, True)
     assert_equal(json.find("\"graph_search_counters\":") != -1, True)
     assert_equal(json.find("\"visited_vertex_count\":3") != -1, True)
 

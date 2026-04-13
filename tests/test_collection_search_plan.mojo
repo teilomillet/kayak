@@ -541,14 +541,14 @@ def test_exact_full_scan_search_plan_explains_collection_snapshot() raises:
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
     assert_equal(explain.candidate_stage.score_histogram.bin_count, 8)
     assert_equal(
-        explain.exact_stage.score_histogram.counts[0]
-            + explain.exact_stage.score_histogram.counts[1]
-            + explain.exact_stage.score_histogram.counts[2]
-            + explain.exact_stage.score_histogram.counts[3]
-            + explain.exact_stage.score_histogram.counts[4]
-            + explain.exact_stage.score_histogram.counts[5]
-            + explain.exact_stage.score_histogram.counts[6]
-            + explain.exact_stage.score_histogram.counts[7],
+        explain.stage2.score_histogram.counts[0]
+            + explain.stage2.score_histogram.counts[1]
+            + explain.stage2.score_histogram.counts[2]
+            + explain.stage2.score_histogram.counts[3]
+            + explain.stage2.score_histogram.counts[4]
+            + explain.stage2.score_histogram.counts[5]
+            + explain.stage2.score_histogram.counts[6]
+            + explain.stage2.score_histogram.counts[7],
         len(explain.final_hits),
     )
     assert_equal(json.find("\"collection_id\":\"search-plan\"") != -1, True)
@@ -579,10 +579,10 @@ def test_exact_full_scan_clause_text_stage2_can_refine_exact_candidates() raises
     assert_equal(explain.plan.stage2_operator.kind, "clause_text")
     assert_equal(explain.plan.stage2_operator.family, "text")
     assert_equal(explain.plan.stage2_operator.requires_query_text, True)
-    assert_equal(explain.exact_stage.stage_name, "clause_text")
-    assert_equal(explain.exact_stage.document_count, 2)
-    assert_equal(explain.exact_stage.token_count > 0, True)
-    assert_equal(explain.exact_stage.byte_size > 0, True)
+    assert_equal(explain.stage2.stage_name, "clause_text")
+    assert_equal(explain.stage2.document_count, 2)
+    assert_equal(explain.stage2.token_count > 0, True)
+    assert_equal(explain.stage2.byte_size > 0, True)
     assert_equal(json.find("\"stage2_kind\":\"clause_text\"") != -1, True)
     assert_equal(json.find("\"stage2_requires_query_text\":true") != -1, True)
 
@@ -618,7 +618,7 @@ def test_document_proxy_search_plan_exact_reranks_shortlist() raises:
     assert_equal(explain.faithfulness.passes, True)
     assert_equal(explain.faithfulness.evidence_kind, "oracle_full_recall")
     assert_equal(explain.candidate_stage.vector_count, 2)
-    assert_equal(explain.exact_stage.document_count, 2)
+    assert_equal(explain.stage2.document_count, 2)
 
 
 def test_document_proxy_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:
@@ -662,7 +662,7 @@ def test_centroid_postings_search_plan_exact_reranks_shortlist() raises:
     assert_equal(explain.faithfulness.evidence_kind, "oracle_full_recall")
     assert_equal(explain.candidate_stage.vector_count, 2)
     assert_equal(explain.candidate_stage.token_count, 3)
-    assert_equal(explain.exact_stage.document_count, 2)
+    assert_equal(explain.stage2.document_count, 2)
 
 
 def test_centroid_postings_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:

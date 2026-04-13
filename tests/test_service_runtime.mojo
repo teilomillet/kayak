@@ -332,8 +332,8 @@ def test_hosted_collection_runtime_supports_text_family_stage2() raises:
     assert_equal(response.hits[0].doc_id, "doc-answer")
     assert_equal(debug.explain.candidate_set.hits[0].doc_id, "doc-context")
     assert_equal(debug.explain.final_hits[0].doc_id, "doc-answer")
-    assert_equal(debug.explain.exact_stage.stage_name, "clause_text")
-    assert_equal(debug.explain.exact_stage.token_count > 0, True)
+    assert_equal(debug.explain.stage2.stage_name, "clause_text")
+    assert_equal(debug.explain.stage2.token_count > 0, True)
 
 
 def test_hosted_collection_runtime_compacts_draft_after_snapshot() raises:

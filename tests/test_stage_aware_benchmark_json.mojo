@@ -51,6 +51,9 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
             "mock_collection",
             "snapshot-0001",
             "document_proxy",
+            "exact_late_interaction",
+            "late_interaction",
+            False,
             "best_effort",
             "ndcg",
             0.4,
@@ -92,6 +95,14 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
         True,
     )
     assert_equal(
+        json.find("\"stage2_kind\":\"exact_late_interaction\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage2_family\":\"late_interaction\"") != -1,
+        True,
+    )
+    assert_equal(
         json.find("\"faithfulness_policy_kind\":\"best_effort\"") != -1,
         True,
     )
@@ -106,6 +117,10 @@ def test_stage_aware_search_summary_json_contains_stage_one_fields() raises:
     )
     assert_equal(
         json.find("\"candidate_stage_bytes_per_vector\":8.0") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"stage2_document_count\":10") != -1,
         True,
     )
 
@@ -191,10 +206,10 @@ def test_build_stage_aware_search_summary_reports_proxy_recall_gap() raises:
         explain.candidate_stage.token_count,
         explain.candidate_stage.vector_count,
         explain.candidate_stage.byte_size,
-        explain.exact_stage.document_count,
-        explain.exact_stage.token_count,
-        explain.exact_stage.vector_count,
-        explain.exact_stage.byte_size,
+        explain.stage2.document_count,
+        explain.stage2.token_count,
+        explain.stage2.vector_count,
+        explain.stage2.byte_size,
         Float64(evaluation.primary_value),
         Float64(evaluation.ndcg_at_k),
         Float64(evaluation.reciprocal_rank_at_k),
@@ -214,8 +229,8 @@ def test_build_stage_aware_search_summary_reports_proxy_recall_gap() raises:
     assert_equal(summary.nominal_document_vector_count, 2)
     assert_equal(summary.candidate_stage_document_count, 3)
     assert_equal(summary.candidate_stage_vector_count, 3)
-    assert_equal(summary.exact_stage_document_count, 1)
-    assert_equal(summary.exact_stage_vector_count, 2)
+    assert_equal(summary.stage2_document_count, 1)
+    assert_equal(summary.stage2_vector_count, 2)
 
 
 def main() raises:

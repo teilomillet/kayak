@@ -164,7 +164,7 @@ def test_synthetic_hard_recall_summary_reports_expected_vector_counts() raises:
     assert_equal(summary.document_count, len(fixture.stored_task.task.documents))
     assert_equal(summary.vector_count > 0, True)
     assert_equal(summary.candidate_stage_vector_count > 0, True)
-    assert_equal(summary.exact_stage_vector_count >= profile.final_k, True)
+    assert_equal(summary.stage2_vector_count >= profile.final_k, True)
 
 
 def test_synthetic_hard_recall_exact_rerank_recovers_when_candidates_cover_oracle() raises:

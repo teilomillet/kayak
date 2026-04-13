@@ -32,7 +32,9 @@ struct CeilingComparisonSummary(Copyable):
     var slice_name: String
     var method_kind: String
     var candidate_generator_kind: String
-    var reranker_kind: String
+    var stage2_kind: String
+    var stage2_family: String
+    var stage2_requires_query_text: Bool
     var candidate_k: Int
     var final_k: Int
     var primary_metric: String
@@ -52,7 +54,9 @@ struct CeilingComparisonSummary(Copyable):
         var slice_name: String,
         var method_kind: String,
         var candidate_generator_kind: String,
-        var reranker_kind: String,
+        var stage2_kind: String,
+        var stage2_family: String,
+        stage2_requires_query_text: Bool,
         candidate_k: Int,
         final_k: Int,
         var primary_metric: String,
@@ -70,7 +74,9 @@ struct CeilingComparisonSummary(Copyable):
         self.slice_name = slice_name^
         self.method_kind = method_kind^
         self.candidate_generator_kind = candidate_generator_kind^
-        self.reranker_kind = reranker_kind^
+        self.stage2_kind = stage2_kind^
+        self.stage2_family = stage2_family^
+        self.stage2_requires_query_text = stage2_requires_query_text
         self.candidate_k = candidate_k
         self.final_k = final_k
         self.primary_metric = primary_metric^
@@ -141,6 +147,12 @@ def build_task_evaluation(
     )
 
 
+def judged_query_text_for_stage2(read plan: SearchPlan, description: String) -> String:
+    if plan.stage2_operator.requires_query_text:
+        return description.copy()
+    return String()
+
+
 def build_exact_full_scan_ceiling_summary(
     read backend: ExactCpuBackend,
     read stored_task: StoredJudgedTask,
@@ -198,7 +210,9 @@ def build_exact_full_scan_ceiling_summary(
         task.slice_name.copy(),
         "exact_full_scan",
         "exact_full_scan",
-        "none",
+        "noop_topk",
+        "identity",
+        False,
         task.k,
         task.k,
         evaluation.primary_metric.copy(),
@@ -292,6 +306,8 @@ def build_exact_clause_text_ceiling_summary(
         "exact_clause_text_ceiling",
         "exact_full_scan",
         "clause_text",
+        "text",
+        True,
         candidate_k,
         task.k,
         evaluation.primary_metric.copy(),
@@ -320,8 +336,16 @@ def build_stage_aware_ceiling_summary_for_plan(
     var candidate_recall_total = 0.0
 
     for judged_query in task.queries:
+        var query_text = judged_query_text_for_stage2(
+            plan,
+            judged_query.description,
+        )
         var explain = explain_collection_search(
-            backend, judged_query.query, snapshot, plan
+            backend,
+            judged_query.query,
+            snapshot,
+            plan,
+            query_text=query_text,
         )
         var query_evaluation = evaluate_query_hits(
             judged_query,
@@ -342,6 +366,10 @@ def build_stage_aware_ceiling_summary_for_plan(
                 task.queries[query_index].query,
                 snapshot,
                 plan,
+                query_text=judged_query_text_for_stage2(
+                    plan,
+                    task.queries[query_index].description,
+                ),
             )
         )
         query_index += 1
@@ -370,7 +398,9 @@ def build_stage_aware_ceiling_summary_for_plan(
         task.slice_name.copy(),
         "stage_aware",
         plan.candidate_generator.kind.copy(),
-        plan.reranker_kind.copy(),
+        plan.stage2_operator.kind.copy(),
+        plan.stage2_operator.family.copy(),
+        plan.stage2_operator.requires_query_text,
         plan.candidate_budget.candidate_k,
         task.k,
         evaluation.primary_metric.copy(),
@@ -395,7 +425,14 @@ def append_ceiling_comparison_summary_json(
     buffer += "\"method_kind\":\"" + json_escape(summary.method_kind) + "\","
     buffer += "\"candidate_generator_kind\":\""
     buffer += json_escape(summary.candidate_generator_kind) + "\","
-    buffer += "\"reranker_kind\":\"" + json_escape(summary.reranker_kind) + "\","
+    buffer += "\"stage2_kind\":\"" + json_escape(summary.stage2_kind) + "\","
+    buffer += "\"stage2_family\":\"" + json_escape(summary.stage2_family) + "\","
+    buffer += "\"stage2_requires_query_text\":"
+    if summary.stage2_requires_query_text:
+        buffer += "true,"
+    else:
+        buffer += "false,"
+    buffer += "\"reranker_kind\":\"" + json_escape(summary.stage2_kind) + "\","
     buffer += "\"candidate_k\":" + String(summary.candidate_k) + ","
     buffer += "\"final_k\":" + String(summary.final_k) + ","
     buffer += "\"primary_metric\":\"" + json_escape(summary.primary_metric) + "\","

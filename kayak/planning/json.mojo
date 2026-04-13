@@ -192,6 +192,9 @@ def collection_search_explain_json(
     buffer += "\"candidate_stage\":"
     append_json_stage_profile(buffer, explain.candidate_stage)
     buffer += ","
+    buffer += "\"stage2\":"
+    append_json_stage_profile(buffer, explain.stage2)
+    buffer += ","
     buffer += "\"exact_stage\":"
     append_json_stage_profile(buffer, explain.exact_stage)
     buffer += ","
