@@ -121,6 +121,7 @@ This contract was verified locally against:
 - `tests/test_planner_benchmark_json.mojo`
 - `tests/test_planner_evidence_json.mojo`
 - `tests/test_ceiling_comparison_json.mojo`
+- `tests/test_stage1_semantic_guardrails.mojo`
 - `python/tests/test_search_plan_api.py`
 - `python/tests/test_public_api_contract.py`
 - `python/tests/test_python_sdk_docs.py`
@@ -134,6 +135,14 @@ The repo also now has a compatibility-boundary guardrail:
   `stage2_operator_kind`, `search_plan_with_stage2_operator`,
   `exact_stage_kind`, or `reranker_kind` outside that allowlist should fail the
   guardrail test
+
+The repo also now has a stage-1 contract guardrail:
+
+- registered candidate generators are checked against an explicit semantic
+  matrix for interaction semantics, alignment granularity, score kind, and
+  filter support
+- the shared search-plan semantics JSON helper must continue to emit the
+  explicit stage-1 fields even when compatibility stage-2 fields are disabled
 
 ## Next steps
 

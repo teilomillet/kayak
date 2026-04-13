@@ -81,8 +81,8 @@ def test_planner_uses_explicit_preferred_order_when_supported() raises:
     )
 
 
-def test_planner_falls_back_to_exact_for_filters_and_oracle_guardrails() raises:
-    var filtered_selection = select_search_plan_for_availability(
+def test_planner_uses_exact_for_unavailable_structured_filters_and_oracle_guardrails() raises:
+    var structured_filter_selection = select_search_plan_for_availability(
         SnapshotSearchArtifactAvailability(
             1,
             ["document_proxy"],
@@ -112,12 +112,17 @@ def test_planner_falls_back_to_exact_for_filters_and_oracle_guardrails() raises:
         ),
     )
 
-    assert_equal(filtered_selection.plan.candidate_generator.kind, "exact_full_scan")
+    assert_equal(
+        structured_filter_selection.plan.candidate_generator.kind,
+        "exact_full_scan",
+    )
     assert_equal(oracle_selection.plan.candidate_generator.kind, "exact_full_scan")
-    assert_equal(filtered_selection.plan.candidate_budget.candidate_k, 20)
+    assert_equal(structured_filter_selection.plan.candidate_budget.candidate_k, 20)
     assert_equal(oracle_selection.plan.candidate_budget.candidate_k, 20)
     assert_equal(
-        filtered_selection.reason.find("require exact stage-1") != -1,
+        structured_filter_selection.reason.find(
+            "default candidate-generator order"
+        ) != -1,
         True,
     )
     assert_equal(

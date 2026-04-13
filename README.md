@@ -11,6 +11,9 @@ The current scaffold is intentionally narrow:
 - indexing and exact MaxSim scoring live in Mojo
 - CPU exact search is the first verified path
 - benchmarks and tests are first-class, not an afterthought
+- repo-wide semantic ownership is explicit through
+  `repo_semantic_inventory.toml`, with a test that walks every tracked file and
+  fails on uncovered or stale semantic buckets
 
 ## Current Layout
 

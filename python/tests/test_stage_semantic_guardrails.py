@@ -25,6 +25,7 @@ LEGACY_STAGE_COMPATIBILITY_ALLOWLIST = {
     Path("kayak/planning/search_plan.mojo"),
     Path("kayak/planning/stage2_operator.mojo"),
     Path("kayak/service/json.mojo"),
+    Path("kayak/service/planned_search_stage_override.mojo"),
     Path("kayak/service/runtime.mojo"),
     Path("kayak/service/search_contracts.mojo"),
     Path("python/kayak/__init__.py"),

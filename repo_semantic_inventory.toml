@@ -1,0 +1,417 @@
+version = 1
+
+[[rule]]
+name = "root-repo-policy"
+role = "repo_control"
+why = "Root policy files define the repo-wide working rules, ignore semantics, and high-level project map."
+paths = [
+    ".gitattributes",
+    ".gitignore",
+    ".python-version",
+    "AGENTS.md",
+    "README.md",
+    "TODO.md",
+]
+normative_docs = ["AGENTS.md", "README.md"]
+
+[[rule]]
+name = "root-legal-notice"
+role = "legal_notice"
+why = "The license is legal metadata rather than engine behavior."
+paths = ["LICENSE"]
+
+[[rule]]
+name = "root-packaging-and-tooling"
+role = "packaging_control"
+why = "Build, packaging, ordeal, and quiet-benchmark entrypoints define the executable control plane for the repo."
+paths = [
+    "MANIFEST.in",
+    "ordeal.toml",
+    "pyproject.toml",
+    "scripts/run_bench_quiet.sh",
+    "setup.py",
+]
+normative_docs = [
+    "README.md",
+    "python/kayak/README.md",
+    "docs/python_sdk.md",
+    "docs/benchmark_rationale.md",
+]
+tests = [
+    "python/tests/test_mojo_packaging.py",
+    "python/tests/test_python_sdk_docs.py",
+]
+
+[[rule]]
+name = "root-lockfiles"
+role = "lockfile"
+why = "Resolver lockfiles pin toolchain and dependency state but do not define semantic engine contracts."
+paths = ["pixi.lock", "uv.lock"]
+
+[[rule]]
+name = "benchmark-entrypoints"
+role = "benchmark_entrypoint"
+why = "Top-level benchmark entrypoints are runnable workloads and reporting surfaces, not reusable engine kernels."
+paths = ["benchmarks/*.mojo", "benchmarks/structural/*.mojo"]
+normative_docs = [
+    "docs/benchmark_rationale.md",
+    "docs/hard_recall_evaluation.md",
+    "docs/harder_recall_benchmark_selection.md",
+]
+tests = [
+    "tests/test_public_benchmark_json.mojo",
+    "tests/test_real_slice_benchmark_json.mojo",
+    "tests/test_vector_budget_json.mojo",
+    "tests/test_candidate_window_json.mojo",
+    "tests/test_storage_encoding_json.mojo",
+    "tests/test_faithfulness_frontier_json.mojo",
+    "tests/test_ceiling_comparison_json.mojo",
+    "tests/test_single_core_scale_fixture.mojo",
+    "tests/test_synthetic_hard_recall_fixture.mojo",
+    "tests/test_public_benchmark_dataset.mojo",
+]
+
+[[rule]]
+name = "architecture-docs"
+role = "normative_doc"
+why = "Architecture docs are the stable contract layer for current repo semantics."
+paths = ["docs/architecture/*.md"]
+
+[[rule]]
+name = "design-and-roadmap-docs"
+role = "design_doc"
+why = "Top-level docs under docs/ are strategy, rationale, and support references rather than per-query evidence."
+paths = ["docs/*.md"]
+
+[[rule]]
+name = "trace-docs"
+role = "evidence_doc"
+why = "Trace notes record point-in-time evidence and implementation history rather than the canonical contract."
+paths = ["docs/traces/*.md"]
+
+[[rule]]
+name = "mojo-examples"
+role = "example_surface"
+why = "Mojo examples are runnable product surfaces that demonstrate the current engine and service boundaries."
+paths = ["examples/*.mojo"]
+normative_docs = ["README.md", "docs/architecture/service_api.md"]
+
+[[rule]]
+name = "engine-package-surface"
+role = "engine_source"
+why = "The top-level Mojo package surface re-exports engine concepts and therefore needs explicit tests and docs."
+paths = ["kayak/__init__.mojo"]
+normative_docs = ["README.md", "docs/architecture/search_plan_semantics.md"]
+tests = [
+    "tests/test_index.mojo",
+    "tests/test_search_planner.mojo",
+    "tests/test_service_contracts.mojo",
+]
+
+[[rule]]
+name = "engine-benchmark-support"
+role = "benchmark_support_source"
+why = "Benchmark support code owns deterministic fixtures, reporting schemas, and workload registry logic for the benchmark ladder."
+paths = ["kayak/benchmarks/*.mojo"]
+normative_docs = [
+    "docs/benchmark_rationale.md",
+    "docs/hard_recall_evaluation.md",
+    "docs/harder_recall_benchmark_selection.md",
+]
+tests = [
+    "tests/test_public_benchmark_json.mojo",
+    "tests/test_real_slice_benchmark_json.mojo",
+    "tests/test_vector_budget_json.mojo",
+    "tests/test_candidate_window_json.mojo",
+    "tests/test_storage_encoding_json.mojo",
+    "tests/test_faithfulness_frontier_json.mojo",
+    "tests/test_planner_benchmark_json.mojo",
+    "tests/test_planner_evidence_json.mojo",
+    "tests/test_filter_fixtures.mojo",
+    "tests/test_single_core_scale_fixture.mojo",
+    "tests/test_synthetic_hard_recall_fixture.mojo",
+]
+
+[[rule]]
+name = "engine-collections"
+role = "engine_source"
+why = "Collections owns hosted collection, segment, snapshot, compaction, and search-artifact continuity semantics."
+paths = ["kayak/collections/*.mojo"]
+normative_docs = [
+    "README.md",
+    "docs/architecture/segment_storage.md",
+    "docs/architecture/service_api.md",
+    "docs/architecture/tenant_layout.md",
+]
+tests = [
+    "tests/test_collection_*.mojo",
+    "tests/test_snapshot_*.mojo",
+    "tests/test_segment_builder_policy.mojo",
+    "tests/test_document_filter_index.mojo",
+]
+
+[[rule]]
+name = "engine-contracts"
+role = "engine_source"
+why = "Contracts defines encoded query and document shapes plus layout-specific validation invariants."
+paths = ["kayak/contracts/*.mojo"]
+normative_docs = ["AGENTS.md", "README.md"]
+tests = [
+    "tests/test_index.mojo",
+    "tests/test_python_bridge.mojo",
+    "tests/test_hybrid_flat_dim128.mojo",
+]
+
+[[rule]]
+name = "engine-eval"
+role = "engine_source"
+why = "Eval owns judged-task metrics and retrieval reporting semantics for benchmark interpretation."
+paths = ["kayak/eval/*.mojo"]
+normative_docs = [
+    "docs/hard_recall_evaluation.md",
+    "docs/harder_recall_benchmark_selection.md",
+]
+tests = ["tests/test_eval_*.mojo", "tests/test_battle.mojo"]
+
+[[rule]]
+name = "engine-filters"
+role = "engine_source"
+why = "Filters owns the typed filter-expression model and runtime matching semantics used by hosted retrieval."
+paths = ["kayak/filters/*.mojo"]
+normative_docs = [
+    "docs/architecture/service_api.md",
+    "docs/architecture/tenant_layout.md",
+]
+tests = [
+    "tests/test_filters.mojo",
+    "tests/test_filter_fixtures.mojo",
+    "tests/test_service_contracts.mojo",
+]
+
+[[rule]]
+name = "engine-index"
+role = "engine_source"
+why = "Index owns family-local index construction and approximation layouts rather than serving orchestration."
+paths = ["kayak/index/*.mojo"]
+normative_docs = [
+    "README.md",
+    "docs/late_interaction_efficiency_roadmap.md",
+    "docs/architecture/native_candidate_generation_next.md",
+]
+tests = [
+    "tests/test_index.mojo",
+    "tests/test_centroid_*.mojo",
+    "tests/test_gem_graph_*.mojo",
+    "tests/test_gem_transport.mojo",
+    "tests/test_hybrid_flat_dim128.mojo",
+]
+
+[[rule]]
+name = "engine-interop"
+role = "engine_source"
+why = "Interop owns real public subset loaders and Python-task decoding at the external corpus boundary."
+paths = ["kayak/interop/*.mojo"]
+normative_docs = [
+    "README.md",
+    "docs/harder_recall_benchmark_selection.md",
+    "docs/python_sdk.md",
+]
+tests = [
+    "tests/test_public_benchmark_dataset.mojo",
+    "tests/test_python_bridge.mojo",
+    "tests/test_battle.mojo",
+]
+
+[[rule]]
+name = "engine-numeric"
+role = "engine_source"
+why = "Numeric centralizes scalar aliases and storage-format constants so dtype choices do not drift across the tree."
+paths = ["kayak/numeric/*.mojo"]
+normative_docs = ["AGENTS.md", "README.md"]
+tests = [
+    "tests/test_index.mojo",
+    "tests/test_maxsim.mojo",
+    "tests/test_storage_invariants.mojo",
+]
+
+[[rule]]
+name = "engine-planning"
+role = "engine_source"
+why = "Planning owns explicit search-plan semantics, stage-aware execution contracts, and candidate generator selection."
+paths = ["kayak/planning/*.mojo"]
+normative_docs = [
+    "docs/architecture/search_plan_semantics.md",
+    "docs/architecture/service_api.md",
+    "docs/architecture/stage2_primitives.md",
+]
+tests = [
+    "tests/test_search_planner.mojo",
+    "tests/test_stage1_capabilities.mojo",
+    "tests/test_planner_*.mojo",
+    "tests/test_collection_search_plan.mojo",
+    "tests/test_centroid_execution_contract.mojo",
+    "tests/test_stage2_operator_contract.mojo",
+    "tests/test_stage_artifact_materialization.mojo",
+    "tests/test_graph_search_counters.mojo",
+    "tests/test_planned_stage2_override.mojo",
+]
+
+[[rule]]
+name = "engine-runtime"
+role = "engine_source"
+why = "Runtime owns the backend boundary for exact scoring implementations."
+paths = ["kayak/runtime/*.mojo"]
+normative_docs = ["README.md", "docs/late_interaction_efficiency_roadmap.md"]
+tests = ["tests/test_runtime_backend.mojo", "tests/test_service_runtime.mojo"]
+
+[[rule]]
+name = "engine-scoring"
+role = "engine_source"
+why = "Scoring owns exact MaxSim and dot-product kernels rather than benchmark or service orchestration."
+paths = ["kayak/scoring/*.mojo"]
+normative_docs = ["README.md", "docs/late_interaction_efficiency_roadmap.md"]
+tests = [
+    "tests/test_maxsim.mojo",
+    "tests/test_hybrid_flat_dim128.mojo",
+    "tests/test_score_partitions.mojo",
+]
+
+[[rule]]
+name = "engine-search"
+role = "engine_source"
+why = "Search owns top-k exact search orchestration on packed and flat exact layouts."
+paths = ["kayak/search/*.mojo"]
+normative_docs = ["README.md", "docs/architecture/search_plan_semantics.md"]
+tests = [
+    "tests/test_index.mojo",
+    "tests/test_search_planner.mojo",
+    "tests/test_hybrid_flat_dim128.mojo",
+]
+
+[[rule]]
+name = "engine-service"
+role = "engine_source"
+why = "Service owns the canonical hosted request and response contracts plus lifecycle runtime orchestration."
+paths = ["kayak/service/*.mojo"]
+normative_docs = [
+    "docs/architecture/service_api.md",
+    "docs/architecture/tenant_layout.md",
+]
+tests = [
+    "tests/test_service_*.mojo",
+    "tests/test_collection_search_plan.mojo",
+    "tests/test_planned_stage2_override.mojo",
+]
+
+[[rule]]
+name = "engine-storage"
+role = "engine_source"
+why = "Storage owns artifact codecs, cache stores, and persisted index payload encodings."
+paths = ["kayak/storage/*.mojo"]
+normative_docs = [
+    "docs/architecture/segment_storage.md",
+    "docs/architecture/service_api.md",
+]
+tests = [
+    "tests/test_storage*.mojo",
+    "tests/test_centroid_*store.mojo",
+    "tests/test_gem_graph_store.mojo",
+]
+
+[[rule]]
+name = "engine-text"
+role = "engine_source"
+why = "Text owns document-text corpus storage and normalization helpers used by service and verifier stages."
+paths = ["kayak/text/*.mojo"]
+normative_docs = ["README.md", "docs/architecture/service_api.md"]
+tests = [
+    "tests/test_verifier.mojo",
+    "tests/test_collection_mirror.mojo",
+    "tests/test_public_benchmark_dataset.mojo",
+]
+
+[[rule]]
+name = "engine-verifier"
+role = "engine_source"
+why = "Verifier owns stage-2 and stage-3 refinement helpers that sit above stage-1 candidate generation."
+paths = ["kayak/verifier/*.mojo"]
+normative_docs = [
+    "docs/architecture/stage2_primitives.md",
+    "docs/late_interaction_2030.md",
+]
+tests = [
+    "tests/test_verifier.mojo",
+    "tests/test_search_planner.mojo",
+    "tests/test_planned_stage2_override.mojo",
+]
+
+[[rule]]
+name = "python-sdk-surface"
+role = "python_sdk_source"
+why = "The public Python package owns the stable local SDK facade rooted at import kayak."
+paths = ["python/kayak/*"]
+normative_docs = [
+    "python/kayak/README.md",
+    "docs/python_sdk.md",
+    "docs/python_sdk_charter.md",
+    "docs/python_sdk_roadmap.md",
+]
+tests = [
+    "python/tests/test_public_api_contract.py",
+    "python/tests/test_search_plan_api.py",
+    "python/tests/test_python_sdk_docs.py",
+]
+
+[[rule]]
+name = "python-bridge-internals"
+role = "python_sdk_source"
+why = "The Python bridge owns internal late-interaction objects, backend dispatch, and Mojo packaging glue behind the public SDK."
+paths = ["python/kayak_bridge/*.py", "python/kayak_bridge/*.mojo"]
+normative_docs = [
+    "python/kayak/README.md",
+    "docs/python_sdk.md",
+    "docs/python_sdk_charter.md",
+    "docs/python_sdk_roadmap.md",
+]
+tests = [
+    "python/tests/test_batch_api.py",
+    "python/tests/test_late_interaction.py",
+    "python/tests/test_search_plan_api.py",
+    "python/tests/test_mojo_packaging.py",
+]
+
+[[rule]]
+name = "python-examples"
+role = "example_surface"
+why = "Python examples are runnable user-facing SDK surfaces rather than reusable engine modules."
+paths = ["python/examples/*.py"]
+normative_docs = ["python/kayak/README.md", "docs/python_sdk.md"]
+
+[[rule]]
+name = "python-utility-scripts"
+role = "utility_script"
+why = "Python scripts are repo utilities for benchmark data preparation, mutation smoke tests, and result summarization."
+paths = ["python/scripts/*.py"]
+normative_docs = [
+    "docs/benchmark_rationale.md",
+    "docs/harder_recall_benchmark_selection.md",
+    "docs/robustness_testing.md",
+]
+
+[[rule]]
+name = "python-ordeal-tests"
+role = "test_suite"
+why = "Ordeal tests are mutation-style robustness checks for the Python SDK."
+paths = ["python/ordeal_tests/*.py"]
+
+[[rule]]
+name = "python-unit-tests"
+role = "test_suite"
+why = "Python unit tests validate the supported local SDK and packaging boundary."
+paths = ["python/tests/*.py"]
+
+[[rule]]
+name = "mojo-unit-tests"
+role = "test_suite"
+why = "Mojo tests validate engine, storage, planner, and benchmark-support behavior directly."
+paths = ["tests/*.mojo"]
