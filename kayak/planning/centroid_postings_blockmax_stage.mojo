@@ -9,8 +9,12 @@ from kayak.numeric import (
 )
 from kayak.scoring.dot import dot_product
 
+from .centroid_primitives import MutableCentroidSelectionScratch
 from .centroid_segment_score_result import CentroidSegmentScoreResult
 from .centroid_postings_stage import top_centroid_indices_for_query_token
+
+
+comptime BLOCKMAX_LINEAR_SCAN_TOP_K_LIMIT = 64
 
 
 struct CentroidPostingBlockmaxProfile(Copyable):
@@ -113,11 +117,60 @@ struct MutableCentroidPostingBlockmaxProfile:
         )
 
 
+struct MutableCentroidPostingBlockmaxScratch:
+    var selection: MutableCentroidSelectionScratch
+    var token_top_positions: List[Int]
+    var token_top_position_generations: List[Int]
+    var use_dense_top_positions: Bool
+
+    def __init__(out self, document_count: Int, candidate_k: Int):
+        self.selection = MutableCentroidSelectionScratch(document_count)
+        self.token_top_positions = List[Int]()
+        self.token_top_position_generations = List[Int]()
+        self.use_dense_top_positions = (
+            candidate_k > BLOCKMAX_LINEAR_SCAN_TOP_K_LIMIT
+        )
+
+        if self.use_dense_top_positions:
+            for _ in range(document_count):
+                self.token_top_positions.append(-1)
+                self.token_top_position_generations.append(0)
+
+    def begin_token(mut self):
+        self.selection.begin_token()
+
+def dense_token_top_doc_position(
+    read scratch: MutableCentroidPostingBlockmaxScratch, doc_index: Int
+) -> Int:
+    if (
+        scratch.token_top_position_generations[doc_index]
+        != scratch.selection.generation
+    ):
+        return -1
+
+    return scratch.token_top_positions[doc_index]
+
+
+def set_dense_token_top_doc_position(
+    mut scratch: MutableCentroidPostingBlockmaxScratch,
+    doc_index: Int,
+    position: Int,
+):
+    scratch.token_top_positions[doc_index] = position
+    scratch.token_top_position_generations[doc_index] = scratch.selection.generation
+
+
+def clear_dense_token_top_doc_position(
+    mut scratch: MutableCentroidPostingBlockmaxScratch, doc_index: Int
+):
+    scratch.token_top_position_generations[doc_index] = 0
+
+
 def bubble_up_descending_token_top_doc(
     mut top_doc_indices: List[Int],
-    mut top_positions: List[Int],
-    read token_best_scores: List[ScoreScalar],
+    mut scratch: MutableCentroidPostingBlockmaxScratch,
     start_position: Int,
+    use_dense_top_positions: Bool,
 ):
     var position = start_position
 
@@ -125,73 +178,112 @@ def bubble_up_descending_token_top_doc(
         var current_doc_index = top_doc_indices[position]
         var previous_doc_index = top_doc_indices[position - 1]
         if (
-            token_best_scores[current_doc_index]
-            <= token_best_scores[previous_doc_index]
+            scratch.selection.token_best_scores[current_doc_index]
+            <= scratch.selection.token_best_scores[previous_doc_index]
         ):
             break
 
         top_doc_indices[position - 1] = current_doc_index
         top_doc_indices[position] = previous_doc_index
-        top_positions[current_doc_index] = position - 1
-        top_positions[previous_doc_index] = position
+        if use_dense_top_positions:
+            set_dense_token_top_doc_position(
+                scratch,
+                current_doc_index,
+                position - 1,
+            )
+            set_dense_token_top_doc_position(
+                scratch,
+                previous_doc_index,
+                position,
+            )
         position -= 1
+
+
+def token_top_doc_position(
+    read top_doc_indices: List[Int],
+    read scratch: MutableCentroidPostingBlockmaxScratch,
+    doc_index: Int,
+    use_dense_top_positions: Bool,
+) -> Int:
+    if use_dense_top_positions:
+        return dense_token_top_doc_position(scratch, doc_index)
+
+    for position in range(len(top_doc_indices)):
+        if top_doc_indices[position] == doc_index:
+            return position
+
+    return -1
 
 
 def update_descending_token_top_docs(
     mut top_doc_indices: List[Int],
-    mut top_positions: List[Int],
-    read token_best_scores: List[ScoreScalar],
     doc_index: Int,
     candidate_k: Int,
+    mut scratch: MutableCentroidPostingBlockmaxScratch,
+    use_dense_top_positions: Bool,
 ):
     if candidate_k <= 0:
         return
 
-    var existing_position = top_positions[doc_index]
+    var existing_position = token_top_doc_position(
+        top_doc_indices,
+        scratch,
+        doc_index,
+        use_dense_top_positions,
+    )
     if existing_position >= 0:
         bubble_up_descending_token_top_doc(
             top_doc_indices,
-            top_positions,
-            token_best_scores,
+            scratch,
             existing_position,
+            use_dense_top_positions,
         )
         return
 
     if len(top_doc_indices) < candidate_k:
         top_doc_indices.append(doc_index)
-        top_positions[doc_index] = len(top_doc_indices) - 1
+        if use_dense_top_positions:
+            set_dense_token_top_doc_position(
+                scratch,
+                doc_index,
+                len(top_doc_indices) - 1,
+            )
         bubble_up_descending_token_top_doc(
             top_doc_indices,
-            top_positions,
-            token_best_scores,
+            scratch,
             len(top_doc_indices) - 1,
+            use_dense_top_positions,
         )
         return
 
     var threshold_doc_index = top_doc_indices[candidate_k - 1]
-    if token_best_scores[doc_index] <= token_best_scores[threshold_doc_index]:
+    if (
+        scratch.selection.token_best_scores[doc_index]
+        <= scratch.selection.token_best_scores[threshold_doc_index]
+    ):
         return
 
-    top_positions[threshold_doc_index] = -1
+    if use_dense_top_positions:
+        clear_dense_token_top_doc_position(scratch, threshold_doc_index)
+        set_dense_token_top_doc_position(scratch, doc_index, candidate_k - 1)
     top_doc_indices[candidate_k - 1] = doc_index
-    top_positions[doc_index] = candidate_k - 1
     bubble_up_descending_token_top_doc(
         top_doc_indices,
-        top_positions,
-        token_best_scores,
+        scratch,
         candidate_k - 1,
+        use_dense_top_positions,
     )
 
 
 def token_top_doc_threshold(
     read top_doc_indices: List[Int],
-    read token_best_scores: List[ScoreScalar],
+    read scratch: MutableCentroidPostingBlockmaxScratch,
     candidate_k: Int,
 ) -> ScoreScalar:
     if candidate_k <= 0 or len(top_doc_indices) < candidate_k:
         return min_score_scalar()
 
-    return token_best_scores[top_doc_indices[candidate_k - 1]]
+    return scratch.selection.token_best_scores[top_doc_indices[candidate_k - 1]]
 
 
 def centroid_block_posting_start(
@@ -221,19 +313,14 @@ def accumulate_token_best_doc_scores_blockmax(
     read query_token: List[VectorScalar], read index: CentroidPostingIndex,
     candidate_k: Int, mut scores: List[ScoreScalar],
     mut active_doc_indices: List[Int], mut active_flags: List[Int],
+    mut scratch: MutableCentroidPostingBlockmaxScratch,
     mut profile: MutableCentroidPostingBlockmaxProfile,
     read allowed_flags: List[Int] = [],
 ):
-    var token_best_scores = List[ScoreScalar]()
-    var token_active_doc_indices = List[Int]()
-    var token_active_flags = List[Int]()
     var token_top_doc_indices = List[Int]()
-    var token_top_positions = List[Int]()
+    var use_dense_top_positions = scratch.use_dense_top_positions
 
-    for _ in range(len(scores)):
-        token_best_scores.append(min_score_scalar())
-        token_active_flags.append(0)
-        token_top_positions.append(-1)
+    scratch.begin_token()
 
     for centroid_index in top_centroid_indices_for_query_token(query_token, index):
         profile.selected_centroid_count += 1
@@ -259,7 +346,7 @@ def accumulate_token_best_doc_scores_blockmax(
             ):
                 var threshold = token_top_doc_threshold(
                     token_top_doc_indices,
-                    token_best_scores,
+                    scratch,
                     candidate_k,
                 )
                 var block_upper_bound = (
@@ -281,26 +368,45 @@ def accumulate_token_best_doc_scores_blockmax(
                     similarity * ScoreScalar(index.posting_weights[posting_index])
                 )
 
-                if token_active_flags[doc_index] == 0:
-                    token_active_doc_indices.append(doc_index)
-                    token_active_flags[doc_index] = 1
-
-                if weighted_similarity > token_best_scores[doc_index]:
-                    token_best_scores[doc_index] = weighted_similarity
+                if (
+                    scratch.selection.token_seen_generations[doc_index]
+                    != scratch.selection.generation
+                ):
+                    scratch.selection.token_active_doc_indices.append(doc_index)
+                    scratch.selection.token_seen_generations[doc_index] = (
+                        scratch.selection.generation
+                    )
+                    scratch.selection.token_best_scores[doc_index] = (
+                        weighted_similarity
+                    )
                     update_descending_token_top_docs(
                         token_top_doc_indices,
-                        token_top_positions,
-                        token_best_scores,
                         doc_index,
                         candidate_k,
+                        scratch,
+                        use_dense_top_positions,
+                    )
+                elif (
+                    weighted_similarity
+                    > scratch.selection.token_best_scores[doc_index]
+                ):
+                    scratch.selection.token_best_scores[doc_index] = (
+                        weighted_similarity
+                    )
+                    update_descending_token_top_docs(
+                        token_top_doc_indices,
+                        doc_index,
+                        candidate_k,
+                        scratch,
+                        use_dense_top_positions,
                     )
 
-    for doc_index in token_active_doc_indices:
+    for doc_index in scratch.selection.token_active_doc_indices:
         if active_flags[doc_index] == 0:
             active_doc_indices.append(doc_index)
             active_flags[doc_index] = 1
 
-        scores[doc_index] += token_best_scores[doc_index]
+        scores[doc_index] += scratch.selection.token_best_scores[doc_index]
 
 
 def centroid_posting_blockmax_scores_for_segment_profiled(
@@ -318,6 +424,10 @@ def centroid_posting_blockmax_scores_for_segment_profiled(
         scores.append(zero_score_scalar())
         active_flags.append(0)
 
+    var scratch = MutableCentroidPostingBlockmaxScratch(
+        index.document_count,
+        candidate_k,
+    )
     for query_token in query_token_vectors:
         accumulate_token_best_doc_scores_blockmax(
             query_token,
@@ -326,6 +436,7 @@ def centroid_posting_blockmax_scores_for_segment_profiled(
             scores,
             active_doc_indices,
             active_flags,
+            scratch,
             profile,
             allowed_flags,
         )
