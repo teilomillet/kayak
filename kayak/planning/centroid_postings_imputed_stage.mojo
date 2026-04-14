@@ -9,11 +9,14 @@ from kayak.numeric import ScoreScalar, VectorScalar, zero_score_scalar
 from kayak.scoring.dot import dot_product
 
 from .centroid_primitives import (
-    MutableCentroidSelectionScratch,
+    MutableCentroidSegmentAccumulator,
     ScoredCentroidSelection,
-    accumulate_selected_centroid_scores_with_scratch,
+    accumulate_selected_centroid_scores_with_accumulator,
 )
-from .centroid_segment_score_result import CentroidSegmentScoreResult
+from .centroid_segment_score_result import (
+    CentroidSegmentScoreResult,
+    materialize_centroid_segment_scores,
+)
 from .centroid_postings_stage import insert_descending_centroid_match
 
 
@@ -115,10 +118,11 @@ def centroid_selection_for_query_token(
     )
 
 
-def centroid_posting_imputed_score_result_for_segment(
+def centroid_posting_imputed_score_result_for_segment_with_workspace(
     read query_token_vectors: List[List[VectorScalar]],
     read index: CentroidPostingIndex,
     final_k: Int,
+    mut workspace: MutableCentroidSegmentAccumulator,
     read allowed_flags: List[Int] = [],
 ) -> CentroidSegmentScoreResult:
     var selections = List[ScoredCentroidSelection]()
@@ -129,29 +133,32 @@ def centroid_posting_imputed_score_result_for_segment(
         selections.append(selection.copy())
         base_score += selection.baseline_correction
 
-    var scores = List[ScoreScalar]()
-    var active_flags = List[Int]()
-    var active_doc_indices = List[Int]()
-    for _ in range(index.document_count):
-        scores.append(base_score)
-        active_flags.append(0)
-
-    var scratch = MutableCentroidSelectionScratch(index.document_count)
+    workspace.begin_segment(index.document_count)
     for selection in selections:
-        accumulate_selected_centroid_scores_with_scratch(
+        accumulate_selected_centroid_scores_with_accumulator(
             selection,
             index,
-            scores,
-            active_doc_indices,
-            active_flags,
-            scratch,
+            workspace,
+            base_score,
             allowed_flags,
         )
 
-    return CentroidSegmentScoreResult(
-        scores^,
-        active_doc_indices^,
-        base_score,
+    return workspace.freeze(base_score)
+
+
+def centroid_posting_imputed_score_result_for_segment(
+    read query_token_vectors: List[List[VectorScalar]],
+    read index: CentroidPostingIndex,
+    final_k: Int,
+    read allowed_flags: List[Int] = [],
+) -> CentroidSegmentScoreResult:
+    var workspace = MutableCentroidSegmentAccumulator(index.document_count)
+    return centroid_posting_imputed_score_result_for_segment_with_workspace(
+        query_token_vectors,
+        index,
+        final_k,
+        workspace,
+        allowed_flags,
     )
 
 
@@ -161,9 +168,12 @@ def centroid_posting_imputed_scores_for_segment(
     final_k: Int,
     read allowed_flags: List[Int] = [],
 ) -> List[ScoreScalar]:
-    return centroid_posting_imputed_score_result_for_segment(
-        query_token_vectors,
-        index,
-        final_k,
-        allowed_flags,
-    ).scores.copy()
+    return materialize_centroid_segment_scores(
+        centroid_posting_imputed_score_result_for_segment(
+            query_token_vectors,
+            index,
+            final_k,
+            allowed_flags,
+        ),
+        index.document_count,
+    )

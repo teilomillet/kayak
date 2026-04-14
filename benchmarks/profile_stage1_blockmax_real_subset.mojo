@@ -9,6 +9,7 @@ from kayak import (
     CollectionId,
     ExactCpuBackend,
     JudgedTask,
+    MutableCentroidCandidateGenerationWorkspace,
     NamespaceId,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
     SearchPlan,
@@ -16,7 +17,7 @@ from kayak import (
     StoredPackedIndex,
     TenantId,
     best_effort_faithfulness_policy,
-    candidate_generation_for_plan,
+    candidate_generation_for_plan_with_workspace,
     centroid_heads_search_plan,
     centroid_postings_flat_search_plan,
     centroid_posting_blockmax_scores_for_segment_profiled,
@@ -139,14 +140,16 @@ def benchmark_candidate_generation_mean_seconds(
     read plan: SearchPlan,
 ) raises -> Float64:
     var query_index = 0
+    var workspace = MutableCentroidCandidateGenerationWorkspace()
 
     def score_once() capturing raises:
         bench_compiler.keep(
-            candidate_generation_for_plan(
+            candidate_generation_for_plan_with_workspace(
                 backend,
                 task.queries[query_index].query,
                 snapshot,
                 plan,
+                workspace,
             )
         )
         query_index += 1

@@ -19,6 +19,9 @@ from kayak.runtime import ExactScoringBackend
 from kayak.storage import CENTROID_POSTINGS_ORDER_WEIGHT_DESC_DOC_ASC
 
 from .candidate_set import CandidateSet
+from .centroid_candidate_generation_workspace import (
+    MutableCentroidCandidateGenerationWorkspace,
+)
 from .centroid_segment_score_result import CentroidSegmentScoreResult
 from .centroid_execution_contract import (
     CENTROID_EXECUTION_SCORE_VARIANT_BLOCKMAX,
@@ -32,24 +35,26 @@ from .centroid_execution_contract import (
     centroid_execution_contract,
 )
 from .centroid_postings_blockmax_stage import (
-    centroid_posting_blockmax_score_result_for_segment,
+    centroid_posting_blockmax_scores_for_segment_profiled_with_workspace,
 )
 from .centroid_postings_flat_stage import (
-    centroid_posting_flat_score_result_for_segment,
+    centroid_posting_flat_score_result_for_segment_with_workspace,
 )
 from .centroid_postings_head_auto_stage import (
-    centroid_posting_head_auto_score_result_for_segment,
+    centroid_posting_head_auto_score_result_for_segment_with_workspace,
 )
 from .centroid_postings_head_stage import (
-    centroid_posting_head_score_result_for_segment,
+    centroid_posting_head_score_result_for_segment_with_workspace,
 )
 from .centroid_postings_imputed_flat_stage import (
-    centroid_posting_imputed_flat_score_result_for_segment,
+    centroid_posting_imputed_flat_score_result_for_segment_with_workspace,
 )
 from .centroid_postings_imputed_stage import (
-    centroid_posting_imputed_score_result_for_segment,
+    centroid_posting_imputed_score_result_for_segment_with_workspace,
 )
-from .centroid_postings_stage import centroid_posting_score_result_for_segment
+from .centroid_postings_stage import (
+    centroid_posting_score_result_for_segment_with_workspace,
+)
 from .collection_hit import CollectionHit
 from .filter_allowlist import (
     document_filter_allowlist_artifact_byte_size_for_segment,
@@ -148,18 +153,19 @@ def insert_scored_centroid_doc_indices(
     mut hits: List[CollectionHit],
     segment_id: String,
     read doc_ids: List[String],
-    read scores: List[ScoreScalar],
+    read active_scores: List[ScoreScalar],
     read doc_indices: List[Int],
     candidate_k: Int,
 ):
-    for document_index in doc_indices:
+    for active_index in range(len(doc_indices)):
+        var document_index = doc_indices[active_index]
         var doc_id = doc_ids[document_index]
         insert_descending_collection_hit(
             hits,
             CollectionHit(
                 segment_id.copy(),
                 doc_id.copy(),
-                scores[document_index],
+                active_scores[active_index],
             ),
             candidate_k,
         )
@@ -213,7 +219,7 @@ def insert_centroid_scores(
         hits,
         segment_id,
         doc_ids,
-        score_result.scores,
+        score_result.active_scores,
         score_result.active_doc_indices,
         candidate_k,
     )
@@ -289,6 +295,25 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
+    read filter_expression: FilterExpression = match_all_filter(),
+) raises -> CandidateSet:
+    var workspace = MutableCentroidCandidateGenerationWorkspace()
+    return candidate_generation_for_centroid_family_with_workspace(
+        backend,
+        query,
+        snapshot,
+        plan,
+        workspace,
+        filter_expression,
+    )
+
+
+def candidate_generation_for_centroid_family_with_workspace[Backend: ExactScoringBackend](
+    read backend: Backend,
+    read query: EncodedQuery,
+    read snapshot: ResolvedCollectionSnapshot,
+    read plan: SearchPlan,
+    mut workspace: MutableCentroidCandidateGenerationWorkspace,
     read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     _ = backend
@@ -367,54 +392,72 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
             plan.candidate_budget.candidate_k,
             plan.candidate_budget.final_k,
         )
-        var score_result = centroid_posting_score_result_for_segment(
-            query.token_vectors,
-            stored_centroid.index,
-            allowed_flags,
+        var active_scores = List[ScoreScalar]()
+        var active_doc_indices = List[Int]()
+        var score_result = CentroidSegmentScoreResult(
+            active_scores^,
+            active_doc_indices^,
+            ScoreScalar(0.0),
         )
-        if contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_FLAT:
-            score_result = centroid_posting_flat_score_result_for_segment(
+        if contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_POSTINGS:
+            score_result = centroid_posting_score_result_for_segment_with_workspace(
+                query.token_vectors,
+                stored_centroid.index,
+                workspace.segment_accumulator,
+                allowed_flags,
+            )
+        elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_FLAT:
+            score_result = centroid_posting_flat_score_result_for_segment_with_workspace(
                 query,
                 stored_centroid.index,
+                workspace.segment_accumulator,
                 allowed_flags,
             )
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_HEAD:
-            score_result = centroid_posting_head_score_result_for_segment(
+            score_result = centroid_posting_head_score_result_for_segment_with_workspace(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
+                workspace.segment_accumulator,
                 allowed_flags,
             )
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_HEAD_AUTO:
-            score_result = centroid_posting_head_auto_score_result_for_segment(
+            score_result = (
+                centroid_posting_head_auto_score_result_for_segment_with_workspace(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
+                workspace.segment_accumulator,
                 allowed_flags,
-            )
+            ))
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_BLOCKMAX:
-            score_result = centroid_posting_blockmax_score_result_for_segment(
+            score_result = (
+                centroid_posting_blockmax_scores_for_segment_profiled_with_workspace(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
+                workspace.blockmax_scratch,
                 allowed_flags,
-            )
+            ).score_result.copy())
         elif contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_IMPUTED:
-            score_result = centroid_posting_imputed_score_result_for_segment(
+            score_result = centroid_posting_imputed_score_result_for_segment_with_workspace(
                 query.token_vectors,
                 stored_centroid.index,
                 shortlist_budget,
+                workspace.segment_accumulator,
                 allowed_flags,
             )
         elif (
             contract.score_variant == CENTROID_EXECUTION_SCORE_VARIANT_IMPUTED_FLAT
         ):
-            score_result = centroid_posting_imputed_flat_score_result_for_segment(
+            score_result = (
+                centroid_posting_imputed_flat_score_result_for_segment_with_workspace(
                 query,
                 stored_centroid.index,
                 shortlist_budget,
+                workspace.segment_accumulator,
                 allowed_flags,
-            )
+            ))
         elif contract.score_variant != CENTROID_EXECUTION_SCORE_VARIANT_POSTINGS:
             raise Error(
                 "unsupported centroid execution score variant: "

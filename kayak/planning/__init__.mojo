@@ -76,18 +76,25 @@ from .reference_scoring_semantics import (
     exact_late_interaction_reference_scoring_semantics,
 )
 from .centroid_primitives import (
+    MutableCentroidSegmentAccumulator,
     MutableCentroidSelectionScratch,
     ScoredCentroidSelection,
     accumulate_selected_centroid_scores,
+    accumulate_selected_centroid_scores_with_accumulator,
     accumulate_selected_centroid_scores_with_scratch,
+)
+from .centroid_candidate_generation_workspace import (
+    MutableCentroidCandidateGenerationWorkspace,
 )
 from .collection_hit import CollectionHit, to_search_hit
 from .execution import (
     candidate_generation_for_plan,
+    candidate_generation_for_plan_with_workspace,
     candidate_recall_at_final_k,
     final_hits_for_plan,
     final_hits_to_search_hits,
     search_collection_for_plan,
+    search_collection_for_plan_with_workspace,
 )
 from .execution_stage2 import stage2_result_for_plan
 from .execution_stage3 import stage3_result_for_plan

@@ -15,7 +15,13 @@ from .candidate_generator import (
 )
 from .candidate_set import CandidateSet
 from .collection_hit import CollectionHit, to_search_hit
-from .execution_centroid_family import candidate_generation_for_centroid_family
+from .centroid_candidate_generation_workspace import (
+    MutableCentroidCandidateGenerationWorkspace,
+)
+from .execution_centroid_family import (
+    candidate_generation_for_centroid_family,
+    candidate_generation_for_centroid_family_with_workspace,
+)
 from .execution_exact_family import candidate_generation_for_exact_family
 from .execution_graph_family import candidate_generation_for_graph_family
 from .execution_proxy_family import candidate_generation_for_proxy_family
@@ -30,6 +36,25 @@ def candidate_generation_for_plan[Backend: ExactScoringBackend](
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,
+    read filter_expression: FilterExpression = match_all_filter(),
+) raises -> CandidateSet:
+    var workspace = MutableCentroidCandidateGenerationWorkspace()
+    return candidate_generation_for_plan_with_workspace(
+        backend,
+        query,
+        snapshot,
+        plan,
+        workspace,
+        filter_expression,
+    )
+
+
+def candidate_generation_for_plan_with_workspace[Backend: ExactScoringBackend](
+    read backend: Backend,
+    read query: EncodedQuery,
+    read snapshot: ResolvedCollectionSnapshot,
+    read plan: SearchPlan,
+    mut workspace: MutableCentroidCandidateGenerationWorkspace,
     read filter_expression: FilterExpression = match_all_filter(),
 ) raises -> CandidateSet:
     if plan.candidate_generator.family == CANDIDATE_GENERATOR_FAMILY_EXACT:
@@ -51,11 +76,12 @@ def candidate_generation_for_plan[Backend: ExactScoringBackend](
         )
 
     if plan.candidate_generator.family == CANDIDATE_GENERATOR_FAMILY_CENTROID:
-        return candidate_generation_for_centroid_family(
+        return candidate_generation_for_centroid_family_with_workspace(
             backend,
             query,
             snapshot,
             plan,
+            workspace,
             filter_expression,
         )
 
@@ -129,11 +155,33 @@ def search_collection_for_plan[Backend: ExactScoringBackend](
     read filter_expression: FilterExpression = match_all_filter(),
     query_text: String = "",
 ) raises -> List[CollectionHit]:
-    var candidate_set = candidate_generation_for_plan(
+    var workspace = MutableCentroidCandidateGenerationWorkspace()
+    return search_collection_for_plan_with_workspace(
         backend,
         query,
         snapshot,
         plan,
+        workspace,
+        filter_expression,
+        query_text,
+    )
+
+
+def search_collection_for_plan_with_workspace[Backend: ExactScoringBackend](
+    read backend: Backend,
+    read query: EncodedQuery,
+    read snapshot: ResolvedCollectionSnapshot,
+    read plan: SearchPlan,
+    mut workspace: MutableCentroidCandidateGenerationWorkspace,
+    read filter_expression: FilterExpression = match_all_filter(),
+    query_text: String = "",
+) raises -> List[CollectionHit]:
+    var candidate_set = candidate_generation_for_plan_with_workspace(
+        backend,
+        query,
+        snapshot,
+        plan,
+        workspace,
         filter_expression,
     )
     return final_hits_for_plan(

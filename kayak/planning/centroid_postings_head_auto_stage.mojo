@@ -8,8 +8,11 @@ from kayak.numeric import (
 )
 from kayak.scoring.dot import dot_product
 
-from .centroid_primitives import MutableCentroidSelectionScratch
-from .centroid_segment_score_result import CentroidSegmentScoreResult
+from .centroid_primitives import MutableCentroidSegmentAccumulator
+from .centroid_segment_score_result import (
+    CentroidSegmentScoreResult,
+    materialize_centroid_segment_scores,
+)
 from .centroid_postings_head_stage import top_centroid_indices_for_query_token_head
 
 
@@ -84,12 +87,11 @@ def auto_centroid_head_posting_stop(
 
 def accumulate_token_best_doc_scores_head_auto(
     read query_token: List[VectorScalar], read index: CentroidPostingIndex,
-    candidate_k: Int, query_vector_count: Int, mut scores: List[ScoreScalar],
-    mut active_doc_indices: List[Int], mut active_flags: List[Int],
-    mut scratch: MutableCentroidSelectionScratch,
+    candidate_k: Int, query_vector_count: Int,
+    mut accumulator: MutableCentroidSegmentAccumulator,
     read allowed_flags: List[Int] = [],
 ):
-    scratch.begin_token()
+    accumulator.selection.begin_token()
 
     for centroid_index in top_centroid_indices_for_query_token_head(query_token, index):
         var similarity = dot_product(query_token, index.centroid_vectors[centroid_index])
@@ -109,20 +111,53 @@ def accumulate_token_best_doc_scores_head_auto(
                 similarity * ScoreScalar(index.posting_weights[posting_index])
             )
 
-            if scratch.token_seen_generations[doc_index] != scratch.generation:
-                scratch.append_token_active_doc_index(doc_index)
-                scratch.token_seen_generations[doc_index] = scratch.generation
-                scratch.token_best_scores[doc_index] = weighted_similarity
-            elif weighted_similarity > scratch.token_best_scores[doc_index]:
-                scratch.token_best_scores[doc_index] = weighted_similarity
+            if (
+                accumulator.selection.token_seen_generations[doc_index]
+                != accumulator.selection.generation
+            ):
+                accumulator.selection.append_token_active_doc_index(doc_index)
+                accumulator.selection.token_seen_generations[doc_index] = (
+                    accumulator.selection.generation
+                )
+                accumulator.selection.token_best_scores[doc_index] = (
+                    weighted_similarity
+                )
+            elif (
+                weighted_similarity
+                > accumulator.selection.token_best_scores[doc_index]
+            ):
+                accumulator.selection.token_best_scores[doc_index] = (
+                    weighted_similarity
+                )
 
-    for active_index in range(scratch.token_active_doc_count):
-        var doc_index = scratch.token_active_doc_indices[active_index]
-        if active_flags[doc_index] == 0:
-            active_doc_indices.append(doc_index)
-            active_flags[doc_index] = 1
+    for active_index in range(accumulator.selection.token_active_doc_count):
+        var doc_index = accumulator.selection.token_active_doc_indices[active_index]
+        accumulator.record_score_delta(
+            doc_index,
+            zero_score_scalar(),
+            accumulator.selection.token_best_scores[doc_index],
+        )
 
-        scores[doc_index] += scratch.token_best_scores[doc_index]
+
+def centroid_posting_head_auto_score_result_for_segment_with_workspace(
+    read query_token_vectors: List[List[VectorScalar]],
+    read index: CentroidPostingIndex,
+    candidate_k: Int,
+    mut workspace: MutableCentroidSegmentAccumulator,
+    read allowed_flags: List[Int] = [],
+) -> CentroidSegmentScoreResult:
+    workspace.begin_segment(index.document_count)
+    for query_token in query_token_vectors:
+        accumulate_token_best_doc_scores_head_auto(
+            query_token,
+            index,
+            candidate_k,
+            len(query_token_vectors),
+            workspace,
+            allowed_flags,
+        )
+
+    return workspace.freeze(zero_score_scalar())
 
 
 def centroid_posting_head_auto_score_result_for_segment(
@@ -131,32 +166,13 @@ def centroid_posting_head_auto_score_result_for_segment(
     candidate_k: Int,
     read allowed_flags: List[Int] = [],
 ) -> CentroidSegmentScoreResult:
-    var scores = List[ScoreScalar]()
-    var active_flags = List[Int]()
-    var active_doc_indices = List[Int]()
-
-    for _ in range(index.document_count):
-        scores.append(zero_score_scalar())
-        active_flags.append(0)
-
-    var scratch = MutableCentroidSelectionScratch(index.document_count)
-    for query_token in query_token_vectors:
-        accumulate_token_best_doc_scores_head_auto(
-            query_token,
-            index,
-            candidate_k,
-            len(query_token_vectors),
-            scores,
-            active_doc_indices,
-            active_flags,
-            scratch,
-            allowed_flags,
-        )
-
-    return CentroidSegmentScoreResult(
-        scores^,
-        active_doc_indices^,
-        zero_score_scalar(),
+    var workspace = MutableCentroidSegmentAccumulator(index.document_count)
+    return centroid_posting_head_auto_score_result_for_segment_with_workspace(
+        query_token_vectors,
+        index,
+        candidate_k,
+        workspace,
+        allowed_flags,
     )
 
 
@@ -166,9 +182,12 @@ def centroid_posting_head_auto_scores_for_segment(
     candidate_k: Int,
     read allowed_flags: List[Int] = [],
 ) -> List[ScoreScalar]:
-    return centroid_posting_head_auto_score_result_for_segment(
-        query_token_vectors,
-        index,
-        candidate_k,
-        allowed_flags,
-    ).scores.copy()
+    return materialize_centroid_segment_scores(
+        centroid_posting_head_auto_score_result_for_segment(
+            query_token_vectors,
+            index,
+            candidate_k,
+            allowed_flags,
+        ),
+        index.document_count,
+    )

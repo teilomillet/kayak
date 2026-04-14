@@ -7,11 +7,13 @@ from kayak.eval import evaluate_query_hits
 from kayak.planning import (
     CollectionSearchExplain,
     FilterApplicationProfile,
+    MutableCentroidCandidateGenerationWorkspace,
     SearchPlan,
     explain_collection_search,
     final_hits_to_search_hits,
     identity_filter_application_profile,
     search_collection_for_plan,
+    search_collection_for_plan_with_workspace,
 )
 from kayak.runtime import ExactCpuBackend
 from kayak.storage import StoredJudgedTask
@@ -321,16 +323,18 @@ def build_stage_aware_search_summary(
     if len(task.queries) == 0:
         raise Error("stage-aware benchmark requires at least one judged query")
 
+    var workspace = MutableCentroidCandidateGenerationWorkspace()
     var first_query = task.queries[0].copy()
     var first_query_text = judged_query_text_for_plan(
         plan,
         first_query.description,
     )
-    var first_final_hits = search_collection_for_plan(
+    var first_final_hits = search_collection_for_plan_with_workspace(
         backend,
         first_query.query,
         snapshot,
         plan,
+        workspace,
         query_text=first_query_text,
     )
     var first_query_evaluation = evaluate_query_hits(
@@ -379,11 +383,12 @@ def build_stage_aware_search_summary(
             plan,
             judged_query.description,
         )
-        var final_hits = search_collection_for_plan(
+        var final_hits = search_collection_for_plan_with_workspace(
             backend,
             judged_query.query,
             snapshot,
             plan,
+            workspace,
             query_text=query_text,
         )
         var query_evaluation = evaluate_query_hits(
@@ -429,11 +434,12 @@ def build_stage_aware_search_summary(
 
     def search_once() capturing raises:
         bench_compiler.keep(
-            search_collection_for_plan(
+            search_collection_for_plan_with_workspace(
                 backend,
                 task.queries[query_index].query,
                 snapshot,
                 plan,
+                workspace,
                 query_text=judged_query_text_for_plan(
                     plan,
                     task.queries[query_index].description,

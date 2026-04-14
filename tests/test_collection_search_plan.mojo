@@ -13,6 +13,8 @@ from kayak import (
 from kayak import (
     CandidateBudget,
     CandidateGenerator,
+    CandidateSet,
+    CollectionHit,
     CollectionId,
     CollectionManifest,
     CollectionStats,
@@ -25,10 +27,13 @@ from kayak import (
     TenantId,
     NamespaceId,
     StoredPackedIndex,
+    MutableCentroidCandidateGenerationWorkspace,
     best_effort_faithfulness_policy,
     build_stored_centroid_heads_index,
     build_stored_centroid_posting_index,
     build_stored_document_proxy_index,
+    candidate_generation_for_plan,
+    candidate_generation_for_plan_with_workspace,
     centroid_heads_search_plan,
     centroid_posting_flat_scores_for_segment,
     centroid_posting_imputed_flat_scores_for_segment,
@@ -71,6 +76,32 @@ from kayak import (
 )
 from kayak.text import DocumentTextCorpus
 from kayak.filters import one_of_filter
+
+
+def assert_collection_hits_equal(
+    read lhs: List[CollectionHit], read rhs: List[CollectionHit]
+) raises:
+    assert_equal(len(lhs), len(rhs))
+    for hit_index in range(len(lhs)):
+        assert_equal(lhs[hit_index].segment_id, rhs[hit_index].segment_id)
+        assert_equal(lhs[hit_index].doc_id, rhs[hit_index].doc_id)
+        assert_equal(lhs[hit_index].score, rhs[hit_index].score)
+
+
+def assert_candidate_sets_equal(
+    read lhs: CandidateSet, read rhs: CandidateSet
+) raises:
+    assert_equal(lhs.generator_kind, rhs.generator_kind)
+    assert_equal(lhs.generator_family, rhs.generator_family)
+    assert_equal(lhs.interaction_semantics, rhs.interaction_semantics)
+    assert_equal(lhs.alignment_granularity, rhs.alignment_granularity)
+    assert_equal(lhs.score_kind, rhs.score_kind)
+    assert_equal(lhs.segment_count, rhs.segment_count)
+    assert_equal(lhs.document_count, rhs.document_count)
+    assert_equal(lhs.token_count, rhs.token_count)
+    assert_equal(lhs.vector_count, rhs.vector_count)
+    assert_equal(lhs.byte_size, rhs.byte_size)
+    assert_collection_hits_equal(lhs.hits, rhs.hits)
 
 
 def write_segment(
@@ -1187,6 +1218,90 @@ def test_centroid_postings_flat_stage_matches_plain_stage_scores() raises:
     assert_equal(len(flat_scores), len(plain_scores))
     for score_index in range(len(plain_scores)):
         assert_equal(flat_scores[score_index], plain_scores[score_index])
+
+
+def test_centroid_candidate_generation_workspace_reuse_matches_plain_path() raises:
+    var root = make_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var workspace = MutableCentroidCandidateGenerationWorkspace()
+    var backend = ExactCpuBackend()
+    var plain_plan = centroid_postings_search_plan(
+        1, 2, best_effort_faithfulness_policy()
+    )
+    var imputed_plan = centroid_postings_imputed_search_plan(
+        1, 2, best_effort_faithfulness_policy()
+    )
+    var first_query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var second_query = EncodedQuery([[0.0, 1.0], [1.0, 0.0]])
+
+    var plain_first = candidate_generation_for_plan(
+        backend,
+        first_query,
+        resolved,
+        plain_plan,
+    )
+    var workspace_first = candidate_generation_for_plan_with_workspace(
+        backend,
+        first_query,
+        resolved,
+        plain_plan,
+        workspace,
+    )
+    assert_candidate_sets_equal(plain_first, workspace_first)
+
+    var plain_second = candidate_generation_for_plan(
+        backend,
+        second_query,
+        resolved,
+        imputed_plan,
+    )
+    var workspace_second = candidate_generation_for_plan_with_workspace(
+        backend,
+        second_query,
+        resolved,
+        imputed_plan,
+        workspace,
+    )
+    assert_candidate_sets_equal(plain_second, workspace_second)
+
+
+def test_centroid_candidate_generation_workspace_keeps_filtered_inactive_docs() raises:
+    var root = make_three_dim_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var workspace = MutableCentroidCandidateGenerationWorkspace()
+    var backend = ExactCpuBackend()
+    var query = EncodedQuery([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    var plan = centroid_postings_imputed_search_plan(
+        1, 1, best_effort_faithfulness_policy()
+    )
+    var filter_expression = one_of_filter("doc_id", ["doc-c"])
+
+    _ = candidate_generation_for_plan_with_workspace(
+        backend,
+        EncodedQuery([[1.0, 0.0, 0.0]]),
+        resolved,
+        centroid_postings_search_plan(1, 1, best_effort_faithfulness_policy()),
+        workspace,
+    )
+    var plain = candidate_generation_for_plan(
+        backend,
+        query,
+        resolved,
+        plan,
+        filter_expression,
+    )
+    var reused = candidate_generation_for_plan_with_workspace(
+        backend,
+        query,
+        resolved,
+        plan,
+        workspace,
+        filter_expression,
+    )
+
+    assert_candidate_sets_equal(plain, reused)
+    assert_equal(len(reused.hits), 1)
+    assert_equal(reused.hits[0].doc_id, "doc-c")
 
 
 def test_centroid_heads_search_plan_exact_reranks_shortlist() raises:
