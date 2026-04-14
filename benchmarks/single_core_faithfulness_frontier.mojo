@@ -24,6 +24,7 @@ from kayak.planning import (
     best_effort_faithfulness_policy,
     centroid_heads_search_plan,
     centroid_postings_head_auto_search_plan,
+    centroid_postings_imputed_flat_search_plan,
     centroid_postings_imputed_search_plan,
     centroid_postings_search_plan,
     document_proxy_search_plan,
@@ -199,6 +200,22 @@ def append_frontier_for_profile(
                 fixture.stored_task,
                 centroid_snapshot,
                 centroid_postings_search_plan(
+                    profile.final_k,
+                    candidate_k,
+                    best_effort_faithfulness_policy(),
+                ),
+                profile.query_vector_count,
+                full_centroid_budget,
+                0,
+            ),
+        )
+        append_summary(
+            summaries,
+            build_faithfulness_frontier_summary_for_plan(
+                backend,
+                fixture.stored_task,
+                centroid_snapshot,
+                centroid_postings_imputed_flat_search_plan(
                     profile.final_k,
                     candidate_k,
                     best_effort_faithfulness_policy(),
