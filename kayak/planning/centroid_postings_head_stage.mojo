@@ -4,11 +4,11 @@ from kayak.index import CentroidPostingIndex
 from kayak.numeric import (
     ScoreScalar,
     VectorScalar,
-    min_score_scalar,
     zero_score_scalar,
 )
 from kayak.scoring.dot import dot_product
 
+from .centroid_primitives import MutableCentroidSelectionScratch
 from .centroid_segment_score_result import CentroidSegmentScoreResult
 
 
@@ -90,15 +90,10 @@ def accumulate_token_best_doc_scores_head(
     read query_token: List[VectorScalar], read index: CentroidPostingIndex,
     candidate_k: Int, mut scores: List[ScoreScalar],
     mut active_doc_indices: List[Int], mut active_flags: List[Int],
+    mut scratch: MutableCentroidSelectionScratch,
     read allowed_flags: List[Int] = [],
 ):
-    var token_best_scores = List[ScoreScalar]()
-    var token_active_doc_indices = List[Int]()
-    var token_active_flags = List[Int]()
-
-    for _ in range(len(scores)):
-        token_best_scores.append(min_score_scalar())
-        token_active_flags.append(0)
+    scratch.begin_token()
 
     for centroid_index in top_centroid_indices_for_query_token_head(query_token, index):
         var similarity = dot_product(query_token, index.centroid_vectors[centroid_index])
@@ -113,19 +108,19 @@ def accumulate_token_best_doc_scores_head(
                 similarity * ScoreScalar(index.posting_weights[posting_index])
             )
 
-            if token_active_flags[doc_index] == 0:
-                token_active_doc_indices.append(doc_index)
-                token_active_flags[doc_index] = 1
+            if scratch.token_seen_generations[doc_index] != scratch.generation:
+                scratch.token_active_doc_indices.append(doc_index)
+                scratch.token_seen_generations[doc_index] = scratch.generation
+                scratch.token_best_scores[doc_index] = weighted_similarity
+            elif weighted_similarity > scratch.token_best_scores[doc_index]:
+                scratch.token_best_scores[doc_index] = weighted_similarity
 
-            if weighted_similarity > token_best_scores[doc_index]:
-                token_best_scores[doc_index] = weighted_similarity
-
-    for doc_index in token_active_doc_indices:
+    for doc_index in scratch.token_active_doc_indices:
         if active_flags[doc_index] == 0:
             active_doc_indices.append(doc_index)
             active_flags[doc_index] = 1
 
-        scores[doc_index] += token_best_scores[doc_index]
+        scores[doc_index] += scratch.token_best_scores[doc_index]
 
 
 def centroid_posting_head_score_result_for_segment(
@@ -142,6 +137,7 @@ def centroid_posting_head_score_result_for_segment(
         scores.append(zero_score_scalar())
         active_flags.append(0)
 
+    var scratch = MutableCentroidSelectionScratch(index.document_count)
     for query_token in query_token_vectors:
         accumulate_token_best_doc_scores_head(
             query_token,
@@ -150,6 +146,7 @@ def centroid_posting_head_score_result_for_segment(
             scores,
             active_doc_indices,
             active_flags,
+            scratch,
             allowed_flags,
         )
 
