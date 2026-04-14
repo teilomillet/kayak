@@ -10,6 +10,9 @@ readme = "python/kayak/README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = ["colbert-ai>=0.2.22,<0.3", "ir-datasets>=0.5.11,<0.6", "numpy>=2.0,<3", "torch>=2.11.0,<3", "transformers<5"]
 
+[project.scripts]
+kayak-engine-serve = "kayak_engine.server:main"
+
 [tool.pixi.workspace]
 channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
 platforms = ["osx-arm64"]
@@ -33,6 +36,7 @@ test_eval = "mojo -I . tests/test_eval_metrics.mojo"
 test_proxies = "mojo -I . tests/test_proxy_tasks.mojo"
 test_python_bridge = "mojo -I . tests/test_python_bridge.mojo"
 test_python_api = "PYTHONPATH=python python -m unittest discover -s python/tests -p 'test_*.py'"
+test_hosted_engine_http = "PYTHONPATH=python python -m unittest python/tests/test_hosted_engine_http.py"
 test_repo_semantic_inventory = "PYTHONPATH=python python -m unittest python/tests/test_repo_semantic_inventory.py"
 test_stage_semantic_guardrails = "PYTHONPATH=python python -m unittest python/tests/test_stage_semantic_guardrails.py"
 test_stage1_semantic_guardrails = "mojo -I . tests/test_stage1_semantic_guardrails.mojo"
@@ -186,7 +190,8 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["python"]
-include = ["kayak", "kayak_bridge"]
+include = ["kayak", "kayak_bridge", "kayak_engine"]
 
 [tool.setuptools.package-data]
 kayak_bridge = ["*.mojo", "_artifacts/*.mojopkg"]
+kayak_engine = ["*.mojo"]

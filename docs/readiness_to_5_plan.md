@@ -91,11 +91,12 @@ Target:
 - typed contracts plus a real deployable service path
 
 Current status:
-- strong typed contracts, but no finished service transport or deployment UX
+- strong typed contracts plus a finished first HTTP transport, but deployment UX
+  is still narrow
 
 What still blocks `5/5`:
-- no networked service path yet
-- no self-hosted operator-facing flow yet
+- no boring self-hosted deployment guide yet
+- no operator safety layer or auth at the service edge yet
 
 ### Axis 3: Python SDK
 
@@ -210,11 +211,11 @@ Why:
 - companies adopt a deployable system, not only a good set of structs
 
 Required work:
-- [ ] Implement one real service transport around `kayak/service/`
-- [ ] Add one networked end-to-end integration test:
+- [x] Implement one real service transport around `kayak/service/`
+- [x] Add one networked end-to-end integration test:
   create collection, ingest, snapshot, search, explain
-- [ ] Expose health and metrics through the real service path
-- [ ] Add one local development startup path
+- [x] Expose health and metrics through the real service path
+- [x] Add one local development startup path
 
 Exit criteria:
 - an external user can run one service process and hit it over the network

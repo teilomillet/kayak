@@ -1,15 +1,16 @@
 # Service API Architecture
 
-Status: `Phase A/Phase E bridge draft`  
-Date: `2026-04-12`
+Status: `Phase A/Phase E bridge with implemented HTTP v0`
+Date: `2026-04-14`
 
 This document defines the public service contract that `kayak` should expose
-before any HTTP transport is implemented.
+through its typed engine boundary and its first HTTP transport.
 
 It is intentionally epistemic:
 - verified statements are tied to the current repository
 - open choices remain open instead of being hidden in provisional code
-- the document distinguishes the canonical typed contract from any future wire format
+- the document distinguishes the canonical typed contract from the current
+  HTTP projection
 
 ## Verified Starting Point
 
@@ -22,7 +23,8 @@ These statements are checked against the current repository.
    - explicit `SearchPlan`
    - explicit `CandidateSet`
    - explicit collection-scoped explain output
-3. The repository still does not have an HTTP transport layer.
+3. The repository now has a first HTTP transport layer implemented in
+   [`python/kayak_engine/server.py`](../../python/kayak_engine/server.py).
 4. The current explain example,
    [`examples/scifact_collection_explain.mojo`](../../examples/scifact_collection_explain.mojo),
    already demonstrates the core engine shape that a service should wrap:
@@ -32,7 +34,7 @@ These statements are checked against the current repository.
 
 ## Decision
 
-Define a canonical service contract in code before choosing a transport.
+Define a canonical service contract in code before fixing the transport shape.
 
 This is the sound order because:
 - the engine already has collection and search-plan primitives
@@ -42,15 +44,25 @@ This is the sound order because:
   requests and responses, not the source of truth
 
 The canonical typed boundary lives in [`kayak/service/`](../../kayak/service).
-The repository now also includes a thin JSON projection layer in
-[`kayak/service/json.mojo`](../../kayak/service/json.mojo) so the initial
-HTTP/JSON adapter can stay simple and reuse the typed contracts directly.
+The repository also includes:
+- a thin JSON projection layer in
+  [`kayak/service/json.mojo`](../../kayak/service/json.mojo)
+- a Mojo-backed Python service binding in
+  [`python/kayak_engine/_mojo_service_bindings.mojo`](../../python/kayak_engine/_mojo_service_bindings.mojo)
+- a small stdlib HTTP server in
+  [`python/kayak_engine/server.py`](../../python/kayak_engine/server.py)
+
+That implementation order was sound because:
+- the typed engine contract was stabilized first
+- the HTTP layer could then stay thin and mostly mechanical
+- the transport did not need to invent a second service model
 
 For the current data-flow and trust-boundary interpretation of this contract,
 see:
 - [data_flow_io.md](data_flow_io.md)
 - [trust_boundary.md](trust_boundary.md)
 - [multi_encoder_interoperability.md](multi_encoder_interoperability.md)
+- [../hosted_engine_http.md](../hosted_engine_http.md)
 
 ## Scope
 
@@ -223,35 +235,41 @@ Current default-order claim is intentionally narrow:
   `centroid_postings_head_auto`, or `centroid_postings_blockmax`
   as universal winners, because the current local traces do not justify that
 
-## Proposed HTTP/JSON Projection
+## Current HTTP/JSON Projection
 
-The initial transport should stay simple and boring.
+The current transport stays simple and boring on purpose.
 
-Recommended first projection:
+Current implemented projection:
 
 ```text
 POST /v1/collections
-PUT  /v1/collections/{tenant}/{namespace}/{collection}/retention
-POST /v1/collections/{tenant}/{namespace}/{collection}/documents:upsert
-POST /v1/collections/{tenant}/{namespace}/{collection}/documents:delete
-POST /v1/collections/{tenant}/{namespace}/{collection}/snapshots
-POST /v1/collections/{tenant}/{namespace}/{collection}/snapshots/{snapshot}:export
-POST /v1/collections/{tenant}/{namespace}/{collection}/snapshots:import
-GET  /v1/collections/{tenant}/{namespace}/{collection}:lifecycle
-POST /v1/collections/{tenant}/{namespace}/{collection}/reclaim:plan
-POST /v1/collections/{tenant}/{namespace}/{collection}/reclaim:execute
-POST /v1/collections/{tenant}/{namespace}/{collection}/search
-POST /v1/collections/{tenant}/{namespace}/{collection}/search:explain
-GET  /healthz
+POST /v1/documents:upsert
+POST /v1/snapshots
+POST /v1/search
+POST /v1/explain
+POST /v1/planned-search
+POST /v1/planned-explain
+GET  /health
 GET  /metrics
 ```
 
-Why this is the current recommendation:
-- it stays collection-scoped instead of introducing a cross-collection query
-  language too early
-- it keeps tenant and namespace explicit in the request path
-- it lets search operate on an explicit snapshot id instead of a hidden
-  mutable "active collection state"
+Why the first implementation uses flat endpoint roots instead of the longer
+collection-scoped path sketch:
+- it keeps the server and integration test small while the contract is still
+  settling
+- collection, tenant, namespace, and snapshot identity stay explicit in the
+  body instead of becoming implicit server state
+- it is easier to refactor URI shape later than to recover from a duplicated
+  engine contract
+
+Still not implemented at the HTTP edge:
+- retention update
+- delete documents
+- export snapshot
+- import snapshot
+- lifecycle report
+- reclaim plan
+- reclaim execute
 
 ## Search Semantics
 
@@ -358,9 +376,9 @@ These remain intentionally undecided:
 
 The next service-adjacent work should be:
 
-1. add a minimal HTTP adapter that translates JSON bodies into
-   `kayak/service/` typed contracts
-2. route debug mode directly to `CollectionSearchExplain`
+1. extend the current HTTP adapter to the remaining lifecycle endpoints
+2. route explicit debug-search HTTP endpoints directly to
+   `CollectionSearchExplain`
 3. reuse collection storage reports and snapshot-bundle export/import in the
    service layer
 4. add an auth and tenant-isolation story once the core request grammar settles

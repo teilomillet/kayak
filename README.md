@@ -157,8 +157,41 @@ documented in:
 - [docs/architecture/data_flow_io.md](docs/architecture/data_flow_io.md)
 - [docs/architecture/trust_boundary.md](docs/architecture/trust_boundary.md)
 - [docs/architecture/multi_encoder_interoperability.md](docs/architecture/multi_encoder_interoperability.md)
+There is now also a first real HTTP transport for Kayak Engine, documented in
+[docs/hosted_engine_http.md](docs/hosted_engine_http.md).
 The execution plan for that SDK is documented in
 [docs/python_sdk_roadmap.md](docs/python_sdk_roadmap.md).
+
+## Hosted Engine HTTP
+
+The repo now includes a deployable hosted-engine HTTP process under
+`python/kayak_engine/`.
+
+This is intentionally separate from `import kayak`:
+- `kayak` is the public local Python SDK
+- `kayak_engine` owns the network service edge
+
+Verified local startup path:
+
+```bash
+PYTHONPATH=python pixi run python -m kayak_engine.server \
+  --root ./.state/kayak-engine \
+  --port 8000
+```
+
+That server currently exposes:
+- `GET /health`
+- `GET /metrics`
+- `POST /v1/collections`
+- `POST /v1/documents:upsert`
+- `POST /v1/snapshots`
+- `POST /v1/search`
+- `POST /v1/explain`
+- `POST /v1/planned-search`
+- `POST /v1/planned-explain`
+
+The current HTTP transport guide and examples live in
+[docs/hosted_engine_http.md](docs/hosted_engine_http.md).
 
 Example:
 
