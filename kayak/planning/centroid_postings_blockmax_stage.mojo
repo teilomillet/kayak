@@ -372,7 +372,7 @@ def accumulate_token_best_doc_scores_blockmax(
                     scratch.selection.token_seen_generations[doc_index]
                     != scratch.selection.generation
                 ):
-                    scratch.selection.token_active_doc_indices.append(doc_index)
+                    scratch.selection.append_token_active_doc_index(doc_index)
                     scratch.selection.token_seen_generations[doc_index] = (
                         scratch.selection.generation
                     )
@@ -401,7 +401,8 @@ def accumulate_token_best_doc_scores_blockmax(
                         use_dense_top_positions,
                     )
 
-    for doc_index in scratch.selection.token_active_doc_indices:
+    for active_index in range(scratch.selection.token_active_doc_count):
+        var doc_index = scratch.selection.token_active_doc_indices[active_index]
         if active_flags[doc_index] == 0:
             active_doc_indices.append(doc_index)
             active_flags[doc_index] = 1

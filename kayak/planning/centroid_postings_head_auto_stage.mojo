@@ -110,13 +110,14 @@ def accumulate_token_best_doc_scores_head_auto(
             )
 
             if scratch.token_seen_generations[doc_index] != scratch.generation:
-                scratch.token_active_doc_indices.append(doc_index)
+                scratch.append_token_active_doc_index(doc_index)
                 scratch.token_seen_generations[doc_index] = scratch.generation
                 scratch.token_best_scores[doc_index] = weighted_similarity
             elif weighted_similarity > scratch.token_best_scores[doc_index]:
                 scratch.token_best_scores[doc_index] = weighted_similarity
 
-    for doc_index in scratch.token_active_doc_indices:
+    for active_index in range(scratch.token_active_doc_count):
+        var doc_index = scratch.token_active_doc_indices[active_index]
         if active_flags[doc_index] == 0:
             active_doc_indices.append(doc_index)
             active_flags[doc_index] = 1
