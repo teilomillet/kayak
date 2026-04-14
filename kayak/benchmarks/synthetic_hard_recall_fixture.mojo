@@ -337,6 +337,23 @@ def default_synthetic_hard_recall_profiles(
     return profiles^
 
 
+def high_centroid_synthetic_hard_recall_profile(
+) raises -> SyntheticHardRecallProfile:
+    return SyntheticHardRecallProfile(
+        "synthetic_hard_recall",
+        "imputed_probe_centroids180_docs544",
+        "Benchmark-only shared-slot conjunction workload with a large filler concept pool so centroid_count exceeds the current imputed bound.",
+        4,
+        4,
+        32,
+        160,
+        2,
+        8,
+        2,
+        16,
+    )
+
+
 def make_synthetic_hard_recall_fixture(
     read profile: SyntheticHardRecallProfile
 ) raises -> SyntheticHardRecallFixture:

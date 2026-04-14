@@ -16,8 +16,8 @@ from .centroid_primitives import (
 )
 from .centroid_segment_score_result import CentroidSegmentScoreResult
 from .centroid_postings_flat_stage import dot_product_flat_pair_at_generic
+from .centroid_postings_stage import insert_descending_centroid_match
 from .centroid_postings_imputed_stage import (
-    append_descending_centroid_index,
     centroid_token_count,
     effective_imputed_centroid_bound,
     effective_imputed_centroid_nprobe,
@@ -31,11 +31,12 @@ def centroid_selection_for_flat_query_token_generic(
     read index: CentroidPostingIndex,
     final_k: Int,
 ) -> ScoredCentroidSelection:
+    var bound = effective_imputed_centroid_bound(index.centroid_count)
     var sorted_centroid_indices = List[Int]()
     var sorted_centroid_scores = List[ScoreScalar]()
 
     for centroid_index in range(index.centroid_count):
-        append_descending_centroid_index(
+        insert_descending_centroid_match(
             sorted_centroid_indices,
             sorted_centroid_scores,
             centroid_index,
@@ -46,9 +47,9 @@ def centroid_selection_for_flat_query_token_generic(
                 centroid_index * index.vector_dim,
                 index.vector_dim,
             ),
+            bound,
         )
 
-    var bound = effective_imputed_centroid_bound(index.centroid_count)
     var nprobe = effective_imputed_centroid_nprobe(bound)
     var selected_centroid_indices = List[Int]()
     var selected_centroid_scores = List[ScoreScalar]()
@@ -81,12 +82,13 @@ def centroid_selection_for_flat_query_token_dim128(
     read index: CentroidPostingIndex,
     final_k: Int,
 ) -> ScoredCentroidSelection:
+    var bound = effective_imputed_centroid_bound(index.centroid_count)
     var sorted_centroid_indices = List[Int]()
     var sorted_centroid_scores = List[ScoreScalar]()
     var query_offset = query_index * COLBERT_VECTOR_DIM
 
     for centroid_index in range(index.centroid_count):
-        append_descending_centroid_index(
+        insert_descending_centroid_match(
             sorted_centroid_indices,
             sorted_centroid_scores,
             centroid_index,
@@ -96,9 +98,9 @@ def centroid_selection_for_flat_query_token_dim128(
                 index.flat_centroid_values,
                 centroid_index * COLBERT_VECTOR_DIM,
             ),
+            bound,
         )
 
-    var bound = effective_imputed_centroid_bound(index.centroid_count)
     var nprobe = effective_imputed_centroid_nprobe(bound)
     var selected_centroid_indices = List[Int]()
     var selected_centroid_scores = List[ScoreScalar]()

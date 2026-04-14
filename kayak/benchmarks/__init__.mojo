@@ -77,6 +77,7 @@ from .synthetic_hard_recall_fixture import (
     SyntheticHardRecallFixture,
     SyntheticHardRecallProfile,
     default_synthetic_hard_recall_profiles,
+    high_centroid_synthetic_hard_recall_profile,
     make_synthetic_hard_recall_fixture,
 )
 from .long_document_hard_recall_fixture import (

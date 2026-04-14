@@ -14,32 +14,7 @@ from .centroid_primitives import (
     accumulate_selected_centroid_scores_with_scratch,
 )
 from .centroid_segment_score_result import CentroidSegmentScoreResult
-
-
-def append_descending_centroid_index(
-    mut centroid_indices: List[Int],
-    mut centroid_scores: List[ScoreScalar],
-    centroid_index: Int,
-    centroid_score: ScoreScalar,
-):
-    var insert_at = 0
-    while (
-        insert_at < len(centroid_scores)
-        and centroid_scores[insert_at] >= centroid_score
-    ):
-        insert_at += 1
-
-    centroid_indices.append(centroid_index)
-    centroid_scores.append(centroid_score)
-
-    var current = len(centroid_scores) - 1
-    while current > insert_at:
-        centroid_indices[current] = centroid_indices[current - 1]
-        centroid_scores[current] = centroid_scores[current - 1]
-        current -= 1
-
-    centroid_indices[insert_at] = centroid_index
-    centroid_scores[insert_at] = centroid_score
+from .centroid_postings_stage import insert_descending_centroid_match
 
 
 comptime DEFAULT_IMPUTED_CENTROID_NPROBE = 32
@@ -101,18 +76,19 @@ def centroid_selection_for_query_token(
     read index: CentroidPostingIndex,
     final_k: Int,
 ) -> ScoredCentroidSelection:
+    var bound = effective_imputed_centroid_bound(index.centroid_count)
     var sorted_centroid_indices = List[Int]()
     var sorted_centroid_scores = List[ScoreScalar]()
 
     for centroid_index in range(index.centroid_count):
-        append_descending_centroid_index(
+        insert_descending_centroid_match(
             sorted_centroid_indices,
             sorted_centroid_scores,
             centroid_index,
             dot_product(query_token, index.centroid_vectors[centroid_index]),
+            bound,
         )
 
-    var bound = effective_imputed_centroid_bound(index.centroid_count)
     var nprobe = effective_imputed_centroid_nprobe(bound)
     var selected_centroid_indices = List[Int]()
     var selected_centroid_scores = List[ScoreScalar]()
