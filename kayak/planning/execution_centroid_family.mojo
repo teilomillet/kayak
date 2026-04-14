@@ -140,6 +140,7 @@ def insert_centroid_scores(
     candidate_k: Int,
     allowed_document_count: Int,
     read allowed_flags: List[Int],
+    read allowed_doc_indices: List[Int],
 ):
     insert_scored_centroid_doc_indices(
         hits,
@@ -165,6 +166,21 @@ def insert_centroid_scores(
 
     for document_index in score_result.active_doc_indices:
         active_flags[document_index] = 1
+
+    if len(allowed_doc_indices) != 0:
+        for document_index in allowed_doc_indices:
+            if active_flags[document_index] != 0:
+                continue
+            insert_descending_collection_hit(
+                hits,
+                CollectionHit(
+                    segment_id.copy(),
+                    doc_ids[document_index].copy(),
+                    score_result.inactive_score,
+                ),
+                candidate_k,
+            )
+        return
 
     for document_index in range(len(doc_ids)):
         if active_flags[document_index] != 0:
@@ -227,6 +243,7 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
         filter_input_document_count += stored_centroid.index.document_count
         byte_size += stored_centroid.artifact_byte_size
         var allowed_flags = List[Int]()
+        var allowed_doc_indices = List[Int]()
         var matching_document_count = stored_centroid.index.document_count
         var effective_filter = effective_filter_expression_for_segment(
             snapshot.collection,
@@ -254,6 +271,7 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
             )
             matching_document_count = allowlist.matching_document_count
             allowed_flags = allowlist.flags.copy()
+            allowed_doc_indices = allowlist.matching_doc_indices.copy()
 
         filter_matching_document_count += matching_document_count
         if matching_document_count == 0:
@@ -325,6 +343,7 @@ def candidate_generation_for_centroid_family[Backend: ExactScoringBackend](
             plan.candidate_budget.candidate_k,
             matching_document_count,
             allowed_flags,
+            allowed_doc_indices,
         )
 
     var candidate_set = CandidateSet(

@@ -12,13 +12,15 @@ from .document_filter_index import StoredDocumentFilterIndex
 
 struct DocumentFilterAllowlist(Copyable):
     var flags: List[Int]
+    var matching_doc_indices: List[Int]
     var matching_document_count: Int
 
     def __init__(
         out self,
         read flags: List[Int],
-        matching_document_count: Int,
+        read matching_doc_indices: List[Int],
     ) raises:
+        var matching_document_count = len(matching_doc_indices)
         if matching_document_count < 0:
             raise Error(
                 "document filter allowlist matching_document_count must be non-negative"
@@ -27,7 +29,23 @@ struct DocumentFilterAllowlist(Copyable):
             raise Error(
                 "document filter allowlist matching_document_count exceeds flags length"
             )
+        for matching_index in range(matching_document_count):
+            var doc_index = matching_doc_indices[matching_index]
+            if doc_index < 0 or doc_index >= len(flags):
+                raise Error(
+                    "document filter allowlist matching_doc_indices must stay within flags bounds"
+                )
+            if matching_index > 0:
+                if matching_doc_indices[matching_index - 1] >= doc_index:
+                    raise Error(
+                        "document filter allowlist matching_doc_indices must be strictly ascending"
+                    )
+            if flags[doc_index] == 0:
+                raise Error(
+                    "document filter allowlist matching_doc_indices must point at allowed documents"
+                )
         self.flags = flags.copy()
+        self.matching_doc_indices = matching_doc_indices.copy()
         self.matching_document_count = matching_document_count
 
     def matches_document_index(self, document_index: Int) -> Bool:
@@ -189,4 +207,4 @@ def document_filter_allowlist_for_expression(
     for doc_index in matching_doc_indices:
         flags[doc_index] = 1
 
-    return DocumentFilterAllowlist(flags, len(matching_doc_indices))
+    return DocumentFilterAllowlist(flags, matching_doc_indices)

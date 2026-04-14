@@ -251,6 +251,9 @@ def test_document_filter_allowlist_matches_exact_filter_runtime() raises:
     )
 
     assert_equal(allowlist.matching_document_count, 2)
+    assert_equal(len(allowlist.matching_doc_indices), 2)
+    assert_equal(allowlist.matching_doc_indices[0], 0)
+    assert_equal(allowlist.matching_doc_indices[1], 2)
     for doc_index in range(len(doc_ids)):
         assert_equal(
             allowlist.matches_document_index(doc_index),
@@ -266,6 +269,9 @@ def test_document_filter_allowlist_matches_exact_filter_runtime() raises:
         stored,
         one_of_filter("doc_id", ["doc-a", "doc-c"]),
     )
+    assert_equal(len(match_all_allowlist.matching_doc_indices), 2)
+    assert_equal(match_all_allowlist.matching_doc_indices[0], 0)
+    assert_equal(match_all_allowlist.matching_doc_indices[1], 2)
     assert_equal(match_all_allowlist.matches_document_index(0), True)
     assert_equal(match_all_allowlist.matches_document_index(1), False)
     assert_equal(match_all_allowlist.matches_document_index(2), True)
@@ -342,6 +348,8 @@ def test_document_filter_allowlist_respects_internal_scope_postings() raises:
     ]
 
     assert_equal(allowlist.matching_document_count, 1)
+    assert_equal(len(allowlist.matching_doc_indices), 1)
+    assert_equal(allowlist.matching_doc_indices[0], 0)
     for doc_index in range(len(doc_ids)):
         assert_equal(
             allowlist.matches_document_index(doc_index),
