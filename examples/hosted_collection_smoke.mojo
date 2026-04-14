@@ -84,6 +84,7 @@ def main() raises:
             SnapshotId("snapshot-0001"),
             EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
             2,
+            "colbertv2",
             True,
         ),
     )

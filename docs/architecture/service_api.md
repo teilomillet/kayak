@@ -46,6 +46,12 @@ The repository now also includes a thin JSON projection layer in
 [`kayak/service/json.mojo`](../../kayak/service/json.mojo) so the initial
 HTTP/JSON adapter can stay simple and reuse the typed contracts directly.
 
+For the current data-flow and trust-boundary interpretation of this contract,
+see:
+- [data_flow_io.md](data_flow_io.md)
+- [trust_boundary.md](trust_boundary.md)
+- [multi_encoder_interoperability.md](multi_encoder_interoperability.md)
+
 ## Scope
 
 The minimum service surface is:
@@ -292,6 +298,9 @@ That matches the current repo shape:
 - `kayak` already treats encoded queries and encoded documents as stable inputs
 - Python/Hugging Face encoding can remain outside the search service
 - the hosted engine focuses on storage, snapshots, planning, and search
+- hosted search requests now also carry explicit `query_model_name`, so the
+  service can reject wrong-model queries instead of treating same-dimension
+  vectors as interchangeable
 
 Inference:
 - an HTTP/JSON v0 may temporarily accept encoded vectors directly for

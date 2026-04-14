@@ -26,6 +26,7 @@ from kayak import (
     SearchPlanSelectionDecision,
     SearchPlanSelection,
     SearchPlanSelectionRequest,
+    SearchRequest,
     document_proxy_build_spec,
     gem_graph_build_spec,
     FaithfulnessAssessment,
@@ -62,6 +63,7 @@ from kayak import (
     planned_debug_search_response_json,
     planned_search_request_json,
     planned_search_response_json,
+    search_request_json,
     service_health_status_json,
     upsert_documents_request_json,
     update_collection_retention_policy_request_json,
@@ -166,6 +168,7 @@ def make_planned_search_request() raises -> PlannedSearchRequest:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
+        "colbertv2",
         "find the clause evidence",
         "",
         "clause_text",
@@ -181,6 +184,21 @@ def make_planned_search_request() raises -> PlannedSearchRequest:
             3,
             9,
         ),
+    )
+
+
+def make_search_request() raises -> SearchRequest:
+    return SearchRequest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
+        "colbertv2",
+        "find the exact answer",
+        match_all_filter(),
+        exact_full_scan_search_plan(2, 2),
+        True,
     )
 
 
@@ -506,6 +524,10 @@ def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
     assert_equal(request_json.find("\"planning\":") != -1, True)
     assert_equal(request_json.find("\"goal\":\"native_multivector\"") != -1, True)
     assert_equal(
+        request_json.find("\"query_model_name\":\"colbertv2\"") != -1,
+        True,
+    )
+    assert_equal(
         request_json.find("\"query_text\":\"find the clause evidence\"") != -1,
         True,
     )
@@ -559,6 +581,20 @@ def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
         debug_json.find("\"serving_scope_kind\":\"layout_rooted\"") != -1,
         True,
     )
+
+
+def test_search_request_json_surfaces_query_model_name() raises:
+    var json = search_request_json(make_search_request())
+
+    assert_equal(
+        json.find("\"query_model_name\":\"colbertv2\"") != -1,
+        True,
+    )
+    assert_equal(
+        json.find("\"query_text\":\"find the exact answer\"") != -1,
+        True,
+    )
+    assert_equal(json.find("\"debug_mode\":true") != -1, True)
 
 
 def test_service_health_status_json_contains_counters() raises:

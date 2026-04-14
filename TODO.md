@@ -466,9 +466,9 @@ Required properties:
   rewriting the engine
 
 Immediate TODOs:
-- [ ] Add one design note for multi-encoder interoperability and non-goals
-- [ ] Keep collection and snapshot contracts explicit about one encoder space
-- [ ] Add one negative test or validation path that rejects unsound mixed-model
+- [x] Add one design note for multi-encoder interoperability and non-goals
+- [x] Keep collection and snapshot contracts explicit about one encoder space
+- [x] Add one negative test or validation path that rejects unsound mixed-model
   search assumptions if the current code surface permits them
 
 ## Execution Plan

@@ -234,6 +234,7 @@ def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() 
         SnapshotId("snapshot-0001"),
         make_query(),
         1,
+        "colbertv2",
         True,
     )
     var search_response = execute_search(ExactCpuBackend(), service_root, search_request)
@@ -278,6 +279,158 @@ def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() 
     assert_equal(exported.snapshot_id.value, "snapshot-0001")
     assert_equal(imported.snapshot_id.value, "snapshot-0001")
     assert_equal(imported_search.hits[0].doc_id, "doc-a")
+
+
+def test_hosted_collection_runtime_rejects_upsert_with_wrong_vector_dim() raises:
+    var service_root = unique_service_root("kayak-service-runtime-upsert-dim")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+
+    var raised = False
+    try:
+        _ = upsert_documents(
+            service_root,
+            UpsertDocumentsRequest(
+                CollectionId("news"),
+                TenantId("tenant-a"),
+                NamespaceId("search"),
+                [
+                    UpsertDocument(
+                        make_document("doc-a", [[1.0, 0.0, 0.0]]),
+                        "alpha",
+                    )
+                ],
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_hosted_collection_runtime_rejects_query_model_name_mismatch() raises:
+    var service_root = unique_service_root("kayak-service-runtime-query-model")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]), "alpha")],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish query-model mismatch fixture",
+        ),
+    )
+
+    var raised = False
+    try:
+        _ = execute_search(
+            ExactCpuBackend(),
+            service_root,
+            SearchRequest(
+                CollectionId("news"),
+                TenantId("tenant-a"),
+                NamespaceId("search"),
+                SnapshotId("snapshot-0001"),
+                make_query(),
+                "bge-small-en-v1.5",
+                match_all_filter(),
+                exact_full_scan_search_plan(1, 1),
+                False,
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_hosted_collection_runtime_rejects_query_vector_dim_mismatch() raises:
+    var service_root = unique_service_root("kayak-service-runtime-query-dim")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]), "alpha")],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish query-dim mismatch fixture",
+        ),
+    )
+
+    var raised = False
+    try:
+        _ = execute_search(
+            ExactCpuBackend(),
+            service_root,
+            SearchRequest(
+                CollectionId("news"),
+                TenantId("tenant-a"),
+                NamespaceId("search"),
+                SnapshotId("snapshot-0001"),
+                EncodedQuery([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+                "colbertv2",
+                match_all_filter(),
+                exact_full_scan_search_plan(1, 1),
+                False,
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
 
 def test_hosted_collection_runtime_supports_text_family_stage2() raises:
     var service_root = unique_service_root("kayak-service-runtime-clause-text")
@@ -328,6 +481,7 @@ def test_hosted_collection_runtime_supports_text_family_stage2() raises:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         EncodedQuery([[1.0, 0.0], [1.0, 0.0]]),
+        "colbertv2",
         "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
         one_of_filter("doc_id", ["doc-context", "doc-answer"]),
         exact_full_scan_clause_text_search_plan(1, 2),
@@ -393,6 +547,7 @@ def test_hosted_collection_runtime_supports_hybrid_stage2() raises:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
+        "colbertv2",
         "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
         match_all_filter(),
         document_proxy_search_plan(
@@ -497,6 +652,7 @@ def test_hosted_collection_runtime_supports_planned_search_after_import() raises
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             match_all_filter(),
             SearchPlanSelectionRequest(
                 1,
@@ -845,6 +1001,7 @@ def test_hosted_collection_runtime_supports_exact_doc_id_filters() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             one_of_filter("doc_id", ["doc-a"]),
             exact_full_scan_search_plan(1, 1),
             False,
@@ -860,6 +1017,7 @@ def test_hosted_collection_runtime_supports_exact_doc_id_filters() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             one_of_filter("doc_id", ["doc-a"]),
             document_proxy_search_plan(
                 1, 1, best_effort_faithfulness_policy()
@@ -924,6 +1082,7 @@ def test_hosted_collection_runtime_executes_planned_search_with_balanced_goal() 
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             match_all_filter(),
             SearchPlanSelectionRequest(
                 1,
@@ -998,6 +1157,7 @@ def test_hosted_collection_runtime_keeps_native_stage1_for_exact_doc_id_filters(
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             one_of_filter("doc_id", ["doc-b"]),
             SearchPlanSelectionRequest(
                 1,
@@ -1072,6 +1232,7 @@ def test_hosted_collection_runtime_executes_planned_search_with_explicit_stage3_
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             EncodedQuery([[1.0, 0.0], [1.0, 0.0]]),
+            "colbertv2",
             "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
             "",
             "clause_text",
@@ -1148,6 +1309,7 @@ def test_hosted_collection_runtime_executes_planned_search_with_hybrid_stage2() 
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             EncodedQuery([[1.0, 0.0], [0.0, 1.0]]),
+            "colbertv2",
             "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
             "exact_late_interaction",
             "clause_text",
@@ -1222,6 +1384,7 @@ def test_hosted_collection_runtime_executes_planned_search_with_native_goal() ra
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             match_all_filter(),
             SearchPlanSelectionRequest(
                 1,
@@ -1294,6 +1457,7 @@ def test_hosted_collection_runtime_planned_debug_search_keeps_native_metadata_fi
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             one_of_filter("source", ["wire"]),
             SearchPlanSelectionRequest(
                 1,
@@ -1392,6 +1556,7 @@ def test_hosted_collection_runtime_merges_metadata_and_filters_exactly() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             one_of_filter("source", ["analysis"]),
             exact_full_scan_search_plan(1, 1),
             False,
@@ -1406,6 +1571,7 @@ def test_hosted_collection_runtime_merges_metadata_and_filters_exactly() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             one_of_filter("source", ["analysis"]),
             document_proxy_search_plan(
                 1, 1, best_effort_faithfulness_policy()
@@ -1422,6 +1588,7 @@ def test_hosted_collection_runtime_merges_metadata_and_filters_exactly() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             one_of_filter("language", ["en"]),
             exact_full_scan_search_plan(1, 1),
             False,
@@ -1485,6 +1652,7 @@ def test_hosted_shared_pool_exact_match_all_loads_scope_filter_index() raises:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        "colbertv2",
         match_all_filter(),
         exact_full_scan_search_plan(1, 1),
         False,
@@ -1591,6 +1759,7 @@ def test_hosted_shared_pool_match_all_planning_rejects_gem_graph_stage1() raises
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             match_all_filter(),
             SearchPlanSelectionRequest(
                 1,
@@ -1681,6 +1850,7 @@ def test_hosted_shared_pool_rejects_scope_unaware_filter_index() raises:
                 NamespaceId("search"),
                 SnapshotId("snapshot-0001"),
                 make_query(),
+                "colbertv2",
                 match_all_filter(),
                 exact_full_scan_search_plan(1, 1),
                 False,
@@ -1747,6 +1917,7 @@ def test_hosted_collection_runtime_supports_configured_gem_graph_stage1() raises
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             match_all_filter(),
             gem_graph_search_plan(
                 1,

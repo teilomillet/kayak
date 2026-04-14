@@ -216,6 +216,66 @@ def test_snapshot_bundle_import_rejects_collection_mismatch() raises:
     assert_equal(raised, True)
 
 
+def test_snapshot_bundle_import_rejects_model_name_mismatch() raises:
+    var source_root = unique_root("kayak-snapshot-bundle-model-source")
+    var bundle_root = unique_root("kayak-snapshot-bundle-model-export")
+    var target_root = unique_root("kayak-snapshot-bundle-model-target")
+
+    build_source_collection(source_root)
+    _ = export_snapshot_bundle(source_root, SnapshotId("snapshot-0004"), bundle_root)
+
+    save_collection_manifest(
+        target_root,
+        CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "bge-small-en-v1.5",
+            VECTOR_SCALAR_NAME,
+            2,
+            0,
+        ),
+    )
+
+    var raised = False
+    try:
+        _ = import_snapshot_bundle(bundle_root, target_root)
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_snapshot_bundle_import_rejects_vector_dim_mismatch() raises:
+    var source_root = unique_root("kayak-snapshot-bundle-dim-source")
+    var bundle_root = unique_root("kayak-snapshot-bundle-dim-export")
+    var target_root = unique_root("kayak-snapshot-bundle-dim-target")
+
+    build_source_collection(source_root)
+    _ = export_snapshot_bundle(source_root, SnapshotId("snapshot-0004"), bundle_root)
+
+    save_collection_manifest(
+        target_root,
+        CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            128,
+            0,
+        ),
+    )
+
+    var raised = False
+    try:
+        _ = import_snapshot_bundle(bundle_root, target_root)
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
 def test_snapshot_bundle_import_preserves_existing_collection_retention_default() raises:
     var source_root = unique_root("kayak-snapshot-bundle-retention-source")
     var bundle_root = unique_root("kayak-snapshot-bundle-retention-export")

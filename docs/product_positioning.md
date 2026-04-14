@@ -17,6 +17,8 @@ Related repo notes:
 - [docs/architecture/service_api.md](architecture/service_api.md)
 - [docs/architecture/search_plan_semantics.md](architecture/search_plan_semantics.md)
 - [docs/hosted_engine_grand_plan.md](hosted_engine_grand_plan.md)
+- [docs/architecture/trust_boundary.md](architecture/trust_boundary.md)
+- [docs/architecture/multi_encoder_interoperability.md](architecture/multi_encoder_interoperability.md)
 
 ## Sources Checked
 

@@ -96,6 +96,7 @@ def test_planned_clause_text_override_preserves_exact_candidate_window() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             EncodedQuery([[1.0, 0.0], [1.0, 0.0]]),
+            "colbertv2",
             "Gugulethu township logo. founded in 1984 in a church longest serving employee artistic director",
             "",
             "clause_text",

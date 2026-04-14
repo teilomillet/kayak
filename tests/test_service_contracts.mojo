@@ -391,10 +391,12 @@ def test_default_search_request_builds_exact_plan() raises:
         SnapshotId("snapshot-0001"),
         make_query(),
         3,
+        "colbertv2",
         True,
     )
 
     assert_equal(request.snapshot_id.value, "snapshot-0001")
+    assert_equal(request.query_model_name, "colbertv2")
     assert_equal(request.filter_expression.is_match_all(), True)
     assert_equal(request.plan.candidate_generator.kind, "exact_full_scan")
     assert_equal(request.plan.stage2_reference_operator.kind, "noop_topk")
@@ -414,8 +416,30 @@ def test_search_request_requires_query_text_for_text_family_stage2() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             match_all_filter(),
             exact_full_scan_clause_text_search_plan(1, 1),
+            False,
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_search_request_requires_non_empty_query_model_name() raises:
+    var raised = False
+
+    try:
+        _ = SearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            "",
+            match_all_filter(),
+            exact_full_scan_search_plan(1, 1),
             False,
         )
     except:
@@ -434,6 +458,7 @@ def test_search_request_requires_query_text_for_hybrid_stage2() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             match_all_filter(),
             document_proxy_search_plan(
                 1,
@@ -457,6 +482,7 @@ def test_search_request_accepts_explicit_query_text_for_text_family_stage2() rai
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        "colbertv2",
         "founding church artistic director",
         match_all_filter(),
         exact_full_scan_clause_text_search_plan(1, 1),
@@ -475,6 +501,7 @@ def test_search_request_accepts_query_text_for_hybrid_stage2() raises:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        "colbertv2",
         "founding church artistic director",
         match_all_filter(),
         document_proxy_search_plan(
@@ -504,6 +531,7 @@ def test_search_request_rejects_unverifiable_oracle_guardrail_without_debug() ra
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             match_all_filter(),
             document_proxy_search_plan(
                 2,
@@ -530,6 +558,7 @@ def test_search_request_accepts_exact_contract_without_debug_even_if_kind_is_cus
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        "colbertv2",
         match_all_filter(),
         SearchPlan(
             exact_generator,
@@ -553,6 +582,7 @@ def test_search_request_allows_best_effort_approximate_search_without_debug() ra
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        "colbertv2",
         match_all_filter(),
         document_proxy_search_plan(2, 2, best_effort_faithfulness_policy()),
         False,
@@ -568,6 +598,7 @@ def test_search_and_debug_responses_match_explain_scope() raises:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        "colbertv2",
         match_all_filter(),
         exact_full_scan_search_plan(2, 2),
         True,
@@ -599,6 +630,7 @@ def test_planned_search_contracts_keep_selection_explicit() raises:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        "colbertv2",
         match_all_filter(),
         SearchPlanSelectionRequest(
             2,
@@ -646,6 +678,7 @@ def test_planned_search_contracts_keep_selection_explicit() raises:
     )
 
     assert_equal(request.planning.goal, "balanced")
+    assert_equal(request.query_model_name, "colbertv2")
     assert_equal(request.query_text, "")
     assert_equal(request.stage_override.has_stage2_reference_override, False)
     assert_equal(request.stage_override.has_stage3_verifier_override, False)
@@ -668,6 +701,7 @@ def test_planned_search_request_accepts_explicit_stage2_override() raises:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        "colbertv2",
         "founded in 1984 longest serving employee",
         "",
         "clause_text",
@@ -692,6 +726,7 @@ def test_planned_search_request_accepts_explicit_hybrid_stage2_override() raises
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        "colbertv2",
         "founded in 1984 longest serving employee",
         "exact_late_interaction",
         "clause_text",
@@ -719,6 +754,7 @@ def test_planned_search_request_accepts_explicit_stage_components() raises:
         NamespaceId("search"),
         SnapshotId("snapshot-0001"),
         make_query(),
+        "colbertv2",
         "founded in 1984 longest serving employee",
         "noop_topk",
         "clause_text",
@@ -748,6 +784,7 @@ def test_planned_search_request_rejects_text_stage2_without_query_text() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             "",
             "",
             "clause_text",
@@ -756,6 +793,30 @@ def test_planned_search_request_rejects_text_stage2_without_query_text() raises:
                 2,
                 8,
                 best_effort_faithfulness_policy(),
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_planned_search_request_requires_non_empty_query_model_name() raises:
+    var raised = False
+    try:
+        _ = PlannedSearchRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            make_query(),
+            "",
+            match_all_filter(),
+            SearchPlanSelectionRequest(
+                1,
+                1,
+                best_effort_faithfulness_policy(),
+                match_all_filter(),
             ),
         )
     except:
@@ -773,6 +834,7 @@ def test_planned_search_request_rejects_hybrid_stage2_without_query_text() raise
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             "",
             "exact_late_interaction",
             "clause_text",
@@ -798,6 +860,7 @@ def test_planned_search_request_rejects_text_stage3_without_query_text() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             "",
             "noop_topk",
             "clause_text",
@@ -858,6 +921,7 @@ def test_search_requests_reject_reserved_internal_scope_filters() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             one_of_filter(FILTER_FIELD_INTERNAL_TENANT_ID, ["tenant-a"]),
             exact_full_scan_search_plan(1, 1),
             False,
@@ -872,6 +936,7 @@ def test_search_requests_reject_reserved_internal_scope_filters() raises:
             NamespaceId("search"),
             SnapshotId("snapshot-0001"),
             make_query(),
+            "colbertv2",
             one_of_filter(FILTER_FIELD_INTERNAL_TENANT_ID, ["tenant-a"]),
             SearchPlanSelectionRequest(
                 1,
