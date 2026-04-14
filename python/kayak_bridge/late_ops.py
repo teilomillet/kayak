@@ -32,6 +32,9 @@ from .late_scores import LateScores, SearchHit
 from .batch_dispatch import maxsim_scores_batch
 from .layouts import MOJO_EXACT_CPU_BACKEND, NUMPY_REFERENCE_BACKEND
 from .backend_dispatch import maxsim_scores
+from .mojo_exact_cpu import load_module as load_mojo_exact_cpu_module
+from .prepared_index_cache import prepared_packed_index_object
+from .mojo_payloads import query_payload
 from .planned_search import SearchPlanResult
 from .search_plan import (
     SearchPlan,
@@ -124,6 +127,23 @@ def search(
     k: int,
     backend: str = NUMPY_REFERENCE_BACKEND,
 ) -> tuple[SearchHit, ...]:
+    if (
+        backend == MOJO_EXACT_CPU_BACKEND
+        and late_index.layout == "packed"
+        and late_query.layout == "nested"
+    ):
+        module = load_mojo_exact_cpu_module()
+        prepared_index = prepared_packed_index_object(late_index, module=module)
+        raw_hits = module.search_prepared_packed(
+            query_payload(late_query),
+            k,
+            prepared_index,
+        )
+        return tuple(
+            SearchHit(doc_id=str(raw_hit[0]), score=float(raw_hit[1]))
+            for raw_hit in raw_hits
+        )
+
     return maxsim(late_query, late_index, backend=backend).topk(k)
 
 
@@ -134,6 +154,28 @@ def search_batch(
     k: int,
     backend: str = NUMPY_REFERENCE_BACKEND,
 ) -> tuple[tuple[SearchHit, ...], ...]:
+    if (
+        backend == MOJO_EXACT_CPU_BACKEND
+        and late_index.layout == "packed"
+        and all(query.layout == "nested" for query in late_query_batch.queries)
+    ):
+        module = load_mojo_exact_cpu_module()
+        prepared_index = prepared_packed_index_object(
+            late_index, module=module
+        )
+        raw_hits_by_query = module.search_prepared_packed_batch(
+            [query_payload(query) for query in late_query_batch.queries],
+            k,
+            prepared_index,
+        )
+        return tuple(
+            tuple(
+                SearchHit(doc_id=str(raw_hit[0]), score=float(raw_hit[1]))
+                for raw_hit in raw_hits
+            )
+            for raw_hits in raw_hits_by_query
+        )
+
     return tuple(
         scores.topk(k)
         for scores in maxsim_batch(late_query_batch, late_index, backend=backend)

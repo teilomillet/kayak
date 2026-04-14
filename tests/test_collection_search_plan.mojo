@@ -76,6 +76,11 @@ from kayak import (
 )
 from kayak.text import DocumentTextCorpus
 from kayak.filters import one_of_filter
+from kayak.planning.exact_stage import (
+    exact_rerank_candidates_for_plan,
+    materialize_candidate_index,
+)
+from kayak.planning.topk import insert_descending_collection_hit
 
 
 def assert_collection_hits_equal(
@@ -1567,6 +1572,64 @@ def test_centroid_postings_imputed_search_plan_exact_reranks_shortlist() raises:
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
     assert_equal(explain.faithfulness.passes, True)
     assert_equal(explain.faithfulness.evidence_kind, "oracle_full_recall")
+
+
+def test_exact_rerank_candidates_for_plan_matches_materialized_reference() raises:
+    var root = make_centroid_postings_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var candidate_hits = [
+        CollectionHit("segment-0001", "doc-b", 0.2),
+        CollectionHit("segment-0001", "doc-a", 0.1),
+    ]
+    var backend = ExactCpuBackend()
+
+    var reranked = exact_rerank_candidates_for_plan(
+        backend,
+        query,
+        resolved,
+        candidate_hits,
+        2,
+    )
+
+    var materialized = materialize_candidate_index(resolved, candidate_hits)
+    var reference_scores = backend.score_all(query, materialized.index)
+    var reference_hits = List[CollectionHit]()
+
+    for document_index in range(len(reference_scores)):
+        insert_descending_collection_hit(
+            reference_hits,
+            CollectionHit(
+                materialized.segment_ids[document_index].copy(),
+                materialized.index.doc_ids[document_index].copy(),
+                reference_scores[document_index],
+            ),
+            2,
+        )
+
+    assert_collection_hits_equal(reranked.final_hits, reference_hits)
+    assert_equal(reranked.segment_count, materialized.segment_count)
+    assert_equal(reranked.document_count, materialized.index.document_count)
+    assert_equal(reranked.token_count, materialized.token_count)
+    assert_equal(reranked.vector_count, materialized.vector_count)
+    assert_equal(reranked.byte_size, materialized.byte_size)
+    assert_equal(len(reranked.materialized_artifacts), 1)
+    assert_equal(
+        reranked.materialized_artifacts[0].document_count,
+        materialized.index.document_count,
+    )
+    assert_equal(
+        reranked.materialized_artifacts[0].token_count,
+        materialized.token_count,
+    )
+    assert_equal(
+        reranked.materialized_artifacts[0].vector_count,
+        materialized.vector_count,
+    )
+    assert_equal(
+        reranked.materialized_artifacts[0].byte_size,
+        materialized.byte_size,
+    )
 
 
 def test_centroid_postings_imputed_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:

@@ -9,6 +9,7 @@ from .late_scores import LateScores
 from .layouts import MOJO_EXACT_CPU_BACKEND, NUMPY_REFERENCE_BACKEND
 from .mojo_exact_cpu import load_module as load_mojo_exact_cpu_module
 from .mojo_payloads import index_payload, query_payload, MojoIndexPayload
+from .prepared_index_cache import prepared_packed_index_object
 from .reference_maxsim import maxsim_scores as numpy_maxsim_scores
 
 
@@ -21,22 +22,22 @@ def _mojo_scores_for_query_and_index(
 ) -> np.ndarray:
     if module is None:
         module = load_mojo_exact_cpu_module()
-    if payload is None:
-        payload = index_payload(index)
 
     if index.layout == "packed":
         if query.layout != "nested":
             raise ValueError("packed indexes require a nested query layout")
 
+        prepared_index = prepared_packed_index_object(index, module=module)
         return np.asarray(
-            module.exact_scores_packed(
+            module.exact_scores_prepared_packed(
                 query_payload(query),
-                payload.doc_ids,
-                payload.doc_offsets,
-                payload.packed_vectors,
+                prepared_index,
             ),
             dtype=SCORE_DTYPE,
         )
+
+    if payload is None:
+        payload = index_payload(index)
 
     if index.layout != "hybrid_flat_dim128":
         raise ValueError(f"unsupported index layout: {index.layout}")

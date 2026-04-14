@@ -1,11 +1,12 @@
 from std.collections import List
+from std.format import Writable, Writer
 
 from kayak.numeric import VectorScalar
 
 from .validation import require_valid_packed_index
 
 
-struct PackedIndex(Copyable):
+struct PackedIndex(Copyable, Writable):
     var doc_ids: List[String]
     var doc_offsets: List[Int]
     var token_vectors: List[List[VectorScalar]]
@@ -30,3 +31,14 @@ struct PackedIndex(Copyable):
         self.doc_offsets = doc_offsets^
         self.token_vectors = token_vectors^
         self.vector_dim = vector_dim
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write(
+            "PackedIndex(document_count=",
+            self.document_count,
+            ", total_vector_count=",
+            self.total_vector_count,
+            ", vector_dim=",
+            self.vector_dim,
+            ")",
+        )

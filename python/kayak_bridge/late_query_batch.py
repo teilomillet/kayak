@@ -96,6 +96,6 @@ class LateQueryBatch:
         k: int,
         backend: str = NUMPY_REFERENCE_BACKEND,
     ) -> tuple[tuple["SearchHit", ...], ...]:
-        return tuple(
-            scores.topk(k) for scores in self.maxsim(index, backend=backend)
-        )
+        from .late_ops import search_batch
+
+        return search_batch(self, index, k=k, backend=backend)

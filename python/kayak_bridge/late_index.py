@@ -267,7 +267,9 @@ class LateIndex:
         k: int,
         backend: str = NUMPY_REFERENCE_BACKEND,
     ) -> tuple["SearchHit", ...]:
-        return self.maxsim(query, backend=backend).topk(k)
+        from .late_ops import search
+
+        return search(query, self, k=k, backend=backend)
 
     def search_with_plan(
         self,

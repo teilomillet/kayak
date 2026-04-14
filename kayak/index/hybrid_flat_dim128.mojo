@@ -1,4 +1,5 @@
 from std.collections import List
+from std.format import Writable, Writer
 
 from kayak.numeric import VectorScalar
 from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
@@ -8,7 +9,7 @@ from .packed_index import PackedIndex
 
 # Owns the optional flat token-value layout for dim128 document indexes.
 # It does not own query encoding or search orchestration.
-struct HybridFlatDim128Index(Copyable):
+struct HybridFlatDim128Index(Copyable, Writable):
     var doc_ids: List[String]
     var doc_offsets: List[Int]
     var token_values: List[VectorScalar]
@@ -33,6 +34,17 @@ struct HybridFlatDim128Index(Copyable):
         self.vector_dim = vector_dim
         self.document_count = len(self.doc_ids)
         self.total_vector_count = len(self.token_values) // COLBERT_VECTOR_DIM
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write(
+            "HybridFlatDim128Index(document_count=",
+            self.document_count,
+            ", total_vector_count=",
+            self.total_vector_count,
+            ", vector_dim=",
+            self.vector_dim,
+            ")",
+        )
 
 
 def require_valid_hybrid_flat_dim128_index(
