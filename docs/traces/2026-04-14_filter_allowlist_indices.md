@@ -25,6 +25,11 @@ filter is active.
   `allowed_flags` and `allowed_doc_indices`.
 - The centroid inactive-doc fallback uses `allowed_doc_indices` when a filter is
   active, while preserving the old full scan for the match-all path.
+- For small active sets, the centroid inactive-doc fallback now sorts active doc
+  indices once and merges them against the sorted allowlist instead of building
+  a dense active bitmap. The merge path is intentionally bounded by
+  `MAX_SORTED_ACTIVE_DOC_INDICES_FOR_MERGE = 128` so larger active sets keep the
+  previous bitmap path.
 
 ## Validation
 
@@ -50,15 +55,25 @@ Benchmark fixture:
 - `active_match_count = 8`
 - `candidate_k = 40`
 
-Measured benchmark output:
+Measured benchmark output before the merge refinement:
 
 - `dense_filtered_fallback`: `4.711500332358891e-05 s`
 - `indexed_filtered_fallback`: `2.2025943797296148e-05 s`
 - speedup: `2.1390685346873823x`
 
+Measured benchmark output after the merge refinement:
+
+- `dense_filtered_fallback`: `6.13251813121943e-05 s`
+- `indexed_filtered_fallback`: `2.2564732049023392e-05 s`
+- `indexed_merge_filtered_fallback`: `1.2721434753201794e-06 s`
+- indexed speedup over dense: `2.7177447167979323x`
+- indexed-merge speedup over dense: `48.20618310899223x`
+
 ## Interpretation
 
 This is a validated microbenchmark win on the exact fallback path the code
 changed. It is not an end-to-end search claim by itself, but it shows that the
-new allowlist contract removes real filtered fallback work rather than only
-making the code cleaner.
+new allowlist contract and bounded merge path remove real filtered fallback
+work rather than only making the code cleaner. The large indexed-merge speedup
+is specific to the selective-filter, small-active-set regime that the merge
+threshold targets.

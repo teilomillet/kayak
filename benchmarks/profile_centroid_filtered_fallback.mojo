@@ -12,6 +12,7 @@ comptime DOCUMENT_COUNT = 50_000
 comptime FILTER_MATCH_COUNT = 64
 comptime ACTIVE_MATCH_COUNT = 8
 comptime CANDIDATE_K = 40
+comptime MAX_SORTED_ACTIVE_DOC_INDICES_FOR_MERGE = 128
 
 
 def make_doc_ids() -> List[String]:
@@ -164,6 +165,83 @@ def indexed_filtered_fallback(
     return hits^
 
 
+def insert_doc_index_ascending(mut sorted_doc_indices: List[Int], doc_index: Int):
+    var insert_at = 0
+    while (
+        insert_at < len(sorted_doc_indices)
+        and sorted_doc_indices[insert_at] < doc_index
+    ):
+        insert_at += 1
+
+    sorted_doc_indices.append(doc_index)
+    var current = len(sorted_doc_indices) - 1
+    while current > insert_at:
+        sorted_doc_indices[current] = sorted_doc_indices[current - 1]
+        current -= 1
+
+    sorted_doc_indices[insert_at] = doc_index
+
+
+def sorted_active_doc_indices_for_merge(
+    read active_doc_indices: List[Int]
+) -> List[Int]:
+    if len(active_doc_indices) > MAX_SORTED_ACTIVE_DOC_INDICES_FOR_MERGE:
+        return []
+
+    var sorted_doc_indices = List[Int]()
+    for doc_index in active_doc_indices:
+        insert_doc_index_ascending(sorted_doc_indices, doc_index)
+
+    return sorted_doc_indices^
+
+
+def indexed_merge_filtered_fallback(
+    segment_id: String,
+    read doc_ids: List[String],
+    read scores: List[ScoreScalar],
+    read active_doc_indices: List[Int],
+    read allowed_doc_indices: List[Int],
+) -> List[CollectionHit]:
+    var hits = List[CollectionHit]()
+    insert_active_hits(
+        hits,
+        segment_id,
+        doc_ids,
+        scores,
+        active_doc_indices,
+    )
+
+    var active_doc_indices_sorted = sorted_active_doc_indices_for_merge(
+        active_doc_indices
+    )
+    var active_index = 0
+
+    for document_index in allowed_doc_indices:
+        while (
+            active_index < len(active_doc_indices_sorted)
+            and active_doc_indices_sorted[active_index] < document_index
+        ):
+            active_index += 1
+
+        if (
+            active_index < len(active_doc_indices_sorted)
+            and active_doc_indices_sorted[active_index] == document_index
+        ):
+            continue
+
+        insert_descending_collection_hit(
+            hits,
+            CollectionHit(
+                segment_id.copy(),
+                doc_ids[document_index].copy(),
+                ScoreScalar(0.25),
+            ),
+            CANDIDATE_K,
+        )
+
+    return hits^
+
+
 def main() raises:
     var segment_id = String("segment-0001")
     var doc_ids = make_doc_ids()
@@ -211,6 +289,28 @@ def main() raises:
     indexed_report.print()
     print("")
 
+    print("== indexed_merge_filtered_fallback ==")
+
+    def indexed_merge_once() capturing:
+        bench_compiler.keep(
+            indexed_merge_filtered_fallback(
+                segment_id,
+                doc_ids,
+                scores,
+                active_doc_indices,
+                allowed_doc_indices,
+            )
+        )
+
+    var indexed_merge_report = benchmark.run[indexed_merge_once]()
+    indexed_merge_report.print()
+    print("")
+
     print("dense_mean_seconds=", dense_report.mean())
     print("indexed_mean_seconds=", indexed_report.mean())
-    print("speedup=", dense_report.mean() / indexed_report.mean())
+    print("indexed_merge_mean_seconds=", indexed_merge_report.mean())
+    print("indexed_speedup=", dense_report.mean() / indexed_report.mean())
+    print(
+        "indexed_merge_speedup=",
+        dense_report.mean() / indexed_merge_report.mean(),
+    )

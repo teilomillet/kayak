@@ -66,6 +66,9 @@ from .search_plan import SearchPlan
 from .topk import insert_descending_collection_hit
 
 
+comptime MAX_SORTED_ACTIVE_DOC_INDICES_FOR_MERGE = 128
+
+
 def require_centroid_artifact_present(
     read segment: LoadedSealedSegment,
     read contract: CentroidExecutionContract,
@@ -111,6 +114,36 @@ def inactive_centroid_docs_can_affect_topk(
     return hits[len(hits) - 1].score <= inactive_score
 
 
+def insert_doc_index_ascending(mut sorted_doc_indices: List[Int], doc_index: Int):
+    var insert_at = 0
+    while (
+        insert_at < len(sorted_doc_indices)
+        and sorted_doc_indices[insert_at] < doc_index
+    ):
+        insert_at += 1
+
+    sorted_doc_indices.append(doc_index)
+    var current = len(sorted_doc_indices) - 1
+    while current > insert_at:
+        sorted_doc_indices[current] = sorted_doc_indices[current - 1]
+        current -= 1
+
+    sorted_doc_indices[insert_at] = doc_index
+
+
+def sorted_active_doc_indices_for_merge(
+    read active_doc_indices: List[Int]
+) -> List[Int]:
+    if len(active_doc_indices) > MAX_SORTED_ACTIVE_DOC_INDICES_FOR_MERGE:
+        return []
+
+    var sorted_doc_indices = List[Int]()
+    for doc_index in active_doc_indices:
+        insert_doc_index_ascending(sorted_doc_indices, doc_index)
+
+    return sorted_doc_indices^
+
+
 def insert_scored_centroid_doc_indices(
     mut hits: List[CollectionHit],
     segment_id: String,
@@ -127,6 +160,40 @@ def insert_scored_centroid_doc_indices(
                 segment_id.copy(),
                 doc_id.copy(),
                 scores[document_index],
+            ),
+            candidate_k,
+        )
+
+def insert_filtered_inactive_centroid_scores_merge(
+    mut hits: List[CollectionHit],
+    segment_id: String,
+    read doc_ids: List[String],
+    inactive_score: ScoreScalar,
+    candidate_k: Int,
+    read allowed_doc_indices: List[Int],
+    read active_doc_indices_sorted: List[Int],
+):
+    var active_index = 0
+
+    for document_index in allowed_doc_indices:
+        while (
+            active_index < len(active_doc_indices_sorted)
+            and active_doc_indices_sorted[active_index] < document_index
+        ):
+            active_index += 1
+
+        if (
+            active_index < len(active_doc_indices_sorted)
+            and active_doc_indices_sorted[active_index] == document_index
+        ):
+            continue
+
+        insert_descending_collection_hit(
+            hits,
+            CollectionHit(
+                segment_id.copy(),
+                doc_ids[document_index].copy(),
+                inactive_score,
             ),
             candidate_k,
         )
@@ -159,6 +226,25 @@ def insert_centroid_scores(
         allowed_document_count,
     ):
         return
+
+    if len(allowed_doc_indices) != 0:
+        var sorted_active_doc_indices = sorted_active_doc_indices_for_merge(
+            score_result.active_doc_indices
+        )
+        if (
+            len(sorted_active_doc_indices) != 0
+            or len(score_result.active_doc_indices) == 0
+        ):
+            insert_filtered_inactive_centroid_scores_merge(
+                hits,
+                segment_id,
+                doc_ids,
+                score_result.inactive_score,
+                candidate_k,
+                allowed_doc_indices,
+                sorted_active_doc_indices,
+            )
+            return
 
     var active_flags = List[Int]()
     for _ in range(len(doc_ids)):
