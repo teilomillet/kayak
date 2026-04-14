@@ -21,6 +21,7 @@ from kayak.collections import (
     import_snapshot_bundle,
     load_snapshot_search_artifact_availability,
     load_collection_manifest,
+    load_snapshot_export_bundle_manifest,
     load_resolved_collection_snapshot,
     publish_collection_snapshot,
     save_collection_manifest,
@@ -51,7 +52,11 @@ from kayak.planning.filter_scope import effective_filter_expression_for_collecti
 from kayak.runtime import ExactScoringBackend
 
 from .collection_requests import CreateCollectionRequest
-from .document_requests import DeleteDocumentsRequest, UpsertDocumentsRequest
+from .document_requests import (
+    DeleteDocumentsRequest,
+    DeleteDocumentsResponse,
+    UpsertDocumentsRequest,
+)
 from .draft_state import (
     append_draft_delete_batch,
     append_draft_upsert_batch,
@@ -260,7 +265,9 @@ def upsert_documents(service_root: Path, request: UpsertDocumentsRequest) raises
     return len(documents)
 
 
-def delete_documents(service_root: Path, request: DeleteDocumentsRequest) raises -> Int:
+def delete_documents(
+    service_root: Path, request: DeleteDocumentsRequest
+) raises -> DeleteDocumentsResponse:
     var collection_root = service_collection_root(
         service_root,
         request.tenant_id,
@@ -289,6 +296,7 @@ def delete_documents(service_root: Path, request: DeleteDocumentsRequest) raises
             kept_documents.append(state.documents[index].copy())
             kept_texts.append(state.texts[index].copy())
 
+    var original_document_count = len(state.documents)
     var kept_document_count = len(kept_documents)
     append_draft_delete_batch(
         draft_state_root(collection_root),
@@ -296,7 +304,14 @@ def delete_documents(service_root: Path, request: DeleteDocumentsRequest) raises
         request.doc_ids,
         kept_document_count,
     )
-    return kept_document_count
+    return DeleteDocumentsResponse(
+        request.collection_id,
+        request.tenant_id,
+        request.namespace_id,
+        len(request.doc_ids),
+        original_document_count - kept_document_count,
+        kept_document_count,
+    )
 
 
 def parse_file_uri(source_uri: String) raises -> Path:
@@ -471,8 +486,19 @@ def export_snapshot(
 def import_snapshot(
     service_root: Path, request: ImportSnapshotRequest
 ) raises -> SnapshotExportBundleManifest:
+    var bundle_root = parse_file_uri(request.source_uri)
+    var bundle_manifest = load_snapshot_export_bundle_manifest(bundle_root)
+    if bundle_manifest.collection_id.value != request.collection_id.value:
+        raise Error("snapshot import bundle collection_id does not match request")
+    if bundle_manifest.tenant_id.value != request.tenant_id.value:
+        raise Error("snapshot import bundle tenant_id does not match request")
+    if bundle_manifest.namespace_id.value != request.namespace_id.value:
+        raise Error("snapshot import bundle namespace_id does not match request")
+    if bundle_manifest.snapshot_id.value != request.snapshot_id.value:
+        raise Error("snapshot import bundle snapshot_id does not match request")
+
     return import_snapshot_bundle(
-        parse_file_uri(request.source_uri),
+        bundle_root,
         service_collection_root(
             service_root,
             request.tenant_id,

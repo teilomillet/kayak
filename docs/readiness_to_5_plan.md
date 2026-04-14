@@ -247,14 +247,14 @@ Why:
 - they need to know how it behaves under failure, retention, and upgrades
 
 Required work:
-- [ ] Document snapshot and restore workflow
+- [x] Document snapshot and restore workflow
 - [ ] Document reclaim and compaction workflow
-- [ ] Add one failure-mode note:
+- [x] Add one failure-mode note:
   - process crash during seal
   - process crash during publish
   - process crash during reclaim
-- [ ] Add one upgrade and rollback note
-- [ ] Add one retention-policy operator guide
+- [x] Add one upgrade and rollback note
+- [x] Add one retention-policy operator guide
 
 Exit criteria:
 - there is a documented recovery story for the main lifecycle operations
@@ -335,7 +335,7 @@ Why:
 Required work:
 - [ ] Update the top-level README to reflect the final category cleanly
 - [ ] Update the Python README to match the SDK role
-- [ ] Add one service-facing README or operator guide
+- [x] Add one service-facing README or operator guide
 - [ ] Ensure Chroma, Qdrant, and Firnflow comparisons inform the messaging
   without overclaiming
 

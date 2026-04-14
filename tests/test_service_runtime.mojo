@@ -207,7 +207,7 @@ def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() 
             ],
         ),
     )
-    var document_count_after_delete = delete_documents(
+    var delete_response = delete_documents(
         service_root,
         DeleteDocumentsRequest(
             CollectionId("news"),
@@ -269,7 +269,8 @@ def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() 
     var collection_manifest = load_collection_manifest(collection_root)
 
     assert_equal(document_count_after_upsert, 2)
-    assert_equal(document_count_after_delete, 1)
+    assert_equal(delete_response.deleted_count, 1)
+    assert_equal(delete_response.remaining_draft_document_count, 1)
     assert_equal(snapshot.generation, 1)
     assert_equal(collection_manifest.latest_generation, 1)
     assert_equal(collection_manifest.active_snapshot_id, "snapshot-0001")
@@ -279,6 +280,70 @@ def test_hosted_collection_runtime_supports_mutate_snapshot_search_and_import() 
     assert_equal(exported.snapshot_id.value, "snapshot-0001")
     assert_equal(imported.snapshot_id.value, "snapshot-0001")
     assert_equal(imported_search.hits[0].doc_id, "doc-a")
+
+
+def test_hosted_collection_runtime_import_rejects_snapshot_id_mismatch() raises:
+    var service_root = unique_service_root("kayak-service-runtime-import-source")
+    var import_service_root = unique_service_root("kayak-service-runtime-import-target")
+
+    _ = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+        ),
+    )
+    _ = upsert_documents(
+        service_root,
+        UpsertDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            [UpsertDocument(make_document("doc-a", [[1.0, 0.0], [0.0, 1.0]]), "alpha")],
+        ),
+    )
+    _ = create_snapshot(
+        service_root,
+        CreateSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+            "publish import mismatch fixture",
+        ),
+    )
+    var bundle_root = unique_service_root("kayak-service-runtime-import-mismatch-bundle")
+    _ = export_snapshot(
+        service_root,
+        ExportSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0001"),
+        ),
+        bundle_root,
+    )
+
+    var raised = False
+    try:
+        _ = import_snapshot(
+            import_service_root,
+            ImportSnapshotRequest(
+                CollectionId("news"),
+                TenantId("tenant-a"),
+                NamespaceId("search"),
+                SnapshotId("snapshot-9999"),
+                "file://" + String(bundle_root),
+            ),
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def test_hosted_collection_runtime_rejects_upsert_with_wrong_vector_dim() raises:
@@ -701,7 +766,7 @@ def test_hosted_collection_runtime_compacts_draft_after_snapshot() raises:
             [UpsertDocument(make_document("doc-b", [[0.0, 1.0], [1.0, 0.0]]), "beta")],
         ),
     )
-    var document_count_after_delete = delete_documents(
+    var delete_response = delete_documents(
         service_root,
         DeleteDocumentsRequest(
             CollectionId("news"),
@@ -736,6 +801,8 @@ def test_hosted_collection_runtime_compacts_draft_after_snapshot() raises:
         (collection_root / "draft" / "text_corpus" / "manifest.tsv").exists(),
         True,
     )
+    assert_equal(delete_response.deleted_count, 1)
+    assert_equal(delete_response.remaining_draft_document_count, 1)
     assert_equal(
         load_collection_manifest(collection_root).active_snapshot_id,
         "snapshot-0001",
@@ -744,7 +811,6 @@ def test_hosted_collection_runtime_compacts_draft_after_snapshot() raises:
         (collection_root / "draft" / "document_metadata" / "manifest.tsv").exists(),
         True,
     )
-    assert_equal(document_count_after_delete, 1)
     assert_equal(snapshot.stats.document_count, 1)
     assert_equal(snapshot.segment_ids[0].value, "segment-1")
 

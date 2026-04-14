@@ -1,6 +1,6 @@
 # Hosted Engine HTTP Transport
 
-Status: `implemented v0 transport`  
+Status: `implemented non-auth hosted transport`
 Date: `2026-04-14`
 
 This note defines the first real HTTP transport for Kayak Engine.
@@ -32,11 +32,24 @@ Verified on `2026-04-14`:
 - `GET /health` works
 - `GET /metrics` works
 - `POST /v1/collections` works
+- `POST /v1/collections:lifecycle` works
+- `POST /v1/collections:reclaim-execute` works
+- `POST /v1/collections:reclaim-plan` works
+- `POST /v1/collections:retention` works
+- `POST /v1/debug-search` works
+- `POST /v1/documents:delete` works
 - `POST /v1/documents:upsert` works
 - `POST /v1/snapshots` works
+- `POST /v1/snapshots:export` works
+- `POST /v1/snapshots:import` works
 - `POST /v1/search` works
 - `POST /v1/explain` works
+- `POST /v1/planned-debug-search` works
 - `POST /v1/planned-search` works
+- `POST /v1/planned-explain` works
+
+For operator workflows beyond the raw endpoint list, see
+[docs/hosted_engine_operator_guide.md](hosted_engine_operator_guide.md).
 
 ## Package Boundary
 
@@ -85,20 +98,34 @@ Current implemented endpoints:
 - `GET /health`
 - `GET /metrics`
 - `POST /v1/collections`
+- `POST /v1/collections:lifecycle`
+- `POST /v1/collections:reclaim-execute`
+- `POST /v1/collections:reclaim-plan`
+- `POST /v1/collections:retention`
+- `POST /v1/debug-search`
+- `POST /v1/documents:delete`
 - `POST /v1/documents:upsert`
 - `POST /v1/snapshots`
+- `POST /v1/snapshots:export`
+- `POST /v1/snapshots:import`
 - `POST /v1/search`
 - `POST /v1/explain`
+- `POST /v1/planned-debug-search`
 - `POST /v1/planned-search`
 - `POST /v1/planned-explain`
 
 Current design choice:
 - exact search and explain have a narrower wire shape
-- planned search and explain expose planner-facing knobs explicitly
+- debug-search routes expose the explain payload directly
+- planned search, planned debug, and planned explain expose planner-facing knobs
+  explicitly
+- lifecycle and reclaim routes keep plan-then-execute explicit rather than
+  hiding cleanup behind implicit policy
 
 Reason:
 - ordinary callers should not need to materialize a full `SearchPlan`
 - planner-aware callers still need an explicit route into stage-1 selection
+- operator routes should stay auditable and predictable at the wire level
 
 ## Example
 
@@ -166,20 +193,46 @@ curl -sS http://127.0.0.1:8000/v1/search \
   }'
 ```
 
+Build a reclaim plan:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/collections:reclaim-plan \
+  -H 'content-type: application/json' \
+  -d '{
+    "collection_id": "news",
+    "tenant_id": "tenant-a",
+    "namespace_id": "search"
+  }'
+```
+
+Export a snapshot bundle:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/snapshots:export \
+  -H 'content-type: application/json' \
+  -d '{
+    "collection_id": "news",
+    "tenant_id": "tenant-a",
+    "namespace_id": "search",
+    "snapshot_id": "snapshot-0001",
+    "bundle_uri": "file:///tmp/kayak-bundle"
+  }'
+```
+
 ## Current Limits
 
 These are verified limits of the current transport:
 
 - single-process, single-threaded server
 - no auth yet
-- no retention, reclaim, import/export, or lifecycle HTTP endpoints yet
 - no streaming results
 - no binary ingest transport
+- snapshot transfer is currently limited to local `file://` URIs
 - planned search currently supports `best_effort` faithfulness at the HTTP edge
 
 Reason:
-- this step solves the deployable-service gap first
-- the next self-hosting tranche should handle operator concerns separately
+- this step solves the deployable-service and operator-surface gap first
+- auth, concurrency, and richer I/O should stay separate follow-on decisions
 
 ## Why Single-Threaded For Now
 

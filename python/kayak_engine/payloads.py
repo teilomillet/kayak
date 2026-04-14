@@ -75,6 +75,37 @@ def require_list(
     return value
 
 
+def require_object(
+    payload: dict[str, Any],
+    key: str,
+    *,
+    default: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if key not in payload:
+        if default is not None:
+            return default
+        raise PayloadError(f"missing required field: {key}")
+    value = payload[key]
+    if not isinstance(value, dict):
+        raise PayloadError(f"field must be an object: {key}")
+    return value
+
+
+def require_string_list(
+    payload: dict[str, Any],
+    key: str,
+    *,
+    default: list[str] | None = None,
+) -> list[str]:
+    values = require_list(payload, key, default=default)
+    normalized: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or value == "":
+            raise PayloadError(f"field must contain non-empty strings: {key}")
+        normalized.append(value)
+    return normalized
+
+
 def require_query_vectors(payload: dict[str, Any]) -> list[list[float]]:
     query = require_list(payload, "query")
     if len(query) == 0:
@@ -193,3 +224,135 @@ def document_payload_parts(
         metadata_values.append(row_values)
 
     return doc_ids, document_vectors, texts, metadata_keys, metadata_values
+
+
+def collection_identity_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "collection_id": require_string(payload, "collection_id"),
+        "tenant_id": require_string(payload, "tenant_id"),
+        "namespace_id": require_string(payload, "namespace_id"),
+    }
+
+
+def policy_override_payload(
+    payload: dict[str, Any],
+) -> tuple[bool, int, list[str]]:
+    override = payload.get("policy_override")
+    if override is None:
+        return False, 0, []
+    if not isinstance(override, dict):
+        raise PayloadError("policy_override must be an object")
+    return (
+        True,
+        require_int(override, "keep_latest_inactive_count"),
+        require_string_list(override, "pinned_snapshot_ids", default=[]),
+    )
+
+
+def delete_documents_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **collection_identity_payload(payload),
+        "doc_ids": require_string_list(payload, "doc_ids"),
+    }
+
+
+def retention_update_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **collection_identity_payload(payload),
+        "default_keep_latest_inactive_count": require_int(
+            payload,
+            "default_keep_latest_inactive_count",
+        ),
+    }
+
+
+def export_snapshot_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    bundle_uri = require_string(payload, "bundle_uri")
+    if not bundle_uri.startswith("file://"):
+        raise PayloadError("bundle_uri must use the file:// scheme")
+    return {
+        **collection_identity_payload(payload),
+        "snapshot_id": require_string(payload, "snapshot_id"),
+        "bundle_root": bundle_uri.removeprefix("file://"),
+    }
+
+
+def import_snapshot_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    source_uri = require_string(payload, "source_uri")
+    if not source_uri.startswith("file://"):
+        raise PayloadError("source_uri must use the file:// scheme")
+    return {
+        **collection_identity_payload(payload),
+        "snapshot_id": require_string(payload, "snapshot_id"),
+        "source_uri": source_uri,
+    }
+
+
+def lifecycle_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    (
+        has_policy_override,
+        keep_latest_inactive_count,
+        pinned_snapshot_ids,
+    ) = policy_override_payload(payload)
+    return {
+        **collection_identity_payload(payload),
+        "has_policy_override": has_policy_override,
+        "policy_override_keep_latest_inactive_count": keep_latest_inactive_count,
+        "policy_override_pinned_snapshot_ids": pinned_snapshot_ids,
+    }
+
+
+def _reclaim_decision_payload(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise PayloadError("reclaim plan decisions must be objects")
+    return {
+        "snapshot_id": require_string(value, "snapshot_id"),
+        "generation": require_int(value, "generation"),
+        "segment_count": require_int(value, "segment_count"),
+        "byte_size": require_int(value, "byte_size"),
+        "retain": require_bool(value, "retain"),
+        "reason": require_string(value, "reason"),
+    }
+
+
+def require_reclaim_plan_payload(payload: dict[str, Any], key: str) -> dict[str, Any]:
+    plan = require_object(payload, key)
+    decisions = require_list(plan, "decisions")
+    return {
+        "collection_id": require_string(plan, "collection_id"),
+        "tenant_id": require_string(plan, "tenant_id"),
+        "namespace_id": require_string(plan, "namespace_id"),
+        "active_snapshot_id": require_string(plan, "active_snapshot_id"),
+        "total_snapshot_count": require_int(plan, "total_snapshot_count"),
+        "inactive_snapshot_count": require_int(plan, "inactive_snapshot_count"),
+        "retained_inactive_snapshot_count": require_int(
+            plan,
+            "retained_inactive_snapshot_count",
+        ),
+        "reclaimable_snapshot_count": require_int(
+            plan,
+            "reclaimable_snapshot_count",
+        ),
+        "reclaimable_unique_segment_count": require_int(
+            plan,
+            "reclaimable_unique_segment_count",
+        ),
+        "reclaimable_unique_byte_size": require_int(
+            plan,
+            "reclaimable_unique_byte_size",
+        ),
+        "decisions": [_reclaim_decision_payload(decision) for decision in decisions],
+        "reclaimable_unique_segment_ids": require_string_list(
+            plan,
+            "reclaimable_unique_segment_ids",
+            default=[],
+        ),
+    }
+
+
+def execute_reclaim_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **collection_identity_payload(payload),
+        "dry_run": require_bool(payload, "dry_run", default=True),
+        "plan": require_reclaim_plan_payload(payload, "plan"),
+    }

@@ -15,6 +15,7 @@ from .lifecycle_contracts import (
 )
 from .document_requests import (
     DeleteDocumentsRequest,
+    DeleteDocumentsResponse,
     UpsertDocument,
     UpsertDocumentsRequest,
 )
@@ -35,6 +36,7 @@ from .json import (
     create_snapshot_request_json,
     debug_search_response_json,
     delete_documents_request_json,
+    delete_documents_response_json,
     build_reclaim_plan_request_json,
     build_reclaim_plan_response_json,
     collection_lifecycle_request_json,
@@ -53,6 +55,7 @@ from .json import (
     search_response_json,
     service_health_status_json,
     service_metrics_snapshot_json,
+    snapshot_export_bundle_manifest_json,
     update_collection_retention_policy_request_json,
     update_collection_retention_policy_response_json,
     upsert_documents_request_json,

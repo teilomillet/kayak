@@ -5,7 +5,10 @@ from kayak.collections.reclaim_json import (
     collection_reclaim_execution_result_json,
     collection_reclaim_plan_json,
 )
-from kayak.collections import SearchArtifactBuildPolicy
+from kayak.collections import (
+    SearchArtifactBuildPolicy,
+    SnapshotExportBundleManifest,
+)
 from kayak.collections.document_metadata import DocumentMetadataUpdate
 from kayak.filters import FilterClause, FilterExpression, FilterTerm
 from kayak.numeric import VectorScalar
@@ -21,7 +24,12 @@ from .collection_requests import (
     CreateCollectionRequest,
     UpdateCollectionRetentionPolicyRequest,
 )
-from .document_requests import DeleteDocumentsRequest, UpsertDocument, UpsertDocumentsRequest
+from .document_requests import (
+    DeleteDocumentsRequest,
+    DeleteDocumentsResponse,
+    UpsertDocument,
+    UpsertDocumentsRequest,
+)
 from .lifecycle_contracts import (
     BuildReclaimPlanRequest,
     BuildReclaimPlanResponse,
@@ -591,6 +599,21 @@ def delete_documents_request_json(read request: DeleteDocumentsRequest) -> Strin
     return buffer^
 
 
+def delete_documents_response_json(read response: DeleteDocumentsResponse) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"collection_id\":\"" + json_escape(response.collection_id.value) + "\","
+    buffer += "\"tenant_id\":\"" + json_escape(response.tenant_id.value) + "\","
+    buffer += "\"namespace_id\":\"" + json_escape(response.namespace_id.value) + "\","
+    buffer += "\"requested_doc_id_count\":"
+    buffer += String(response.requested_doc_id_count) + ","
+    buffer += "\"deleted_count\":" + String(response.deleted_count) + ","
+    buffer += "\"remaining_draft_document_count\":"
+    buffer += String(response.remaining_draft_document_count)
+    buffer += "}"
+    return buffer^
+
+
 def create_snapshot_request_json(read request: CreateSnapshotRequest) -> String:
     var buffer = String()
     buffer += "{"
@@ -610,6 +633,21 @@ def export_snapshot_request_json(read request: ExportSnapshotRequest) -> String:
     buffer += "\"tenant_id\":\"" + json_escape(request.tenant_id.value) + "\","
     buffer += "\"namespace_id\":\"" + json_escape(request.namespace_id.value) + "\","
     buffer += "\"snapshot_id\":\"" + json_escape(request.snapshot_id.value) + "\""
+    buffer += "}"
+    return buffer^
+
+
+def snapshot_export_bundle_manifest_json(
+    read manifest: SnapshotExportBundleManifest
+) -> String:
+    var buffer = String()
+    buffer += "{"
+    buffer += "\"snapshot_id\":\"" + json_escape(manifest.snapshot_id.value) + "\","
+    buffer += "\"collection_id\":\"" + json_escape(manifest.collection_id.value) + "\","
+    buffer += "\"tenant_id\":\"" + json_escape(manifest.tenant_id.value) + "\","
+    buffer += "\"namespace_id\":\"" + json_escape(manifest.namespace_id.value) + "\","
+    buffer += "\"generation\":" + String(manifest.generation) + ","
+    buffer += "\"segment_count\":" + String(manifest.segment_count)
     buffer += "}"
     return buffer^
 

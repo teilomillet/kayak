@@ -382,6 +382,23 @@ tests = [
 ]
 
 [[rule]]
+name = "python-hosted-engine-surface"
+role = "engine_source"
+why = "The hosted engine package owns the network transport, Mojo service bridge, and local operator-facing service process."
+paths = ["python/kayak_engine/*.py", "python/kayak_engine/*.mojo"]
+normative_docs = [
+    "README.md",
+    "docs/architecture/service_api.md",
+    "docs/hosted_engine_http.md",
+    "docs/hosted_engine_operator_guide.md",
+]
+tests = [
+    "python/tests/test_hosted_engine_http.py",
+    "tests/test_service_json.mojo",
+    "tests/test_service_runtime.mojo",
+]
+
+[[rule]]
 name = "python-examples"
 role = "example_surface"
 why = "Python examples are runnable user-facing SDK surfaces rather than reusable engine modules."

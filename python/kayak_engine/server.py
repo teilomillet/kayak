@@ -13,8 +13,14 @@ from typing import Any, Callable
 from .mojo_service import load_module
 from .payloads import (
     PayloadError,
+    delete_documents_request_payload,
     document_payload_parts,
+    execute_reclaim_request_payload,
+    export_snapshot_request_payload,
     filter_payload_parts,
+    import_snapshot_request_payload,
+    lifecycle_request_payload,
+    retention_update_request_payload,
     require_bool,
     require_int,
     require_list,
@@ -74,10 +80,19 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         routes: dict[str, Callable[[dict[str, Any]], str]] = {
             "/v1/collections": self._create_collection,
+            "/v1/collections:lifecycle": self._collection_lifecycle,
+            "/v1/collections:reclaim-execute": self._execute_reclaim,
+            "/v1/collections:reclaim-plan": self._build_reclaim_plan,
+            "/v1/collections:retention": self._update_collection_retention,
+            "/v1/debug-search": self._exact_debug_search,
+            "/v1/documents:delete": self._delete_documents,
             "/v1/documents:upsert": self._upsert_documents,
             "/v1/snapshots": self._create_snapshot,
+            "/v1/snapshots:export": self._export_snapshot,
+            "/v1/snapshots:import": self._import_snapshot,
             "/v1/search": self._exact_search,
             "/v1/explain": self._exact_explain,
+            "/v1/planned-debug-search": self._planned_debug_search,
             "/v1/planned-search": self._planned_search,
             "/v1/planned-explain": self._planned_explain,
         }
@@ -177,6 +192,12 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
             },
         )
 
+    def _delete_documents(self, payload: dict[str, Any]) -> str:
+        return self.server.engine_module.delete_documents_json(
+            str(self.server.service_root),
+            delete_documents_request_payload(payload),
+        )
+
     def _create_snapshot(self, payload: dict[str, Any]) -> str:
         return self.server.engine_module.create_snapshot_json(
             str(self.server.service_root),
@@ -187,6 +208,42 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
                 "snapshot_id": require_string(payload, "snapshot_id"),
                 "reason": require_string(payload, "reason"),
             },
+        )
+
+    def _export_snapshot(self, payload: dict[str, Any]) -> str:
+        return self.server.engine_module.export_snapshot_json(
+            str(self.server.service_root),
+            export_snapshot_request_payload(payload),
+        )
+
+    def _import_snapshot(self, payload: dict[str, Any]) -> str:
+        return self.server.engine_module.import_snapshot_json(
+            str(self.server.service_root),
+            import_snapshot_request_payload(payload),
+        )
+
+    def _collection_lifecycle(self, payload: dict[str, Any]) -> str:
+        return self.server.engine_module.collection_lifecycle_json(
+            str(self.server.service_root),
+            lifecycle_request_payload(payload),
+        )
+
+    def _build_reclaim_plan(self, payload: dict[str, Any]) -> str:
+        return self.server.engine_module.build_reclaim_plan_json(
+            str(self.server.service_root),
+            lifecycle_request_payload(payload),
+        )
+
+    def _execute_reclaim(self, payload: dict[str, Any]) -> str:
+        return self.server.engine_module.execute_reclaim_json(
+            str(self.server.service_root),
+            execute_reclaim_request_payload(payload),
+        )
+
+    def _update_collection_retention(self, payload: dict[str, Any]) -> str:
+        return self.server.engine_module.update_collection_retention_policy_json(
+            str(self.server.service_root),
+            retention_update_request_payload(payload),
         )
 
     def _exact_search(self, payload: dict[str, Any]) -> str:
@@ -223,6 +280,26 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
                 "query_text": require_string(payload, "query_text", default=""),
                 "final_k": require_int(payload, "final_k"),
                 "debug_mode": require_bool(payload, "debug_mode", default=False),
+                "clause_fields": clause_fields,
+                "clause_operators": clause_operators,
+                "clause_values": clause_values,
+            },
+        )
+
+    def _exact_debug_search(self, payload: dict[str, Any]) -> str:
+        clause_fields, clause_operators, clause_values = filter_payload_parts(payload)
+        return self.server.engine_module.debug_search_json(
+            str(self.server.service_root),
+            {
+                "collection_id": require_string(payload, "collection_id"),
+                "tenant_id": require_string(payload, "tenant_id"),
+                "namespace_id": require_string(payload, "namespace_id"),
+                "snapshot_id": require_string(payload, "snapshot_id"),
+                "query": require_query_vectors(payload),
+                "query_model_name": require_string(payload, "query_model_name"),
+                "query_text": require_string(payload, "query_text", default=""),
+                "final_k": require_int(payload, "final_k"),
+                "debug_mode": require_bool(payload, "debug_mode", default=True),
                 "clause_fields": clause_fields,
                 "clause_operators": clause_operators,
                 "clause_values": clause_values,
@@ -302,6 +379,58 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
                     default=[],
                 ),
                 "debug_mode": require_bool(payload, "debug_mode", default=False),
+                "faithfulness_policy_kind": require_string(
+                    payload,
+                    "faithfulness_policy_kind",
+                    default="best_effort",
+                ),
+                "stage2_reference_kind": require_string(
+                    payload,
+                    "stage2_reference_kind",
+                    default="",
+                ),
+                "stage3_verifier_kind": require_string(
+                    payload,
+                    "stage3_verifier_kind",
+                    default="",
+                ),
+                "clause_fields": clause_fields,
+                "clause_operators": clause_operators,
+                "clause_values": clause_values,
+                "gem_graph_cluster_top_k_per_query_token": require_int(
+                    payload,
+                    "gem_graph_cluster_top_k_per_query_token",
+                    default=3,
+                ),
+                "gem_graph_beam_width": require_int(
+                    payload,
+                    "gem_graph_beam_width",
+                    default=9,
+                ),
+            },
+        )
+
+    def _planned_debug_search(self, payload: dict[str, Any]) -> str:
+        clause_fields, clause_operators, clause_values = filter_payload_parts(payload)
+        return self.server.engine_module.planned_debug_search_json(
+            str(self.server.service_root),
+            {
+                "collection_id": require_string(payload, "collection_id"),
+                "tenant_id": require_string(payload, "tenant_id"),
+                "namespace_id": require_string(payload, "namespace_id"),
+                "snapshot_id": require_string(payload, "snapshot_id"),
+                "query": require_query_vectors(payload),
+                "query_model_name": require_string(payload, "query_model_name"),
+                "query_text": require_string(payload, "query_text", default=""),
+                "final_k": require_int(payload, "final_k"),
+                "candidate_k": require_int(payload, "candidate_k"),
+                "goal": require_string(payload, "goal", default=""),
+                "preferred_candidate_generator_kinds": require_list(
+                    payload,
+                    "preferred_candidate_generator_kinds",
+                    default=[],
+                ),
+                "debug_mode": require_bool(payload, "debug_mode", default=True),
                 "faithfulness_policy_kind": require_string(
                     payload,
                     "faithfulness_policy_kind",

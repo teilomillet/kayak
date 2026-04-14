@@ -6,9 +6,13 @@ from std.python.bindings import PythonModuleBuilder
 
 from kayak.collections import (
     COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
+    CollectionReclaimPlan,
     CollectionId,
     NamespaceId,
+    SegmentId,
     SnapshotId,
+    SnapshotRetentionDecision,
+    SnapshotRetentionPolicy,
     TenantId,
 )
 from kayak.collections.document_metadata import DocumentMetadataUpdate
@@ -22,9 +26,15 @@ from kayak.planning import (
 )
 from kayak.runtime import ExactCpuBackend
 from kayak.service import (
+    BuildReclaimPlanRequest,
+    CollectionLifecycleRequest,
     CreateCollectionRequest,
     CreateSnapshotRequest,
+    DeleteDocumentsRequest,
     ExplainResponse,
+    ExecuteReclaimRequest,
+    ExportSnapshotRequest,
+    ImportSnapshotRequest,
     PlannedDebugSearchResponse,
     PlannedExplainResponse,
     PlannedSearchRequest,
@@ -32,24 +42,38 @@ from kayak.service import (
     SearchResponse,
     ServiceHealthStatus,
     ServiceMetricsSnapshot,
+    UpdateCollectionRetentionPolicyRequest,
     UpsertDocument,
     UpsertDocumentsRequest,
+    build_collection_lifecycle_report,
+    build_reclaim_plan,
+    build_reclaim_plan_response_json,
+    collection_lifecycle_response_json,
     create_collection,
     create_snapshot,
     debug_search_response_json,
+    delete_documents,
+    delete_documents_response_json,
     execute_debug_search,
     execute_explain,
     execute_planned_debug_search,
     execute_planned_explain,
     execute_planned_search,
+    execute_reclaim,
+    execute_reclaim_response_json,
     execute_search,
     explain_response_json,
+    export_snapshot,
     planned_debug_search_response_json,
     planned_explain_response_json,
     planned_search_response_json,
     search_response_json,
     service_health_status_json,
     service_metrics_snapshot_json,
+    snapshot_export_bundle_manifest_json,
+    import_snapshot,
+    update_collection_retention_policy,
+    update_collection_retention_policy_response_json,
     upsert_documents,
 )
 from kayak.service.metrics_runtime import (
@@ -74,6 +98,20 @@ def decode_nested_string_lists(py_values: PythonObject) raises -> List[List[Stri
     for index in range(len(py_values)):
         values.append(decode_string_list(py_values[index]))
     return values^
+
+
+def decode_snapshot_ids(py_values: PythonObject) raises -> List[SnapshotId]:
+    var snapshot_ids = List[SnapshotId]()
+    for index in range(len(py_values)):
+        snapshot_ids.append(SnapshotId(String(py=py_values[index])))
+    return snapshot_ids^
+
+
+def decode_segment_ids(py_values: PythonObject) raises -> List[SegmentId]:
+    var segment_ids = List[SegmentId]()
+    for index in range(len(py_values)):
+        segment_ids.append(SegmentId(String(py=py_values[index])))
+    return segment_ids^
 
 
 def decode_float_vector(py_values: PythonObject) raises -> List[VectorScalar]:
@@ -146,6 +184,61 @@ def decode_metadata_updates(
             updates.append(DocumentMetadataUpdate(keys[update_index], values[update_index]))
         rows.append(updates^)
     return rows^
+
+
+def snapshot_retention_policy_from_python(
+    has_policy_override: Bool,
+    keep_latest_inactive_count: Int,
+    py_pinned_snapshot_ids: PythonObject,
+) raises -> SnapshotRetentionPolicy:
+    if not has_policy_override:
+        return SnapshotRetentionPolicy(0)
+
+    return SnapshotRetentionPolicy(
+        keep_latest_inactive_count,
+        decode_snapshot_ids(py_pinned_snapshot_ids),
+    )
+
+
+def decode_snapshot_retention_decision(
+    py_decision: PythonObject
+) raises -> SnapshotRetentionDecision:
+    return SnapshotRetentionDecision(
+        SnapshotId(String(py=py_decision["snapshot_id"])),
+        Int(py=py_decision["generation"]),
+        Int(py=py_decision["segment_count"]),
+        Int(py=py_decision["byte_size"]),
+        Bool(py=py_decision["retain"]),
+        String(py=py_decision["reason"]),
+    )
+
+
+def decode_snapshot_retention_decisions(
+    py_decisions: PythonObject
+) raises -> List[SnapshotRetentionDecision]:
+    var decisions = List[SnapshotRetentionDecision]()
+    for index in range(len(py_decisions)):
+        decisions.append(decode_snapshot_retention_decision(py_decisions[index]))
+    return decisions^
+
+
+def decode_collection_reclaim_plan(
+    py_plan: PythonObject
+) raises -> CollectionReclaimPlan:
+    return CollectionReclaimPlan(
+        CollectionId(String(py=py_plan["collection_id"])),
+        TenantId(String(py=py_plan["tenant_id"])),
+        NamespaceId(String(py=py_plan["namespace_id"])),
+        String(py=py_plan["active_snapshot_id"]),
+        Int(py=py_plan["total_snapshot_count"]),
+        Int(py=py_plan["inactive_snapshot_count"]),
+        Int(py=py_plan["retained_inactive_snapshot_count"]),
+        Int(py=py_plan["reclaimable_snapshot_count"]),
+        Int(py=py_plan["reclaimable_unique_segment_count"]),
+        Int(py=py_plan["reclaimable_unique_byte_size"]),
+        decode_snapshot_retention_decisions(py_plan["decisions"]),
+        decode_segment_ids(py_plan["reclaimable_unique_segment_ids"]),
+    )
 
 
 def upsert_documents_request_from_python(
@@ -402,6 +495,196 @@ def create_snapshot_json(
     )
 
 
+def delete_documents_json(
+    py_service_root: PythonObject,
+    py_collection_id: PythonObject,
+    py_tenant_id: PythonObject,
+    py_namespace_id: PythonObject,
+    py_doc_ids: PythonObject,
+) raises -> PythonObject:
+    return python_string(
+        delete_documents_response_json(
+            delete_documents(
+                Path(String(py=py_service_root)),
+                DeleteDocumentsRequest(
+                    CollectionId(String(py=py_collection_id)),
+                    TenantId(String(py=py_tenant_id)),
+                    NamespaceId(String(py=py_namespace_id)),
+                    decode_string_list(py_doc_ids),
+                ),
+            )
+        )
+    )
+
+
+def update_collection_retention_policy_json(
+    py_service_root: PythonObject,
+    py_collection_id: PythonObject,
+    py_tenant_id: PythonObject,
+    py_namespace_id: PythonObject,
+    py_default_keep_latest_inactive_count: PythonObject,
+) raises -> PythonObject:
+    return python_string(
+        update_collection_retention_policy_response_json(
+            update_collection_retention_policy(
+                Path(String(py=py_service_root)),
+                UpdateCollectionRetentionPolicyRequest(
+                    CollectionId(String(py=py_collection_id)),
+                    TenantId(String(py=py_tenant_id)),
+                    NamespaceId(String(py=py_namespace_id)),
+                    Int(py=py_default_keep_latest_inactive_count),
+                ),
+            )
+        )
+    )
+
+
+def export_snapshot_json(
+    py_service_root: PythonObject,
+    py_collection_id: PythonObject,
+    py_tenant_id: PythonObject,
+    py_namespace_id: PythonObject,
+    py_snapshot_id: PythonObject,
+    py_bundle_root: PythonObject,
+) raises -> PythonObject:
+    return python_string(
+        snapshot_export_bundle_manifest_json(
+            export_snapshot(
+                Path(String(py=py_service_root)),
+                ExportSnapshotRequest(
+                    CollectionId(String(py=py_collection_id)),
+                    TenantId(String(py=py_tenant_id)),
+                    NamespaceId(String(py=py_namespace_id)),
+                    SnapshotId(String(py=py_snapshot_id)),
+                ),
+                Path(String(py=py_bundle_root)),
+            )
+        )
+    )
+
+
+def import_snapshot_json(
+    py_service_root: PythonObject,
+    py_collection_id: PythonObject,
+    py_tenant_id: PythonObject,
+    py_namespace_id: PythonObject,
+    py_snapshot_id: PythonObject,
+    py_source_uri: PythonObject,
+) raises -> PythonObject:
+    return python_string(
+        snapshot_export_bundle_manifest_json(
+            import_snapshot(
+                Path(String(py=py_service_root)),
+                ImportSnapshotRequest(
+                    CollectionId(String(py=py_collection_id)),
+                    TenantId(String(py=py_tenant_id)),
+                    NamespaceId(String(py=py_namespace_id)),
+                    SnapshotId(String(py=py_snapshot_id)),
+                    String(py=py_source_uri),
+                ),
+            )
+        )
+    )
+
+
+def collection_lifecycle_json(
+    py_service_root: PythonObject,
+    py_collection_id: PythonObject,
+    py_tenant_id: PythonObject,
+    py_namespace_id: PythonObject,
+    py_has_policy_override: PythonObject,
+    py_policy_override_keep_latest_inactive_count: PythonObject,
+    py_policy_override_pinned_snapshot_ids: PythonObject,
+) raises -> PythonObject:
+    var has_policy_override = Bool(py=py_has_policy_override)
+    var request = CollectionLifecycleRequest(
+        CollectionId(String(py=py_collection_id)),
+        TenantId(String(py=py_tenant_id)),
+        NamespaceId(String(py=py_namespace_id)),
+    )
+    if has_policy_override:
+        request = CollectionLifecycleRequest(
+            CollectionId(String(py=py_collection_id)),
+            TenantId(String(py=py_tenant_id)),
+            NamespaceId(String(py=py_namespace_id)),
+            snapshot_retention_policy_from_python(
+                has_policy_override,
+                Int(py=py_policy_override_keep_latest_inactive_count),
+                py_policy_override_pinned_snapshot_ids,
+            ),
+        )
+
+    return python_string(
+        collection_lifecycle_response_json(
+            build_collection_lifecycle_report(
+                Path(String(py=py_service_root)),
+                request,
+            )
+        )
+    )
+
+
+def build_reclaim_plan_json(
+    py_service_root: PythonObject,
+    py_collection_id: PythonObject,
+    py_tenant_id: PythonObject,
+    py_namespace_id: PythonObject,
+    py_has_policy_override: PythonObject,
+    py_policy_override_keep_latest_inactive_count: PythonObject,
+    py_policy_override_pinned_snapshot_ids: PythonObject,
+) raises -> PythonObject:
+    var has_policy_override = Bool(py=py_has_policy_override)
+    var request = BuildReclaimPlanRequest(
+        CollectionId(String(py=py_collection_id)),
+        TenantId(String(py=py_tenant_id)),
+        NamespaceId(String(py=py_namespace_id)),
+    )
+    if has_policy_override:
+        request = BuildReclaimPlanRequest(
+            CollectionId(String(py=py_collection_id)),
+            TenantId(String(py=py_tenant_id)),
+            NamespaceId(String(py=py_namespace_id)),
+            snapshot_retention_policy_from_python(
+                has_policy_override,
+                Int(py=py_policy_override_keep_latest_inactive_count),
+                py_policy_override_pinned_snapshot_ids,
+            ),
+        )
+
+    return python_string(
+        build_reclaim_plan_response_json(
+            build_reclaim_plan(
+                Path(String(py=py_service_root)),
+                request,
+            )
+        )
+    )
+
+
+def execute_reclaim_json(
+    py_service_root: PythonObject,
+    py_collection_id: PythonObject,
+    py_tenant_id: PythonObject,
+    py_namespace_id: PythonObject,
+    py_dry_run: PythonObject,
+    py_plan: PythonObject,
+) raises -> PythonObject:
+    return python_string(
+        execute_reclaim_response_json(
+            execute_reclaim(
+                Path(String(py=py_service_root)),
+                ExecuteReclaimRequest(
+                    CollectionId(String(py=py_collection_id)),
+                    TenantId(String(py=py_tenant_id)),
+                    NamespaceId(String(py=py_namespace_id)),
+                    decode_collection_reclaim_plan(py_plan),
+                    Bool(py=py_dry_run),
+                ),
+            )
+        )
+    )
+
+
 def exact_search_request_from_python(
     collection_id: String,
     tenant_id: String,
@@ -571,6 +854,43 @@ def exact_explain_json(
     return python_string(explain_response_json(response))
 
 
+def debug_search_json(
+    py_service_root: PythonObject,
+    py_collection_id: PythonObject,
+    py_tenant_id: PythonObject,
+    py_namespace_id: PythonObject,
+    py_snapshot_id: PythonObject,
+    py_query_vectors: PythonObject,
+    py_query_model_name: PythonObject,
+    py_query_text: PythonObject,
+    py_final_k: PythonObject,
+    py_debug_mode: PythonObject,
+    py_clause_fields: PythonObject,
+    py_clause_operators: PythonObject,
+    py_clause_values: PythonObject,
+) raises -> PythonObject:
+    var backend = ExactCpuBackend()
+    var response = execute_debug_search(
+        backend,
+        Path(String(py=py_service_root)),
+        exact_search_request_from_python(
+            String(py=py_collection_id),
+            String(py=py_tenant_id),
+            String(py=py_namespace_id),
+            String(py=py_snapshot_id),
+            py_query_vectors,
+            String(py=py_query_model_name),
+            String(py=py_query_text),
+            Int(py=py_final_k),
+            Bool(py=py_debug_mode),
+            py_clause_fields,
+            py_clause_operators,
+            py_clause_values,
+        ),
+    )
+    return python_string(debug_search_response_json(response))
+
+
 def planned_search_json(
     py_service_root: PythonObject,
     py_collection_id: PythonObject,
@@ -622,6 +942,59 @@ def planned_search_json(
         ),
     )
     return python_string(planned_search_response_json(response))
+
+
+def planned_debug_search_json(
+    py_service_root: PythonObject,
+    py_collection_id: PythonObject,
+    py_tenant_id: PythonObject,
+    py_namespace_id: PythonObject,
+    py_snapshot_id: PythonObject,
+    py_query_vectors: PythonObject,
+    py_query_model_name: PythonObject,
+    py_query_text: PythonObject,
+    py_final_k: PythonObject,
+    py_candidate_k: PythonObject,
+    py_goal: PythonObject,
+    py_preferred_candidate_generator_kinds: PythonObject,
+    py_debug_mode: PythonObject,
+    py_faithfulness_policy_kind: PythonObject,
+    py_stage2_reference_kind: PythonObject,
+    py_stage3_verifier_kind: PythonObject,
+    py_clause_fields: PythonObject,
+    py_clause_operators: PythonObject,
+    py_clause_values: PythonObject,
+    py_gem_graph_cluster_top_k_per_query_token: PythonObject,
+    py_gem_graph_beam_width: PythonObject,
+) raises -> PythonObject:
+    var backend = ExactCpuBackend()
+    var response = execute_planned_debug_search(
+        backend,
+        Path(String(py=py_service_root)),
+        planned_search_request_from_python(
+            String(py=py_collection_id),
+            String(py=py_tenant_id),
+            String(py=py_namespace_id),
+            String(py=py_snapshot_id),
+            py_query_vectors,
+            String(py=py_query_model_name),
+            String(py=py_query_text),
+            Int(py=py_final_k),
+            Int(py=py_candidate_k),
+            String(py=py_goal),
+            py_preferred_candidate_generator_kinds,
+            Bool(py=py_debug_mode),
+            String(py=py_faithfulness_policy_kind),
+            String(py=py_stage2_reference_kind),
+            String(py=py_stage3_verifier_kind),
+            py_clause_fields,
+            py_clause_operators,
+            py_clause_values,
+            Int(py=py_gem_graph_cluster_top_k_per_query_token),
+            Int(py=py_gem_graph_beam_width),
+        ),
+    )
+    return python_string(planned_debug_search_response_json(response))
 
 
 def planned_explain_json(
@@ -738,10 +1111,121 @@ def create_snapshot_json_bridge(
     )
 
 
+def delete_documents_json_bridge(
+    py_service_root: PythonObject, py_request: PythonObject
+) raises -> PythonObject:
+    return delete_documents_json(
+        py_service_root,
+        py_request["collection_id"],
+        py_request["tenant_id"],
+        py_request["namespace_id"],
+        py_request["doc_ids"],
+    )
+
+
+def update_collection_retention_policy_json_bridge(
+    py_service_root: PythonObject, py_request: PythonObject
+) raises -> PythonObject:
+    return update_collection_retention_policy_json(
+        py_service_root,
+        py_request["collection_id"],
+        py_request["tenant_id"],
+        py_request["namespace_id"],
+        py_request["default_keep_latest_inactive_count"],
+    )
+
+
+def export_snapshot_json_bridge(
+    py_service_root: PythonObject, py_request: PythonObject
+) raises -> PythonObject:
+    return export_snapshot_json(
+        py_service_root,
+        py_request["collection_id"],
+        py_request["tenant_id"],
+        py_request["namespace_id"],
+        py_request["snapshot_id"],
+        py_request["bundle_root"],
+    )
+
+
+def import_snapshot_json_bridge(
+    py_service_root: PythonObject, py_request: PythonObject
+) raises -> PythonObject:
+    return import_snapshot_json(
+        py_service_root,
+        py_request["collection_id"],
+        py_request["tenant_id"],
+        py_request["namespace_id"],
+        py_request["snapshot_id"],
+        py_request["source_uri"],
+    )
+
+
+def collection_lifecycle_json_bridge(
+    py_service_root: PythonObject, py_request: PythonObject
+) raises -> PythonObject:
+    return collection_lifecycle_json(
+        py_service_root,
+        py_request["collection_id"],
+        py_request["tenant_id"],
+        py_request["namespace_id"],
+        py_request["has_policy_override"],
+        py_request["policy_override_keep_latest_inactive_count"],
+        py_request["policy_override_pinned_snapshot_ids"],
+    )
+
+
+def build_reclaim_plan_json_bridge(
+    py_service_root: PythonObject, py_request: PythonObject
+) raises -> PythonObject:
+    return build_reclaim_plan_json(
+        py_service_root,
+        py_request["collection_id"],
+        py_request["tenant_id"],
+        py_request["namespace_id"],
+        py_request["has_policy_override"],
+        py_request["policy_override_keep_latest_inactive_count"],
+        py_request["policy_override_pinned_snapshot_ids"],
+    )
+
+
+def execute_reclaim_json_bridge(
+    py_service_root: PythonObject, py_request: PythonObject
+) raises -> PythonObject:
+    return execute_reclaim_json(
+        py_service_root,
+        py_request["collection_id"],
+        py_request["tenant_id"],
+        py_request["namespace_id"],
+        py_request["dry_run"],
+        py_request["plan"],
+    )
+
+
 def exact_search_json_bridge(
     py_service_root: PythonObject, py_request: PythonObject
 ) raises -> PythonObject:
     return exact_search_json(
+        py_service_root,
+        py_request["collection_id"],
+        py_request["tenant_id"],
+        py_request["namespace_id"],
+        py_request["snapshot_id"],
+        py_request["query"],
+        py_request["query_model_name"],
+        py_request["query_text"],
+        py_request["final_k"],
+        py_request["debug_mode"],
+        py_request["clause_fields"],
+        py_request["clause_operators"],
+        py_request["clause_values"],
+    )
+
+
+def debug_search_json_bridge(
+    py_service_root: PythonObject, py_request: PythonObject
+) raises -> PythonObject:
+    return debug_search_json(
         py_service_root,
         py_request["collection_id"],
         py_request["tenant_id"],
@@ -782,6 +1266,34 @@ def planned_search_json_bridge(
     py_service_root: PythonObject, py_request: PythonObject
 ) raises -> PythonObject:
     return planned_search_json(
+        py_service_root,
+        py_request["collection_id"],
+        py_request["tenant_id"],
+        py_request["namespace_id"],
+        py_request["snapshot_id"],
+        py_request["query"],
+        py_request["query_model_name"],
+        py_request["query_text"],
+        py_request["final_k"],
+        py_request["candidate_k"],
+        py_request["goal"],
+        py_request["preferred_candidate_generator_kinds"],
+        py_request["debug_mode"],
+        py_request["faithfulness_policy_kind"],
+        py_request["stage2_reference_kind"],
+        py_request["stage3_verifier_kind"],
+        py_request["clause_fields"],
+        py_request["clause_operators"],
+        py_request["clause_values"],
+        py_request["gem_graph_cluster_top_k_per_query_token"],
+        py_request["gem_graph_beam_width"],
+    )
+
+
+def planned_debug_search_json_bridge(
+    py_service_root: PythonObject, py_request: PythonObject
+) raises -> PythonObject:
+    return planned_debug_search_json(
         py_service_root,
         py_request["collection_id"],
         py_request["tenant_id"],
@@ -850,9 +1362,41 @@ def PyInit__mojo_service_bindings() -> PythonObject:
             "create_snapshot_json",
             docstring="Create a hosted snapshot and return a JSON response payload.",
         )
+        module.def_function[delete_documents_json_bridge](
+            "delete_documents_json",
+            docstring="Delete hosted collection documents and return a JSON response payload.",
+        )
+        module.def_function[update_collection_retention_policy_json_bridge](
+            "update_collection_retention_policy_json",
+            docstring="Update collection retention policy and return a JSON response payload.",
+        )
+        module.def_function[export_snapshot_json_bridge](
+            "export_snapshot_json",
+            docstring="Export a hosted snapshot bundle and return a JSON response payload.",
+        )
+        module.def_function[import_snapshot_json_bridge](
+            "import_snapshot_json",
+            docstring="Import a hosted snapshot bundle and return a JSON response payload.",
+        )
+        module.def_function[collection_lifecycle_json_bridge](
+            "collection_lifecycle_json",
+            docstring="Build the collection lifecycle report and return a JSON response payload.",
+        )
+        module.def_function[build_reclaim_plan_json_bridge](
+            "build_reclaim_plan_json",
+            docstring="Build a reclaim plan and return a JSON response payload.",
+        )
+        module.def_function[execute_reclaim_json_bridge](
+            "execute_reclaim_json",
+            docstring="Execute a reclaim plan and return a JSON response payload.",
+        )
         module.def_function[exact_search_json_bridge](
             "exact_search_json",
             docstring="Execute exact hosted search and return a JSON response payload.",
+        )
+        module.def_function[debug_search_json_bridge](
+            "debug_search_json",
+            docstring="Execute exact hosted debug search and return a JSON response payload.",
         )
         module.def_function[exact_explain_json_bridge](
             "exact_explain_json",
@@ -861,6 +1405,10 @@ def PyInit__mojo_service_bindings() -> PythonObject:
         module.def_function[planned_search_json_bridge](
             "planned_search_json",
             docstring="Execute planner-driven hosted search and return a JSON response payload.",
+        )
+        module.def_function[planned_debug_search_json_bridge](
+            "planned_debug_search_json",
+            docstring="Execute planner-driven hosted debug search and return a JSON response payload.",
         )
         module.def_function[planned_explain_json_bridge](
             "planned_explain_json",

@@ -183,15 +183,26 @@ That server currently exposes:
 - `GET /health`
 - `GET /metrics`
 - `POST /v1/collections`
+- `POST /v1/collections:lifecycle`
+- `POST /v1/collections:reclaim-execute`
+- `POST /v1/collections:reclaim-plan`
+- `POST /v1/collections:retention`
+- `POST /v1/debug-search`
+- `POST /v1/documents:delete`
 - `POST /v1/documents:upsert`
 - `POST /v1/snapshots`
+- `POST /v1/snapshots:export`
+- `POST /v1/snapshots:import`
 - `POST /v1/search`
 - `POST /v1/explain`
+- `POST /v1/planned-debug-search`
 - `POST /v1/planned-search`
 - `POST /v1/planned-explain`
 
 The current HTTP transport guide and examples live in
 [docs/hosted_engine_http.md](docs/hosted_engine_http.md).
+The operator workflow note for retention, reclaim, export, and restore lives in
+[docs/hosted_engine_operator_guide.md](docs/hosted_engine_operator_guide.md).
 
 Example:
 

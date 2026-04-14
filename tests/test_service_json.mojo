@@ -14,12 +14,15 @@ from kayak import (
     CollectionSearchExplain,
     CreateCollectionRequest,
     DebugSearchResponse,
+    DeleteDocumentsRequest,
+    DeleteDocumentsResponse,
     DocumentMetadataUpdate,
     EncodedDocument,
     EncodedQuery,
     ExecuteReclaimRequest,
     ExecuteReclaimResponse,
     ExplainResponse,
+    ExportSnapshotRequest,
     PlannedDebugSearchResponse,
     PlannedSearchRequest,
     PlannedSearchResponse,
@@ -43,6 +46,7 @@ from kayak import (
     SegmentId,
     service_metrics_snapshot_json,
     SnapshotId,
+    SnapshotExportBundleManifest,
     SnapshotRetentionDecision,
     SnapshotRetentionPolicy,
     TenantId,
@@ -58,13 +62,17 @@ from kayak import (
     collection_lifecycle_response_json,
     create_collection_request_json,
     debug_search_response_json,
+    delete_documents_request_json,
+    delete_documents_response_json,
     execute_reclaim_request_json,
     execute_reclaim_response_json,
+    export_snapshot_request_json,
     planned_debug_search_response_json,
     planned_search_request_json,
     planned_search_response_json,
     search_request_json,
     service_health_status_json,
+    snapshot_export_bundle_manifest_json,
     upsert_documents_request_json,
     update_collection_retention_policy_request_json,
     update_collection_retention_policy_response_json,
@@ -451,6 +459,70 @@ def test_lifecycle_and_reclaim_json_are_machine_readable() raises:
     )
     assert_equal(
         execute_response_json.find("\"applied\":true") != -1,
+        True,
+    )
+
+
+def test_delete_and_snapshot_bundle_json_are_machine_readable() raises:
+    var delete_request_json = delete_documents_request_json(
+        DeleteDocumentsRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            ["doc-a", "doc-b"],
+        )
+    )
+    var delete_response_json = delete_documents_response_json(
+        DeleteDocumentsResponse(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            2,
+            1,
+            3,
+        )
+    )
+    var export_request_json = export_snapshot_request_json(
+        ExportSnapshotRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            SnapshotId("snapshot-0004"),
+        )
+    )
+    var bundle_json = snapshot_export_bundle_manifest_json(
+        SnapshotExportBundleManifest(
+            SnapshotId("snapshot-0004"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            4,
+            1,
+        )
+    )
+
+    assert_equal(
+        delete_request_json.find("\"doc_ids\":[\"doc-a\",\"doc-b\"]") != -1,
+        True,
+    )
+    assert_equal(
+        delete_response_json.find("\"deleted_count\":1") != -1,
+        True,
+    )
+    assert_equal(
+        delete_response_json.find("\"remaining_draft_document_count\":3") != -1,
+        True,
+    )
+    assert_equal(
+        export_request_json.find("\"snapshot_id\":\"snapshot-0004\"") != -1,
+        True,
+    )
+    assert_equal(
+        bundle_json.find("\"generation\":4") != -1,
+        True,
+    )
+    assert_equal(
+        bundle_json.find("\"segment_count\":1") != -1,
         True,
     )
 

@@ -243,10 +243,19 @@ Current implemented projection:
 
 ```text
 POST /v1/collections
+POST /v1/collections:lifecycle
+POST /v1/collections:reclaim-execute
+POST /v1/collections:reclaim-plan
+POST /v1/collections:retention
+POST /v1/debug-search
+POST /v1/documents:delete
 POST /v1/documents:upsert
 POST /v1/snapshots
+POST /v1/snapshots:export
+POST /v1/snapshots:import
 POST /v1/search
 POST /v1/explain
+POST /v1/planned-debug-search
 POST /v1/planned-search
 POST /v1/planned-explain
 GET  /health
@@ -262,14 +271,12 @@ collection-scoped path sketch:
 - it is easier to refactor URI shape later than to recover from a duplicated
   engine contract
 
-Still not implemented at the HTTP edge:
-- retention update
-- delete documents
-- export snapshot
-- import snapshot
-- lifecycle report
-- reclaim plan
-- reclaim execute
+Additional verified transport choices:
+- snapshot export uses an explicit `bundle_uri` with the `file://` scheme
+- snapshot import uses an explicit `source_uri` with the `file://` scheme
+- lifecycle and reclaim-plan routes accept an optional nested
+  `policy_override`
+- reclaim execution remains explicit plan-then-execute at the HTTP edge too
 
 ## Search Semantics
 
@@ -376,14 +383,15 @@ These remain intentionally undecided:
 
 The next service-adjacent work should be:
 
-1. extend the current HTTP adapter to the remaining lifecycle endpoints
-2. route explicit debug-search HTTP endpoints directly to
-   `CollectionSearchExplain`
-3. reuse collection storage reports and snapshot-bundle export/import in the
-   service layer
-4. add an auth and tenant-isolation story once the core request grammar settles
-5. add selectivity reporting for the new shared-layout logical-scope pushdown
-   path so `shared_pool` filter costs are measurable
+1. add auth and tenant-isolation at the HTTP edge
+2. decide whether the hosted transport should stay single-threaded or move to a
+   verified concurrency model
+3. add a documented binary or multipart ingest path once vector payload
+   portability is no longer the main concern
+4. add selectivity reporting for the shared-layout logical-scope pushdown path
+   so `shared_pool` filter costs are measurable
+5. decide whether to ship a prebuilt hosted-engine extension artifact instead
+   of compiling the Mojo bridge at runtime
 
 That sequence preserves the current engine contracts and keeps the transport
 thin.

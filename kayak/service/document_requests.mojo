@@ -4,7 +4,10 @@ from std.collections import List
 
 from kayak.collections import CollectionId, NamespaceId, TenantId
 from kayak.collections.document_metadata import DocumentMetadataUpdate
-from kayak.collections.validation import require_non_empty_string
+from kayak.collections.validation import (
+    require_non_empty_string,
+    require_non_negative_int,
+)
 from kayak.contracts import EncodedDocument
 
 
@@ -90,3 +93,33 @@ struct DeleteDocumentsRequest(Copyable):
         self.tenant_id = tenant_id.copy()
         self.namespace_id = namespace_id.copy()
         self.doc_ids = validated_doc_ids^
+
+
+struct DeleteDocumentsResponse(Copyable):
+    var collection_id: CollectionId
+    var tenant_id: TenantId
+    var namespace_id: NamespaceId
+    var requested_doc_id_count: Int
+    var deleted_count: Int
+    var remaining_draft_document_count: Int
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        requested_doc_id_count: Int,
+        deleted_count: Int,
+        remaining_draft_document_count: Int,
+    ) raises:
+        self.collection_id = collection_id.copy()
+        self.tenant_id = tenant_id.copy()
+        self.namespace_id = namespace_id.copy()
+        self.requested_doc_id_count = require_non_negative_int(
+            requested_doc_id_count, "requested_doc_id_count"
+        )
+        self.deleted_count = require_non_negative_int(deleted_count, "deleted_count")
+        self.remaining_draft_document_count = require_non_negative_int(
+            remaining_draft_document_count,
+            "remaining_draft_document_count",
+        )
