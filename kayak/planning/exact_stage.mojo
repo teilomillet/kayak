@@ -1,3 +1,4 @@
+from std.algorithm.backend.cpu.parallelize import sync_parallelize
 from std.collections import List
 
 from kayak.collections import (
@@ -16,10 +17,13 @@ from kayak.filters import (
     match_all_filter,
 )
 from kayak.index import PackedIndex, pack_documents
-from kayak.numeric import VectorScalar
+from kayak.numeric import ScoreScalar, VectorScalar, zero_score_scalar
 from kayak.runtime import ExactScoringBackend
 from kayak.runtime import ExactCpuBackend
-from kayak.scoring.maxsim import exact_score_for_document_with_config
+from kayak.scoring.maxsim import (
+    choose_parallel_work_item_count_for_shape,
+    exact_score_for_document_with_config,
+)
 from kayak.storage.binary_vector_codec import native_vector_scalar_byte_width
 
 from .collection_hit import CollectionHit
@@ -139,6 +143,67 @@ def find_document_index_in_segment(
     raise Error("candidate doc_id not found in loaded segment: " + doc_id)
 
 
+def has_resolved_indices(
+    read hit: CollectionHit, read snapshot: ResolvedCollectionSnapshot
+) -> Bool:
+    if hit.segment_index < 0 or hit.document_index < 0:
+        return False
+    if hit.segment_index >= len(snapshot.segments):
+        return False
+
+    if (
+        hit.document_index
+        >= snapshot.segments[hit.segment_index].stored_index.index.document_count
+    ):
+        return False
+
+    return (
+        snapshot.segments[hit.segment_index].manifest.segment_id.value == hit.segment_id
+        and snapshot.segments[hit.segment_index].stored_index.index.doc_ids[
+            hit.document_index
+        ] == hit.doc_id
+    )
+
+
+def resolve_document_index_for_hit(
+    read snapshot: ResolvedCollectionSnapshot, read hit: CollectionHit
+) raises -> ResolvedCandidateDocument:
+    if has_resolved_indices(hit, snapshot):
+        return ResolvedCandidateDocument(
+            hit.segment_index,
+            hit.document_index,
+            hit.segment_id.copy(),
+            hit.doc_id.copy(),
+            vector_count_for_document_index(
+                snapshot.segments[hit.segment_index],
+                hit.document_index,
+            ),
+        )
+
+    for segment_index in range(len(snapshot.segments)):
+        if snapshot.segments[segment_index].manifest.segment_id.value != hit.segment_id:
+            continue
+
+        var document_index = find_document_index_in_segment(
+            snapshot.segments[segment_index],
+            hit.doc_id,
+        )
+        return ResolvedCandidateDocument(
+            segment_index,
+            document_index,
+            hit.segment_id.copy(),
+            hit.doc_id.copy(),
+            vector_count_for_document_index(
+                snapshot.segments[segment_index],
+                document_index,
+            ),
+        )
+
+    raise Error(
+        "candidate segment_id not found in resolved snapshot: " + hit.segment_id
+    )
+
+
 def build_encoded_document_from_segment(
     read segment: LoadedSealedSegment, document_index: Int
 ) raises -> EncodedDocument:
@@ -175,42 +240,12 @@ def resolve_candidate_window(
     var total_vector_count = 0
 
     for hit in hits:
-        var matched = False
-
-        for segment_index in range(len(snapshot.segments)):
-            if (
-                snapshot.segments[segment_index].manifest.segment_id.value
-                != hit.segment_id
-            ):
-                continue
-
-            var document_index = find_document_index_in_segment(
-                snapshot.segments[segment_index],
-                hit.doc_id,
-            )
-            var vector_count = vector_count_for_document_index(
-                snapshot.segments[segment_index],
-                document_index,
-            )
-            documents.append(
-                ResolvedCandidateDocument(
-                    segment_index,
-                    document_index,
-                    hit.segment_id.copy(),
-                    hit.doc_id.copy(),
-                    vector_count,
-                )
-            )
-            append_unique_segment_index(unique_segment_indices, segment_index)
-            total_vector_count += vector_count
-            matched = True
-            break
-
-        if not matched:
-            raise Error(
-                "candidate segment_id not found in resolved snapshot: "
-                + hit.segment_id
-            )
+        var resolved_document = resolve_document_index_for_hit(snapshot, hit)
+        append_unique_segment_index(
+            unique_segment_indices, resolved_document.segment_index
+        )
+        total_vector_count += resolved_document.vector_count
+        documents.append(resolved_document.copy())
 
     var scalar_width = native_vector_scalar_byte_width()
     return ResolvedCandidateWindow(
@@ -222,29 +257,187 @@ def resolve_candidate_window(
     )
 
 
-def score_candidate_window_for_cpu(
+def build_resolved_candidate_vector_offsets(
+    read resolved: ResolvedCandidateWindow
+) -> List[Int]:
+    var vector_offsets = List[Int]()
+    var running_total = 0
+    vector_offsets.append(0)
+
+    for resolved_document in resolved.documents:
+        running_total += resolved_document.vector_count
+        vector_offsets.append(running_total)
+
+    return vector_offsets^
+
+
+def build_resolved_candidate_boundaries(
+    read resolved: ResolvedCandidateWindow, work_item_count: Int
+) -> List[Int]:
+    var boundaries = List[Int]()
+    var document_count = len(resolved.documents)
+    boundaries.append(0)
+
+    if work_item_count <= 1:
+        boundaries.append(document_count)
+        return boundaries^
+
+    var vector_offsets = build_resolved_candidate_vector_offsets(resolved)
+    var start_doc = 0
+
+    for work_item in range(work_item_count - 1):
+        var remaining_work_items = work_item_count - work_item
+        var remaining_vectors = resolved.vector_count - vector_offsets[start_doc]
+        var target_vectors = (
+            remaining_vectors + remaining_work_items - 1
+        ) // remaining_work_items
+        var max_stop_doc = document_count - (remaining_work_items - 1)
+        var stop_doc = start_doc + 1
+
+        while (
+            stop_doc < max_stop_doc
+            and (
+                vector_offsets[stop_doc] - vector_offsets[start_doc]
+            ) < target_vectors
+        ):
+            stop_doc += 1
+
+        boundaries.append(stop_doc)
+        start_doc = stop_doc
+
+    boundaries.append(document_count)
+    return boundaries^
+
+
+def exact_score_for_resolved_document(
+    read backend: ExactCpuBackend,
+    read query: EncodedQuery,
+    read snapshot: ResolvedCollectionSnapshot,
+    read resolved_document: ResolvedCandidateDocument,
+) -> ScoreScalar:
+    return exact_score_for_document_with_config(
+        query,
+        snapshot.segments[resolved_document.segment_index].stored_index.index,
+        resolved_document.document_index,
+        backend.scoring_config,
+    )
+
+
+def score_resolved_candidate_window_for_cpu(
+    read backend: ExactCpuBackend,
+    read query: EncodedQuery,
+    read snapshot: ResolvedCollectionSnapshot,
+    read resolved: ResolvedCandidateWindow,
+) raises -> List[ScoreScalar]:
+    var scores = List[ScoreScalar]()
+    for _ in range(len(resolved.documents)):
+        scores.append(zero_score_scalar())
+
+    var work_item_count = choose_parallel_work_item_count_for_shape(
+        query.vector_count,
+        len(resolved.documents),
+        resolved.vector_count,
+        backend.scoring_config,
+    )
+    var scores_ptr = scores.unsafe_ptr()
+
+    if work_item_count <= 1:
+        for document_index in range(len(resolved.documents)):
+            scores_ptr[document_index] = exact_score_for_resolved_document(
+                backend,
+                query,
+                snapshot,
+                resolved.documents[document_index],
+            )
+        return scores^
+
+    var boundaries = build_resolved_candidate_boundaries(
+        resolved, work_item_count
+    )
+
+    @parameter
+    def score_partition(work_item: Int):
+        var start_doc = boundaries[work_item]
+        var stop_doc = boundaries[work_item + 1]
+
+        for document_index in range(start_doc, stop_doc):
+            scores_ptr[document_index] = exact_score_for_resolved_document(
+                backend,
+                query,
+                snapshot,
+                resolved.documents[document_index],
+            )
+
+    sync_parallelize[score_partition](work_item_count)
+    return scores^
+
+
+def materialize_candidate_index(
+    read snapshot: ResolvedCollectionSnapshot, read hits: List[CollectionHit]
+) raises -> MaterializedCandidateIndex:
+    if len(hits) == 0:
+        raise Error("cannot materialize an empty candidate index")
+
+    var documents = List[EncodedDocument]()
+    var segment_ids = List[String]()
+    var unique_segment_indices = List[Int]()
+
+    for hit in hits:
+        var resolved_document = resolve_document_index_for_hit(snapshot, hit)
+        documents.append(
+            build_encoded_document_from_segment(
+                snapshot.segments[resolved_document.segment_index],
+                resolved_document.document_index,
+            )
+        )
+        segment_ids.append(
+            snapshot.segments[resolved_document.segment_index].manifest.segment_id.value.copy()
+        )
+        append_unique_segment_index(
+            unique_segment_indices,
+            resolved_document.segment_index,
+        )
+
+    var index = pack_documents(documents)
+    var scalar_width = native_vector_scalar_byte_width()
+    return MaterializedCandidateIndex(
+        index,
+        segment_ids^,
+        len(unique_segment_indices),
+        index.total_vector_count,
+        index.total_vector_count,
+        index.total_vector_count * index.vector_dim * scalar_width,
+    )
+
+
+def exact_rerank_candidates_for_plan(
     read backend: ExactCpuBackend,
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read hits: List[CollectionHit],
+    final_k: Int,
 ) raises -> Stage2Result:
+    if len(hits) == 0:
+        return Stage2Result([], 0, 0, 0, 0, 0)
+
     var resolved = resolve_candidate_window(snapshot, hits)
+    var scores = score_resolved_candidate_window_for_cpu(
+        backend,
+        query,
+        snapshot,
+        resolved,
+    )
     var final_hits = List[CollectionHit]()
 
-    for resolved_document in resolved.documents:
+    for document_index in range(len(scores)):
         insert_descending_collection_hit(
             final_hits,
             CollectionHit(
-                resolved_document.segment_id.copy(),
-                resolved_document.doc_id.copy(),
-                exact_score_for_document_with_config(
-                    query,
-                    snapshot.segments[resolved_document.segment_index].stored_index.index,
-                    resolved_document.document_index,
-                    backend.scoring_config,
-                ),
+                resolved.documents[document_index].segment_id.copy(),
+                resolved.documents[document_index].doc_id.copy(),
+                scores[document_index],
             ),
-            len(resolved.documents),
+            final_k,
         )
 
     return Stage2Result(
@@ -264,84 +457,6 @@ def score_candidate_window_for_cpu(
         resolved.token_count,
         resolved.vector_count,
         resolved.byte_size,
-    )
-
-
-def materialize_candidate_index(
-    read snapshot: ResolvedCollectionSnapshot, read hits: List[CollectionHit]
-) raises -> MaterializedCandidateIndex:
-    if len(hits) == 0:
-        raise Error("cannot materialize an empty candidate index")
-
-    var documents = List[EncodedDocument]()
-    var segment_ids = List[String]()
-
-    for hit in hits:
-        var matched = False
-
-        for segment in snapshot.segments:
-            if segment.manifest.segment_id.value != hit.segment_id:
-                continue
-
-            documents.append(
-                build_encoded_document_from_segment(
-                    segment,
-                    find_document_index_in_segment(segment, hit.doc_id),
-                )
-            )
-            segment_ids.append(segment.manifest.segment_id.value.copy())
-            matched = True
-            break
-
-        if not matched:
-            raise Error(
-                "candidate segment_id not found in resolved snapshot: " + hit.segment_id
-            )
-
-    var index = pack_documents(documents)
-    var scalar_width = native_vector_scalar_byte_width()
-    return MaterializedCandidateIndex(
-        index,
-        segment_ids^,
-        count_unique_segment_ids(segment_ids),
-        index.total_vector_count,
-        index.total_vector_count,
-        index.total_vector_count * index.vector_dim * scalar_width,
-    )
-
-
-def exact_rerank_candidates_for_plan(
-    read backend: ExactCpuBackend,
-    read query: EncodedQuery,
-    read snapshot: ResolvedCollectionSnapshot,
-    read hits: List[CollectionHit],
-    final_k: Int,
-) raises -> Stage2Result:
-    if len(hits) == 0:
-        return Stage2Result([], 0, 0, 0, 0, 0)
-
-    var scored_window = score_candidate_window_for_cpu(
-        backend,
-        query,
-        snapshot,
-        hits,
-    )
-    var final_hits = List[CollectionHit]()
-    var limit = final_k
-    if limit > len(scored_window.final_hits):
-        limit = len(scored_window.final_hits)
-
-    for hit_index in range(limit):
-        final_hits.append(scored_window.final_hits[hit_index].copy())
-
-    return Stage2Result(
-        final_hits^,
-        scored_window.materialized_artifacts.copy(),
-        scored_window.segment_count,
-        scored_window.document_count,
-        scored_window.token_count,
-        scored_window.vector_count,
-        scored_window.byte_size,
     )
 
 

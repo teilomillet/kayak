@@ -56,9 +56,10 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
     var filter_artifact_byte_size = 0
     var uses_document_filter_index = False
 
-    for segment in snapshot.segments:
+    for segment_index in range(len(snapshot.segments)):
         if not loaded_segment_has_search_artifact(
-            segment, SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY
+            snapshot.segments[segment_index],
+            SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
         ):
             raise Error(
                 "document_proxy stage-1 requires a document proxy sidecar for every segment"
@@ -66,7 +67,7 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
 
         var stored_proxy = loaded_search_artifact_stored_document_proxy_index(
             loaded_segment_search_artifact(
-                segment,
+                snapshot.segments[segment_index],
                 SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
             )
         )
@@ -80,13 +81,13 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
         var matching_document_count = stored_proxy.index.document_count
         var effective_filter = effective_filter_expression_for_segment(
             snapshot.collection,
-            segment,
+            snapshot.segments[segment_index],
             filter_expression,
         )
         if not effective_filter.is_match_all():
             var filter_artifact_bytes = (
                 document_filter_allowlist_artifact_byte_size_for_segment(
-                    segment,
+                    snapshot.segments[segment_index],
                     effective_filter,
                 )
             )
@@ -99,7 +100,7 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
                 )
             )
             var allowlist = document_filter_allowlist_for_segment(
-                segment,
+                snapshot.segments[segment_index],
                 effective_filter,
             )
             matching_document_count = allowlist.matching_document_count
@@ -116,12 +117,14 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
             insert_descending_collection_hit(
                 hits,
                 CollectionHit(
-                    segment.manifest.segment_id.value.copy(),
+                    snapshot.segments[segment_index].manifest.segment_id.value.copy(),
                     doc_id.copy(),
                     dot_product(
                         query_proxy,
                         stored_proxy.index.proxy_vectors[document_index],
                     ),
+                    segment_index,
+                    document_index,
                 ),
                 plan.candidate_budget.candidate_k,
             )

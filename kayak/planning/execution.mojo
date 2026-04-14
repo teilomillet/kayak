@@ -4,6 +4,7 @@ from kayak.collections import ResolvedCollectionSnapshot
 from kayak.contracts import EncodedQuery
 from kayak.filters import FilterExpression, match_all_filter
 from kayak.numeric import MetricScalar
+from kayak.runtime import ExactCpuBackend
 from kayak.runtime import ExactScoringBackend
 from kayak.search import SearchHit
 
@@ -147,6 +148,30 @@ def final_hits_for_plan[Backend: ExactScoringBackend](
     )
 
 
+def final_hits_for_plan(
+    read backend: ExactCpuBackend,
+    read query: EncodedQuery,
+    query_text: String,
+    read snapshot: ResolvedCollectionSnapshot,
+    read candidate_set: CandidateSet,
+    read plan: SearchPlan,
+) raises -> Stage2Result:
+    var reference_result = stage2_result_for_plan(
+        backend,
+        query,
+        query_text,
+        snapshot,
+        candidate_set,
+        plan,
+    )
+    return stage3_result_for_plan(
+        query_text,
+        snapshot,
+        reference_result,
+        plan,
+    )
+
+
 def search_collection_for_plan[Backend: ExactScoringBackend](
     read backend: Backend,
     read query: EncodedQuery,
@@ -167,8 +192,55 @@ def search_collection_for_plan[Backend: ExactScoringBackend](
     )
 
 
+def search_collection_for_plan(
+    read backend: ExactCpuBackend,
+    read query: EncodedQuery,
+    read snapshot: ResolvedCollectionSnapshot,
+    read plan: SearchPlan,
+    read filter_expression: FilterExpression = match_all_filter(),
+    query_text: String = "",
+) raises -> List[CollectionHit]:
+    var workspace = MutableCentroidCandidateGenerationWorkspace()
+    return search_collection_for_plan_with_workspace(
+        backend,
+        query,
+        snapshot,
+        plan,
+        workspace,
+        filter_expression,
+        query_text,
+    )
+
+
 def search_collection_for_plan_with_workspace[Backend: ExactScoringBackend](
     read backend: Backend,
+    read query: EncodedQuery,
+    read snapshot: ResolvedCollectionSnapshot,
+    read plan: SearchPlan,
+    mut workspace: MutableCentroidCandidateGenerationWorkspace,
+    read filter_expression: FilterExpression = match_all_filter(),
+    query_text: String = "",
+) raises -> List[CollectionHit]:
+    var candidate_set = candidate_generation_for_plan_with_workspace(
+        backend,
+        query,
+        snapshot,
+        plan,
+        workspace,
+        filter_expression,
+    )
+    return final_hits_for_plan(
+        backend,
+        query,
+        query_text,
+        snapshot,
+        candidate_set,
+        plan,
+    ).final_hits.copy()
+
+
+def search_collection_for_plan_with_workspace(
+    read backend: ExactCpuBackend,
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read plan: SearchPlan,

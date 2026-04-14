@@ -1,8 +1,11 @@
 from std.collections import List
 from std.testing import TestSuite, assert_equal
 
-from kayak import EncodedDocument, VectorScalar, pack_documents
-from kayak.scoring.maxsim import build_vector_balanced_boundaries
+from kayak import ExactScoringConfig, EncodedDocument, VectorScalar, pack_documents
+from kayak.scoring.maxsim import (
+    build_vector_balanced_boundaries,
+    choose_parallel_work_item_count_for_shape,
+)
 
 
 def repeated_vector(vector_dim: Int) -> List[VectorScalar]:
@@ -42,6 +45,18 @@ def test_vector_balanced_boundaries_handle_single_partition() raises:
     )
 
     assert_equal(build_vector_balanced_boundaries(index, 1), [0, 2])
+
+
+def test_parallel_work_item_count_keeps_tiny_windows_single_partition() raises:
+    var config = ExactScoringConfig()
+    var work_item_count = choose_parallel_work_item_count_for_shape(
+        32,
+        10,
+        10_000,
+        config,
+    )
+
+    assert_equal(work_item_count, 1)
 
 
 def main() raises:

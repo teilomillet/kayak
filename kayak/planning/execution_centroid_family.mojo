@@ -152,6 +152,7 @@ def sorted_active_doc_indices_for_merge(
 def insert_scored_centroid_doc_indices(
     mut hits: List[CollectionHit],
     segment_id: String,
+    segment_index: Int,
     read doc_ids: List[String],
     read active_scores: List[ScoreScalar],
     read doc_indices: List[Int],
@@ -166,6 +167,8 @@ def insert_scored_centroid_doc_indices(
                 segment_id.copy(),
                 doc_id.copy(),
                 active_scores[active_index],
+                segment_index,
+                document_index,
             ),
             candidate_k,
         )
@@ -173,6 +176,7 @@ def insert_scored_centroid_doc_indices(
 def insert_filtered_inactive_centroid_scores_merge(
     mut hits: List[CollectionHit],
     segment_id: String,
+    segment_index: Int,
     read doc_ids: List[String],
     inactive_score: ScoreScalar,
     candidate_k: Int,
@@ -200,6 +204,8 @@ def insert_filtered_inactive_centroid_scores_merge(
                 segment_id.copy(),
                 doc_ids[document_index].copy(),
                 inactive_score,
+                segment_index,
+                document_index,
             ),
             candidate_k,
         )
@@ -208,6 +214,7 @@ def insert_filtered_inactive_centroid_scores_merge(
 def insert_centroid_scores(
     mut hits: List[CollectionHit],
     segment_id: String,
+    segment_index: Int,
     read doc_ids: List[String],
     read score_result: CentroidSegmentScoreResult,
     candidate_k: Int,
@@ -218,6 +225,7 @@ def insert_centroid_scores(
     insert_scored_centroid_doc_indices(
         hits,
         segment_id,
+        segment_index,
         doc_ids,
         score_result.active_scores,
         score_result.active_doc_indices,
@@ -244,6 +252,7 @@ def insert_centroid_scores(
             insert_filtered_inactive_centroid_scores_merge(
                 hits,
                 segment_id,
+                segment_index,
                 doc_ids,
                 score_result.inactive_score,
                 candidate_k,
@@ -269,6 +278,8 @@ def insert_centroid_scores(
                     segment_id.copy(),
                     doc_ids[document_index].copy(),
                     score_result.inactive_score,
+                    segment_index,
+                    document_index,
                 ),
                 candidate_k,
             )
@@ -285,6 +296,8 @@ def insert_centroid_scores(
                 segment_id.copy(),
                 doc_ids[document_index].copy(),
                 score_result.inactive_score,
+                segment_index,
+                document_index,
             ),
             candidate_k,
         )
@@ -332,11 +345,13 @@ def candidate_generation_for_centroid_family_with_workspace[Backend: ExactScorin
     var filter_artifact_byte_size = 0
     var uses_document_filter_index = False
 
-    for segment in snapshot.segments:
-        require_centroid_artifact_present(segment, contract)
+    for segment_index in range(len(snapshot.segments)):
+        require_centroid_artifact_present(
+            snapshot.segments[segment_index], contract
+        )
 
         var stored_centroid = loaded_segment_stored_centroid_postings_index(
-            segment, contract.artifact_family
+            snapshot.segments[segment_index], contract.artifact_family
         )
 
         if contract.requires_weight_sorted_postings:
@@ -358,13 +373,13 @@ def candidate_generation_for_centroid_family_with_workspace[Backend: ExactScorin
         var matching_document_count = stored_centroid.index.document_count
         var effective_filter = effective_filter_expression_for_segment(
             snapshot.collection,
-            segment,
+            snapshot.segments[segment_index],
             filter_expression,
         )
         if not effective_filter.is_match_all():
             var filter_artifact_bytes = (
                 document_filter_allowlist_artifact_byte_size_for_segment(
-                    segment,
+                    snapshot.segments[segment_index],
                     effective_filter,
                 )
             )
@@ -377,7 +392,7 @@ def candidate_generation_for_centroid_family_with_workspace[Backend: ExactScorin
                 )
             )
             var allowlist = document_filter_allowlist_for_segment(
-                segment,
+                snapshot.segments[segment_index],
                 effective_filter,
             )
             matching_document_count = allowlist.matching_document_count
@@ -466,8 +481,9 @@ def candidate_generation_for_centroid_family_with_workspace[Backend: ExactScorin
 
         insert_centroid_scores(
             hits,
-            segment.manifest.segment_id.value,
-            segment.stored_index.index.doc_ids,
+            snapshot.segments[segment_index].manifest.segment_id.value,
+            segment_index,
+            snapshot.segments[segment_index].stored_index.index.doc_ids,
             score_result,
             plan.candidate_budget.candidate_k,
             matching_document_count,

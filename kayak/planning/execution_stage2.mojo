@@ -4,6 +4,7 @@ from std.collections import List
 
 from kayak.collections import ResolvedCollectionSnapshot
 from kayak.contracts import EncodedQuery
+from kayak.runtime import ExactCpuBackend
 from kayak.runtime import ExactScoringBackend
 
 from .candidate_set import CandidateSet
@@ -65,6 +66,38 @@ def reference_stage_output_k(
 
 def stage2_result_for_plan[Backend: ExactScoringBackend](
     read backend: Backend,
+    read query: EncodedQuery,
+    query_text: String,
+    read snapshot: ResolvedCollectionSnapshot,
+    read candidate_set: CandidateSet,
+    read plan: SearchPlan,
+) raises -> Stage2Result:
+    _ = query_text
+    var output_k = reference_stage_output_k(candidate_set, plan)
+
+    if plan.stage2_reference_operator.kind == "noop_topk":
+        return noop_topk_stage2_result(
+            candidate_set.hits,
+            output_k,
+        )
+
+    if plan.stage2_reference_operator.kind == "exact_late_interaction":
+        return exact_rerank_candidates_for_plan(
+            backend,
+            query,
+            snapshot,
+            candidate_set.hits,
+            output_k,
+        )
+
+    raise Error(
+        "unsupported stage2 reference operator kind: "
+        + plan.stage2_reference_operator.kind
+    )
+
+
+def stage2_result_for_plan(
+    read backend: ExactCpuBackend,
     read query: EncodedQuery,
     query_text: String,
     read snapshot: ResolvedCollectionSnapshot,

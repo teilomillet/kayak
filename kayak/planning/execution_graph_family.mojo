@@ -121,6 +121,7 @@ struct GemGraphSegmentSearchResult(Copyable):
 def segment_hits_for_gem_graph(
     read query: EncodedQuery,
     segment_id: String,
+    segment_index: Int,
     read stored_gem_graph: StoredGemGraphIndex,
     candidate_k: Int,
     cluster_top_k_per_query_token: Int,
@@ -281,6 +282,8 @@ def segment_hits_for_gem_graph(
                 segment_id.copy(),
                 index.doc_ids[result_doc_indices[hit_index]].copy(),
                 metric_score(result_distances[hit_index]),
+                segment_index,
+                result_doc_indices[hit_index],
             )
         )
     return GemGraphSegmentSearchResult(
@@ -312,9 +315,10 @@ def candidate_generation_for_graph_family[Backend: ExactScoringBackend](
     var byte_size = 0
     var graph_search_counters = GraphSearchCounters()
 
-    for segment in snapshot.segments:
+    for segment_index in range(len(snapshot.segments)):
         if not loaded_segment_has_search_artifact(
-            segment, SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
+            snapshot.segments[segment_index],
+            SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
         ):
             raise Error(
                 "gem_graph stage-1 requires a gem graph sidecar for every segment"
@@ -322,7 +326,7 @@ def candidate_generation_for_graph_family[Backend: ExactScoringBackend](
 
         var stored_gem_graph = loaded_search_artifact_stored_gem_graph_index(
             loaded_segment_search_artifact(
-                segment,
+                snapshot.segments[segment_index],
                 SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
             )
         )
@@ -336,7 +340,8 @@ def candidate_generation_for_graph_family[Backend: ExactScoringBackend](
 
         var segment_result = segment_hits_for_gem_graph(
             query,
-            segment.manifest.segment_id.value,
+            snapshot.segments[segment_index].manifest.segment_id.value,
+            segment_index,
             stored_gem_graph,
             plan.candidate_budget.candidate_k,
             plan.candidate_generator.cluster_top_k_per_query_token,

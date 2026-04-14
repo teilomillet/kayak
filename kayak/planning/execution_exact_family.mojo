@@ -50,25 +50,30 @@ def candidate_generation_for_exact_family[Backend: ExactScoringBackend](
     var filter_artifact_byte_size = 0
     var uses_document_filter_index = False
 
-    for segment in snapshot.segments:
-        var scores = backend.score_all(query, segment.stored_index.index)
+    for segment_index in range(len(snapshot.segments)):
+        var scores = backend.score_all(
+            query,
+            snapshot.segments[segment_index].stored_index.index,
+        )
         var allowed_flags = List[Int]()
         var use_allowlist = False
         var segment_matching_document_count = len(scores)
         filter_input_document_count += len(scores)
         var effective_filter = effective_filter_expression_for_segment(
             snapshot.collection,
-            segment,
+            snapshot.segments[segment_index],
             filter_expression,
         )
         if not effective_filter.is_match_all():
             segment_matching_document_count = 0
             if (
                 not filter_expression_requires_document_metadata(effective_filter)
-                or loaded_segment_has_document_filter_index(segment)
+                or loaded_segment_has_document_filter_index(
+                    snapshot.segments[segment_index]
+                )
             ):
                 var allowlist = document_filter_allowlist_for_segment(
-                    segment,
+                    snapshot.segments[segment_index],
                     effective_filter,
                 )
                 allowed_flags = allowlist.flags.copy()
@@ -79,7 +84,7 @@ def candidate_generation_for_exact_family[Backend: ExactScoringBackend](
                 if filter_expression_requires_document_metadata(effective_filter):
                     filter_artifact_byte_size += (
                         document_filter_allowlist_artifact_byte_size_for_segment(
-                            segment,
+                            snapshot.segments[segment_index],
                             effective_filter,
                         )
                     )
@@ -92,9 +97,9 @@ def candidate_generation_for_exact_family[Backend: ExactScoringBackend](
             elif not effective_filter.is_match_all():
                 if not filter_expression_matches_document(
                     effective_filter,
-                    segment.stored_index.index.doc_ids[index],
+                    snapshot.segments[segment_index].stored_index.index.doc_ids[index],
                     loaded_segment_document_metadata_for_doc_index(
-                        segment, index
+                        snapshot.segments[segment_index], index
                     ),
                 ):
                     continue
@@ -102,9 +107,13 @@ def candidate_generation_for_exact_family[Backend: ExactScoringBackend](
             insert_descending_collection_hit(
                 hits,
                 CollectionHit(
-                    segment.manifest.segment_id.value.copy(),
-                    segment.stored_index.index.doc_ids[index].copy(),
+                    snapshot.segments[segment_index].manifest.segment_id.value.copy(),
+                    snapshot.segments[segment_index].stored_index.index.doc_ids[
+                        index
+                    ].copy(),
                     scores[index],
+                    segment_index,
+                    index,
                 ),
                 plan.candidate_budget.candidate_k,
             )

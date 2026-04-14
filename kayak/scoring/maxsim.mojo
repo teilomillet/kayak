@@ -16,18 +16,20 @@ from .dot128 import COLBERT_VECTOR_DIM, dot_product_dim128
 
 comptime MIN_PARALLEL_SIMILARITY_PAIRS = 4096
 comptime TARGET_CHUNKS_PER_WORKER = 4
+comptime MIN_DOCUMENTS_PER_PARALLEL_WORK_ITEM = 10
 
 
 def ceil_div(numerator: Int, denominator: Int) -> Int:
     return (numerator + denominator - 1) // denominator
 
 
-def choose_parallel_work_item_count_for_query_vector_count(
+def choose_parallel_work_item_count_for_shape(
     query_vector_count: Int,
-    read index: PackedIndex,
+    document_count: Int,
+    total_vector_count: Int,
     read config: ExactScoringConfig,
 ) -> Int:
-    if query_vector_count <= 0:
+    if query_vector_count <= 0 or document_count <= 0:
         return 1
 
     if not config.enable_parallel_scoring:
@@ -35,26 +37,37 @@ def choose_parallel_work_item_count_for_query_vector_count(
 
     if config.parallel_work_item_count_override > 0:
         var overridden_work_item_count = config.parallel_work_item_count_override
-        if overridden_work_item_count > index.document_count:
-            return index.document_count
+        if overridden_work_item_count > document_count:
+            return document_count
         return overridden_work_item_count
 
     var worker_count = parallelism_level()
     if worker_count <= 1:
         return 1
 
-    var total_similarity_pairs = query_vector_count * index.total_vector_count
+    var total_similarity_pairs = query_vector_count * total_vector_count
     if total_similarity_pairs < MIN_PARALLEL_SIMILARITY_PAIRS:
         return 1
 
     if not config.enable_parallel_work_item_oversubscription:
-        if worker_count > index.document_count:
-            return index.document_count
+        if worker_count > document_count:
+            return document_count
         return worker_count
 
     var max_work_items = worker_count * TARGET_CHUNKS_PER_WORKER
-    if max_work_items > index.document_count:
-        max_work_items = index.document_count
+    if max_work_items > document_count:
+        max_work_items = document_count
+    # Avoid spawning many tiny partitions for small exact windows. The gold
+    # BrowseComp policy sweep showed that oversubscribing a 90-document exact
+    # search to dozens of work items was materially slower than keeping each
+    # partition responsible for a non-trivial document slice.
+    var document_bounded_max_work_items = (
+        document_count // MIN_DOCUMENTS_PER_PARALLEL_WORK_ITEM
+    )
+    if document_bounded_max_work_items < 1:
+        document_bounded_max_work_items = 1
+    if document_bounded_max_work_items < max_work_items:
+        max_work_items = document_bounded_max_work_items
 
     var work_item_count = ceil_div(
         total_similarity_pairs, MIN_PARALLEL_SIMILARITY_PAIRS
@@ -67,6 +80,19 @@ def choose_parallel_work_item_count_for_query_vector_count(
         return max_work_items
 
     return work_item_count
+
+
+def choose_parallel_work_item_count_for_query_vector_count(
+    query_vector_count: Int,
+    read index: PackedIndex,
+    read config: ExactScoringConfig,
+) -> Int:
+    return choose_parallel_work_item_count_for_shape(
+        query_vector_count,
+        index.document_count,
+        index.total_vector_count,
+        config,
+    )
 
 
 def choose_parallel_work_item_count(

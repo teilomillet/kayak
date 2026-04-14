@@ -48,7 +48,7 @@ def print_frontier_mean_line(read summary: FaithfulnessFrontierSummary):
         " slice=",
         summary.slice_name,
         " generator=",
-        summary.candidate_generator_kind,
+        summary.candidate_generator.kind,
         " candidate_k=",
         summary.candidate_k,
         " posting_cap=",

@@ -6,6 +6,7 @@ from kayak import (
     EncodedDocument,
     EncodedQuery,
     ExactCpuBackend,
+    ExactScoringConfig,
     MetricScalar,
     VECTOR_SCALAR_NAME,
     pack_documents,
@@ -151,6 +152,16 @@ def write_segment(
     )
 
 
+def basis_vector(vector_dim: Int, hot_index: Int) -> List[Float32]:
+    var vector = List[Float32]()
+    for dim_index in range(vector_dim):
+        if dim_index == hot_index:
+            vector.append(1.0)
+        else:
+            vector.append(0.0)
+    return vector^
+
+
 def make_collection_root() raises -> Path:
     var root = Path("/tmp/kayak-collection-search-plan")
     save_collection_manifest(
@@ -195,6 +206,87 @@ def make_collection_root() raises -> Path:
             2,
             [SegmentId("segment-0001"), SegmentId("segment-0002")],
             CollectionStats(2, 4, 8, 8, 1024),
+        ),
+    )
+    return root^
+
+
+def make_parallel_exact_stage_collection_root() raises -> Path:
+    var root = Path("/tmp/kayak-collection-exact-stage-parallel")
+    var vector_dim = 128
+    var segment_root = root / "segments" / "segment-0001"
+    var documents = List[EncodedDocument]()
+
+    for document_index in range(8):
+        var token_vectors = List[List[Float32]]()
+        for token_index in range(256):
+            token_vectors.append(
+                basis_vector(vector_dim, (document_index + token_index) % vector_dim)
+            )
+        documents.append(
+            EncodedDocument("doc-" + String(document_index), token_vectors^)
+        )
+
+    var packed_index = pack_documents(documents)
+    save_collection_manifest(
+        root,
+        CollectionManifest(
+            CollectionId("exact-stage-parallel"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            vector_dim,
+            1,
+        ),
+    )
+    save_stored_packed_index(
+        segment_root / "packed_index",
+        StoredPackedIndex(
+            "collection://exact-stage-parallel",
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            packed_index.copy(),
+        ),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("exact-stage-parallel"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            vector_dim,
+            "packed_index",
+            "",
+            "",
+            SegmentStats(
+                packed_index.document_count,
+                packed_index.total_vector_count,
+                packed_index.total_vector_count,
+                packed_index.total_vector_count * vector_dim * 4,
+            ),
+        ),
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0001",
+        SnapshotManifest(
+            SnapshotId("snapshot-0001"),
+            CollectionId("exact-stage-parallel"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            1,
+            [SegmentId("segment-0001")],
+            CollectionStats(
+                1,
+                packed_index.document_count,
+                packed_index.total_vector_count,
+                packed_index.total_vector_count,
+                packed_index.total_vector_count * vector_dim * 4,
+            ),
         ),
     )
     return root^
@@ -1630,6 +1722,55 @@ def test_exact_rerank_candidates_for_plan_matches_materialized_reference() raise
         reranked.materialized_artifacts[0].byte_size,
         materialized.byte_size,
     )
+
+
+def test_exact_rerank_candidates_for_plan_parallel_toggle_keeps_scores_identical_for_resolved_hits() raises:
+    var root = make_parallel_exact_stage_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query_vectors = List[List[Float32]]()
+    for hot_index in range(32):
+        query_vectors.append(basis_vector(128, hot_index))
+
+    var candidate_hits = List[CollectionHit]()
+    for document_index in range(8):
+        candidate_hits.append(
+            CollectionHit(
+                "segment-0001",
+                "doc-" + String(document_index),
+                0.0,
+                0,
+                document_index,
+            )
+        )
+
+    var parallel_config = ExactScoringConfig()
+    parallel_config.parallel_work_item_count_override = 2
+    var parallel_reranked = exact_rerank_candidates_for_plan(
+        ExactCpuBackend(parallel_config^),
+        EncodedQuery(query_vectors.copy()),
+        resolved,
+        candidate_hits,
+        5,
+    )
+
+    var serial_config = ExactScoringConfig()
+    serial_config.enable_parallel_scoring = False
+    var serial_reranked = exact_rerank_candidates_for_plan(
+        ExactCpuBackend(serial_config^),
+        EncodedQuery(query_vectors^),
+        resolved,
+        candidate_hits,
+        5,
+    )
+
+    assert_collection_hits_equal(
+        parallel_reranked.final_hits, serial_reranked.final_hits
+    )
+    assert_equal(parallel_reranked.segment_count, serial_reranked.segment_count)
+    assert_equal(parallel_reranked.document_count, serial_reranked.document_count)
+    assert_equal(parallel_reranked.token_count, serial_reranked.token_count)
+    assert_equal(parallel_reranked.vector_count, serial_reranked.vector_count)
+    assert_equal(parallel_reranked.byte_size, serial_reranked.byte_size)
 
 
 def test_centroid_postings_imputed_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:
