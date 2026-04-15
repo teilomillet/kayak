@@ -2,8 +2,8 @@
 
 Import from ``kayak`` when writing application or research code in Python.
 This package owns the stable late-interaction object model, text encoders,
-stores, exact and stage-aware local operations, and explicit backend
-selection for the SDK surface.
+retrieval workflows, stores, exact and stage-aware local operations, and
+explicit backend selection for the SDK surface.
 
 It is not the hosted engine surface for collections, snapshots, or service
 operations. The sibling ``kayak_bridge`` package remains an internal
@@ -73,6 +73,10 @@ from .stores import (
     open_store,
     register_store,
 )
+from .retrievers import (
+    LateTextRetriever,
+    open_text_retriever,
+)
 
 PUBLIC_API = (
     "BackendInfo",
@@ -90,6 +94,7 @@ PUBLIC_API = (
     "LateScores",
     "LateStore",
     "LateStoreStats",
+    "LateTextRetriever",
     "LateTextEncoder",
     "MemoryLateStore",
     "SearchHit",
@@ -122,6 +127,7 @@ PUBLIC_API = (
     "none_stage3_verifier_operator",
     "noop_topk_stage2_reference_operator",
     "open_encoder",
+    "open_text_retriever",
     "open_store",
     "packed_index",
     "query",

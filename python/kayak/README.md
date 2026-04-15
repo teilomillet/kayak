@@ -162,6 +162,68 @@ The factory is intentionally small:
 - `open_encoder("callable", query_encoder=..., document_encoder=...)`
 - `register_encoder(...)`
 
+## Text Retrievers
+
+If you want one object that owns text ingest, store materialization, and search,
+use `LateTextRetriever`.
+
+That is the highest-level public SDK shape today:
+
+```python
+import kayak
+
+retriever = kayak.open_text_retriever(
+    encoder="callable",
+    store="kayak",
+    encoder_kwargs={
+        "query_encoder": my_query_encoder,
+        "document_encoder": my_document_encoder,
+    },
+    store_kwargs={"path": "./kayak-index"},
+)
+
+retriever.upsert_texts(
+    ["doc-a", "doc-b"],
+    [
+        "Pixi installs Python, Mojo, and kayak together.",
+        "LanceDB can keep multivector rows on disk.",
+    ],
+    metadata=[
+        {"topic": "installation"},
+        {"topic": "storage"},
+    ],
+)
+
+hits = retriever.search_text(
+    "install python mojo together",
+    k=2,
+    where={"topic": "installation"},
+)
+```
+
+`open_text_retriever(...)` prefers `kayak.MOJO_EXACT_CPU_BACKEND` automatically
+when the active environment can actually run the Mojo backend. If Mojo is not
+available, it falls back to `kayak.NUMPY_REFERENCE_BACKEND`. Pass
+`backend=...` when you want to override that policy explicitly.
+
+The retriever keeps the lower-level pieces injectable:
+- pass your own encoder object
+- pass your own store object
+- or open both from the public factories
+
+The high-level contract stays narrow:
+- `upsert_texts(doc_ids, texts, metadata=None)`
+- `delete(doc_ids)`
+- `load_index(...)`
+- `search_text(...)`
+- `search_query(...)`
+- `search_text_with_plan(...)`
+- `search_query_with_plan(...)`
+
+Use this when you want one object for normal text workflows.
+Use raw encoders, stores, and `LateIndex` objects when you want lower-level
+control over each step.
+
 ## Stores
 
 Kayak search still operates on `LateIndex`, but the SDK now exposes one store

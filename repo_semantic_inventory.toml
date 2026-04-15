@@ -7,6 +7,7 @@ why = "Root policy files define the repo-wide working rules, ignore semantics, a
 paths = [
     ".gitattributes",
     ".gitignore",
+    ".gitmodules",
     ".python-version",
     "AGENTS.md",
     "README.md",
@@ -20,6 +21,13 @@ name = "root-legal-notice"
 role = "legal_notice"
 why = "The license is legal metadata rather than engine behavior."
 paths = ["LICENSE"]
+
+[[rule]]
+name = "docs-site-submodule"
+role = "repo_control"
+why = "The public docs site is tracked as a submodule pointer in the main repo and must stay explicitly visible in repo ownership rules."
+paths = ["public"]
+normative_docs = ["README.md", "python/kayak/README.md"]
 
 [[rule]]
 name = "root-packaging-and-tooling"
@@ -42,6 +50,7 @@ normative_docs = [
 tests = [
     "python/tests/test_mojo_packaging.py",
     "python/tests/test_python_sdk_docs.py",
+    "python/tests/test_sdist_manifest.py",
 ]
 
 [[rule]]
@@ -362,7 +371,7 @@ tests = [
 name = "python-sdk-surface"
 role = "python_sdk_source"
 why = "The public Python package owns the stable local SDK facade rooted at import kayak."
-paths = ["python/kayak/*"]
+paths = ["python/kayak/*", "python/kayak/*/*.py"]
 normative_docs = [
     "python/kayak/README.md",
     "docs/python_sdk.md",
@@ -371,6 +380,7 @@ normative_docs = [
 ]
 tests = [
     "python/tests/test_public_api_contract.py",
+    "python/tests/test_text_retriever_api.py",
     "python/tests/test_search_plan_api.py",
     "python/tests/test_python_sdk_docs.py",
 ]

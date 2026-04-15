@@ -3,10 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from unittest import mock
 
 import kayak_bridge.mojo_exact_cpu as mojo_exact_cpu
+
+
+PROJECT_VERSION = tomllib.loads(
+    (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text(
+        encoding="utf-8"
+    )
+)["project"]["version"]
 
 
 class MojoPackagingTests(unittest.TestCase):
@@ -91,7 +99,7 @@ class MojoPackagingTests(unittest.TestCase):
                 (
                     "{\n"
                     '  "schema_version": 1,\n'
-                    '  "project_version": "0.2.0",\n'
+                    f'  "project_version": "{PROJECT_VERSION}",\n'
                     '  "mojo_version": "mojo 0.26.3",\n'
                     '  "artifact_filename": "kayak.mojopkg",\n'
                     '  "artifact_sha256": "abc123"\n'
@@ -112,7 +120,7 @@ class MojoPackagingTests(unittest.TestCase):
                             bundled_artifact,
                         ],
                         (
-                            "project_version:0.2.0",
+                            f"project_version:{PROJECT_VERSION}",
                             "mojo_version:mojo 0.26.3",
                             "artifact_sha256:abc123",
                         ),
@@ -315,7 +323,7 @@ class MojoPackagingTests(unittest.TestCase):
                 (
                     "{\n"
                     '  "schema_version": 1,\n'
-                    '  "project_version": "0.2.0",\n'
+                    f'  "project_version": "{PROJECT_VERSION}",\n'
                     '  "mojo_version": "mojo 0.26.3",\n'
                     '  "artifact_filename": "kayak.mojopkg",\n'
                     '  "artifact_sha256": "abc123"\n'
@@ -337,7 +345,7 @@ class MojoPackagingTests(unittest.TestCase):
                     mojopkg_path=artifacts_root / "kayak.mojopkg",
                 )
                 message = str(error)
-                self.assertIn("Kayak 0.2.0", message)
+                self.assertIn(f"Kayak {PROJECT_VERSION}", message)
                 self.assertIn("mojo 0.26.3", message)
                 self.assertIn("mojo 0.26.2", message)
                 self.assertIn("runtime source rebuild is not available", message)
