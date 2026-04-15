@@ -187,6 +187,9 @@ class DirectoryLateStore:
             raise ValueError("directory store has no stored offsets")
 
         token_vectors = _load_token_vectors_memmap(self._token_vectors_path)
+        used_vector_count = int(self._doc_offsets[-1])
+        if used_vector_count != int(token_vectors.shape[0]):
+            token_vectors = token_vectors[:used_vector_count]
         token_vectors.setflags(write=False)
 
         return packed_index_from_parts(

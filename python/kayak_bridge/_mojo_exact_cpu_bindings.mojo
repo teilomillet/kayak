@@ -238,10 +238,19 @@ def prepare_packed_index_from_storage(
     if vector_dim != 128:
         raise Error("prepared packed storage path currently requires vector_dim=128")
 
+    var token_values = List[VectorScalar]()
+    var token_value_parts_path = root / "token_values.parts.tsv"
+    if token_value_parts_path.exists():
+        for part_name in read_non_empty_lines(token_value_parts_path):
+            for value in read_binary_scalar_payload(root / part_name):
+                token_values.append(value)
+    else:
+        token_values = read_binary_scalar_payload(root / "token_values.bin")
+
     var index = HybridFlatDim128Index(
         read_non_empty_lines(root / "doc_ids.tsv"),
         read_binary_int64_payload(root / "doc_offsets.bin"),
-        read_binary_scalar_payload(root / "token_values.bin"),
+        token_values^,
         vector_dim,
     )
     return PythonObject(alloc=PreparedPackedIndex(index^))

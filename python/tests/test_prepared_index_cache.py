@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
 import kayak
+import kayak_bridge.prepared_index_storage_artifact as prepared_storage_artifact
 from kayak_bridge.prepared_index_cache import (
     PREPARED_PACKED_INDEX_CACHE_SIZE,
     clear_prepared_packed_index_cache,
@@ -140,6 +142,30 @@ class PreparedIndexCacheTests(unittest.TestCase):
 
         clear_prepared_packed_index_cache()
         self.assertFalse(root.exists())
+
+    def test_storage_preparation_splits_large_token_value_payload(self) -> None:
+        module = _FakePreparedStorageModule()
+        index = _build_index(13)
+
+        with patch.object(
+            prepared_storage_artifact,
+            "MAX_PREPARED_TOKEN_VALUES_PART_BYTES",
+            512,
+        ):
+            prepared = prepared_packed_index_object(index, module=module)
+
+        self.assertIs(prepared, module.prepared_objects[0])
+        root = module.storage_roots[0]
+        parts_manifest = root / "token_values.parts.tsv"
+        self.assertTrue(parts_manifest.exists())
+        part_names = parts_manifest.read_text(encoding="utf-8").splitlines()
+        self.assertGreater(len(part_names), 1)
+        self.assertFalse((root / "token_values.bin").exists())
+        total_size = sum((root / part_name).stat().st_size for part_name in part_names)
+        expected_size = (
+            index.total_vector_count * index.vector_dim * np.dtype(np.float32).itemsize
+        )
+        self.assertEqual(total_size, expected_size)
 
 
 if __name__ == "__main__":

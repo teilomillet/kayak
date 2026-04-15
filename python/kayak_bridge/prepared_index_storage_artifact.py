@@ -21,6 +21,8 @@ import numpy as np
 PREPARED_PACKED_INDEX_ARTIFACT_ROOT = (
     PYTHON_MOJO_CACHE / "prepared_packed_index_artifacts"
 )
+MAX_PREPARED_TOKEN_VALUES_PART_BYTES = 2_000_000_000
+TOKEN_VALUES_PARTS_FILENAME = "token_values.parts.tsv"
 
 
 def prepared_packed_index_artifact_root(*, module: object, index: "LateIndex") -> Path:
@@ -68,5 +70,26 @@ def _write_token_values(index: "LateIndex", *, root: Path) -> None:
     values = index.as_flat_token_values()
     little_endian_dtype = np.dtype(VECTOR_DTYPE).newbyteorder("<")
     encoded = np.asarray(values, dtype=little_endian_dtype, order="C")
-    with (root / "token_values.bin").open("wb") as handle:
-        encoded.tofile(handle)
+    if encoded.nbytes <= MAX_PREPARED_TOKEN_VALUES_PART_BYTES:
+        with (root / "token_values.bin").open("wb") as handle:
+            encoded.tofile(handle)
+        return
+
+    scalar_width = encoded.dtype.itemsize
+    scalar_limit = MAX_PREPARED_TOKEN_VALUES_PART_BYTES // scalar_width
+    aligned_scalar_limit = (scalar_limit // index.vector_dim) * index.vector_dim
+    if aligned_scalar_limit <= 0:
+        raise ValueError("prepared token-value segment limit is too small")
+
+    part_names: list[str] = []
+    part_index = 0
+    for start in range(0, int(encoded.size), aligned_scalar_limit):
+        stop = min(start + aligned_scalar_limit, int(encoded.size))
+        part_name = f"token_values.part{part_index:04d}.bin"
+        with (root / part_name).open("wb") as handle:
+            encoded[start:stop].tofile(handle)
+        part_names.append(part_name)
+        part_index += 1
+
+    payload = "".join(f"{part_name}\n" for part_name in part_names)
+    (root / TOKEN_VALUES_PARTS_FILENAME).write_text(payload, encoding="utf-8")
