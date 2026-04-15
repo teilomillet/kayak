@@ -1,18 +1,21 @@
 from std.algorithm.backend.cpu.parallelize import sync_parallelize
 from std.collections import List
 from std.runtime.asyncrt import parallelism_level
+from std.sys.info import simd_width_of
 
-from kayak.contracts import EncodedQuery
+from kayak.contracts import EncodedQuery, FlatQueryDim128
 from kayak.index import PackedIndex
 from kayak.numeric import (
     VECTOR_SCALAR_NAME,
     ScoreScalar,
+    VectorScalar,
     min_score_scalar,
     zero_score_scalar,
 )
 from .exact_scoring_config import ExactScoringConfig
 from .dot import dot_product
 from .dot128 import COLBERT_VECTOR_DIM, dot_product_dim128
+from .dot128_flat import dot_product_dim128_flat_at
 
 comptime MIN_PARALLEL_SIMILARITY_PAIRS = 4096
 comptime TARGET_CHUNKS_PER_WORKER = 4
@@ -204,6 +207,125 @@ def exact_score_for_document_dim128(
                 best_similarity = similarity
 
         total += best_similarity
+
+    return total
+
+
+def exact_score_for_document_dim128_flat_query(
+    read query: FlatQueryDim128,
+    read index: PackedIndex,
+    document_index: Int,
+) -> ScoreScalar:
+    var start = index.doc_offsets[document_index]
+    var stop = index.doc_offsets[document_index + 1]
+    var total = zero_score_scalar()
+
+    for query_index in range(query.vector_count):
+        var query_offset = query_index * COLBERT_VECTOR_DIM
+        var best_similarity = min_score_scalar()
+
+        for token_index in range(start, stop):
+            var similarity = dot_product_dim128_flat_at(
+                index.token_vectors[token_index],
+                query.token_values,
+                query_offset,
+            )
+            if similarity > best_similarity:
+                best_similarity = similarity
+
+        total += best_similarity
+
+    return total
+
+
+def exact_score_for_document_dim128_flat_query_tiled4(
+    read query: FlatQueryDim128,
+    read index: PackedIndex,
+    document_index: Int,
+) -> ScoreScalar:
+    if VECTOR_SCALAR_NAME != "Float32":
+        return exact_score_for_document_dim128_flat_query(
+            query,
+            index,
+            document_index,
+        )
+
+    comptime width = simd_width_of[VectorScalar]()
+    if COLBERT_VECTOR_DIM % width != 0:
+        return exact_score_for_document_dim128_flat_query(
+            query,
+            index,
+            document_index,
+        )
+
+    var start = index.doc_offsets[document_index]
+    var stop = index.doc_offsets[document_index + 1]
+    var total = zero_score_scalar()
+    var query_index = 0
+    var query_values_ptr = query.token_values.unsafe_ptr()
+
+    while query_index + 3 < query.vector_count:
+        var query_offset0 = query_index * COLBERT_VECTOR_DIM
+        var query_offset1 = (query_index + 1) * COLBERT_VECTOR_DIM
+        var query_offset2 = (query_index + 2) * COLBERT_VECTOR_DIM
+        var query_offset3 = (query_index + 3) * COLBERT_VECTOR_DIM
+        var query_ptr0 = query_values_ptr + query_offset0
+        var query_ptr1 = query_values_ptr + query_offset1
+        var query_ptr2 = query_values_ptr + query_offset2
+        var query_ptr3 = query_values_ptr + query_offset3
+        var best_similarity0 = min_score_scalar()
+        var best_similarity1 = min_score_scalar()
+        var best_similarity2 = min_score_scalar()
+        var best_similarity3 = min_score_scalar()
+
+        for token_index in range(start, stop):
+            var token_ptr = index.token_vectors[token_index].unsafe_ptr()
+            var accum0 = SIMD[DType.float32, width](0.0)
+            var accum1 = SIMD[DType.float32, width](0.0)
+            var accum2 = SIMD[DType.float32, width](0.0)
+            var accum3 = SIMD[DType.float32, width](0.0)
+
+            for dim in range(0, COLBERT_VECTOR_DIM, width):
+                var token_chunk = (token_ptr + dim).load[width=width]()
+                accum0 += (query_ptr0 + dim).load[width=width]() * token_chunk
+                accum1 += (query_ptr1 + dim).load[width=width]() * token_chunk
+                accum2 += (query_ptr2 + dim).load[width=width]() * token_chunk
+                accum3 += (query_ptr3 + dim).load[width=width]() * token_chunk
+
+            var similarity0 = ScoreScalar(accum0.reduce_add()[0])
+            var similarity1 = ScoreScalar(accum1.reduce_add()[0])
+            var similarity2 = ScoreScalar(accum2.reduce_add()[0])
+            var similarity3 = ScoreScalar(accum3.reduce_add()[0])
+
+            if similarity0 > best_similarity0:
+                best_similarity0 = similarity0
+            if similarity1 > best_similarity1:
+                best_similarity1 = similarity1
+            if similarity2 > best_similarity2:
+                best_similarity2 = similarity2
+            if similarity3 > best_similarity3:
+                best_similarity3 = similarity3
+        total += best_similarity0
+        total += best_similarity1
+        total += best_similarity2
+        total += best_similarity3
+        query_index += 4
+
+    while query_index < query.vector_count:
+        var query_offset = query_index * COLBERT_VECTOR_DIM
+        var best_similarity = min_score_scalar()
+
+        for token_index in range(start, stop):
+            var similarity = dot_product_dim128_flat_at(
+                index.token_vectors[token_index],
+                query.token_values,
+                query_offset,
+            )
+            if similarity > best_similarity:
+                best_similarity = similarity
+
+        total += best_similarity
+        query_index += 1
 
     return total
 

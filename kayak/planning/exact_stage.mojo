@@ -6,7 +6,12 @@ from kayak.collections import (
     ResolvedCollectionSnapshot,
     loaded_segment_has_document_filter_index,
 )
-from kayak.contracts import EncodedDocument, EncodedQuery
+from kayak.contracts import (
+    EncodedDocument,
+    EncodedQuery,
+    FlatQueryDim128,
+    build_flat_query_dim128,
+)
 from kayak.collections.resolved_snapshot import (
     loaded_segment_document_metadata_for_doc_index,
 )
@@ -17,11 +22,18 @@ from kayak.filters import (
     match_all_filter,
 )
 from kayak.index import PackedIndex, pack_documents
-from kayak.numeric import ScoreScalar, VectorScalar, zero_score_scalar
+from kayak.numeric import (
+    VECTOR_SCALAR_NAME,
+    ScoreScalar,
+    VectorScalar,
+    zero_score_scalar,
+)
 from kayak.runtime import ExactScoringBackend
 from kayak.runtime import ExactCpuBackend
+from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
 from kayak.scoring.maxsim import (
     choose_parallel_work_item_count_for_shape,
+    exact_score_for_document_dim128_flat_query_tiled4,
     exact_score_for_document_with_config,
 )
 from kayak.storage.binary_vector_codec import native_vector_scalar_byte_width
@@ -323,12 +335,97 @@ def exact_score_for_resolved_document(
     )
 
 
+def should_use_dim128_tiled4_exact_stage(
+    read backend: ExactCpuBackend,
+    read query: EncodedQuery,
+) -> Bool:
+    return (
+        backend.scoring_config.enable_dim128_fast_path
+        and VECTOR_SCALAR_NAME == "Float32"
+        and query.vector_dim == COLBERT_VECTOR_DIM
+        and query.vector_count == 32
+    )
+
+
+def exact_score_for_resolved_document_dim128_tiled4(
+    read query: FlatQueryDim128,
+    read snapshot: ResolvedCollectionSnapshot,
+    read resolved_document: ResolvedCandidateDocument,
+) -> ScoreScalar:
+    return exact_score_for_document_dim128_flat_query_tiled4(
+        query,
+        snapshot.segments[resolved_document.segment_index].stored_index.index,
+        resolved_document.document_index,
+    )
+
+
+def score_resolved_candidate_window_for_cpu_dim128_tiled4(
+    read backend: ExactCpuBackend,
+    read query: FlatQueryDim128,
+    read snapshot: ResolvedCollectionSnapshot,
+    read resolved: ResolvedCandidateWindow,
+) raises -> List[ScoreScalar]:
+    var scores = List[ScoreScalar]()
+    for _ in range(len(resolved.documents)):
+        scores.append(zero_score_scalar())
+
+    var work_item_count = choose_parallel_work_item_count_for_shape(
+        query.vector_count,
+        len(resolved.documents),
+        resolved.vector_count,
+        backend.scoring_config,
+    )
+    var scores_ptr = scores.unsafe_ptr()
+
+    if work_item_count <= 1:
+        for document_index in range(len(resolved.documents)):
+            scores_ptr[document_index] = (
+                exact_score_for_resolved_document_dim128_tiled4(
+                    query,
+                    snapshot,
+                    resolved.documents[document_index],
+                )
+            )
+        return scores^
+
+    var boundaries = build_resolved_candidate_boundaries(
+        resolved, work_item_count
+    )
+
+    @parameter
+    def score_partition(work_item: Int):
+        var start_doc = boundaries[work_item]
+        var stop_doc = boundaries[work_item + 1]
+
+        for document_index in range(start_doc, stop_doc):
+            scores_ptr[document_index] = (
+                exact_score_for_resolved_document_dim128_tiled4(
+                    query,
+                    snapshot,
+                    resolved.documents[document_index],
+                )
+            )
+
+    sync_parallelize[score_partition](work_item_count)
+    return scores^
+
+
 def score_resolved_candidate_window_for_cpu(
     read backend: ExactCpuBackend,
     read query: EncodedQuery,
     read snapshot: ResolvedCollectionSnapshot,
     read resolved: ResolvedCandidateWindow,
 ) raises -> List[ScoreScalar]:
+    # This path is only enabled for the measured dim128 q=32 exact-stage shape.
+    # Other shapes continue to use the existing scorer until they are benchmarked.
+    if should_use_dim128_tiled4_exact_stage(backend, query):
+        return score_resolved_candidate_window_for_cpu_dim128_tiled4(
+            backend,
+            build_flat_query_dim128(query),
+            snapshot,
+            resolved,
+        )
+
     var scores = List[ScoreScalar]()
     for _ in range(len(resolved.documents)):
         scores.append(zero_score_scalar())

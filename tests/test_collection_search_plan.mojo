@@ -1773,6 +1773,53 @@ def test_exact_rerank_candidates_for_plan_parallel_toggle_keeps_scores_identical
     assert_equal(parallel_reranked.byte_size, serial_reranked.byte_size)
 
 
+def test_exact_rerank_candidates_for_plan_dim128_fast_path_toggle_keeps_scores_identical_for_resolved_hits() raises:
+    var root = make_parallel_exact_stage_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query_vectors = List[List[Float32]]()
+    for hot_index in range(32):
+        query_vectors.append(basis_vector(128, hot_index))
+
+    var candidate_hits = List[CollectionHit]()
+    for document_index in range(8):
+        candidate_hits.append(
+            CollectionHit(
+                "segment-0001",
+                "doc-" + String(document_index),
+                0.0,
+                0,
+                document_index,
+            )
+        )
+
+    var default_reranked = exact_rerank_candidates_for_plan(
+        ExactCpuBackend(),
+        EncodedQuery(query_vectors.copy()),
+        resolved,
+        candidate_hits,
+        5,
+    )
+
+    var generic_config = ExactScoringConfig()
+    generic_config.enable_dim128_fast_path = False
+    var generic_reranked = exact_rerank_candidates_for_plan(
+        ExactCpuBackend(generic_config^),
+        EncodedQuery(query_vectors^),
+        resolved,
+        candidate_hits,
+        5,
+    )
+
+    assert_collection_hits_equal(
+        default_reranked.final_hits, generic_reranked.final_hits
+    )
+    assert_equal(default_reranked.segment_count, generic_reranked.segment_count)
+    assert_equal(default_reranked.document_count, generic_reranked.document_count)
+    assert_equal(default_reranked.token_count, generic_reranked.token_count)
+    assert_equal(default_reranked.vector_count, generic_reranked.vector_count)
+    assert_equal(default_reranked.byte_size, generic_reranked.byte_size)
+
+
 def test_centroid_postings_imputed_search_plan_reports_oracle_miss_when_shortlist_is_too_small() raises:
     var root = make_centroid_postings_collection_root()
     var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
