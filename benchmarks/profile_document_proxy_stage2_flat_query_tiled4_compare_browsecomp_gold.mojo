@@ -45,7 +45,7 @@ from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
 from kayak.scoring.maxsim import choose_parallel_work_item_count_for_shape
 
 
-struct FlatQueryTiled4Measurement(Copyable):
+struct FlatQueryTiledKernelMeasurement(Copyable):
     var benchmark_kind: String
     var slice_name: String
     var candidate_k: Int
@@ -74,7 +74,7 @@ struct FlatQueryTiled4Measurement(Copyable):
 
 
 def write_measurements_tsv(
-    path: Path, measurements: List[FlatQueryTiled4Measurement]
+    path: Path, measurements: List[FlatQueryTiledKernelMeasurement]
 ) raises:
     var lines = String()
     lines += "benchmark_kind\tslice_name\tcandidate_k\tquery_count\tmean_candidate_document_count\tmean_candidate_vector_count\tmean_seconds\tthroughput_per_second\n"
@@ -276,6 +276,174 @@ def tiled4_flat_query_exact_score_for_document_dim128(
     return total
 
 
+def tiled8_flat_query_exact_score_for_document_dim128(
+    read query: FlatQueryDim128,
+    read index: PackedIndex,
+    document_index: Int,
+) -> ScoreScalar:
+    comptime width = simd_width_of[VectorScalar]()
+    if COLBERT_VECTOR_DIM % width != 0:
+        return flat_query_exact_score_for_document_dim128(
+            query,
+            index,
+            document_index,
+        )
+
+    var start = index.doc_offsets[document_index]
+    var stop = index.doc_offsets[document_index + 1]
+    var total = zero_score_scalar()
+    var query_index = 0
+    var query_values_ptr = query.token_values.unsafe_ptr()
+
+    while query_index + 7 < query.vector_count:
+        var query_offset0 = query_index * COLBERT_VECTOR_DIM
+        var query_offset1 = (query_index + 1) * COLBERT_VECTOR_DIM
+        var query_offset2 = (query_index + 2) * COLBERT_VECTOR_DIM
+        var query_offset3 = (query_index + 3) * COLBERT_VECTOR_DIM
+        var query_offset4 = (query_index + 4) * COLBERT_VECTOR_DIM
+        var query_offset5 = (query_index + 5) * COLBERT_VECTOR_DIM
+        var query_offset6 = (query_index + 6) * COLBERT_VECTOR_DIM
+        var query_offset7 = (query_index + 7) * COLBERT_VECTOR_DIM
+        var query_ptr0 = query_values_ptr + query_offset0
+        var query_ptr1 = query_values_ptr + query_offset1
+        var query_ptr2 = query_values_ptr + query_offset2
+        var query_ptr3 = query_values_ptr + query_offset3
+        var query_ptr4 = query_values_ptr + query_offset4
+        var query_ptr5 = query_values_ptr + query_offset5
+        var query_ptr6 = query_values_ptr + query_offset6
+        var query_ptr7 = query_values_ptr + query_offset7
+        var best_similarity0 = min_score_scalar()
+        var best_similarity1 = min_score_scalar()
+        var best_similarity2 = min_score_scalar()
+        var best_similarity3 = min_score_scalar()
+        var best_similarity4 = min_score_scalar()
+        var best_similarity5 = min_score_scalar()
+        var best_similarity6 = min_score_scalar()
+        var best_similarity7 = min_score_scalar()
+
+        for token_index in range(start, stop):
+            var token_ptr = index.token_vectors[token_index].unsafe_ptr()
+            var accum0 = SIMD[DType.float32, width](0.0)
+            var accum1 = SIMD[DType.float32, width](0.0)
+            var accum2 = SIMD[DType.float32, width](0.0)
+            var accum3 = SIMD[DType.float32, width](0.0)
+            var accum4 = SIMD[DType.float32, width](0.0)
+            var accum5 = SIMD[DType.float32, width](0.0)
+            var accum6 = SIMD[DType.float32, width](0.0)
+            var accum7 = SIMD[DType.float32, width](0.0)
+
+            for dim in range(0, COLBERT_VECTOR_DIM, width):
+                var token_chunk = (token_ptr + dim).load[width=width]()
+                accum0 += (query_ptr0 + dim).load[width=width]() * token_chunk
+                accum1 += (query_ptr1 + dim).load[width=width]() * token_chunk
+                accum2 += (query_ptr2 + dim).load[width=width]() * token_chunk
+                accum3 += (query_ptr3 + dim).load[width=width]() * token_chunk
+                accum4 += (query_ptr4 + dim).load[width=width]() * token_chunk
+                accum5 += (query_ptr5 + dim).load[width=width]() * token_chunk
+                accum6 += (query_ptr6 + dim).load[width=width]() * token_chunk
+                accum7 += (query_ptr7 + dim).load[width=width]() * token_chunk
+
+            var similarity0 = ScoreScalar(accum0.reduce_add()[0])
+            var similarity1 = ScoreScalar(accum1.reduce_add()[0])
+            var similarity2 = ScoreScalar(accum2.reduce_add()[0])
+            var similarity3 = ScoreScalar(accum3.reduce_add()[0])
+            var similarity4 = ScoreScalar(accum4.reduce_add()[0])
+            var similarity5 = ScoreScalar(accum5.reduce_add()[0])
+            var similarity6 = ScoreScalar(accum6.reduce_add()[0])
+            var similarity7 = ScoreScalar(accum7.reduce_add()[0])
+
+            if similarity0 > best_similarity0:
+                best_similarity0 = similarity0
+            if similarity1 > best_similarity1:
+                best_similarity1 = similarity1
+            if similarity2 > best_similarity2:
+                best_similarity2 = similarity2
+            if similarity3 > best_similarity3:
+                best_similarity3 = similarity3
+            if similarity4 > best_similarity4:
+                best_similarity4 = similarity4
+            if similarity5 > best_similarity5:
+                best_similarity5 = similarity5
+            if similarity6 > best_similarity6:
+                best_similarity6 = similarity6
+            if similarity7 > best_similarity7:
+                best_similarity7 = similarity7
+        total += best_similarity0
+        total += best_similarity1
+        total += best_similarity2
+        total += best_similarity3
+        total += best_similarity4
+        total += best_similarity5
+        total += best_similarity6
+        total += best_similarity7
+        query_index += 8
+
+    while query_index + 3 < query.vector_count:
+        var query_offset0 = query_index * COLBERT_VECTOR_DIM
+        var query_offset1 = (query_index + 1) * COLBERT_VECTOR_DIM
+        var query_offset2 = (query_index + 2) * COLBERT_VECTOR_DIM
+        var query_offset3 = (query_index + 3) * COLBERT_VECTOR_DIM
+        var query_ptr0 = query_values_ptr + query_offset0
+        var query_ptr1 = query_values_ptr + query_offset1
+        var query_ptr2 = query_values_ptr + query_offset2
+        var query_ptr3 = query_values_ptr + query_offset3
+        var best_similarity0 = min_score_scalar()
+        var best_similarity1 = min_score_scalar()
+        var best_similarity2 = min_score_scalar()
+        var best_similarity3 = min_score_scalar()
+
+        for token_index in range(start, stop):
+            var token_ptr = index.token_vectors[token_index].unsafe_ptr()
+            var accum0 = SIMD[DType.float32, width](0.0)
+            var accum1 = SIMD[DType.float32, width](0.0)
+            var accum2 = SIMD[DType.float32, width](0.0)
+            var accum3 = SIMD[DType.float32, width](0.0)
+
+            for dim in range(0, COLBERT_VECTOR_DIM, width):
+                var token_chunk = (token_ptr + dim).load[width=width]()
+                accum0 += (query_ptr0 + dim).load[width=width]() * token_chunk
+                accum1 += (query_ptr1 + dim).load[width=width]() * token_chunk
+                accum2 += (query_ptr2 + dim).load[width=width]() * token_chunk
+                accum3 += (query_ptr3 + dim).load[width=width]() * token_chunk
+
+            var similarity0 = ScoreScalar(accum0.reduce_add()[0])
+            var similarity1 = ScoreScalar(accum1.reduce_add()[0])
+            var similarity2 = ScoreScalar(accum2.reduce_add()[0])
+            var similarity3 = ScoreScalar(accum3.reduce_add()[0])
+
+            if similarity0 > best_similarity0:
+                best_similarity0 = similarity0
+            if similarity1 > best_similarity1:
+                best_similarity1 = similarity1
+            if similarity2 > best_similarity2:
+                best_similarity2 = similarity2
+            if similarity3 > best_similarity3:
+                best_similarity3 = similarity3
+        total += best_similarity0
+        total += best_similarity1
+        total += best_similarity2
+        total += best_similarity3
+        query_index += 4
+
+    while query_index < query.vector_count:
+        var query_offset = query_index * COLBERT_VECTOR_DIM
+        var best_similarity = min_score_scalar()
+
+        for token_index in range(start, stop):
+            var similarity = dot_product_dim128_flat_at(
+                index.token_vectors[token_index],
+                query.token_values,
+                query_offset,
+            )
+            if similarity > best_similarity:
+                best_similarity = similarity
+
+        total += best_similarity
+        query_index += 1
+
+    return total
+
+
 def tiled4_flat_query_score_resolved_candidate_window_for_cpu(
     read backend: ExactCpuBackend,
     read query: FlatQueryDim128,
@@ -320,6 +488,60 @@ def tiled4_flat_query_score_resolved_candidate_window_for_cpu(
             var resolved_document = resolved.documents[document_index].copy()
             scores_ptr[document_index] = (
                 tiled4_flat_query_exact_score_for_document_dim128(
+                    query,
+                    snapshot.segments[resolved_document.segment_index].stored_index.index,
+                    resolved_document.document_index,
+                )
+            )
+
+    sync_parallelize[score_partition](work_item_count)
+    return scores^
+
+
+def tiled8_flat_query_score_resolved_candidate_window_for_cpu(
+    read backend: ExactCpuBackend,
+    read query: FlatQueryDim128,
+    read snapshot: ResolvedCollectionSnapshot,
+    read resolved: ResolvedCandidateWindow,
+) raises -> List[ScoreScalar]:
+    var scores = List[ScoreScalar]()
+    for _ in range(len(resolved.documents)):
+        scores.append(zero_score_scalar())
+
+    var work_item_count = choose_parallel_work_item_count_for_shape(
+        query.vector_count,
+        len(resolved.documents),
+        resolved.vector_count,
+        backend.scoring_config,
+    )
+    var scores_ptr = scores.unsafe_ptr()
+
+    if work_item_count <= 1:
+        for document_index in range(len(resolved.documents)):
+            var resolved_document = resolved.documents[document_index].copy()
+            scores_ptr[document_index] = (
+                tiled8_flat_query_exact_score_for_document_dim128(
+                    query,
+                    snapshot.segments[resolved_document.segment_index].stored_index.index,
+                    resolved_document.document_index,
+                )
+            )
+        return scores^
+
+    var boundaries = build_resolved_candidate_boundaries(
+        resolved,
+        work_item_count,
+    )
+
+    @parameter
+    def score_partition(work_item: Int):
+        var start_doc = boundaries[work_item]
+        var stop_doc = boundaries[work_item + 1]
+
+        for document_index in range(start_doc, stop_doc):
+            var resolved_document = resolved.documents[document_index].copy()
+            scores_ptr[document_index] = (
+                tiled8_flat_query_exact_score_for_document_dim128(
                     query,
                     snapshot.segments[resolved_document.segment_index].stored_index.index,
                     resolved_document.document_index,
@@ -390,6 +612,34 @@ def require_tiled4_scores_match(
             "flat_query_tiled4_stage2",
             current_scores,
             tiled4_scores,
+            query_index,
+        )
+
+
+def require_tiled8_scores_match(
+    read backend: ExactCpuBackend,
+    read task: JudgedTask,
+    read snapshot: ResolvedCollectionSnapshot,
+    read resolved_windows: List[ResolvedCandidateWindow],
+    read flat_queries: List[FlatQueryDim128],
+) raises:
+    for query_index in range(len(task.queries)):
+        var current_scores = score_resolved_candidate_window_for_cpu(
+            backend,
+            task.queries[query_index].query,
+            snapshot,
+            resolved_windows[query_index],
+        )
+        var tiled8_scores = tiled8_flat_query_score_resolved_candidate_window_for_cpu(
+            backend,
+            flat_queries[query_index],
+            snapshot,
+            resolved_windows[query_index],
+        )
+        require_score_lists_close(
+            "flat_query_tiled8_stage2",
+            current_scores,
+            tiled8_scores,
             query_index,
         )
 
@@ -493,8 +743,63 @@ def benchmark_build_flat_query_and_tiled4_mean_seconds(
     return report.mean()
 
 
+def benchmark_prebuilt_tiled8_mean_seconds(
+    read backend: ExactCpuBackend,
+    read flat_queries: List[FlatQueryDim128],
+    read snapshot: ResolvedCollectionSnapshot,
+    read resolved_windows: List[ResolvedCandidateWindow],
+) raises -> Float64:
+    var query_index = 0
+
+    def score_once() capturing raises:
+        bench_compiler.keep(
+            tiled8_flat_query_score_resolved_candidate_window_for_cpu(
+                backend,
+                flat_queries[query_index],
+                snapshot,
+                resolved_windows[query_index],
+            )
+        )
+        query_index += 1
+        if query_index == len(flat_queries):
+            query_index = 0
+
+    var report = benchmark.run[score_once]()
+    report.print()
+    print("")
+    return report.mean()
+
+
+def benchmark_build_flat_query_and_tiled8_mean_seconds(
+    read backend: ExactCpuBackend,
+    read task: JudgedTask,
+    read snapshot: ResolvedCollectionSnapshot,
+    read resolved_windows: List[ResolvedCandidateWindow],
+) raises -> Float64:
+    var query_index = 0
+
+    def score_once() capturing raises:
+        var flat_query = build_flat_query_dim128(task.queries[query_index].query)
+        bench_compiler.keep(
+            tiled8_flat_query_score_resolved_candidate_window_for_cpu(
+                backend,
+                flat_query,
+                snapshot,
+                resolved_windows[query_index],
+            )
+        )
+        query_index += 1
+        if query_index == len(task.queries):
+            query_index = 0
+
+    var report = benchmark.run[score_once]()
+    report.print()
+    print("")
+    return report.mean()
+
+
 def append_measurement(
-    mut measurements: List[FlatQueryTiled4Measurement],
+    mut measurements: List[FlatQueryTiledKernelMeasurement],
     read task: JudgedTask,
     benchmark_kind: String,
     candidate_k: Int,
@@ -503,7 +808,7 @@ def append_measurement(
     mean_seconds: Float64,
 ):
     measurements.append(
-        FlatQueryTiled4Measurement(
+        FlatQueryTiledKernelMeasurement(
             benchmark_kind.copy(),
             task.slice_name.copy(),
             candidate_k,
@@ -539,7 +844,7 @@ def main() raises:
     )
     var resolved_windows = precompute_resolved_windows(snapshot, candidate_sets)
     var flat_queries = precompute_flat_queries(task)
-    var measurements = List[FlatQueryTiled4Measurement]()
+    var measurements = List[FlatQueryTiledKernelMeasurement]()
     var total_candidate_document_count = Float64(0.0)
     var total_candidate_vector_count = Float64(0.0)
 
@@ -555,6 +860,13 @@ def main() raises:
     )
 
     require_tiled4_scores_match(
+        backend,
+        task,
+        snapshot,
+        resolved_windows,
+        flat_queries,
+    )
+    require_tiled8_scores_match(
         backend,
         task,
         snapshot,
@@ -580,7 +892,7 @@ def main() raises:
     )
     print("")
 
-    print("validated flat-query tiled4 stage-2 score equivalence against current scorer")
+    print("validated flat-query tiled4 and tiled8 stage-2 score equivalence against current scorer")
     print("")
 
     print("== current score_resolved_candidate_window_for_cpu ==")
@@ -632,6 +944,36 @@ def main() raises:
         mean_candidate_document_count,
         mean_candidate_vector_count,
         benchmark_build_flat_query_and_tiled4_mean_seconds(
+            backend,
+            task,
+            snapshot,
+            resolved_windows,
+        ),
+    )
+    print("== prebuilt flat-query tiled8 nested score_resolved_candidate_window_for_cpu ==")
+    append_measurement(
+        measurements,
+        task,
+        "prebuilt_flat_query_tiled8_nested_score_resolved_candidate_window_for_cpu",
+        candidate_k,
+        mean_candidate_document_count,
+        mean_candidate_vector_count,
+        benchmark_prebuilt_tiled8_mean_seconds(
+            backend,
+            flat_queries,
+            snapshot,
+            resolved_windows,
+        ),
+    )
+    print("== build_flat_query_dim128 and flat-query tiled8 nested score_resolved_candidate_window_for_cpu ==")
+    append_measurement(
+        measurements,
+        task,
+        "build_flat_query_dim128_and_flat_query_tiled8_nested_score_resolved_candidate_window_for_cpu",
+        candidate_k,
+        mean_candidate_document_count,
+        mean_candidate_vector_count,
+        benchmark_build_flat_query_and_tiled8_mean_seconds(
             backend,
             task,
             snapshot,
