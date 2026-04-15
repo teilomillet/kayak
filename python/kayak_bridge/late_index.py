@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -44,6 +44,11 @@ class LateIndex:
     doc_texts: tuple[str, ...] | None = None
     token_vectors: np.ndarray | None = None
     token_values: np.ndarray | None = None
+    _doc_id_positions: dict[str, int] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     @classmethod
     def from_packed(
@@ -153,6 +158,13 @@ class LateIndex:
                 "index doc_offsets must end at total vector count"
             )
 
+        doc_id_positions: dict[str, int] = {}
+        for index, doc_id in enumerate(self.doc_ids):
+            if doc_id in doc_id_positions:
+                raise ValueError("index doc_ids must be unique")
+            doc_id_positions[doc_id] = index
+        object.__setattr__(self, "_doc_id_positions", doc_id_positions)
+
     @property
     def vector_counts(self) -> tuple[int, ...]:
         return tuple(
@@ -212,32 +224,62 @@ class LateIndex:
     def select(self, doc_ids: DocIdsInput) -> "LateIndex":
         """Return a smaller index containing only the requested document ids."""
         selected_doc_ids = to_doc_ids(doc_ids, "selected index doc_ids")
-        positions = {doc_id: index for index, doc_id in enumerate(self.doc_ids)}
-        selected_offsets = [0]
-        selected_matrices = []
+        selected_positions: list[int] = []
+        selected_offsets = np.empty(len(selected_doc_ids) + 1, dtype=self.doc_offsets.dtype)
+        selected_offsets[0] = 0
         selected_texts = [] if self.doc_texts is not None else None
-        running_offset = 0
-        for doc_id in selected_doc_ids:
-            if doc_id not in positions:
+        total_selected_vectors = 0
+        for selected_index, doc_id in enumerate(selected_doc_ids, start=1):
+            position = self._doc_id_positions.get(doc_id)
+            if position is None:
                 raise ValueError(f"document id not found in index: {doc_id}")
 
-            position = positions[doc_id]
-            matrix = self.document_token_matrix(position)
-            selected_matrices.append(matrix)
+            selected_positions.append(position)
+            start = int(self.doc_offsets[position])
+            stop = int(self.doc_offsets[position + 1])
+            total_selected_vectors += stop - start
+            selected_offsets[selected_index] = total_selected_vectors
             if selected_texts is not None:
                 assert self.doc_texts is not None
                 selected_texts.append(self.doc_texts[position])
-            running_offset += int(matrix.shape[0])
-            selected_offsets.append(running_offset)
 
-        selected_vectors = np.concatenate(selected_matrices, axis=0)
-        selected_index = LateIndex.from_packed(
+        packed_matrix = self.as_packed_token_matrix()
+        selected_vectors = np.empty(
+            (total_selected_vectors, self.vector_dim),
+            dtype=packed_matrix.dtype,
+        )
+        running_offset = 0
+        for position in selected_positions:
+            start = int(self.doc_offsets[position])
+            stop = int(self.doc_offsets[position + 1])
+            vector_count = stop - start
+            selected_vectors[running_offset : running_offset + vector_count] = (
+                packed_matrix[start:stop]
+            )
+            running_offset += vector_count
+
+        selected_offsets.setflags(write=False)
+        selected_vectors.setflags(write=False)
+        if self.layout == INDEX_LAYOUT_PACKED:
+            return LateIndex(
+                layout=INDEX_LAYOUT_PACKED,
+                doc_ids=selected_doc_ids,
+                doc_offsets=selected_offsets,
+                vector_dim=self.vector_dim,
+                document_count=len(selected_doc_ids),
+                total_vector_count=total_selected_vectors,
+                doc_texts=(
+                    None if selected_texts is None else tuple(selected_texts)
+                ),
+                token_vectors=selected_vectors,
+            )
+
+        return LateIndex.from_packed(
             selected_doc_ids,
             selected_offsets,
             selected_vectors,
             doc_texts=selected_texts,
-        )
-        return selected_index.to_layout(self.layout)
+        ).to_layout(self.layout)
 
     def with_texts(self, doc_texts: DocTextsInput | None) -> "LateIndex":
         """Return the same index data with replaced optional document texts."""
