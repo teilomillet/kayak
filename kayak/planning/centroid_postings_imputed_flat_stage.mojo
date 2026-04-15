@@ -5,7 +5,7 @@ from std.collections import List
 
 from kayak.contracts import EncodedQuery, FlatQueryDim128, build_flat_query_dim128
 from kayak.index import CentroidPostingIndex
-from kayak.numeric import ScoreScalar, VectorScalar, min_score_scalar, zero_score_scalar
+from kayak.numeric import ScoreScalar, VectorScalar, zero_score_scalar
 from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
 from kayak.scoring.dot128_flat import dot_product_dim128_flat_pair_at
 
@@ -21,10 +21,8 @@ from .centroid_segment_score_result import (
 from .centroid_postings_flat_stage import dot_product_flat_pair_at_generic
 from .centroid_postings_stage import insert_descending_centroid_match
 from .centroid_postings_imputed_stage import (
-    centroid_token_count,
     effective_imputed_centroid_bound,
-    effective_imputed_centroid_nprobe,
-    warp_like_t_prime,
+    finalize_imputed_centroid_selection,
 )
 
 
@@ -53,29 +51,11 @@ def centroid_selection_for_flat_query_token_generic(
             bound,
         )
 
-    var nprobe = effective_imputed_centroid_nprobe(bound)
-    var selected_centroid_indices = List[Int]()
-    var selected_centroid_scores = List[ScoreScalar]()
-
-    for selection_index in range(nprobe):
-        selected_centroid_indices.append(sorted_centroid_indices[selection_index])
-        selected_centroid_scores.append(sorted_centroid_scores[selection_index])
-
-    var t_prime = warp_like_t_prime(index, final_k)
-    var cumulative_size = 0
-    var missing_similarity_estimate = zero_score_scalar()
-
-    for sorted_index in range(bound):
-        var centroid_index = sorted_centroid_indices[sorted_index]
-        cumulative_size += centroid_token_count(index, centroid_index)
-        missing_similarity_estimate = sorted_centroid_scores[sorted_index]
-        if cumulative_size >= t_prime:
-            break
-
-    return ScoredCentroidSelection(
-        selected_centroid_indices^,
-        selected_centroid_scores^,
-        missing_similarity_estimate,
+    return finalize_imputed_centroid_selection(
+        sorted_centroid_indices^,
+        sorted_centroid_scores^,
+        index,
+        final_k,
     )
 
 
@@ -104,29 +84,11 @@ def centroid_selection_for_flat_query_token_dim128(
             bound,
         )
 
-    var nprobe = effective_imputed_centroid_nprobe(bound)
-    var selected_centroid_indices = List[Int]()
-    var selected_centroid_scores = List[ScoreScalar]()
-
-    for selection_index in range(nprobe):
-        selected_centroid_indices.append(sorted_centroid_indices[selection_index])
-        selected_centroid_scores.append(sorted_centroid_scores[selection_index])
-
-    var t_prime = warp_like_t_prime(index, final_k)
-    var cumulative_size = 0
-    var missing_similarity_estimate = zero_score_scalar()
-
-    for sorted_index in range(bound):
-        var centroid_index = sorted_centroid_indices[sorted_index]
-        cumulative_size += centroid_token_count(index, centroid_index)
-        missing_similarity_estimate = sorted_centroid_scores[sorted_index]
-        if cumulative_size >= t_prime:
-            break
-
-    return ScoredCentroidSelection(
-        selected_centroid_indices^,
-        selected_centroid_scores^,
-        missing_similarity_estimate,
+    return finalize_imputed_centroid_selection(
+        sorted_centroid_indices^,
+        sorted_centroid_scores^,
+        index,
+        final_k,
     )
 
 
@@ -152,8 +114,8 @@ def centroid_posting_imputed_flat_score_result_for_segment_generic_with_workspac
             index,
             final_k,
         )
-        selections.append(selection.copy())
         base_score += selection.baseline_correction
+        selections.append(selection^)
 
     workspace.begin_segment(index.document_count)
     for selection in selections:
@@ -182,8 +144,8 @@ def centroid_posting_imputed_flat_score_result_for_segment_dim128_with_workspace
         var selection = centroid_selection_for_flat_query_token_dim128(
             query, query_index, index, final_k
         )
-        selections.append(selection.copy())
         base_score += selection.baseline_correction
+        selections.append(selection^)
 
     workspace.begin_segment(index.document_count)
     for selection in selections:

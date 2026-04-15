@@ -74,6 +74,36 @@ def warp_like_t_prime(read index: CentroidPostingIndex, final_k: Int) -> Int:
     return proportional
 
 
+def finalize_imputed_centroid_selection(
+    var sorted_centroid_indices: List[Int],
+    var sorted_centroid_scores: List[ScoreScalar],
+    read index: CentroidPostingIndex,
+    final_k: Int,
+) -> ScoredCentroidSelection:
+    var shortlist_count = len(sorted_centroid_indices)
+    var t_prime = warp_like_t_prime(index, final_k)
+    var cumulative_size = 0
+    var missing_similarity_estimate = zero_score_scalar()
+
+    for sorted_index in range(shortlist_count):
+        var centroid_index = sorted_centroid_indices[sorted_index]
+        cumulative_size += centroid_token_count(index, centroid_index)
+        missing_similarity_estimate = sorted_centroid_scores[sorted_index]
+        if cumulative_size >= t_prime:
+            break
+
+    var nprobe = effective_imputed_centroid_nprobe(shortlist_count)
+    while len(sorted_centroid_indices) > nprobe:
+        _ = sorted_centroid_indices.pop()
+        _ = sorted_centroid_scores.pop()
+
+    return ScoredCentroidSelection(
+        sorted_centroid_indices^,
+        sorted_centroid_scores^,
+        missing_similarity_estimate,
+    )
+
+
 def centroid_selection_for_query_token(
     read query_token: List[VectorScalar],
     read index: CentroidPostingIndex,
@@ -92,29 +122,11 @@ def centroid_selection_for_query_token(
             bound,
         )
 
-    var nprobe = effective_imputed_centroid_nprobe(bound)
-    var selected_centroid_indices = List[Int]()
-    var selected_centroid_scores = List[ScoreScalar]()
-
-    for selection_index in range(nprobe):
-        selected_centroid_indices.append(sorted_centroid_indices[selection_index])
-        selected_centroid_scores.append(sorted_centroid_scores[selection_index])
-
-    var t_prime = warp_like_t_prime(index, final_k)
-    var cumulative_size = 0
-    var missing_similarity_estimate = zero_score_scalar()
-
-    for sorted_index in range(bound):
-        var centroid_index = sorted_centroid_indices[sorted_index]
-        cumulative_size += centroid_token_count(index, centroid_index)
-        missing_similarity_estimate = sorted_centroid_scores[sorted_index]
-        if cumulative_size >= t_prime:
-            break
-
-    return ScoredCentroidSelection(
-        selected_centroid_indices^,
-        selected_centroid_scores^,
-        missing_similarity_estimate,
+    return finalize_imputed_centroid_selection(
+        sorted_centroid_indices^,
+        sorted_centroid_scores^,
+        index,
+        final_k,
     )
 
 
@@ -130,8 +142,8 @@ def centroid_posting_imputed_score_result_for_segment_with_workspace(
 
     for query_token in query_token_vectors:
         var selection = centroid_selection_for_query_token(query_token, index, final_k)
-        selections.append(selection.copy())
         base_score += selection.baseline_correction
+        selections.append(selection^)
 
     workspace.begin_segment(index.document_count)
     for selection in selections:

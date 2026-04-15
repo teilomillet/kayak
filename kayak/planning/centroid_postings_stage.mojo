@@ -32,6 +32,11 @@ def insert_descending_centroid_match(
     if k <= 0:
         return
 
+    # Once the shortlist is full, most centroid scores lose to the current tail.
+    # Rejecting them in O(1) avoids scanning the whole sorted prefix.
+    if len(centroid_scores) == k and centroid_score <= centroid_scores[k - 1]:
+        return
+
     var insert_at = 0
     while (
         insert_at < len(centroid_scores)
