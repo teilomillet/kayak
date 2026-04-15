@@ -15,6 +15,7 @@ from kayak.interop import (
 from kayak.storage import (
     ensure_bright_stackoverflow_real_subset_cache,
     ensure_lemb_narrativeqa_real_subset_cache,
+    ensure_legal_rag_bench_real_subset_cache,
     StoredJudgedTask,
     StoredPackedIndex,
     ensure_browsecomp_plus_gold_real_subset_cache,
@@ -231,6 +232,19 @@ def load_public_benchmark_dataset(
         return PublicBenchmarkDataset(
             "bright_stackoverflow_real_subset",
             "bright_stackoverflow_real_subset",
+            False,
+            cache.loaded_task_from_storage,
+            cache.loaded_index_from_storage,
+            cache.stored_task,
+            cache.stored_index,
+            empty_document_text_corpus(),
+        )
+
+    if dataset_key == "legal_rag_bench_real_subset":
+        var cache = ensure_legal_rag_bench_real_subset_cache()
+        return PublicBenchmarkDataset(
+            "legal_rag_bench_real_subset",
+            "legal_rag_bench_real_subset",
             False,
             cache.loaded_task_from_storage,
             cache.loaded_index_from_storage,

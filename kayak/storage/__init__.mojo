@@ -64,6 +64,10 @@ from .judged_task_store import (
     load_stored_judged_task,
     save_stored_judged_task,
 )
+from .legal_rag_bench_cache import (
+    LegalRagBenchRealSubsetCache,
+    ensure_legal_rag_bench_real_subset_cache,
+)
 from .lemb_narrativeqa_cache import (
     LembNarrativeQaRealSubsetCache,
     ensure_lemb_narrativeqa_real_subset_cache,

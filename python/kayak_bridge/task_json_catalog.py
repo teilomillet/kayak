@@ -40,6 +40,7 @@ def named_task_json_keys() -> tuple[str, ...]:
         "browsecomp_plus_evidence",
         "browsecomp_plus_gold",
         "fiqa_real_subset",
+        "legal_rag_bench_real_subset",
         "lemb_narrativeqa_real_subset",
         "limit_small",
         "r2med_biology_real_subset",
@@ -85,6 +86,11 @@ def build_named_task_json(dataset_key: str) -> dict[str, Any]:
         from .fiqa_subset import build_fiqa_colbert_subset
 
         return build_fiqa_colbert_subset()
+
+    if dataset_key == "legal_rag_bench_real_subset":
+        from .legal_rag_bench_subset import build_legal_rag_bench_colbert_subset
+
+        return build_legal_rag_bench_colbert_subset()
 
     if dataset_key == "lemb_narrativeqa_real_subset":
         from .lemb_narrativeqa_subset import build_lemb_narrativeqa_colbert_subset
