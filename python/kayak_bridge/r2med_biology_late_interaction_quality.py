@@ -118,6 +118,22 @@ def default_policy_specs() -> tuple[LateInteractionPolicySpec, ...]:
             "query2doc_plus_2.0_lamer",
             {"query2doc_gpt4": 1.0, "lamer_gpt4": 2.0},
         ),
+        LateInteractionPolicySpec(
+            "query2doc_plus_1.9_lamer_plus_0.75_search_r1_qwen7b_ins",
+            {
+                "query2doc_gpt4": 1.0,
+                "lamer_gpt4": 1.9,
+                "search_r1_qwen7b_ins": 0.75,
+            },
+        ),
+        LateInteractionPolicySpec(
+            "query2doc_plus_1.9_lamer_plus_0.35_search_r1_qwen7b_ins",
+            {
+                "query2doc_gpt4": 1.0,
+                "lamer_gpt4": 1.9,
+                "search_r1_qwen7b_ins": 0.35,
+            },
+        ),
     )
 
 

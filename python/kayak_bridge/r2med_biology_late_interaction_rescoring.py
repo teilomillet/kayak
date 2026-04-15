@@ -133,9 +133,15 @@ class R2MEDLateInteractionRescoreSummary:
 
 def default_candidate_policy() -> LateInteractionPolicySpec:
     for policy in default_policy_specs():
-        if policy.name == "query2doc_plus_1.9_lamer":
+        if (
+            policy.name
+            == "query2doc_plus_1.9_lamer_plus_0.35_search_r1_qwen7b_ins"
+        ):
             return policy
-    raise RuntimeError("default candidate policy query2doc_plus_1.9_lamer missing")
+    raise RuntimeError(
+        "default candidate policy "
+        "query2doc_plus_1.9_lamer_plus_0.35_search_r1_qwen7b_ins missing"
+    )
 
 
 def default_rescore_operator_specs(

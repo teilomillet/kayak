@@ -9,13 +9,20 @@ from kayak_bridge.r2med_biology_late_interaction_rescoring import (
 
 
 class R2MEDLateInteractionRescoringTests(unittest.TestCase):
-    def test_default_candidate_policy_matches_best_maxsim_fusion(self) -> None:
+    def test_default_candidate_policy_matches_best_rescored_fusion(self) -> None:
         policy = default_candidate_policy()
 
-        self.assertEqual(policy.name, "query2doc_plus_1.9_lamer")
+        self.assertEqual(
+            policy.name,
+            "query2doc_plus_1.9_lamer_plus_0.35_search_r1_qwen7b_ins",
+        )
         self.assertEqual(
             policy.weights_by_variant_name,
-            {"query2doc_gpt4": 1.0, "lamer_gpt4": 1.9},
+            {
+                "query2doc_gpt4": 1.0,
+                "lamer_gpt4": 1.9,
+                "search_r1_qwen7b_ins": 0.35,
+            },
         )
 
     def test_default_rescore_operator_specs_include_control_and_alternatives(
