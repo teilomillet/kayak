@@ -49,6 +49,9 @@ struct PlannerBenchmarkRunOptions(Copyable):
     var include_scifact: Bool
     var include_fiqa: Bool
     var include_limit_small: Bool
+    var include_bright_stackoverflow: Bool
+    var include_lemb_narrativeqa: Bool
+    var include_r2med_biology: Bool
     var include_browsecomp_plus: Bool
     var include_browsecomp_plus_gold: Bool
     var include_clause_text_stage3_when_text_available: Bool
@@ -62,6 +65,9 @@ struct PlannerBenchmarkRunOptions(Copyable):
         include_scifact: Bool,
         include_fiqa: Bool,
         include_limit_small: Bool,
+        include_bright_stackoverflow: Bool,
+        include_lemb_narrativeqa: Bool,
+        include_r2med_biology: Bool,
         include_browsecomp_plus: Bool,
         include_browsecomp_plus_gold: Bool,
         include_clause_text_stage3_when_text_available: Bool = False,
@@ -73,6 +79,9 @@ struct PlannerBenchmarkRunOptions(Copyable):
         self.include_scifact = include_scifact
         self.include_fiqa = include_fiqa
         self.include_limit_small = include_limit_small
+        self.include_bright_stackoverflow = include_bright_stackoverflow
+        self.include_lemb_narrativeqa = include_lemb_narrativeqa
+        self.include_r2med_biology = include_r2med_biology
         self.include_browsecomp_plus = include_browsecomp_plus
         self.include_browsecomp_plus_gold = include_browsecomp_plus_gold
         self.include_clause_text_stage3_when_text_available = (
@@ -91,6 +100,9 @@ def default_planner_benchmark_run_options() -> PlannerBenchmarkRunOptions:
         True,
         True,
         True,
+        False,
+        True,
+        True,
     )
 
 
@@ -101,6 +113,9 @@ def smoke_planner_benchmark_run_options() -> PlannerBenchmarkRunOptions:
         False,
         1,
         True,
+        False,
+        False,
+        False,
         False,
         False,
         False,
@@ -332,6 +347,12 @@ def selected_public_benchmark_dataset_keys(
         dataset_keys.append("fiqa_real_subset")
     if options.include_limit_small:
         dataset_keys.append("limit_small")
+    if options.include_bright_stackoverflow:
+        dataset_keys.append("bright_stackoverflow_real_subset")
+    if options.include_lemb_narrativeqa:
+        dataset_keys.append("lemb_narrativeqa_real_subset")
+    if options.include_r2med_biology:
+        dataset_keys.append("r2med_biology_real_subset")
     if options.include_browsecomp_plus:
         dataset_keys.append("browsecomp_plus_real_subset")
     if options.include_browsecomp_plus_gold:

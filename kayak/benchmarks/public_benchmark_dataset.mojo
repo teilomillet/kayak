@@ -13,12 +13,15 @@ from kayak.interop import (
     load_browsecomp_plus_real_subset_document_text_corpus,
 )
 from kayak.storage import (
+    ensure_bright_stackoverflow_real_subset_cache,
+    ensure_lemb_narrativeqa_real_subset_cache,
     StoredJudgedTask,
     StoredPackedIndex,
     ensure_browsecomp_plus_gold_real_subset_cache,
     ensure_browsecomp_plus_real_subset_cache,
     ensure_fiqa_real_subset_cache,
     ensure_limit_small_real_subset_cache,
+    ensure_r2med_biology_real_subset_cache,
     ensure_scifact_real_subset_cache,
 )
 from kayak.text import DocumentTextCorpus
@@ -223,6 +226,45 @@ def load_public_benchmark_dataset(
             empty_document_text_corpus(),
         )
 
+    if dataset_key == "bright_stackoverflow_real_subset":
+        var cache = ensure_bright_stackoverflow_real_subset_cache()
+        return PublicBenchmarkDataset(
+            "bright_stackoverflow_real_subset",
+            "bright_stackoverflow_real_subset",
+            False,
+            cache.loaded_task_from_storage,
+            cache.loaded_index_from_storage,
+            cache.stored_task,
+            cache.stored_index,
+            empty_document_text_corpus(),
+        )
+
+    if dataset_key == "lemb_narrativeqa_real_subset":
+        var cache = ensure_lemb_narrativeqa_real_subset_cache()
+        return PublicBenchmarkDataset(
+            "lemb_narrativeqa_real_subset",
+            "lemb_narrativeqa_real_subset",
+            False,
+            cache.loaded_task_from_storage,
+            cache.loaded_index_from_storage,
+            cache.stored_task,
+            cache.stored_index,
+            empty_document_text_corpus(),
+        )
+
+    if dataset_key == "r2med_biology_real_subset":
+        var cache = ensure_r2med_biology_real_subset_cache()
+        return PublicBenchmarkDataset(
+            "r2med_biology_real_subset",
+            "r2med_biology_real_subset",
+            False,
+            cache.loaded_task_from_storage,
+            cache.loaded_index_from_storage,
+            cache.stored_task,
+            cache.stored_index,
+            empty_document_text_corpus(),
+        )
+
     if dataset_key == "browsecomp_plus_real_subset":
         var cache = ensure_browsecomp_plus_real_subset_cache()
         var document_text_corpus = empty_document_text_corpus()
@@ -277,6 +319,8 @@ def default_public_benchmark_dataset_keys() -> List[String]:
     dataset_keys.append("scifact_real_subset")
     dataset_keys.append("fiqa_real_subset")
     dataset_keys.append("limit_small")
+    dataset_keys.append("bright_stackoverflow_real_subset")
+    dataset_keys.append("lemb_narrativeqa_real_subset")
     dataset_keys.append("browsecomp_plus_real_subset")
     dataset_keys.append("browsecomp_plus_gold")
     return dataset_keys^

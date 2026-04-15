@@ -15,6 +15,10 @@ from kayak_bridge.json_task_loader import load_task_json
 from kayak_bridge.storage_scale_comparison import (
     benchmark_storage_engine_scale_sweep,
 )
+from kayak_bridge.task_storage_encoding import (
+    VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE,
+    VECTOR_PAYLOAD_ENCODING_BINARY_LE,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,6 +41,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--warmup-iterations", type=int, default=1)
     parser.add_argument("--measurement-iterations", type=int, default=2)
+    parser.add_argument(
+        "--kayak-vector-payload-encoding",
+        type=str,
+        default=VECTOR_PAYLOAD_ENCODING_BINARY_LE,
+        choices=(
+            VECTOR_PAYLOAD_ENCODING_BINARY_LE,
+            VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE,
+        ),
+        help="Native Kayak packed-index vector payload encoding to benchmark.",
+    )
     return parser.parse_args()
 
 
@@ -62,6 +76,7 @@ def main() -> None:
         database_root=args.db_root,
         table_prefix=args.table_prefix,
         target_document_counts=target_document_counts,
+        kayak_vector_payload_encoding=args.kayak_vector_payload_encoding,
         warmup_iterations=args.warmup_iterations,
         measurement_iterations=args.measurement_iterations,
     ).to_json_ready()

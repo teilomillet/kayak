@@ -1,3 +1,7 @@
+from .bright_stackoverflow_cache import (
+    BrightStackoverflowRealSubsetCache,
+    ensure_bright_stackoverflow_real_subset_cache,
+)
 from .browsecomp_plus_gold_cache import (
     BrowsecompPlusGoldRealSubsetCache,
     ensure_browsecomp_plus_gold_real_subset_cache,
@@ -57,6 +61,10 @@ from .judged_task_store import (
     load_stored_judged_task,
     save_stored_judged_task,
 )
+from .lemb_narrativeqa_cache import (
+    LembNarrativeQaRealSubsetCache,
+    ensure_lemb_narrativeqa_real_subset_cache,
+)
 from .metadata import (
     StoredCentroidPostingIndex,
     StoredDocumentProxyIndex,
@@ -74,6 +82,10 @@ from .packed_index_store import (
     packed_index_exists,
     save_stored_packed_index,
     save_stored_packed_index_with_encoding,
+)
+from .r2med_biology_cache import (
+    R2medBiologyRealSubsetCache,
+    ensure_r2med_biology_real_subset_cache,
 )
 from .scifact_cache import ScifactRealSubsetCache, ensure_scifact_real_subset_cache
 from .vector_payload_encoding import (

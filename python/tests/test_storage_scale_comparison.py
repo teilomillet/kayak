@@ -71,6 +71,33 @@ class StorageScaleComparisonTests(unittest.TestCase):
         self.assertEqual(len(payload["rows"]), 1)
         self.assertEqual(payload["rows"][0]["lancedb_storage_byte_size"], 120)
 
+    def test_summary_serializes_custom_kayak_storage_format(self) -> None:
+        summary = StorageScaleComparisonSummary(
+            dataset_id="dataset://tiny",
+            model_name="tiny-model",
+            family="tiny_family",
+            slice_name="tiny_slice",
+            primary_metric="ndcg",
+            k=10,
+            vector_dim=4,
+            base_document_count=2,
+            base_nominal_document_vector_count=3,
+            base_zero_document_vector_count_filtered=1,
+            base_zero_query_vector_count_filtered=0,
+            protected_document_count=1,
+            repeatable_distractor_source_count=1,
+            inflation_policy="repeat_nonprotected_documents_with_unique_doc_ids",
+            kayak_storage_engine="kayak",
+            kayak_storage_format="packed_index_binary_f16_le",
+            lancedb_storage_engine="lancedb",
+            lancedb_storage_engine_version="0.0.0",
+            rows=(),
+        )
+
+        payload = summary.to_json_ready()
+
+        self.assertEqual(payload["kayak_storage_format"], "packed_index_binary_f16_le")
+
 
 if __name__ == "__main__":
     unittest.main()

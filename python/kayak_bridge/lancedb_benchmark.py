@@ -9,6 +9,7 @@ This module keeps the external-engine baseline narrow:
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import timedelta
 from pathlib import Path
 import shutil
 import time
@@ -172,6 +173,13 @@ def _search_doc_ids(table: Any, query_vectors: np.ndarray, k: int) -> tuple[str,
     return tuple(str(row["doc_id"]) for row in rows)
 
 
+def _wait_for_vector_index(table: Any, *, timeout_seconds: int = 300) -> None:
+    index_names = [str(index.name) for index in table.list_indices()]
+    if not index_names:
+        raise RuntimeError("LanceDB reported no index after create_index()")
+    table.wait_for_index(index_names, timeout=timedelta(seconds=timeout_seconds))
+
+
 @dataclass(frozen=True, slots=True)
 class LanceDbBenchmarkSummary:
     dataset_id: str
@@ -261,6 +269,8 @@ def benchmark_task_with_lancedb(
     if build_index:
         _require_faiss_for_indexing()
         table.create_index(vector_column_name="vector", metric="cosine")
+        # Indexed timings are only meaningful once LanceDB confirms the index is ready.
+        _wait_for_vector_index(table)
         index_kind = "ivf_pq"
 
     query_matrices = tuple(

@@ -33,10 +33,16 @@ from .task_scale import (
     choose_repeatable_distractor_doc_ids,
     protected_doc_ids_for_scale_sweep,
 )
+from .task_storage_encoding import (
+    VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE,
+    VECTOR_PAYLOAD_ENCODING_BINARY_LE,
+    benchmark_task_storage_encodings,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIXI_BIN = shutil.which("pixi")
+MOJO_WITH_PIXI_PYTHON = REPO_ROOT / "scripts" / "run_mojo_with_pixi_python.sh"
 TASK_JSON_STORAGE_INPUT_PATH = (
     REPO_ROOT / ".cache" / "kayak" / "task_json_storage_encoding_input.json"
 )
@@ -60,9 +66,33 @@ def _write_task_json(path: Path, task: Mapping[str, Any]) -> None:
 
 def _run_native_kayak_storage_benchmark(
     task: Mapping[str, Any],
+    *,
+    vector_payload_encoding: str = VECTOR_PAYLOAD_ENCODING_BINARY_LE,
 ) -> dict[str, object]:
     if PIXI_BIN is None:
-        raise RuntimeError("expected `pixi` on PATH to run the native Mojo benchmark")
+        raise RuntimeError(
+            "expected `pixi` on PATH to run the native Mojo benchmark"
+        )
+    if not MOJO_WITH_PIXI_PYTHON.exists():
+        raise RuntimeError(
+            "expected scripts/run_mojo_with_pixi_python.sh to run the native "
+            "Mojo benchmark with the Pixi Python runtime"
+        )
+
+    if vector_payload_encoding == VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE:
+        for summary in benchmark_task_storage_encodings(task):
+            if str(summary["encoding_kind"]) == vector_payload_encoding:
+                return summary
+        raise RuntimeError(
+            "task_json_storage_encoding_compare benchmark did not return "
+            f"{vector_payload_encoding}"
+        )
+
+    if vector_payload_encoding != VECTOR_PAYLOAD_ENCODING_BINARY_LE:
+        raise ValueError(
+            "unsupported Kayak vector payload encoding for storage scale comparison: "
+            f"{vector_payload_encoding}"
+        )
 
     _write_task_json(TASK_JSON_STORAGE_INPUT_PATH, task)
     pixi_env_root = REPO_ROOT / ".pixi" / "envs" / "default"
@@ -87,7 +117,8 @@ def _run_native_kayak_storage_benchmark(
         [
             PIXI_BIN,
             "run",
-            "mojo",
+            "bash",
+            str(MOJO_WITH_PIXI_PYTHON),
             "-I",
             ".",
             "benchmarks/task_json_storage_encoding.mojo",
@@ -258,6 +289,7 @@ def benchmark_storage_engine_scale_sweep(
     database_root: Path,
     table_prefix: str,
     target_document_counts: Sequence[int],
+    kayak_vector_payload_encoding: str = VECTOR_PAYLOAD_ENCODING_BINARY_LE,
     warmup_iterations: int = 1,
     measurement_iterations: int = 3,
 ) -> StorageScaleComparisonSummary:
@@ -295,7 +327,10 @@ def benchmark_storage_engine_scale_sweep(
             inflation_policy=inflation_policy,
         )
         scaled_task = scaled.task
-        kayak_summary = _run_native_kayak_storage_benchmark(scaled_task)
+        kayak_summary = _run_native_kayak_storage_benchmark(
+            scaled_task,
+            vector_payload_encoding=kayak_vector_payload_encoding,
+        )
         lancedb_summary = _benchmark_lancedb_storage_profile(
             task=scaled_task,
             database_root=database_root / f"docs_{target_document_count}",
@@ -378,7 +413,7 @@ def benchmark_storage_engine_scale_sweep(
         repeatable_distractor_source_count=len(repeatable_doc_ids),
         inflation_policy=inflation_policy,
         kayak_storage_engine="kayak",
-        kayak_storage_format="packed_index_binary_le",
+        kayak_storage_format=f"packed_index_{kayak_vector_payload_encoding}",
         lancedb_storage_engine="lancedb",
         lancedb_storage_engine_version=lancedb_engine_version,
         rows=tuple(rows),

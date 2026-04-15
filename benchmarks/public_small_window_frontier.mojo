@@ -5,6 +5,7 @@ from std.pathlib import Path
 from kayak.benchmarks import (
     StageAwareSearchSummary,
     build_stage_aware_search_summary,
+    default_public_benchmark_dataset_keys,
     ensure_public_benchmark_dataset_collection_mirror,
     load_public_benchmark_dataset,
     stage_aware_search_summaries_json,
@@ -131,13 +132,7 @@ def append_small_window_frontier_for_dataset(
 
 def main() raises:
     var summaries = List[StageAwareSearchSummary]()
-    for dataset_key in [
-        "scifact_real_subset",
-        "fiqa_real_subset",
-        "limit_small",
-        "browsecomp_plus_real_subset",
-        "browsecomp_plus_gold",
-    ]:
+    for dataset_key in default_public_benchmark_dataset_keys():
         append_small_window_frontier_for_dataset(summaries, dataset_key)
 
     var output_root = Path(".cache/kayak")

@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
         "--task",
         type=Path,
         required=True,
-        help="Path to the encoded task JSON built by build_browsecomp_plus_task_json.py.",
+        help="Path to a compatible encoded task JSON.",
     )
     parser.add_argument(
         "--output",

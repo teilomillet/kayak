@@ -6,6 +6,7 @@ from std.os import makedirs
 from std.pathlib import Path
 
 from kayak.benchmarks import (
+    default_public_benchmark_dataset_keys,
     ensure_public_benchmark_dataset_collection_mirror,
     load_public_benchmark_dataset,
     standard_candidate_window_sizes,
@@ -229,11 +230,7 @@ def append_dataset_summaries(
 
 def main() raises:
     var summaries = List[WideWindowCandidateGenerationSummary]()
-    for dataset_key in [
-        "fiqa_real_subset",
-        "browsecomp_plus_real_subset",
-        "browsecomp_plus_gold",
-    ]:
+    for dataset_key in default_public_benchmark_dataset_keys():
         append_dataset_summaries(summaries, dataset_key)
 
     var output_root = Path(".cache/kayak")

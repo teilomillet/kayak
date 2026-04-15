@@ -105,6 +105,23 @@ from .public_benchmark_dataset import (
     public_benchmark_dataset_has_text_sidecars,
     require_public_benchmark_dataset_loaded_text_corpus,
 )
+from .query_bucket_stage_aware_json import (
+    QueryBucketStageAwareSearchSummary,
+    build_query_bucket_stage_aware_search_summary,
+    query_bucket_stage_aware_search_summaries_json,
+    query_bucket_stage_aware_search_summary_json,
+)
+from .query_vector_bucket import (
+    QueryVectorBucket,
+    make_query_vector_bucket,
+    max_query_vector_count_in_bucket,
+    non_empty_standard_query_vector_buckets,
+    query_is_in_vector_bucket,
+    query_vector_bucket_query_count,
+    standard_query_vector_buckets,
+    subset_judged_task_queries_to_query_vector_bucket,
+    subset_stored_judged_task_queries_to_query_vector_bucket,
+)
 from .vector_pruning_json import (
     VectorPruningSummary,
     build_vector_pruning_summary,
