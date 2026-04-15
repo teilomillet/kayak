@@ -214,6 +214,38 @@ def small_count_dim128_index(last_centroid_value: Float64) raises -> CentroidPos
     )
 
 
+def high_count_dim128_index(last_centroid_value: Float64) raises -> CentroidPostingIndex:
+    var centroid_dims = List[Int]()
+    var centroid_vectors = List[List[VectorScalar]]()
+    var posting_offsets = List[Int]()
+    var posting_doc_indices = List[Int]()
+    var posting_weights = List[Int]()
+
+    posting_offsets.append(0)
+    for _ in range(128):
+        centroid_dims.append(0)
+        centroid_vectors.append(constant_vector(128, 1.0))
+        posting_doc_indices.append(0)
+        posting_weights.append(1)
+        posting_offsets.append(len(posting_doc_indices))
+
+    centroid_dims.append(0)
+    centroid_vectors.append(constant_vector(128, last_centroid_value))
+    posting_doc_indices.append(0)
+    posting_weights.append(1)
+    posting_offsets.append(len(posting_doc_indices))
+
+    return CentroidPostingIndex(
+        centroid_dims^,
+        centroid_vectors^,
+        posting_offsets^,
+        posting_doc_indices^,
+        posting_weights^,
+        128,
+        1,
+    )
+
+
 def small_count_dim128_zero_token_index() raises -> CentroidPostingIndex:
     var centroid_dims = List[Int]()
     var centroid_vectors = List[List[VectorScalar]]()
@@ -490,6 +522,26 @@ def test_imputed_flat_dim128_small_count_evicts_tail_for_better_late_centroid() 
     assert_scored_centroid_selection_equal(
         centroid_selection_for_flat_query_token_dim128(flat_query, 0, index, 1),
         centroid_selection_for_query_token(query_token, index, 1),
+    )
+
+
+def test_imputed_dim128_high_count_keeps_earlier_equal_score_tail_entries() raises:
+    var index = high_count_dim128_index(1.0)
+    var query_token = constant_vector(128, 1.0)
+
+    assert_scored_centroid_selection_equal(
+        centroid_selection_for_query_token(query_token, index, 1),
+        reference_centroid_selection_for_query_token(query_token, index, 1),
+    )
+
+
+def test_imputed_dim128_high_count_evicts_tail_for_better_late_centroid() raises:
+    var index = high_count_dim128_index(2.0)
+    var query_token = constant_vector(128, 1.0)
+
+    assert_scored_centroid_selection_equal(
+        centroid_selection_for_query_token(query_token, index, 1),
+        reference_centroid_selection_for_query_token(query_token, index, 1),
     )
 
 

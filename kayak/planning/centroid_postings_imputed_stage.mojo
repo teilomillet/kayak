@@ -6,6 +6,8 @@ from std.math import sqrt
 
 from kayak.index import CentroidPostingIndex
 from kayak.numeric import ScoreScalar, VectorScalar, zero_score_scalar
+from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
+from kayak.scoring.dot128_flat import dot_product_dim128_flat_at
 from kayak.scoring.dot import dot_product
 
 from .centroid_primitives import (
@@ -18,6 +20,10 @@ from .centroid_segment_score_result import (
     materialize_centroid_segment_scores,
 )
 from .centroid_postings_stage import insert_descending_centroid_match
+from .imputed_centroid_shortlist import (
+    insert_top_bound_centroid_match,
+    sort_top_bound_centroid_matches_descending,
+)
 
 
 comptime DEFAULT_IMPUTED_CENTROID_NPROBE = 32
@@ -167,7 +173,7 @@ def exact_small_count_imputed_centroid_selection_limit(
     return bound
 
 
-def centroid_selection_for_query_token(
+def centroid_selection_for_query_token_generic(
     read query_token: List[VectorScalar],
     read index: CentroidPostingIndex,
     final_k: Int,
@@ -188,6 +194,103 @@ def centroid_selection_for_query_token(
     return finalize_imputed_centroid_selection(
         sorted_centroid_indices^,
         sorted_centroid_scores^,
+        index,
+        final_k,
+    )
+
+
+def centroid_selection_for_query_token_dim128_with_small_count_limit(
+    read query_token: List[VectorScalar],
+    read index: CentroidPostingIndex,
+    final_k: Int,
+    selection_limit: Int,
+) -> ScoredCentroidSelection:
+    var sorted_centroid_indices = List[Int]()
+    var sorted_centroid_scores = List[ScoreScalar]()
+
+    for centroid_index in range(index.centroid_count):
+        insert_descending_centroid_match(
+            sorted_centroid_indices,
+            sorted_centroid_scores,
+            centroid_index,
+            dot_product_dim128_flat_at(
+                query_token,
+                index.flat_centroid_values,
+                centroid_index * COLBERT_VECTOR_DIM,
+            ),
+            selection_limit,
+        )
+
+    return finalize_imputed_centroid_selection(
+        sorted_centroid_indices^,
+        sorted_centroid_scores^,
+        index,
+        final_k,
+    )
+
+
+def centroid_selection_for_query_token_dim128(
+    read query_token: List[VectorScalar],
+    read index: CentroidPostingIndex,
+    final_k: Int,
+) -> ScoredCentroidSelection:
+    var bound = effective_imputed_centroid_bound(index.centroid_count)
+    if index.centroid_count <= bound:
+        return centroid_selection_for_query_token_dim128_with_small_count_limit(
+            query_token,
+            index,
+            final_k,
+            small_count_imputed_centroid_selection_limit(index, final_k, bound),
+        )
+
+    var sorted_centroid_indices = List[Int]()
+    var sorted_centroid_scores = List[ScoreScalar]()
+
+    for centroid_index in range(index.centroid_count):
+        insert_top_bound_centroid_match(
+            sorted_centroid_indices,
+            sorted_centroid_scores,
+            centroid_index,
+            dot_product_dim128_flat_at(
+                query_token,
+                index.flat_centroid_values,
+                centroid_index * COLBERT_VECTOR_DIM,
+            ),
+            bound,
+        )
+
+    sort_top_bound_centroid_matches_descending(
+        sorted_centroid_indices,
+        sorted_centroid_scores,
+    )
+
+    return finalize_imputed_centroid_selection(
+        sorted_centroid_indices^,
+        sorted_centroid_scores^,
+        index,
+        final_k,
+    )
+
+
+def centroid_selection_for_query_token(
+    read query_token: List[VectorScalar],
+    read index: CentroidPostingIndex,
+    final_k: Int,
+) -> ScoredCentroidSelection:
+    # The nested dim128 path can score directly against the flat centroid buffer
+    # without flattening the query token or changing shortlist semantics.
+    if (
+        index.vector_dim == COLBERT_VECTOR_DIM
+        and len(query_token) == COLBERT_VECTOR_DIM
+    ):
+        return centroid_selection_for_query_token_dim128(
+            query_token,
+            index,
+            final_k,
+        )
+
+    return centroid_selection_for_query_token_generic(
+        query_token,
         index,
         final_k,
     )
