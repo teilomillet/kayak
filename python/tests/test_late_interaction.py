@@ -149,13 +149,28 @@ class LateInteractionApiTests(unittest.TestCase):
     )
     def test_mojo_exact_cpu_matches_numpy_reference_for_packed_index(self) -> None:
         query = kayak.query(
-            np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+            np.stack(
+                [
+                    _dim128_vector((0, 1.0)),
+                    _dim128_vector((1, 1.0)),
+                ]
+            )
         )
         index = kayak.documents(
             ["doc-a", "doc-b"],
             [
-                np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
-                np.array([[1.0, 0.0], [0.5, 0.5]], dtype=np.float32),
+                np.stack(
+                    [
+                        _dim128_vector((0, 1.0)),
+                        _dim128_vector((1, 1.0)),
+                    ]
+                ),
+                np.stack(
+                    [
+                        _dim128_vector((0, 1.0)),
+                        _dim128_vector((0, 0.5), (1, 0.5)),
+                    ]
+                ),
             ],
         ).pack()
 

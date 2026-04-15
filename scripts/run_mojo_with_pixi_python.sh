@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/.." && pwd)"
+
 python_executable="$(
   python - <<'PY'
 import sys
@@ -55,7 +58,7 @@ if command -v mojo >/dev/null 2>&1; then
 fi
 
 if command -v pixi >/dev/null 2>&1; then
-  exec pixi run mojo "$@"
+  exec pixi run --manifest-path "${repo_root}/pyproject.toml" mojo "$@"
 fi
 
 echo "Could not find \`mojo\` or \`pixi\` on PATH" >&2

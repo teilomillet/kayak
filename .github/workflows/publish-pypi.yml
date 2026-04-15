@@ -1,0 +1,190 @@
+name: Publish PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-version-contract:
+    name: Validate tag/version contract (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-22.04
+          - windows-latest
+          - macos-14
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python for version checks
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate tag matches pyproject version
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          payload = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          package_version = payload["project"]["version"]
+          event_name = os.environ["GITHUB_EVENT_NAME"]
+          ref_type = os.environ.get("GITHUB_REF_TYPE", "")
+          ref_name = os.environ.get("GITHUB_REF_NAME", "")
+
+          if event_name != "push" or ref_type != "tag":
+              print(f"non-tag run for package version {package_version}")
+              raise SystemExit(0)
+
+          valid_tags = {package_version, f"v{package_version}"}
+          if ref_name not in valid_tags:
+              raise SystemExit(
+                  f"tag {ref_name!r} does not match pyproject version {package_version!r}"
+              )
+          print(f"validated tag {ref_name} for package version {package_version}")
+          PY
+
+  build-wheel:
+    name: Build and verify wheel (${{ matrix.runner }})
+    needs: validate-version-contract
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            artifact_name: kayak-release-wheel-linux
+          - runner: macos-14
+            artifact_name: kayak-release-wheel-macos
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Install Pixi
+        uses: prefix-dev/setup-pixi@v0
+
+      - name: Build and verify release wheel
+        shell: bash
+        run: pixi run build_and_verify_python_wheel
+
+      - name: Upload verified wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/release/*.whl
+          if-no-files-found: error
+          retention-days: 14
+
+  compare-supported-wheel-builds:
+    name: Compare Linux and macOS wheel hashes
+    needs: build-wheel
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Download Linux wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kayak-release-wheel-linux
+          path: dist/linux
+
+      - name: Download macOS wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kayak-release-wheel-macos
+          path: dist/macos
+
+      - name: Compare wheel hashes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          roots = {
+              "linux": Path("dist/linux"),
+              "macos": Path("dist/macos"),
+          }
+          hashes: dict[str, tuple[str, str]] = {}
+          for platform, root in roots.items():
+              wheels = list(root.rglob("*.whl"))
+              if len(wheels) != 1:
+                  raise SystemExit(
+                      f"expected exactly one wheel for {platform}, found {len(wheels)}"
+                  )
+              wheel = wheels[0]
+              digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+              hashes[platform] = (wheel.name, digest)
+
+          linux_name, linux_hash = hashes["linux"]
+          macos_name, macos_hash = hashes["macos"]
+          if linux_name != macos_name:
+              raise SystemExit(
+                  f"wheel filenames differ across supported builds: "
+                  f"{linux_name} != {macos_name}"
+              )
+          if linux_hash != macos_hash:
+              raise SystemExit(
+                  f"wheel hashes differ across supported builds: "
+                  f"linux={linux_hash} macos={macos_hash}"
+              )
+          print(f"matching wheel hash {linux_hash} for {linux_name}")
+          PY
+
+  publish-pypi:
+    name: Publish wheel to PyPI
+    needs:
+      - validate-version-contract
+      - compare-supported-wheel-builds
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: pypi
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python for release verification
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download verified wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kayak-release-wheel-linux
+          path: dist/release
+
+      - name: Re-verify downloaded wheel artifact
+        shell: bash
+        run: PYTHONPATH=python python python/scripts/check_release_wheel.py dist/release/*.whl
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/release/

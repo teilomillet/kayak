@@ -168,6 +168,41 @@ class SearchPlanApiTests(unittest.TestCase):
         self.assertEqual(generator.query_vector_budget, 1)
         self.assertEqual(generator.document_vector_budget, 1)
 
+    def test_document_proxy_candidate_generation_matches_reference_when_full_budget(self) -> None:
+        query, index = self._build_fixture()
+        generator = kayak.document_proxy_candidate_generator()
+
+        result = kayak.generate_candidates(query, index, generator, k=3)
+        reference = self._reference_document_proxy_scores(
+            query,
+            index,
+            query_vector_budget=generator.query_vector_budget,
+            document_vector_budget=generator.document_vector_budget,
+        )
+
+        np.testing.assert_allclose(result.scores.numpy(), reference)
+        self.assertEqual(result.profile.query_vector_count, 1)
+        self.assertEqual(result.profile.document_vector_count, 3)
+
+    def test_document_proxy_candidate_generation_matches_reference_when_budget_exceeds_lengths(self) -> None:
+        query, index = self._build_fixture()
+        generator = kayak.document_proxy_candidate_generator(
+            query_vector_budget=16,
+            document_vector_budget=16,
+        )
+
+        result = kayak.generate_candidates(query, index, generator, k=3)
+        reference = self._reference_document_proxy_scores(
+            query,
+            index,
+            query_vector_budget=generator.query_vector_budget,
+            document_vector_budget=generator.document_vector_budget,
+        )
+
+        np.testing.assert_allclose(result.scores.numpy(), reference)
+        self.assertEqual(result.profile.query_vector_count, 1)
+        self.assertEqual(result.profile.document_vector_count, 3)
+
     def test_document_proxy_plan_exactly_reranks_candidate_window(self) -> None:
         query, index = self._build_fixture()
         plan = kayak.document_proxy_search_plan(
@@ -216,6 +251,46 @@ class SearchPlanApiTests(unittest.TestCase):
         self.assertEqual(result.stage2.query_vector_count, 0)
         self.assertEqual(result.stage2.document_vector_count, 0)
         self.assertEqual(result.stage2.materialized_artifacts, ())
+
+    def _reference_document_proxy_scores(
+        self,
+        query: kayak.LateQuery,
+        index: kayak.LateIndex,
+        *,
+        query_vector_budget: int,
+        document_vector_budget: int,
+    ) -> np.ndarray:
+        query_matrix = query.as_vector_matrix()
+        effective_query_budget = self._effective_budget(
+            query_vector_budget,
+            query.vector_count,
+        )
+        query_proxy = np.mean(
+            query_matrix[:effective_query_budget],
+            axis=0,
+            dtype=np.float32,
+        ).astype(np.float32, copy=False)
+
+        token_matrix = index.as_packed_token_matrix()
+        proxy_vectors = np.empty((index.document_count, index.vector_dim), dtype=np.float32)
+        for document_index in range(index.document_count):
+            start = int(index.doc_offsets[document_index])
+            stop = int(index.doc_offsets[document_index + 1])
+            effective_document_budget = self._effective_budget(
+                document_vector_budget,
+                stop - start,
+            )
+            proxy_vectors[document_index] = np.mean(
+                token_matrix[start : start + effective_document_budget],
+                axis=0,
+                dtype=np.float32,
+            )
+        return np.matmul(proxy_vectors, query_proxy).astype(np.float32, copy=False)
+
+    def _effective_budget(self, requested_budget: int, available_count: int) -> int:
+        if requested_budget == 0 or requested_budget > available_count:
+            return available_count
+        return requested_budget
 
     def test_clause_text_stage2_can_refine_exact_candidate_window(self) -> None:
         query, index = self._build_clause_text_fixture()

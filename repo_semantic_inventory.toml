@@ -30,6 +30,7 @@ paths = [
     "ordeal.toml",
     "pyproject.toml",
     "scripts/run_bench_quiet.sh",
+    "scripts/run_mojo_with_pixi_python.sh",
     "setup.py",
 ]
 normative_docs = [
@@ -48,6 +49,17 @@ name = "root-lockfiles"
 role = "lockfile"
 why = "Resolver lockfiles pin toolchain and dependency state but do not define semantic engine contracts."
 paths = ["pixi.lock", "uv.lock"]
+
+[[rule]]
+name = "github-workflows"
+role = "packaging_control"
+why = "GitHub Actions workflows own automated validation and release orchestration rather than runtime engine behavior."
+paths = [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+normative_docs = [
+    "README.md",
+    "python/kayak/README.md",
+]
+tests = ["python/tests/test_repo_semantic_inventory.py"]
 
 [[rule]]
 name = "benchmark-entrypoints"

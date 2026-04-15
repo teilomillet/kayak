@@ -76,6 +76,18 @@ from .snapshot_requests import (
     ExportSnapshotRequest,
     ImportSnapshotRequest,
 )
+from .prepared_snapshot_runtime import (
+    PreparedSearchSnapshot,
+    execute_debug_search_with_prepared_snapshot,
+    execute_explain_with_prepared_snapshot,
+    execute_planned_debug_search_with_prepared_snapshot,
+    execute_planned_explain_with_prepared_snapshot,
+    execute_planned_search_with_prepared_snapshot,
+    execute_search_with_prepared_snapshot,
+    prepare_collection_search_snapshot,
+    prepare_service_search_snapshot,
+    select_search_plan_for_prepared_snapshot,
+)
 from .runtime import (
     create_collection,
     create_snapshot,

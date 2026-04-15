@@ -199,7 +199,6 @@ class LateIndex:
     def select(self, doc_ids: object) -> "LateIndex":
         selected_doc_ids = to_doc_ids(doc_ids, "selected index doc_ids")
         positions = {doc_id: index for index, doc_id in enumerate(self.doc_ids)}
-
         selected_offsets = [0]
         selected_matrices = []
         selected_texts = [] if self.doc_texts is not None else None

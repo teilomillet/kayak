@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -12,7 +15,7 @@ from setuptools.command.build_py import build_py as _build_py
 
 REPO_ROOT = Path(__file__).resolve().parent
 MOJO_SOURCE_ROOT = REPO_ROOT / "kayak"
-BUNDLED_ENGINE_ROOT = Path("kayak_bridge") / "_engine" / "kayak"
+BUNDLED_ARTIFACTS_ROOT = Path("kayak_bridge") / "_artifacts"
 
 
 def _mojo_binary_names() -> tuple[str, ...]:
@@ -77,34 +80,53 @@ def _interpreter_local_mojo_command() -> list[str] | None:
     return None
 
 
+def _mojo_version(command: list[str]) -> str:
+    result = subprocess.run(
+        [*command, "--version"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip() or result.stderr.strip() or "unknown"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 class build_py(_build_py):
     def run(self) -> None:
         super().run()
-        self._stage_engine_sources()
-        self._build_mojopkg_if_possible()
+        self._prune_stale_release_payloads()
+        self._build_bundled_mojopkg()
 
-    def _stage_engine_sources(self) -> None:
-        if not MOJO_SOURCE_ROOT.exists():
+    def _prune_stale_release_payloads(self) -> None:
+        stale_paths = (
+            Path(self.build_lib) / "kayak_engine",
+            Path(self.build_lib) / "kayak_bridge" / "_engine",
+        )
+        for stale_path in stale_paths:
+            if not stale_path.exists():
+                continue
+            if stale_path.is_dir():
+                shutil.rmtree(stale_path)
+            else:
+                stale_path.unlink()
             self.announce(
-                "skipping bundled Mojo source staging because kayak/ Mojo sources are missing",
+                f"removed stale packaged payload at {stale_path}",
                 level=2,
             )
-            return
-
-        bundled_engine_root = Path(self.build_lib) / BUNDLED_ENGINE_ROOT
-        bundled_engine_root.parent.mkdir(parents=True, exist_ok=True)
-        if bundled_engine_root.exists():
-            shutil.rmtree(bundled_engine_root)
-        shutil.copytree(MOJO_SOURCE_ROOT, bundled_engine_root)
-        self.announce(
-            f"staged bundled Mojo sources at {bundled_engine_root}",
-            level=2,
-        )
 
     def _detect_mojo_command(self) -> list[str] | None:
         configured = os.environ.get("KAYAK_MOJO_CLI")
         if configured:
-            return [configured]
+            command = shlex.split(configured)
+            if command:
+                return command
 
         interpreter_local = _interpreter_local_mojo_command()
         if interpreter_local is not None:
@@ -122,24 +144,22 @@ class build_py(_build_py):
 
         return None
 
-    def _build_mojopkg_if_possible(self) -> None:
+    def _build_bundled_mojopkg(self) -> None:
         mojo_command = self._detect_mojo_command()
         if mojo_command is None:
-            self.announce(
-                "skipping kayak.mojopkg build because no Mojo CLI was found; "
-                "bundled engine sources will still be packaged",
-                level=2,
+            raise RuntimeError(
+                "Kayak wheel build requires a usable Mojo CLI so the bundled "
+                "`kayak.mojopkg` can be produced. Install Mojo in the active "
+                "build environment or set KAYAK_MOJO_CLI."
             )
-            return
 
         if not MOJO_SOURCE_ROOT.exists():
-            self.announce(
-                "skipping kayak.mojopkg build because kayak/ Mojo sources are missing",
-                level=2,
+            raise RuntimeError(
+                "Kayak wheel build requires the repo Mojo sources under "
+                "`kayak/`, but they were not found."
             )
-            return
 
-        artifact_dir = Path(self.build_lib) / "kayak_bridge" / "_artifacts"
+        artifact_dir = Path(self.build_lib) / BUNDLED_ARTIFACTS_ROOT
         artifact_dir.mkdir(parents=True, exist_ok=True)
         artifact_path = artifact_dir / "kayak.mojopkg"
 
@@ -155,6 +175,31 @@ class build_py(_build_py):
             level=2,
         )
         subprocess.run(command, cwd=REPO_ROOT, check=True)
+        self._write_mojopkg_metadata(
+            artifact_dir=artifact_dir,
+            artifact_path=artifact_path,
+            mojo_version=_mojo_version(mojo_command),
+        )
+
+    def _write_mojopkg_metadata(
+        self,
+        *,
+        artifact_dir: Path,
+        artifact_path: Path,
+        mojo_version: str,
+    ) -> None:
+        metadata_path = artifact_dir / "mojopkg_build.json"
+        payload = {
+            "schema_version": 1,
+            "project_version": self.distribution.get_version(),
+            "mojo_version": mojo_version,
+            "artifact_filename": artifact_path.name,
+            "artifact_sha256": _sha256(artifact_path),
+        }
+        metadata_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
 
 setup(cmdclass={"build_py": build_py})

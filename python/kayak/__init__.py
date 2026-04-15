@@ -1,9 +1,9 @@
 """Public Python SDK for Kayak late-interaction programming.
 
 Import from ``kayak`` when writing application or research code in Python.
-This package owns the stable late-interaction object model, exact and
-stage-aware local operations, and explicit backend selection for the SDK
-surface.
+This package owns the stable late-interaction object model, text encoders,
+stores, exact and stage-aware local operations, and explicit backend
+selection for the SDK surface.
 
 It is not the hosted engine surface for collections, snapshots, or service
 operations. The sibling ``kayak_bridge`` package remains an internal
@@ -55,16 +55,43 @@ from kayak_bridge import (
     search_batch,
     search_with_plan,
 )
+from .encoders import (
+    CallableLateTextEncoder,
+    ColBERTTextEncoder,
+    DEFAULT_COLBERT_MODEL_NAME,
+    LateTextEncoder,
+    open_encoder,
+    register_encoder,
+)
+from .stores import (
+    DirectoryLateStore,
+    LanceDBLateStore,
+    LateStore,
+    LateStoreStats,
+    MemoryLateStore,
+    StoreCapabilities,
+    open_store,
+    register_store,
+)
 
 PUBLIC_API = (
     "BackendInfo",
     "CandidateGenerator",
     "CandidateStageResult",
+    "CallableLateTextEncoder",
+    "ColBERTTextEncoder",
+    "DEFAULT_COLBERT_MODEL_NAME",
+    "DirectoryLateStore",
+    "LanceDBLateStore",
     "LateDocuments",
     "LateIndex",
     "LateQuery",
     "LateQueryBatch",
     "LateScores",
+    "LateStore",
+    "LateStoreStats",
+    "LateTextEncoder",
+    "MemoryLateStore",
     "SearchHit",
     "SearchPlan",
     "SearchPlanResult",
@@ -75,6 +102,7 @@ PUBLIC_API = (
     "StageArtifactMaterialization",
     "MOJO_EXACT_CPU_BACKEND",
     "NUMPY_REFERENCE_BACKEND",
+    "StoreCapabilities",
     "available_backends",
     "backend_info",
     "clause_text_stage3_verifier_operator",
@@ -93,9 +121,13 @@ PUBLIC_API = (
     "maxsim_batch",
     "none_stage3_verifier_operator",
     "noop_topk_stage2_reference_operator",
+    "open_encoder",
+    "open_store",
     "packed_index",
     "query",
     "query_batch",
+    "register_encoder",
+    "register_store",
     "search",
     "search_batch",
     "search_with_plan",

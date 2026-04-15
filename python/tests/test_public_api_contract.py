@@ -12,11 +12,20 @@ class PublicApiContractTests(unittest.TestCase):
             "BackendInfo",
             "CandidateGenerator",
             "CandidateStageResult",
+            "CallableLateTextEncoder",
+            "ColBERTTextEncoder",
+            "DEFAULT_COLBERT_MODEL_NAME",
+            "DirectoryLateStore",
+            "LanceDBLateStore",
             "LateDocuments",
             "LateIndex",
             "LateQuery",
             "LateQueryBatch",
             "LateScores",
+            "LateStore",
+            "LateStoreStats",
+            "LateTextEncoder",
+            "MemoryLateStore",
             "SearchHit",
             "SearchPlan",
             "SearchPlanResult",
@@ -27,6 +36,7 @@ class PublicApiContractTests(unittest.TestCase):
             "StageArtifactMaterialization",
             "MOJO_EXACT_CPU_BACKEND",
             "NUMPY_REFERENCE_BACKEND",
+            "StoreCapabilities",
             "available_backends",
             "backend_info",
             "clause_text_stage3_verifier_operator",
@@ -45,9 +55,13 @@ class PublicApiContractTests(unittest.TestCase):
             "maxsim_batch",
             "none_stage3_verifier_operator",
             "noop_topk_stage2_reference_operator",
+            "open_encoder",
+            "open_store",
             "packed_index",
             "query",
             "query_batch",
+            "register_encoder",
+            "register_store",
             "search",
             "search_batch",
             "search_with_plan",
@@ -66,6 +80,8 @@ class PublicApiContractTests(unittest.TestCase):
     def test_package_docstrings_match_sdk_boundary(self) -> None:
         self.assertIsNotNone(kayak.__doc__)
         self.assertIn("Public Python SDK", kayak.__doc__)
+        self.assertIn("text encoders", kayak.__doc__)
+        self.assertIn("stores", kayak.__doc__)
         self.assertIn("not the hosted engine surface", kayak.__doc__)
         self.assertIsNotNone(kayak_bridge.__doc__)
         self.assertIn("internal implementation layer", kayak_bridge.__doc__.lower())

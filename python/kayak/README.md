@@ -14,6 +14,8 @@ It gives you explicit objects for:
 - query batches
 - documents
 - packed indexes
+- text encoders
+- stores
 - candidate generators
 - stage-2 operators
 - search plans
@@ -104,8 +106,129 @@ Current CLI discovery order for the Mojo backend:
 - `mojo` on `PATH`
 - `pixi run mojo`
 
+`KAYAK_MOJO_CLI` can be either a binary path or a full command prefix such as
+`bash /full/path/to/run_mojo_with_wrapper.sh`.
+
 If you do not pass `backend=kayak.MOJO_EXACT_CPU_BACKEND`, Kayak stays on the
 NumPy reference backend and does not require Mojo.
+
+Kayak wheels bundle the Mojo backend they were built with. If a
+`mojo_exact_cpu` call reports a bundled-backend/compiler mismatch, upgrade
+`kayak` and `mojo` together so both come from compatible releases.
+
+## Text Encoders
+
+Kayak's public core remains vector-first, but the SDK now exposes a small text
+encoder contract for the common "I start from text" path.
+
+Use the first-party ColBERT encoder when you want a ready-made text path:
+
+```python
+import kayak
+
+encoder = kayak.open_encoder("colbert", model_name="colbert-ir/colbertv2.0")
+
+query = encoder.encode_query("what tool installs Python and Mojo together?")
+documents = encoder.encode_documents(
+    ["doc-a", "doc-b"],
+    [
+        "Pixi can create one environment with Python, Mojo, and kayak.",
+        "uv add kayak installs the Python package but not the Mojo CLI.",
+    ],
+)
+index = documents.pack()
+hits = kayak.search(query, index, k=2)
+```
+
+Use `CallableLateTextEncoder` when you already have your own text-to-token-vector
+functions and only want them adapted to Kayak's public late-interaction types:
+
+```python
+import kayak
+
+encoder = kayak.CallableLateTextEncoder(
+    query_encoder=my_query_encoder,
+    document_encoder=my_document_encoder,
+)
+```
+
+The contract stays narrow:
+- `encode_query(text)`
+- `encode_document_vectors(text)`
+- `encode_documents(doc_ids, texts)`
+
+The factory is intentionally small:
+- `open_encoder("colbert", model_name=...)`
+- `open_encoder("callable", query_encoder=..., document_encoder=...)`
+- `register_encoder(...)`
+
+## Stores
+
+Kayak search still operates on `LateIndex`, but the SDK now exposes one store
+contract for persistence and materialization.
+
+Use `open_store("kayak", path=...)` for the default local directory-backed
+store:
+
+```python
+import kayak
+
+store = kayak.open_store("kayak", path="./kayak-index")
+
+documents = kayak.documents(
+    ["doc-a", "doc-b"],
+    [doc_a_vectors, doc_b_vectors],
+    texts=["alpha", "beta"],
+)
+store.upsert(
+    documents,
+    metadata=[
+        {"topic": "installation"},
+        {"topic": "vector_db"},
+    ],
+)
+
+index = store.load_index(
+    where={"topic": "installation"},
+    include_text=True,
+)
+```
+
+Use `MemoryLateStore` when you want the same contract without persistence:
+
+```python
+store = kayak.MemoryLateStore()
+store.upsert(documents)
+index = store.load_index()
+```
+
+Use `open_store("lancedb", ...)` when you want Kayak to materialize search-ready
+indexes from a LanceDB table while keeping persistence in the database:
+
+```python
+import kayak
+
+store = kayak.open_store(
+    "lancedb",
+    path="./lancedb-store",
+    table_name="docs",
+)
+store.upsert(documents, metadata=metadata_rows)
+index = store.load_index(where={"topic": "installation"}, include_text=True)
+```
+
+The store contract is intentionally narrow:
+- `upsert(...)`
+- `delete(...)`
+- `load_index(...)`
+- `stats()`
+- `capabilities()`
+
+The factory is intentionally small:
+- `open_store("kayak", path=...)`
+- `open_store("memory")`
+- `open_store("lancedb", path=..., table_name=...)`
+- `register_store(...)`
 
 ## Core API
 

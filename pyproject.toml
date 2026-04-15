@@ -4,18 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kayak"
-version = "0.1.4"
+version = "0.2.0"
 description = "Mojo-first late-interaction retrieval engine"
 readme = "python/kayak/README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = ["colbert-ai>=0.2.22,<0.3", "ir-datasets>=0.5.11,<0.6", "numpy>=2.0,<3", "torch>=2.11.0,<3", "transformers<5"]
 
-[project.scripts]
-kayak-engine-serve = "kayak_engine.server:main"
-
 [tool.pixi.workspace]
 channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
-platforms = ["osx-arm64"]
+platforms = ["linux-64", "osx-arm64"]
 
 [tool.pixi.tasks]
 demo = "mojo -I . examples/exact_search.mojo"
@@ -30,6 +27,14 @@ bench_python_batch_maxsim_naive_raw = "PYTHONPATH=python python python/scripts/b
 bench_python_batch_maxsim_shared_raw = "PYTHONPATH=python python python/scripts/bench_batch_maxsim.py --mode shared_batch"
 bench_python_batch_maxsim_naive = "bash scripts/run_bench_quiet.sh -- pixi run bench_python_batch_maxsim_naive_raw"
 bench_python_batch_maxsim_shared = "bash scripts/run_bench_quiet.sh -- pixi run bench_python_batch_maxsim_shared_raw"
+bench_python_store_load_raw = "PYTHONPATH=python python python/scripts/bench_store_load.py --store directory --document-count 1000 --vectors-per-document 16 --vector-dim 128 --subset-size 50 --layout packed"
+bench_python_store_load = "bash scripts/run_bench_quiet.sh -- pixi run bench_python_store_load_raw"
+bench_python_store_search_raw = "PYTHONPATH=python python python/scripts/bench_store_search.py --store directory --document-count 1000 --vectors-per-document 16 --vector-dim 128 --candidate-window-size 50 --layout packed --backend mojo_exact_cpu"
+bench_python_store_search = "bash scripts/run_bench_quiet.sh -- pixi run bench_python_store_search_raw"
+bench_python_store_compare_raw = "PYTHONPATH=python uv run --python 3.11 --with lancedb --with pyarrow python python/scripts/bench_store_compare.py --stores directory lancedb --baseline-store directory --document-count 1000 --vectors-per-document 16 --vector-dim 128 --subset-size 50 --layout packed"
+bench_python_store_compare = "bash scripts/run_bench_quiet.sh -- pixi run bench_python_store_compare_raw"
+bench_python_directory_subset_load_raw = "PYTHONPATH=python python python/scripts/bench_directory_subset_load.py --document-count 5000 --vectors-per-document 32 --vector-dim 128 --subset-size 2000"
+bench_python_directory_subset_load = "bash scripts/run_bench_quiet.sh -- pixi run bench_python_directory_subset_load_raw"
 test_index = "mojo -I . tests/test_index.mojo"
 test_maxsim = "mojo -I . tests/test_maxsim.mojo"
 test_eval = "mojo -I . tests/test_eval_metrics.mojo"
@@ -79,6 +84,7 @@ test_runtime_backend = "mojo -I . tests/test_runtime_backend.mojo"
 test_real_slice_collection_storage_json = "mojo -I . tests/test_real_slice_collection_storage_json.mojo"
 test_real_slice_benchmark_json = "mojo -I . tests/test_real_slice_benchmark_json.mojo"
 test_public_benchmark_json = "mojo -I . tests/test_public_benchmark_json.mojo"
+test_query_vector_bucket = "mojo -I . tests/test_query_vector_bucket.mojo"
 test_storage_compat = "mojo -I . tests/test_storage_compat.mojo"
 test_storage_invariants = "mojo -I . tests/test_storage_invariants.mojo"
 test_score_partitions = "mojo -I . tests/test_score_partitions.mojo"
@@ -122,6 +128,9 @@ eval_matrix = "mojo -I . benchmarks/eval_matrix.mojo"
 bench_scifact_raw = "mojo -I . benchmarks/scifact_real_subset_search.mojo"
 bench_fiqa_raw = "mojo -I . benchmarks/fiqa_real_subset_search.mojo"
 bench_limit_small_raw = "mojo -I . benchmarks/limit_small_real_subset_search.mojo"
+bench_bright_stackoverflow_raw = "bash scripts/run_mojo_with_pixi_python.sh -I . benchmarks/bright_stackoverflow_real_subset_search.mojo"
+bench_lemb_narrativeqa_raw = "bash scripts/run_mojo_with_pixi_python.sh -I . benchmarks/lemb_narrativeqa_real_subset_search.mojo"
+bench_r2med_biology_raw = "bash scripts/run_mojo_with_pixi_python.sh -I . benchmarks/r2med_biology_real_subset_search.mojo"
 bench_browsecomp_plus_raw = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/browsecomp_plus_real_subset_search.mojo"
 bench_browsecomp_plus_gold_raw = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/browsecomp_plus_gold_real_subset_search.mojo"
 bench_browsecomp_plus_gold_token_pooling_raw = "mojo -I . benchmarks/browsecomp_plus_gold_token_pooling.mojo"
@@ -136,17 +145,18 @@ bench_real_subset_posting_caps = "python python/scripts/build_browsecomp_plus_ta
 bench_real_subset_vector_budgets_raw = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/real_subset_vector_budget_sweep.mojo"
 bench_real_subset_policies_raw = "mojo -I . benchmarks/real_subset_partition_policies.mojo"
 bench_real_subset_breakdown_raw = "mojo -I . benchmarks/real_subset_search_breakdown.mojo"
-bench_public_small_window_frontier_raw = "mojo -I . benchmarks/public_small_window_frontier.mojo"
-bench_public_wide_window_native_frontier_raw = "mojo -I . benchmarks/public_wide_window_native_frontier.mojo"
-bench_public_wide_window_candidate_generation_raw = "mojo -I . benchmarks/public_wide_window_candidate_generation.mojo"
+bench_public_small_window_frontier_raw = "bash scripts/run_mojo_with_pixi_python.sh -I . benchmarks/public_small_window_frontier.mojo"
+bench_public_query_bucket_frontier_raw = "bash scripts/run_mojo_with_pixi_python.sh -I . benchmarks/public_query_bucket_frontier.mojo"
+bench_public_wide_window_native_frontier_raw = "bash scripts/run_mojo_with_pixi_python.sh -I . benchmarks/public_wide_window_native_frontier.mojo"
+bench_public_wide_window_candidate_generation_raw = "bash scripts/run_mojo_with_pixi_python.sh -I . benchmarks/public_wide_window_candidate_generation.mojo"
 bench_hard_recall_real_subset_raw = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/hard_recall_real_subset.mojo"
 bench_synthetic_hard_recall_stage_aware_raw = "mojo -I . benchmarks/synthetic_hard_recall_stage_aware.mojo"
 bench_long_document_hard_recall_stage_aware_raw = "mojo -I . benchmarks/long_document_hard_recall_stage_aware.mojo"
 bench_single_core_scale_raw = "mojo -I . benchmarks/single_core_scale.mojo"
 bench_single_core_faithfulness_frontier_raw = "mojo -I . benchmarks/single_core_faithfulness_frontier.mojo"
-bench_real_subset_planner_benchmark_raw = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/real_subset_planner_benchmark.mojo"
-bench_real_subset_planner_benchmark_smoke_raw = "mojo -I . benchmarks/real_subset_planner_benchmark_smoke.mojo"
-bench_browsecomp_plus_gold_planner_benchmark_raw = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/browsecomp_plus_gold_planner_benchmark.mojo"
+bench_real_subset_planner_benchmark_raw = "python python/scripts/build_browsecomp_plus_task_json.py && bash scripts/run_mojo_with_pixi_python.sh -I . benchmarks/real_subset_planner_benchmark.mojo"
+bench_real_subset_planner_benchmark_smoke_raw = "bash scripts/run_mojo_with_pixi_python.sh -I . benchmarks/real_subset_planner_benchmark_smoke.mojo"
+bench_browsecomp_plus_gold_planner_benchmark_raw = "python python/scripts/build_browsecomp_plus_task_json.py && bash scripts/run_mojo_with_pixi_python.sh -I . benchmarks/browsecomp_plus_gold_planner_benchmark.mojo"
 bench_browsecomp_plus_gold_planner_evidence_raw = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/browsecomp_plus_gold_planner_evidence.mojo"
 bench_browsecomp_plus_gold_faithfulness_frontier_raw = "python python/scripts/build_browsecomp_plus_task_json.py && mojo -I . benchmarks/browsecomp_plus_gold_faithfulness_frontier.mojo"
 bench_browsecomp_plus_gold_storage_encoding_raw = "mojo -I . benchmarks/browsecomp_plus_gold_storage_encoding.mojo"
@@ -171,6 +181,9 @@ bench_storage_engine_browsecomp_plus_evidence_scale_raw = "python python/scripts
 bench_scifact = "bash scripts/run_bench_quiet.sh -- pixi run bench_scifact_raw"
 bench_fiqa = "bash scripts/run_bench_quiet.sh -- pixi run bench_fiqa_raw"
 bench_limit_small = "bash scripts/run_bench_quiet.sh -- pixi run bench_limit_small_raw"
+bench_bright_stackoverflow = "bash scripts/run_bench_quiet.sh -- pixi run bench_bright_stackoverflow_raw"
+bench_lemb_narrativeqa = "bash scripts/run_bench_quiet.sh -- pixi run bench_lemb_narrativeqa_raw"
+bench_r2med_biology = "bash scripts/run_bench_quiet.sh -- pixi run bench_r2med_biology_raw"
 bench_browsecomp_plus = "bash scripts/run_bench_quiet.sh -- pixi run bench_browsecomp_plus_raw"
 bench_browsecomp_plus_gold = "bash scripts/run_bench_quiet.sh -- pixi run bench_browsecomp_plus_gold_raw"
 bench_browsecomp_plus_gold_token_pooling = "bash scripts/run_bench_quiet.sh -- pixi run bench_browsecomp_plus_gold_token_pooling_raw"
@@ -180,6 +193,7 @@ bench_real_subset_vector_budgets = "bash scripts/run_bench_quiet.sh -- pixi run 
 bench_real_subset_policies = "bash scripts/run_bench_quiet.sh -- pixi run bench_real_subset_policies_raw"
 bench_real_subset_breakdown = "bash scripts/run_bench_quiet.sh -- pixi run bench_real_subset_breakdown_raw"
 bench_public_small_window_frontier = "bash scripts/run_bench_quiet.sh -- pixi run bench_public_small_window_frontier_raw"
+bench_public_query_bucket_frontier = "bash scripts/run_bench_quiet.sh -- pixi run bench_public_query_bucket_frontier_raw"
 bench_public_wide_window_native_frontier = "bash scripts/run_bench_quiet.sh -- pixi run bench_public_wide_window_native_frontier_raw"
 bench_public_wide_window_candidate_generation = "bash scripts/run_bench_quiet.sh -- pixi run bench_public_wide_window_candidate_generation_raw"
 bench_hard_recall_real_subset = "bash scripts/run_bench_quiet.sh -- pixi run bench_hard_recall_real_subset_raw"
@@ -217,6 +231,9 @@ summarize_partitions = "python python/scripts/summarize_partition_sweep.py"
 mutate_smoke = "python python/scripts/mutation_smoke.py"
 build_browsecomp_plus_task_json = "python python/scripts/build_browsecomp_plus_task_json.py"
 package_mojo = "mojo package kayak -o dist/kayak.mojopkg"
+build_python_wheel = "rm -rf build dist/release && mkdir -p dist/release && python -m pip wheel . --no-deps --wheel-dir dist/release"
+verify_python_wheel = "PYTHONPATH=python python python/scripts/check_release_wheel.py dist/release/kayak-*.whl"
+build_and_verify_python_wheel = "pixi run build_python_wheel && pixi run verify_python_wheel"
 
 [tool.pixi.dependencies]
 mojo = ">=0.26.3.0.dev2026041020,<0.27"
@@ -230,8 +247,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["python"]
-include = ["kayak", "kayak_bridge", "kayak_engine"]
+include = ["kayak", "kayak.*", "kayak_bridge", "kayak_bridge.*"]
 
 [tool.setuptools.package-data]
-kayak_bridge = ["*.mojo", "_artifacts/*.mojopkg"]
-kayak_engine = ["*.mojo"]
+kayak_bridge = ["*.mojo", "_artifacts/*.json", "_artifacts/*.mojopkg"]
