@@ -7,6 +7,7 @@ from typing import Any
 from .prepared_exact_types import (
     ExactScoringOptions,
     PreparedExactSearchRuntimeConfig,
+    _runtime_config,
 )
 
 
@@ -365,33 +366,40 @@ def prepared_exact_runtime_config_payload(
     key: str = "config",
 ) -> PreparedExactSearchRuntimeConfig:
     config = require_object(payload, key, default={})
-    return PreparedExactSearchRuntimeConfig(
-        execution_backend=require_string(
-            config,
-            "execution_backend",
-            default="process",
-        ),
-        concurrency_lane_count=require_int(
-            config,
-            "concurrency_lane_count",
-            default=1,
-        ),
-        worker_count=require_int(
-            config,
-            "worker_count",
-            default=1,
-        ),
-        max_batch_size=require_int(
-            config,
-            "max_batch_size",
-            default=32,
-        ),
-        max_batch_wait_ms=require_int(
-            config,
-            "max_batch_wait_ms",
-            default=1,
-        ),
-        scoring=exact_scoring_options_payload(config, "scoring"),
+    return _runtime_config(
+        PreparedExactSearchRuntimeConfig(
+            execution_backend=require_string(
+                config,
+                "execution_backend",
+                default="process",
+            ),
+            concurrency_lane_count=require_int(
+                config,
+                "concurrency_lane_count",
+                default=1,
+            ),
+            worker_count=require_int(
+                config,
+                "worker_count",
+                default=1,
+            ),
+            max_batch_size=require_int(
+                config,
+                "max_batch_size",
+                default=32,
+            ),
+            max_batch_wait_ms=require_int(
+                config,
+                "max_batch_wait_ms",
+                default=1,
+            ),
+            max_outstanding_request_count=require_int(
+                config,
+                "max_outstanding_request_count",
+                default=0,
+            ),
+            scoring=exact_scoring_options_payload(config, "scoring"),
+        )
     )
 
 

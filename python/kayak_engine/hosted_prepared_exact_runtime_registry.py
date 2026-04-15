@@ -17,6 +17,7 @@ from .prepared_exact_runtime import (
     prepare_exact_search_runtime,
 )
 from .prepared_exact_types import (
+    _runtime_config,
     prepared_exact_runtime_config_json,
     prepared_exact_runtime_stats_json,
 )
@@ -106,6 +107,7 @@ class HostedPreparedExactRuntimeRegistry:
         load_text_corpus: bool,
         config: PreparedExactSearchRuntimeConfig,
     ) -> tuple[dict[str, object], bool]:
+        resolved_config = _runtime_config(config)
         key = HostedPreparedExactRuntimeKey(
             service_root=self._service_root,
             collection_id=collection_id,
@@ -113,7 +115,7 @@ class HostedPreparedExactRuntimeRegistry:
             namespace_id=namespace_id,
             snapshot_id=snapshot_id,
             load_text_corpus=load_text_corpus,
-            config=config,
+            config=resolved_config,
         )
 
         while True:
@@ -143,7 +145,7 @@ class HostedPreparedExactRuntimeRegistry:
                 namespace_id=namespace_id,
                 snapshot_id=snapshot_id,
                 load_text_corpus=load_text_corpus,
-                config=config,
+                config=resolved_config,
             )
             runtime.wait_until_ready(timeout=60.0)
         except Exception:

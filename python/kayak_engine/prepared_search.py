@@ -8,6 +8,7 @@ from .prepared_exact_runtime import (
     PreparedExactSearchRuntimeStats,
     PreparedExactSearchScheduler,
     PreparedExactSearchSchedulerConfig,
+    PreparedExactSearchSchedulerOverloadedError,
     PreparedExactSearchSchedulerStats,
     prepare_exact_search_runtime,
     prepare_exact_search_scheduler,
@@ -18,6 +19,7 @@ from .prepared_exact_session import (
 )
 from .prepared_exact_types import (
     ExactScoringOptions,
+    PreparedExactSearchRuntimeOverloadedError,
     SUPPORTED_PREPARED_EXACT_RUNTIME_BACKENDS,
 )
 
@@ -25,9 +27,11 @@ __all__ = [
     "ExactScoringOptions",
     "PreparedExactSearchRuntime",
     "PreparedExactSearchRuntimeConfig",
+    "PreparedExactSearchRuntimeOverloadedError",
     "PreparedExactSearchRuntimeStats",
     "PreparedExactSearchScheduler",
     "PreparedExactSearchSchedulerConfig",
+    "PreparedExactSearchSchedulerOverloadedError",
     "PreparedExactSearchSchedulerStats",
     "PreparedExactSearchSession",
     "SUPPORTED_PREPARED_EXACT_RUNTIME_BACKENDS",

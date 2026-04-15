@@ -175,6 +175,66 @@ curl -sS http://127.0.0.1:8000/v1/planned-debug-search \
   }'
 ```
 
+## Prepared Exact Runtime Reuse
+
+Prepare one explicit same-snapshot exact runtime:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/prepared-exact-runtimes \
+  -H 'content-type: application/json' \
+  -d '{
+    "collection_id": "news",
+    "tenant_id": "tenant-a",
+    "namespace_id": "search",
+    "snapshot_id": "snapshot-0001",
+    "config": {
+      "execution_backend": "process",
+      "concurrency_lane_count": 1,
+      "worker_count": 2,
+      "max_batch_size": 8,
+      "max_batch_wait_ms": 25,
+      "max_outstanding_request_count": 128
+    }
+  }'
+```
+
+Search through that prepared runtime:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/prepared-exact-search \
+  -H 'content-type: application/json' \
+  -d '{
+    "runtime_id": "prepared-exact-runtime-0001",
+    "request": {
+      "query_model_name": "colbertv2",
+      "query": [[1.0, 0.0], [0.0, 1.0]],
+      "final_k": 2
+    }
+  }'
+```
+
+Inspect runtime counters:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/prepared-exact-runtimes:stats \
+  -H 'content-type: application/json' \
+  -d '{
+    "runtime_id": "prepared-exact-runtime-0001"
+  }'
+```
+
+Operational rules:
+
+- `max_outstanding_request_count` bounds accepted-but-not-yet-finished requests
+  on one runtime
+- if a new request would exceed that limit, the hosted surface returns HTTP
+  `429` immediately instead of queueing forever
+- `rejected_request_count` and `current_pending_request_count` in runtime stats
+  show whether the runtime is currently dropping work or draining normally
+- omitting `max_outstanding_request_count` is allowed; the runtime derives a
+  default from lane count and batch size and reports that resolved value back in
+  the runtime summary
+
 ## Retention, Lifecycle, And Reclaim
 
 Update the collection default retention policy:

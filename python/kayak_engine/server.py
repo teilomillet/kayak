@@ -36,6 +36,7 @@ from .payloads import (
     require_query_vectors,
     require_string,
 )
+from .prepared_exact_types import PreparedExactSearchRuntimeOverloadedError
 
 
 PREPARED_EXACT_ROUTE_PATHS = frozenset(
@@ -251,13 +252,16 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
     def _write_engine_error(self, exc: Exception) -> None:
         message = str(exc)
         status = HTTPStatus.BAD_REQUEST
-        lowered = message.lower()
-        if (
-            "does not exist" in lowered
-            or "not resolve" in lowered
-            or "no snapshots directory" in lowered
-        ):
-            status = HTTPStatus.NOT_FOUND
+        if isinstance(exc, PreparedExactSearchRuntimeOverloadedError):
+            status = HTTPStatus.TOO_MANY_REQUESTS
+        else:
+            lowered = message.lower()
+            if (
+                "does not exist" in lowered
+                or "not resolve" in lowered
+                or "no snapshots directory" in lowered
+            ):
+                status = HTTPStatus.NOT_FOUND
         self._write_error(status, message)
 
     def _create_collection(self, payload: dict[str, Any]) -> str:

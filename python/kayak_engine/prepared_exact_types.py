@@ -9,6 +9,10 @@ from typing import Final
 SUPPORTED_PREPARED_EXACT_RUNTIME_BACKENDS: Final[tuple[str, ...]] = ("process",)
 
 
+class PreparedExactSearchRuntimeOverloadedError(RuntimeError):
+    """Raised when a prepared exact runtime rejects work above its limit."""
+
+
 def _require_bool(name: str, value: bool) -> bool:
     if not isinstance(value, bool):
         raise TypeError(f"{name} must be a bool")
@@ -52,6 +56,7 @@ class PreparedExactSearchRuntimeConfig:
     worker_count: int = 1
     max_batch_size: int = 32
     max_batch_wait_ms: int = 1
+    max_outstanding_request_count: int = 0
     scoring: ExactScoringOptions = field(default_factory=ExactScoringOptions)
 
     def __post_init__(self) -> None:
@@ -66,6 +71,10 @@ class PreparedExactSearchRuntimeConfig:
             "max_batch_wait_ms",
             self.max_batch_wait_ms,
         )
+        max_outstanding_request_count = _require_non_bool_int(
+            "max_outstanding_request_count",
+            self.max_outstanding_request_count,
+        )
         if concurrency_lane_count < 1:
             raise ValueError("concurrency_lane_count must be positive")
         if worker_count < 1:
@@ -74,6 +83,8 @@ class PreparedExactSearchRuntimeConfig:
             raise ValueError("max_batch_size must be positive")
         if max_batch_wait_ms < 0:
             raise ValueError("max_batch_wait_ms must be non-negative")
+        if max_outstanding_request_count < 0:
+            raise ValueError("max_outstanding_request_count must be non-negative")
         _normalized_scoring(self.scoring)
 
 
@@ -82,12 +93,14 @@ class PreparedExactSearchRuntimeStats:
     """Snapshot of runtime work counters and timing totals."""
 
     submitted_request_count: int = 0
+    rejected_request_count: int = 0
     completed_request_count: int = 0
     failed_request_count: int = 0
     executed_batch_count: int = 0
     last_batch_size: int = 0
     max_observed_batch_size: int = 0
     max_observed_queue_depth: int = 0
+    current_pending_request_count: int = 0
     total_queue_wait_seconds: float = 0.0
     total_batch_execution_seconds: float = 0.0
 
@@ -165,6 +178,7 @@ def prepared_exact_runtime_config_json(
         "worker_count": config.worker_count,
         "max_batch_size": config.max_batch_size,
         "max_batch_wait_ms": config.max_batch_wait_ms,
+        "max_outstanding_request_count": config.max_outstanding_request_count,
         "scoring": scoring_options_json(config.scoring),
     }
 
@@ -176,6 +190,7 @@ def prepared_exact_runtime_stats_json(
 
     return {
         "submitted_request_count": stats.submitted_request_count,
+        "rejected_request_count": stats.rejected_request_count,
         "completed_request_count": stats.completed_request_count,
         "failed_request_count": stats.failed_request_count,
         "processed_request_count": stats.processed_request_count,
@@ -183,6 +198,7 @@ def prepared_exact_runtime_stats_json(
         "last_batch_size": stats.last_batch_size,
         "max_observed_batch_size": stats.max_observed_batch_size,
         "max_observed_queue_depth": stats.max_observed_queue_depth,
+        "current_pending_request_count": stats.current_pending_request_count,
         "total_queue_wait_seconds": stats.total_queue_wait_seconds,
         "total_batch_execution_seconds": stats.total_batch_execution_seconds,
         "average_batch_size": stats.average_batch_size,
@@ -203,4 +219,17 @@ def _runtime_config(
         raise TypeError(
             "config must be a PreparedExactSearchRuntimeConfig instance"
         )
-    return resolved
+    if resolved.max_outstanding_request_count > 0:
+        return resolved
+    return PreparedExactSearchRuntimeConfig(
+        execution_backend=resolved.execution_backend,
+        concurrency_lane_count=resolved.concurrency_lane_count,
+        worker_count=resolved.worker_count,
+        max_batch_size=resolved.max_batch_size,
+        max_batch_wait_ms=resolved.max_batch_wait_ms,
+        max_outstanding_request_count=max(
+            128,
+            resolved.concurrency_lane_count * resolved.max_batch_size * 4,
+        ),
+        scoring=resolved.scoring,
+    )

@@ -10,6 +10,7 @@ import unittest
 from kayak_engine import (
     PreparedExactSearchRuntime,
     PreparedExactSearchRuntimeConfig,
+    PreparedExactSearchRuntimeOverloadedError,
     PreparedExactSearchSchedulerConfig,
     PreparedExactSearchScheduler,
     SUPPORTED_PREPARED_EXACT_RUNTIME_BACKENDS,
@@ -112,6 +113,10 @@ class PreparedExactSearchRuntimeApiTests(unittest.TestCase):
     def test_runtime_config_rejects_non_positive_concurrency_lane_count(self) -> None:
         with self.assertRaises(ValueError):
             PreparedExactSearchRuntimeConfig(concurrency_lane_count=0)
+
+    def test_runtime_config_rejects_negative_max_outstanding_request_count(self) -> None:
+        with self.assertRaises(ValueError):
+            PreparedExactSearchRuntimeConfig(max_outstanding_request_count=-1)
 
 
 @unittest.skipUnless(
@@ -222,6 +227,7 @@ class PreparedExactSearchRuntimeTests(unittest.TestCase):
         )
         self.addCleanup(runtime.close)
         self.assertEqual(runtime.config.concurrency_lane_count, 2)
+        self.assertGreater(runtime.config.max_outstanding_request_count, 0)
         self.assertFalse(runtime.load_text_corpus)
 
         requests = [
@@ -279,6 +285,87 @@ class PreparedExactSearchRuntimeTests(unittest.TestCase):
         self.assertLess(stats.executed_batch_count, len(requests))
         self.assertGreater(stats.max_observed_batch_size, 1)
         self.assertGreaterEqual(stats.max_observed_queue_depth, 1)
+        self.assertEqual(stats.rejected_request_count, 0)
+        self.assertEqual(stats.current_pending_request_count, 0)
+
+    def test_runtime_rejects_overload_above_max_outstanding_request_count(self) -> None:
+        service_root, _module, _session, temp_dir = self._seed_snapshot()
+        self.addCleanup(temp_dir.cleanup)
+
+        runtime = prepare_exact_search_runtime(
+            service_root=service_root,
+            collection_id="news",
+            tenant_id="tenant-a",
+            namespace_id="search",
+            snapshot_id="snapshot-0001",
+            config=PreparedExactSearchRuntimeConfig(
+                concurrency_lane_count=1,
+                worker_count=1,
+                max_batch_size=8,
+                max_batch_wait_ms=250,
+                max_outstanding_request_count=1,
+            ),
+        )
+        self.addCleanup(runtime.close)
+        runtime.wait_until_ready(timeout=30.0)
+
+        request = {
+            "query_model_name": "colbertv2",
+            "query": [[1.0, 0.0], [0.0, 1.0]],
+            "final_k": 2,
+        }
+
+        accepted = runtime.submit(request)
+        with self.assertRaises(PreparedExactSearchRuntimeOverloadedError):
+            runtime.submit(request)
+
+        mid_stats = runtime.stats()
+        self.assertEqual(mid_stats.submitted_request_count, 1)
+        self.assertEqual(mid_stats.rejected_request_count, 1)
+        self.assertEqual(mid_stats.current_pending_request_count, 1)
+
+        _ = accepted.result(timeout=10.0)
+        final_stats = runtime.stats()
+        self.assertEqual(final_stats.completed_request_count, 1)
+        self.assertEqual(final_stats.failed_request_count, 0)
+        self.assertEqual(final_stats.rejected_request_count, 1)
+        self.assertEqual(final_stats.current_pending_request_count, 0)
+
+    def test_runtime_rejects_batch_atomically_when_batch_exceeds_admission_limit(self) -> None:
+        service_root, _module, _session, temp_dir = self._seed_snapshot()
+        self.addCleanup(temp_dir.cleanup)
+
+        runtime = prepare_exact_search_runtime(
+            service_root=service_root,
+            collection_id="news",
+            tenant_id="tenant-a",
+            namespace_id="search",
+            snapshot_id="snapshot-0001",
+            config=PreparedExactSearchRuntimeConfig(
+                concurrency_lane_count=1,
+                worker_count=1,
+                max_batch_size=8,
+                max_batch_wait_ms=250,
+                max_outstanding_request_count=1,
+            ),
+        )
+        self.addCleanup(runtime.close)
+        runtime.wait_until_ready(timeout=30.0)
+
+        request = {
+            "query_model_name": "colbertv2",
+            "query": [[1.0, 0.0], [0.0, 1.0]],
+            "final_k": 2,
+        }
+
+        with self.assertRaises(PreparedExactSearchRuntimeOverloadedError):
+            runtime.search_batch([request, request], timeout=10.0)
+
+        stats = runtime.stats()
+        self.assertEqual(stats.submitted_request_count, 0)
+        self.assertEqual(stats.rejected_request_count, 2)
+        self.assertEqual(stats.completed_request_count, 0)
+        self.assertEqual(stats.current_pending_request_count, 0)
 
     def test_runtime_rejects_submit_after_close(self) -> None:
         service_root, _module, _session, temp_dir = self._seed_snapshot()

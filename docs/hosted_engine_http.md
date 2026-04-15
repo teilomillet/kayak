@@ -179,6 +179,7 @@ What it owns:
   - `worker_count`
   - `max_batch_size`
   - `max_batch_wait_ms`
+  - `max_outstanding_request_count`
   - exact scoring options
 - per-runtime counters and derived averages
 
@@ -197,6 +198,14 @@ Current prepare/reuse rule:
   `runtime_id`
 - preparing one new hosted runtime does not block searches on already-active
   hosted runtimes
+
+Current overload rule:
+
+- prepared exact runtimes admit only up to `max_outstanding_request_count`
+  accepted-but-not-yet-finished requests at a time
+- if a new search or search-batch request would exceed that limit, the runtime
+  rejects it immediately
+- hosted overload currently returns HTTP `429`
 
 Current invalidation rule:
 
@@ -294,7 +303,8 @@ curl -sS http://127.0.0.1:8000/v1/prepared-exact-runtimes \
       "concurrency_lane_count": 1,
       "worker_count": 2,
       "max_batch_size": 8,
-      "max_batch_wait_ms": 25
+      "max_batch_wait_ms": 25,
+      "max_outstanding_request_count": 128
     }
   }'
 ```
@@ -302,6 +312,10 @@ curl -sS http://127.0.0.1:8000/v1/prepared-exact-runtimes \
 `load_text_corpus` is optional on this exact-only runtime surface and defaults to
 `false`. Set it explicitly only if you need prepared document text loaded for a
 future text-dependent extension on the same pinned snapshot.
+
+`max_outstanding_request_count` is optional. When omitted, the runtime derives a
+safe default from lane count and batch size and then reports that resolved value
+back in runtime summaries.
 
 Prepared exact runtime routes are now the only hosted routes that intentionally
 overlap across HTTP requests. They can batch concurrent searches onto one
@@ -382,6 +396,8 @@ These are verified limits of the current transport:
 - only prepared exact-runtime routes intentionally overlap across HTTP requests
 - extra process lanes still duplicate prepared snapshot memory; concurrency is
   not free
+- prepared exact-runtime concurrency is bounded by explicit admission control, so
+  excess load is rejected rather than queued forever
 - no auth yet
 - no streaming results
 - no binary ingest transport

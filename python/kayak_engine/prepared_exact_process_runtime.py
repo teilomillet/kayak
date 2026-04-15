@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import Future
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import multiprocessing as mp
 from pathlib import Path
 from queue import Empty
@@ -16,6 +16,7 @@ from .prepared_exact_session import (
     prepare_exact_search_session,
 )
 from .prepared_exact_types import (
+    PreparedExactSearchRuntimeOverloadedError,
     PreparedExactSearchRuntimeConfig,
     PreparedExactSearchRuntimeStats,
     _require_bool,
@@ -293,17 +294,7 @@ class PreparedExactProcessRuntime:
 
     def stats(self) -> PreparedExactSearchRuntimeStats:
         with self._stats_lock:
-            return PreparedExactSearchRuntimeStats(
-                submitted_request_count=self._stats.submitted_request_count,
-                completed_request_count=self._stats.completed_request_count,
-                failed_request_count=self._stats.failed_request_count,
-                executed_batch_count=self._stats.executed_batch_count,
-                last_batch_size=self._stats.last_batch_size,
-                max_observed_batch_size=self._stats.max_observed_batch_size,
-                max_observed_queue_depth=self._stats.max_observed_queue_depth,
-                total_queue_wait_seconds=self._stats.total_queue_wait_seconds,
-                total_batch_execution_seconds=self._stats.total_batch_execution_seconds,
-            )
+            return replace(self._stats)
 
     def wait_until_ready(self, timeout: float | None = None) -> None:
         if timeout is not None and timeout < 0:
@@ -346,28 +337,7 @@ class PreparedExactProcessRuntime:
             namespace_id=self.namespace_id,
             snapshot_id=self.snapshot_id,
         )
-        future: Future[dict[str, Any]] = Future()
-        with self._lifecycle_lock:
-            if self._closed:
-                raise RuntimeError("prepared exact search runtime is closed")
-            if self._fatal_exception is not None:
-                raise RuntimeError(
-                    "prepared exact search runtime failed"
-                ) from self._fatal_exception
-            request_id = self._next_request_id
-            self._next_request_id += 1
-            self._pending_futures[request_id] = future
-            self._pending_request_count += 1
-            pending_request_count = self._pending_request_count
-        self._request_queue.put(
-            _RuntimeRequestEnvelope(
-                request_id=request_id,
-                request=request,
-                submitted_at=time.perf_counter(),
-            )
-        )
-        self._record_submission(pending_request_count)
-        return future
+        return self._submit_normalized_requests([request])[0]
 
     def search(
         self,
@@ -398,7 +368,7 @@ class PreparedExactProcessRuntime:
             )
             for payload in requests
         ]
-        futures = [self.submit(request) for request in normalized_requests]
+        futures = self._submit_normalized_requests(normalized_requests)
         if timeout is None:
             return [future.result() for future in futures]
 
@@ -432,21 +402,99 @@ class PreparedExactProcessRuntime:
         del exc_type, exc, tb
         self.close()
 
-    def _record_submission(self, pending_request_count: int) -> None:
+    def _submit_normalized_requests(
+        self,
+        requests: list[dict[str, Any]],
+    ) -> list[Future[dict[str, Any]]]:
+        futures: list[Future[dict[str, Any]]] = []
+        envelopes: list[_RuntimeRequestEnvelope] = []
+        admitted_pending_request_count: int | None = None
+        rejected_pending_request_count: int | None = None
+        with self._lifecycle_lock:
+            if self._closed:
+                raise RuntimeError("prepared exact search runtime is closed")
+            if self._fatal_exception is not None:
+                raise RuntimeError(
+                    "prepared exact search runtime failed"
+                ) from self._fatal_exception
+
+            request_count = len(requests)
+            next_pending_request_count = self._pending_request_count + request_count
+            if next_pending_request_count > self._config.max_outstanding_request_count:
+                rejected_pending_request_count = self._pending_request_count
+            else:
+                admitted_pending_request_count = next_pending_request_count
+                submitted_at = time.perf_counter()
+                for request in requests:
+                    request_id = self._next_request_id
+                    self._next_request_id += 1
+                    future: Future[dict[str, Any]] = Future()
+                    self._pending_futures[request_id] = future
+                    futures.append(future)
+                    envelopes.append(
+                        _RuntimeRequestEnvelope(
+                            request_id=request_id,
+                            request=request,
+                            submitted_at=submitted_at,
+                        )
+                    )
+                self._pending_request_count = next_pending_request_count
+
+        if rejected_pending_request_count is not None:
+            self._record_rejection(
+                rejected_request_count=len(requests),
+                current_pending_request_count=rejected_pending_request_count,
+            )
+            raise PreparedExactSearchRuntimeOverloadedError(
+                "prepared exact search runtime is overloaded: "
+                f"pending={rejected_pending_request_count}, "
+                "admission would exceed "
+                f"max_outstanding_request_count="
+                f"{self._config.max_outstanding_request_count}"
+            )
+
+        if admitted_pending_request_count is None:  # pragma: no cover - guardrail
+            raise RuntimeError("prepared exact search runtime submission was not admitted")
+        self._record_submission(
+            submitted_request_count=len(envelopes),
+            pending_request_count=admitted_pending_request_count,
+        )
+        for envelope in envelopes:
+            self._request_queue.put(envelope)
+        return futures
+
+    def _record_submission(
+        self,
+        *,
+        submitted_request_count: int,
+        pending_request_count: int,
+    ) -> None:
         with self._stats_lock:
-            self._stats = PreparedExactSearchRuntimeStats(
-                submitted_request_count=self._stats.submitted_request_count + 1,
-                completed_request_count=self._stats.completed_request_count,
-                failed_request_count=self._stats.failed_request_count,
-                executed_batch_count=self._stats.executed_batch_count,
-                last_batch_size=self._stats.last_batch_size,
-                max_observed_batch_size=self._stats.max_observed_batch_size,
+            self._stats = replace(
+                self._stats,
+                submitted_request_count=(
+                    self._stats.submitted_request_count + submitted_request_count
+                ),
                 max_observed_queue_depth=max(
                     self._stats.max_observed_queue_depth,
                     pending_request_count,
                 ),
-                total_queue_wait_seconds=self._stats.total_queue_wait_seconds,
-                total_batch_execution_seconds=self._stats.total_batch_execution_seconds,
+                current_pending_request_count=pending_request_count,
+            )
+
+    def _record_rejection(
+        self,
+        *,
+        rejected_request_count: int,
+        current_pending_request_count: int,
+    ) -> None:
+        with self._stats_lock:
+            self._stats = replace(
+                self._stats,
+                rejected_request_count=(
+                    self._stats.rejected_request_count + rejected_request_count
+                ),
+                current_pending_request_count=current_pending_request_count,
             )
 
     def _record_batch(
@@ -459,8 +507,8 @@ class PreparedExactProcessRuntime:
     ) -> None:
         completed_request_count = batch_size - failed_request_count
         with self._stats_lock:
-            self._stats = PreparedExactSearchRuntimeStats(
-                submitted_request_count=self._stats.submitted_request_count,
+            self._stats = replace(
+                self._stats,
                 completed_request_count=(
                     self._stats.completed_request_count + completed_request_count
                 ),
@@ -473,7 +521,6 @@ class PreparedExactProcessRuntime:
                     self._stats.max_observed_batch_size,
                     batch_size,
                 ),
-                max_observed_queue_depth=self._stats.max_observed_queue_depth,
                 total_queue_wait_seconds=(
                     self._stats.total_queue_wait_seconds + queue_wait_seconds
                 ),
@@ -490,7 +537,12 @@ class PreparedExactProcessRuntime:
             future = self._pending_futures.pop(request_id, None)
             if future is not None:
                 self._pending_request_count -= 1
-            return future
+                pending_request_count = self._pending_request_count
+            else:
+                pending_request_count = -1
+        if pending_request_count >= 0:
+            self._record_pending_request_count(pending_request_count)
+        return future
 
     def _set_fatal_exception(self, exc: BaseException) -> None:
         with self._lifecycle_lock:
@@ -506,8 +558,16 @@ class PreparedExactProcessRuntime:
             pending_futures = list(self._pending_futures.values())
             self._pending_futures.clear()
             self._pending_request_count = 0
+        self._record_pending_request_count(0)
         for future in pending_futures:
             future.set_exception(exc)
+
+    def _record_pending_request_count(self, pending_request_count: int) -> None:
+        with self._stats_lock:
+            self._stats = replace(
+                self._stats,
+                current_pending_request_count=pending_request_count,
+            )
 
     def _broadcast_stop_envelopes_locked(self) -> None:
         for _ in self._workers:

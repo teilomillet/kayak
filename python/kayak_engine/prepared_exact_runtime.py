@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .prepared_exact_process_runtime import PreparedExactProcessRuntime
 from .prepared_exact_types import (
+    PreparedExactSearchRuntimeOverloadedError,
     PreparedExactSearchRuntimeConfig,
     PreparedExactSearchRuntimeStats,
     _runtime_config,
@@ -49,6 +50,7 @@ def prepare_exact_search_runtime(
 PreparedExactSearchSchedulerConfig = PreparedExactSearchRuntimeConfig
 PreparedExactSearchSchedulerStats = PreparedExactSearchRuntimeStats
 PreparedExactSearchScheduler = PreparedExactSearchRuntime
+PreparedExactSearchSchedulerOverloadedError = PreparedExactSearchRuntimeOverloadedError
 
 
 def prepare_exact_search_scheduler(

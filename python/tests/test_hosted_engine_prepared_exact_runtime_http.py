@@ -95,11 +95,16 @@ class HostedPreparedExactRuntimeHttpTest(unittest.TestCase):
                 self.assertEqual(runtime["snapshot_id"], "snapshot-0001")
                 self.assertFalse(runtime["load_text_corpus"])
                 self.assertEqual(runtime["config"]["worker_count"], 2)
+                self.assertGreater(
+                    runtime["config"]["max_outstanding_request_count"],
+                    0,
+                )
                 self.assertEqual(
                     runtime["config"]["scoring"]["parallel_work_item_count_override"],
                     2,
                 )
                 self.assertEqual(runtime["stats"]["submitted_request_count"], 0)
+                self.assertEqual(runtime["stats"]["rejected_request_count"], 0)
 
                 status, payload = http_json(
                     "GET",
@@ -191,6 +196,7 @@ class HostedPreparedExactRuntimeHttpTest(unittest.TestCase):
                 self.assertEqual(runtime["stats"]["submitted_request_count"], 3)
                 self.assertEqual(runtime["stats"]["completed_request_count"], 3)
                 self.assertEqual(runtime["stats"]["failed_request_count"], 0)
+                self.assertEqual(runtime["stats"]["rejected_request_count"], 0)
                 self.assertEqual(runtime["stats"]["processed_request_count"], 3)
                 self.assertGreaterEqual(
                     runtime["stats"]["executed_batch_count"],
@@ -379,8 +385,141 @@ class HostedPreparedExactRuntimeHttpTest(unittest.TestCase):
                 self.assertEqual(stats["submitted_request_count"], len(requests))
                 self.assertEqual(stats["completed_request_count"], len(requests))
                 self.assertEqual(stats["failed_request_count"], 0)
+                self.assertEqual(stats["rejected_request_count"], 0)
                 self.assertLess(stats["executed_batch_count"], len(requests))
                 self.assertGreater(stats["max_observed_batch_size"], 1)
+
+    def test_network_prepared_exact_runtime_returns_429_under_overload(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kayak-http-prepared-runtime-overload-") as temp_dir:
+            with HostedEngineServer(Path(temp_dir) / "service-root") as server:
+                for path, payload in (
+                    (
+                        "/v1/collections",
+                        {
+                            "collection_id": "news",
+                            "tenant_id": "tenant-a",
+                            "namespace_id": "search",
+                            "model_name": "colbertv2",
+                            "vector_dim": 2,
+                        },
+                    ),
+                    (
+                        "/v1/documents:upsert",
+                        {
+                            "collection_id": "news",
+                            "tenant_id": "tenant-a",
+                            "namespace_id": "search",
+                            "documents": [
+                                {
+                                    "doc_id": "doc-a",
+                                    "vectors": [[1.0, 0.0], [0.0, 1.0]],
+                                    "text": "alpha evidence document",
+                                },
+                                {
+                                    "doc_id": "doc-b",
+                                    "vectors": [[0.0, 1.0], [1.0, 0.0]],
+                                    "text": "beta evidence document",
+                                },
+                            ],
+                        },
+                    ),
+                    (
+                        "/v1/snapshots",
+                        {
+                            "collection_id": "news",
+                            "tenant_id": "tenant-a",
+                            "namespace_id": "search",
+                            "snapshot_id": "snapshot-0001",
+                            "reason": "publish prepared runtime snapshot",
+                        },
+                    ),
+                ):
+                    status, _payload = http_json(
+                        "POST",
+                        f"{server.base_url}{path}",
+                        payload,
+                    )
+                    self.assertEqual(status, 200)
+
+                status, payload = http_json(
+                    "POST",
+                    f"{server.base_url}/v1/prepared-exact-runtimes",
+                    {
+                        "collection_id": "news",
+                        "tenant_id": "tenant-a",
+                        "namespace_id": "search",
+                        "snapshot_id": "snapshot-0001",
+                        "config": {
+                            "execution_backend": "process",
+                            "concurrency_lane_count": 1,
+                            "worker_count": 1,
+                            "max_batch_size": 8,
+                            "max_batch_wait_ms": 250,
+                            "max_outstanding_request_count": 1,
+                        },
+                    },
+                )
+                self.assertEqual(status, 200)
+                runtime_id = payload["runtime"]["runtime_id"]
+
+                request = {
+                    "query_model_name": "colbertv2",
+                    "query": [[1.0, 0.0], [0.0, 1.0]],
+                    "final_k": 2,
+                }
+
+                barrier = threading.Barrier(3)
+                results: list[tuple[int, dict] | None] = [None, None]
+                failures: list[BaseException] = []
+
+                def run(index: int) -> None:
+                    try:
+                        barrier.wait()
+                        results[index] = http_json(
+                            "POST",
+                            f"{server.base_url}/v1/prepared-exact-search",
+                            {
+                                "runtime_id": runtime_id,
+                                "request": request,
+                            },
+                        )
+                    except BaseException as exc:  # pragma: no cover - surfaced below
+                        failures.append(exc)
+
+                threads = [
+                    threading.Thread(target=run, args=(index,), daemon=True)
+                    for index in range(2)
+                ]
+                for thread in threads:
+                    thread.start()
+                barrier.wait()
+                for thread in threads:
+                    thread.join(timeout=30.0)
+
+                self.assertEqual(failures, [])
+                self.assertTrue(all(result is not None for result in results))
+                populated_results = [result for result in results if result is not None]
+                statuses = sorted(status for status, _payload in populated_results)
+                self.assertEqual(statuses, [200, 429])
+                overloaded_payload = next(
+                    payload
+                    for status, payload in populated_results
+                    if status == 429
+                )
+                self.assertIn("overloaded", overloaded_payload["error"])
+
+                status, payload = http_json(
+                    "POST",
+                    f"{server.base_url}/v1/prepared-exact-runtimes:stats",
+                    {"runtime_id": runtime_id},
+                )
+                self.assertEqual(status, 200)
+                stats = payload["runtime"]["stats"]
+                self.assertEqual(stats["submitted_request_count"], 1)
+                self.assertEqual(stats["rejected_request_count"], 1)
+                self.assertEqual(stats["completed_request_count"], 1)
+                self.assertEqual(stats["failed_request_count"], 0)
+                self.assertEqual(stats["current_pending_request_count"], 0)
 
     def test_network_prepared_exact_runtime_is_invalidated_by_reclaim(self) -> None:
         with tempfile.TemporaryDirectory(prefix="kayak-http-prepared-runtime-reclaim-") as temp_dir:
