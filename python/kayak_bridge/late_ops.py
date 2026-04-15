@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+from .api_types import (
+    DocIdsInput,
+    DocumentMatricesInput,
+    DocOffsetsInput,
+    DocTextsInput,
+    QueryBatchInput,
+    TokenMatrixInput,
+    TokenValuesInput,
+)
 from .backend_info import BackendInfo, available_backends, backend_info
 from .candidate_generator import (
     CandidateGenerator,
@@ -45,17 +54,26 @@ from .search_plan import (
 from .search_stage_profile import SearchStageProfile
 
 
-def query(token_vectors: object, *, text: object | None = None) -> LateQuery:
+def query(
+    token_vectors: TokenMatrixInput,
+    *,
+    text: str | None = None,
+) -> LateQuery:
+    """Build one ``LateQuery`` from a 2D token-vector matrix."""
     return LateQuery.from_vectors(token_vectors, text=text)
 
 
-def query_batch(token_vectors: object) -> LateQueryBatch:
+def query_batch(token_vectors: QueryBatchInput) -> LateQueryBatch:
+    """Build one ``LateQueryBatch`` from a sequence of query matrices."""
     return LateQueryBatch.from_inputs(token_vectors)
 
 
 def flat_query_dim128(
-    token_values: object, *, text: object | None = None
+    token_values: TokenValuesInput,
+    *,
+    text: str | None = None,
 ) -> LateQuery:
+    """Build one flat 128-dimensional query layout directly from values."""
     return LateQuery.from_flat_values(
         token_values,
         vector_dim=FLAT_DIM128_VECTOR_DIM,
@@ -64,21 +82,23 @@ def flat_query_dim128(
 
 
 def documents(
-    doc_ids: object,
-    token_vectors: object,
+    doc_ids: DocIdsInput,
+    token_vectors: DocumentMatricesInput,
     *,
-    texts: object | None = None,
+    texts: DocTextsInput | None = None,
 ) -> LateDocuments:
+    """Build ``LateDocuments`` from document ids and token-level vectors."""
     return LateDocuments.from_inputs(doc_ids, token_vectors, texts=texts)
 
 
 def packed_index(
-    doc_ids: object,
-    doc_offsets: object,
-    token_vectors: object,
+    doc_ids: DocIdsInput,
+    doc_offsets: DocOffsetsInput,
+    token_vectors: TokenMatrixInput,
     *,
-    doc_texts: object | None = None,
+    doc_texts: DocTextsInput | None = None,
 ) -> LateIndex:
+    """Build one packed ``LateIndex`` directly from packed layout fields."""
     return LateIndex.from_packed(
         doc_ids,
         doc_offsets,
@@ -88,12 +108,13 @@ def packed_index(
 
 
 def hybrid_flat_dim128_index(
-    doc_ids: object,
-    doc_offsets: object,
-    token_values: object,
+    doc_ids: DocIdsInput,
+    doc_offsets: DocOffsetsInput,
+    token_values: TokenValuesInput,
     *,
-    doc_texts: object | None = None,
+    doc_texts: DocTextsInput | None = None,
 ) -> LateIndex:
+    """Build one ``hybrid_flat_dim128`` index directly from flat values."""
     return LateIndex.from_hybrid_flat_dim128(
         doc_ids,
         doc_offsets,
@@ -108,6 +129,7 @@ def maxsim(
     *,
     backend: str = NUMPY_REFERENCE_BACKEND,
 ) -> LateScores:
+    """Return exact scores for every document in one index."""
     return maxsim_scores(late_query, late_index, backend=backend)
 
 
@@ -117,6 +139,7 @@ def maxsim_batch(
     *,
     backend: str = NUMPY_REFERENCE_BACKEND,
 ) -> tuple[LateScores, ...]:
+    """Return exact score vectors for every query in one batch."""
     return maxsim_scores_batch(late_query_batch, late_index, backend=backend)
 
 
@@ -127,6 +150,7 @@ def search(
     k: int,
     backend: str = NUMPY_REFERENCE_BACKEND,
 ) -> tuple[SearchHit, ...]:
+    """Return exact top-k hits for one query against one index."""
     if (
         backend == MOJO_EXACT_CPU_BACKEND
         and late_index.layout == "packed"
@@ -154,6 +178,7 @@ def search_batch(
     k: int,
     backend: str = NUMPY_REFERENCE_BACKEND,
 ) -> tuple[tuple[SearchHit, ...], ...]:
+    """Return exact top-k hits for every query in one batch."""
     if (
         backend == MOJO_EXACT_CPU_BACKEND
         and late_index.layout == "packed"
@@ -190,6 +215,7 @@ def generate_candidates(
     k: int,
     backend: str = NUMPY_REFERENCE_BACKEND,
 ) -> CandidateStageResult:
+    """Run the explicit stage-1 candidate generator for one query and index."""
     return late_index.generate_candidates(
         late_query,
         generator,
@@ -205,6 +231,7 @@ def search_with_plan(
     *,
     backend: str = NUMPY_REFERENCE_BACKEND,
 ) -> SearchPlanResult:
+    """Run one explicit staged retrieval plan against one index."""
     return late_index.search_with_plan(
         late_query,
         plan=plan,

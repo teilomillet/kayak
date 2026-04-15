@@ -30,7 +30,7 @@ def main() -> None:
     documents = encoder.encode_documents(
         ["doc-a", "doc-b", "doc-c"],
         [
-            "pixi installs python mojo and kayak together",
+            "one environment keeps python mojo and kayak together",
             "lancedb can keep multivector rows on disk",
             "kayak loads the slice and runs exact late interaction search",
         ],

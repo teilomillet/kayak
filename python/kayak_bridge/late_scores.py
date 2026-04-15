@@ -17,12 +17,16 @@ except ImportError:  # pragma: no cover - torch is present in the managed env.
 
 @dataclass(frozen=True, slots=True)
 class SearchHit:
+    """One stable `(doc_id, score)` retrieval result."""
+
     doc_id: str
     score: float
 
 
 @dataclass(frozen=True, slots=True)
 class LateScores:
+    """Exact score values aligned to one ordered document id sequence."""
+
     backend: str
     doc_ids: tuple[str, ...]
     values: np.ndarray
@@ -34,14 +38,17 @@ class LateScores:
             raise ValueError("scores and doc_ids must have matching lengths")
 
     def numpy(self) -> np.ndarray:
+        """Return the score values as a NumPy array."""
         return self.values
 
     def torch(self) -> "torch.Tensor":
+        """Return the score values as a torch tensor."""
         if torch is None:  # pragma: no cover - torch is present in the env.
             raise RuntimeError("torch is not installed")
         return torch.tensor(self.values, dtype=torch.float32)
 
     def topk(self, k: int) -> tuple[SearchHit, ...]:
+        """Return the top-k hits ordered by descending score."""
         if k < 0:
             raise ValueError("top-k requires a non-negative k")
         if k == 0:
@@ -69,6 +76,7 @@ class LateScores:
     def from_values(
         cls, backend: str, doc_ids: tuple[str, ...], values: np.ndarray
     ) -> "LateScores":
+        """Build one immutable score vector from aligned ids and values."""
         return cls(
             backend=backend,
             doc_ids=doc_ids,

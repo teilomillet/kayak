@@ -12,6 +12,8 @@ REFERENCE_SCORING_SCORE_KIND_EXACT = "exact_score"
 
 @dataclass(frozen=True, slots=True)
 class ReferenceScoringSemantics:
+    """Declares the exact scoring semantics used by a search-plan stage."""
+
     kind: str
     family: str = field(init=False)
     required_artifact_families: tuple[str, ...] = field(init=False)
@@ -39,4 +41,5 @@ class ReferenceScoringSemantics:
 
 def exact_late_interaction_reference_scoring_semantics(
 ) -> ReferenceScoringSemantics:
+    """Return the exact late-interaction reference scoring semantics."""
     return ReferenceScoringSemantics("exact_late_interaction")

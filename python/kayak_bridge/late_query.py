@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .api_types import TokenMatrixInput, TokenValuesInput
 from .array_conversions import (
     flatten_vector_matrix,
     reshape_flat_values,
@@ -19,6 +20,8 @@ from .layouts import QUERY_LAYOUT_FLAT_DIM128, QUERY_LAYOUT_NESTED
 
 @dataclass(frozen=True, slots=True)
 class LateQuery:
+    """One explicit late-interaction query in nested or flat-dim128 layout."""
+
     layout: str
     vector_dim: int
     vector_count: int
@@ -28,8 +31,12 @@ class LateQuery:
 
     @classmethod
     def from_vectors(
-        cls, token_vectors: object, *, text: object | None = None
+        cls,
+        token_vectors: TokenMatrixInput,
+        *,
+        text: str | None = None,
     ) -> "LateQuery":
+        """Build one nested-layout query from a 2D token-vector matrix."""
         matrix = to_vector_matrix(token_vectors, "query")
         return cls(
             layout=QUERY_LAYOUT_NESTED,
@@ -42,11 +49,12 @@ class LateQuery:
     @classmethod
     def from_flat_values(
         cls,
-        token_values: object,
+        token_values: TokenValuesInput,
         *,
         vector_dim: int,
-        text: object | None = None,
+        text: str | None = None,
     ) -> "LateQuery":
+        """Build one `flat_dim128` query from flat values and explicit dimension."""
         values = to_flat_vector_values(token_values, "flat query")
         if vector_dim != FLAT_DIM128_VECTOR_DIM:
             raise ValueError("flat_dim128 query requires vector_dim=128")
@@ -92,6 +100,7 @@ class LateQuery:
         return (self.vector_count, self.vector_dim)
 
     def to_layout(self, layout: str) -> "LateQuery":
+        """Convert this query into another supported public layout."""
         if layout == self.layout:
             return self
         if layout == QUERY_LAYOUT_NESTED:
@@ -104,7 +113,8 @@ class LateQuery:
             )
         raise ValueError(f"unsupported query layout: {layout}")
 
-    def with_text(self, text: object | None) -> "LateQuery":
+    def with_text(self, text: str | None) -> "LateQuery":
+        """Return the same query vectors with replaced optional query text."""
         if self.layout == QUERY_LAYOUT_NESTED:
             return LateQuery.from_vectors(self.as_vector_matrix(), text=text)
         return LateQuery.from_flat_values(
@@ -114,6 +124,7 @@ class LateQuery:
         )
 
     def as_vector_matrix(self) -> np.ndarray:
+        """Return this query as a 2D token-vector matrix."""
         if self.layout == QUERY_LAYOUT_NESTED:
             assert self.token_vectors is not None
             return self.token_vectors
@@ -122,6 +133,7 @@ class LateQuery:
         return reshape_flat_values(self.token_values, self.vector_dim)
 
     def as_flat_values(self) -> np.ndarray:
+        """Return this query as one flat dim128 value buffer."""
         if self.layout == QUERY_LAYOUT_FLAT_DIM128:
             assert self.token_values is not None
             return self.token_values

@@ -22,7 +22,15 @@ from .metadata import normalize_metadata_filter, normalize_metadata_rows
 
 
 class LanceDBLateStore:
-    """Persists late-interaction documents in LanceDB row storage."""
+    """Persist late-interaction documents in LanceDB row storage.
+
+    Parameters
+    ----------
+    path:
+        LanceDB database directory.
+    table_name:
+        Table used to store one row per document with the full token matrix.
+    """
 
     def __init__(
         self,
@@ -42,6 +50,16 @@ class LanceDBLateStore:
             supports_document_subset_load=True,
             supported_layouts=("packed", "hybrid_flat_dim128"),
         )
+
+    def close(self) -> None:
+        """This store opens database handles on demand and does not keep one alive."""
+
+    def __enter__(self) -> "LanceDBLateStore":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        del exc_type, exc, tb
+        self.close()
 
     def stats(self) -> LateStoreStats:
         table = self._open_table()

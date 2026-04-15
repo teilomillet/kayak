@@ -7,18 +7,26 @@ This package owns the stable storage contract for Python users:
 """
 
 from .base import LateStore, LateStoreStats, StoreCapabilities
+from .chromadb_store import ChromaLateStore
 from .directory import DirectoryLateStore
 from .lancedb_store import LanceDBLateStore
 from .memory import MemoryLateStore
+from .pgvector_store import PgVectorLateStore
+from .qdrant_store import QdrantLateStore
 from .registry import open_store, register_store
+from .weaviate_store import WeaviateLateStore
 
 __all__ = [
+    "ChromaLateStore",
     "DirectoryLateStore",
     "LanceDBLateStore",
     "LateStore",
     "LateStoreStats",
     "MemoryLateStore",
+    "PgVectorLateStore",
+    "QdrantLateStore",
     "StoreCapabilities",
+    "WeaviateLateStore",
     "open_store",
     "register_store",
 ]

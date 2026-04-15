@@ -12,6 +12,8 @@ STAGE2_REFERENCE_REQUIRED_ARTIFACT_LATE_INTERACTION = "late_interaction"
 
 @dataclass(frozen=True, slots=True)
 class Stage2ReferenceOperator:
+    """Declares how stage 2 reranks or truncates candidate hits."""
+
     kind: str
     family: str = field(init=False)
     required_artifact_families: tuple[str, ...] = field(init=False)
@@ -46,9 +48,11 @@ class Stage2ReferenceOperator:
 
 
 def noop_topk_stage2_reference_operator() -> Stage2ReferenceOperator:
+    """Return the identity stage-2 operator that only truncates to top-k."""
     return Stage2ReferenceOperator("noop_topk")
 
 
 def exact_late_interaction_stage2_reference_operator(
 ) -> Stage2ReferenceOperator:
+    """Return the exact late-interaction stage-2 reranking operator."""
     return Stage2ReferenceOperator("exact_late_interaction")

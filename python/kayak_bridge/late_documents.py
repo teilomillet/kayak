@@ -6,11 +6,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .api_types import DocIdsInput, DocumentMatricesInput, DocTextsInput
 from .array_conversions import to_doc_ids, to_document_matrices, to_optional_doc_texts
 
 
 @dataclass(frozen=True, slots=True)
 class LateDocuments:
+    """One ragged batch of document token matrices before index packing."""
+
     doc_ids: tuple[str, ...]
     token_matrices: tuple[np.ndarray, ...]
     vector_dim: int
@@ -21,10 +24,10 @@ class LateDocuments:
     @classmethod
     def from_inputs(
         cls,
-        doc_ids: object,
-        token_vectors: object,
+        doc_ids: DocIdsInput,
+        token_vectors: DocumentMatricesInput,
         *,
-        texts: object | None = None,
+        texts: DocTextsInput | None = None,
     ) -> "LateDocuments":
         normalized_doc_ids = to_doc_ids(doc_ids, "documents")
         matrices = to_document_matrices(token_vectors, "documents")
@@ -72,6 +75,7 @@ class LateDocuments:
         return tuple(int(matrix.shape[0]) for matrix in self.token_matrices)
 
     def pack(self) -> "LateIndex":
+        """Pack ragged document matrices into one searchable packed index."""
         from .late_index import LateIndex
 
         doc_offsets = [0]
@@ -89,9 +93,11 @@ class LateDocuments:
         )
 
     def to_layout(self, layout: str) -> "LateIndex":
+        """Pack these documents and convert the result into the requested layout."""
         return self.pack().to_layout(layout)
 
-    def with_texts(self, texts: object | None) -> "LateDocuments":
+    def with_texts(self, texts: DocTextsInput | None) -> "LateDocuments":
+        """Return the same document vectors with replaced optional texts."""
         return LateDocuments.from_inputs(
             self.doc_ids,
             self.token_matrices,

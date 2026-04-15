@@ -18,6 +18,8 @@ from .mojo_exact_cpu import _detect_mojo_command
 
 @dataclass(frozen=True, slots=True)
 class BackendInfo:
+    """Capability and availability facts for one public backend name."""
+
     name: str
     available: bool
     requires_mojo: bool
@@ -36,6 +38,7 @@ def _mojo_backend_availability_reason() -> str:
 
 
 def backend_info(name: str) -> BackendInfo:
+    """Return capability and availability metadata for one backend name."""
     query_layouts = (QUERY_LAYOUT_NESTED, QUERY_LAYOUT_FLAT_DIM128)
     index_layouts = (INDEX_LAYOUT_PACKED, INDEX_LAYOUT_HYBRID_FLAT_DIM128)
 
@@ -64,6 +67,7 @@ def backend_info(name: str) -> BackendInfo:
 
 
 def available_backends() -> tuple[str, ...]:
+    """Return the backend names available in the current runtime."""
     names = [NUMPY_REFERENCE_BACKEND]
     if backend_info(MOJO_EXACT_CPU_BACKEND).available:
         names.append(MOJO_EXACT_CPU_BACKEND)

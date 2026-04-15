@@ -27,6 +27,8 @@ from .stage3_verifier_operator import (
 
 @dataclass(frozen=True, slots=True)
 class SearchPlan:
+    """One explicit staged retrieval plan from candidate generation to verifier."""
+
     candidate_generator: CandidateGenerator
     final_k: int
     candidate_k: int
@@ -71,6 +73,7 @@ def exact_full_scan_search_plan(
     stage2_reference_operator: Stage2ReferenceOperator | None = None,
     stage3_verifier: Stage3VerifierOperator | None = None,
 ) -> SearchPlan:
+    """Build the exact full-scan correctness baseline plan."""
     effective_candidate_k = final_k if candidate_k is None else candidate_k
     (
         reference_scoring_semantics,
@@ -98,6 +101,7 @@ def exact_full_scan_search_plan(
 def exact_full_scan_clause_text_search_plan(
     final_k: int, *, candidate_k: int | None = None
 ) -> SearchPlan:
+    """Build an exact full-scan plan with clause-text verification enabled."""
     return exact_full_scan_search_plan(
         final_k,
         candidate_k=candidate_k,
@@ -114,6 +118,7 @@ def document_proxy_search_plan(
     stage2_reference_operator: Stage2ReferenceOperator | None = None,
     stage3_verifier: Stage3VerifierOperator | None = None,
 ) -> SearchPlan:
+    """Build a proxy-candidate plus exact-rerank staged retrieval plan."""
     (
         reference_scoring_semantics,
         effective_stage2_reference_operator,

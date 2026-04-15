@@ -53,7 +53,17 @@ class _DirectoryManifest:
 
 
 class DirectoryLateStore:
-    """Persists late-interaction documents as one local packed snapshot."""
+    """Persist late-interaction documents as one local packed snapshot.
+
+    Parameters
+    ----------
+    path:
+        Root directory used to store the manifest, offsets, vectors, optional
+        texts, and optional metadata.
+
+    Use this when you want a built-in persistent store without an external
+    database service.
+    """
 
     def __init__(self, path: str | Path) -> None:
         self._root = Path(path)
@@ -74,6 +84,16 @@ class DirectoryLateStore:
             supports_document_subset_load=True,
             supported_layouts=("packed", "hybrid_flat_dim128"),
         )
+
+    def close(self) -> None:
+        """Directory stores do not own live resources beyond the filesystem."""
+
+    def __enter__(self) -> "DirectoryLateStore":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        del exc_type, exc, tb
+        self.close()
 
     def stats(self) -> LateStoreStats:
         return LateStoreStats(

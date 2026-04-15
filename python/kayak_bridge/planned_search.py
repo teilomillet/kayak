@@ -19,6 +19,8 @@ from .stage3_verifier_operator import STAGE3_REQUIRED_ARTIFACT_DOCUMENT_TEXT
 
 @dataclass(frozen=True, slots=True)
 class SearchPlanResult:
+    """One executed search plan result with per-stage outputs and final hits."""
+
     plan: SearchPlan
     candidate_stage: CandidateStageResult
     candidate_index: "LateIndex | None"

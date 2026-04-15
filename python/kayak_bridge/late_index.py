@@ -6,6 +6,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .api_types import (
+    DocIdsInput,
+    DocOffsetsInput,
+    DocTextsInput,
+    TokenMatrixInput,
+    TokenValuesInput,
+)
 from .array_conversions import (
     flatten_vector_matrix,
     reshape_flat_values,
@@ -26,6 +33,8 @@ from .layouts import (
 
 @dataclass(frozen=True, slots=True)
 class LateIndex:
+    """One searchable late-interaction index with an explicit storage layout."""
+
     layout: str
     doc_ids: tuple[str, ...]
     doc_offsets: np.ndarray
@@ -39,11 +48,11 @@ class LateIndex:
     @classmethod
     def from_packed(
         cls,
-        doc_ids: object,
-        doc_offsets: object,
-        token_vectors: object,
+        doc_ids: DocIdsInput,
+        doc_offsets: DocOffsetsInput,
+        token_vectors: TokenMatrixInput,
         *,
-        doc_texts: object | None = None,
+        doc_texts: DocTextsInput | None = None,
     ) -> "LateIndex":
         normalized_doc_ids = to_doc_ids(doc_ids, "packed index")
         offsets = to_index_offsets(
@@ -70,11 +79,11 @@ class LateIndex:
     @classmethod
     def from_hybrid_flat_dim128(
         cls,
-        doc_ids: object,
-        doc_offsets: object,
-        token_values: object,
+        doc_ids: DocIdsInput,
+        doc_offsets: DocOffsetsInput,
+        token_values: TokenValuesInput,
         *,
-        doc_texts: object | None = None,
+        doc_texts: DocTextsInput | None = None,
     ) -> "LateIndex":
         normalized_doc_ids = to_doc_ids(doc_ids, "hybrid flat index")
         offsets = to_index_offsets(
@@ -152,6 +161,7 @@ class LateIndex:
         )
 
     def as_packed_token_matrix(self) -> np.ndarray:
+        """Return this index as one packed 2D token-vector matrix."""
         if self.layout == INDEX_LAYOUT_PACKED:
             assert self.token_vectors is not None
             return self.token_vectors
@@ -160,6 +170,7 @@ class LateIndex:
         return reshape_flat_values(self.token_values, self.vector_dim)
 
     def as_flat_token_values(self) -> np.ndarray:
+        """Return this index as one flat dim128 value buffer."""
         if self.layout == INDEX_LAYOUT_HYBRID_FLAT_DIM128:
             assert self.token_values is not None
             return self.token_values
@@ -170,6 +181,7 @@ class LateIndex:
         return flatten_vector_matrix(self.token_vectors)
 
     def to_layout(self, layout: str) -> "LateIndex":
+        """Convert this index into another supported public layout."""
         if layout == self.layout:
             return self
         if layout == INDEX_LAYOUT_PACKED:
@@ -189,6 +201,7 @@ class LateIndex:
         raise ValueError(f"unsupported index layout: {layout}")
 
     def document_token_matrix(self, document_index: int) -> np.ndarray:
+        """Return the token matrix for one document position in this index."""
         if document_index < 0 or document_index >= self.document_count:
             raise IndexError("document index out of range")
 
@@ -196,7 +209,8 @@ class LateIndex:
         stop = int(self.doc_offsets[document_index + 1])
         return self.as_packed_token_matrix()[start:stop]
 
-    def select(self, doc_ids: object) -> "LateIndex":
+    def select(self, doc_ids: DocIdsInput) -> "LateIndex":
+        """Return a smaller index containing only the requested document ids."""
         selected_doc_ids = to_doc_ids(doc_ids, "selected index doc_ids")
         positions = {doc_id: index for index, doc_id in enumerate(self.doc_ids)}
         selected_offsets = [0]
@@ -225,7 +239,8 @@ class LateIndex:
         )
         return selected_index.to_layout(self.layout)
 
-    def with_texts(self, doc_texts: object | None) -> "LateIndex":
+    def with_texts(self, doc_texts: DocTextsInput | None) -> "LateIndex":
+        """Return the same index data with replaced optional document texts."""
         if self.layout == INDEX_LAYOUT_PACKED:
             return LateIndex.from_packed(
                 self.doc_ids,
@@ -243,6 +258,7 @@ class LateIndex:
     def maxsim(
         self, query: "LateQuery", *, backend: str = NUMPY_REFERENCE_BACKEND
     ) -> "LateScores":
+        """Return exact scores for one query against this index."""
         from .backend_dispatch import maxsim_scores
 
         return maxsim_scores(query, self, backend=backend)
@@ -255,6 +271,7 @@ class LateIndex:
         k: int,
         backend: str = NUMPY_REFERENCE_BACKEND,
     ) -> "CandidateStageResult":
+        """Run one explicit candidate generator against this index."""
         from .candidate_stage import generate_candidates
 
         return generate_candidates(query, self, generator, k=k, backend=backend)

@@ -19,6 +19,8 @@ from .search_stage_profile import SearchStageProfile
 
 @dataclass(frozen=True, slots=True)
 class CandidateStageResult:
+    """Scores, hits, and profile emitted by one candidate-generation stage."""
+
     generator: CandidateGenerator
     scores: LateScores
     hits: tuple[SearchHit, ...]

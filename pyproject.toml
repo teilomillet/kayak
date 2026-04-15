@@ -255,4 +255,5 @@ where = ["python"]
 include = ["kayak", "kayak.*", "kayak_bridge", "kayak_bridge.*"]
 
 [tool.setuptools.package-data]
+kayak = ["py.typed"]
 kayak_bridge = ["*.mojo", "_artifacts/*.json", "_artifacts/*.mojopkg"]

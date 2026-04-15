@@ -29,6 +29,37 @@ the parts that matter in late interaction:
 - layout stays explicit
 - backend choice stays explicit
 
+If you are coding at a REPL, in a notebook, or inside an editor console, start
+with:
+
+```python
+import kayak
+
+print(kayak.help())
+print(kayak.help("search"))
+print(kayak.help("search_text"))
+print(kayak.help("typing"))
+print(kayak.help("TokenMatrixInput"))
+print(kayak.help("mojo"))
+print(kayak.help("stores"))
+print(kayak.help(kayak.LateTextRetriever))
+```
+
+That help text is generated from the current public API, signatures, and
+docstrings instead of a separate handwritten help registry.
+
+If you prefer normal Python introspection in an editor or REPL, the same
+descriptions are available through public docstrings:
+
+```python
+import inspect
+import kayak
+
+print(inspect.signature(kayak.open_text_retriever))
+print(inspect.getdoc(kayak.open_text_retriever))
+print(inspect.getdoc(kayak.LateTextRetriever.search_text))
+```
+
 For the higher-level product positioning and the split between the open Python
 SDK and the hosted engine, see
 [docs/python_sdk_charter.md](../../docs/python_sdk_charter.md).
@@ -37,16 +68,18 @@ For the execution plan behind that position, see
 
 ## Install
 
-With pip:
-
-```bash
-pip install kayak
-```
+Install the SDK with any Python package manager:
 
 With UV:
 
 ```bash
 uv add kayak
+```
+
+With pip:
+
+```bash
+pip install kayak
 ```
 
 With Pixi and PyPI:
@@ -57,7 +90,15 @@ pixi add --pypi kayak
 
 ## Optional Mojo Backend
 
-The default Python SDK path uses the NumPy reference backend.
+The default low-level Python SDK path uses the NumPy reference backend.
+
+If you want the Mojo backend, the actual requirement is simple:
+
+- install `kayak`
+- make a usable `mojo` CLI visible to Kayak
+
+If no usable `mojo` CLI is visible, the package still works and stays on
+`kayak.NUMPY_REFERENCE_BACKEND`.
 
 The Python package does not expose a separate "Mojo-mode" import surface.
 You still write normal Python:
@@ -71,9 +112,9 @@ You only need Mojo if you want the explicit exact CPU Mojo backend:
 Examples:
 
 ```bash
-# global or activated environment
-pip install kayak
+# any environment where mojo is already installed and discoverable
 mojo --version
+uv add kayak
 ```
 
 ```bash
@@ -93,8 +134,16 @@ scores = kayak.maxsim(
 )
 ```
 
-Kayak does not silently switch to the Mojo backend just because Mojo is
-installed. The backend choice stays explicit.
+Low-level operations do not silently switch to the Mojo backend just because
+Mojo is installed. The backend choice stays explicit there.
+
+The high-level `open_text_retriever(...)` workflow is different: it prefers
+`kayak.MOJO_EXACT_CPU_BACKEND` automatically when the backend is actually
+available.
+
+Pixi is one easy way to create a Mojo-capable environment, but it is not a
+requirement. UV, pip, or another environment manager work too if Kayak can find
+the `mojo` CLI.
 
 If you are running inside an activated virtual environment or `pixi run
 python`, Kayak first checks that active Python environment for a usable `mojo`
@@ -121,6 +170,13 @@ Kayak wheels bundle the Mojo backend they were built with. If a
 Kayak's public core remains vector-first, but the SDK now exposes a small text
 encoder contract for the common "I start from text" path.
 
+There are two main user paths:
+
+1. use the built-in ColBERT encoder when your checkpoint is already a ColBERT
+   model on Hugging Face
+2. use the callable encoder when you already have your own model methods and
+   just want Kayak to wrap them into late-interaction objects
+
 Use the first-party ColBERT encoder when you want a ready-made text path:
 
 ```python
@@ -128,20 +184,23 @@ import kayak
 
 encoder = kayak.open_encoder("colbert", model_name="colbert-ir/colbertv2.0")
 
-query = encoder.encode_query("what tool installs Python and Mojo together?")
+query = encoder.encode_query("what keeps python mojo and kayak together?")
 documents = encoder.encode_documents(
     ["doc-a", "doc-b"],
     [
-        "Pixi can create one environment with Python, Mojo, and kayak.",
-        "uv add kayak installs the Python package but not the Mojo CLI.",
+        "One environment can keep Python, Mojo, and kayak together.",
+        "Installing kayak alone adds the Python package but not the Mojo CLI.",
     ],
 )
 index = documents.pack()
 hits = kayak.search(query, index, k=2)
 ```
 
+`model_name` is the Hugging Face repo id for the ColBERT checkpoint.
+
 Use `CallableLateTextEncoder` when you already have your own text-to-token-vector
-functions and only want them adapted to Kayak's public late-interaction types:
+functions or model methods and only want them adapted to Kayak's public
+late-interaction types:
 
 ```python
 import kayak
@@ -152,15 +211,72 @@ encoder = kayak.CallableLateTextEncoder(
 )
 ```
 
+That includes model-backed call sites such as:
+
+```python
+encoder = kayak.open_encoder(
+    "callable",
+    query_encoder=my_model.encode_query_tokens,
+    document_encoder=my_model.encode_document_tokens,
+)
+```
+
+That is the intended path for non-ColBERT Hugging Face or custom models today.
+
 The contract stays narrow:
 - `encode_query(text)`
 - `encode_document_vectors(text)`
 - `encode_documents(doc_ids, texts)`
 
+If you are wrapping your own model, use the stable public typing aliases in
+`kayak.typing` instead of importing types from the internal bridge package:
+
+```python
+from kayak.typing import DocIdsInput, DocTextsInput, TokenMatrixInput
+
+
+class MyLateInteractionModel:
+    def encode_query_tokens(self, text: str) -> TokenMatrixInput:
+        ...
+
+    def encode_document_tokens(self, text: str) -> TokenMatrixInput:
+        ...
+
+
+def encode_documents(
+    model: MyLateInteractionModel,
+    doc_ids: DocIdsInput,
+    texts: DocTextsInput,
+) -> list[TokenMatrixInput]:
+    return [model.encode_document_tokens(str(text)) for text in texts]
+```
+
+That keeps editor help and annotations on the stable `kayak` public surface.
+The same aliases are available in generated help:
+
+```python
+import kayak
+
+print(kayak.help("typing"))
+print(kayak.help("TokenMatrixInput"))
+```
+
+Current encoder behavior is intentionally simple:
+- one query text at a time
+- one document text at a time
+
+If your model already has its own efficient batching path, keep that batching in
+your wrapper and adapt it to Kayak through the callable encoder.
+
 The factory is intentionally small:
 - `open_encoder("colbert", model_name=...)`
 - `open_encoder("callable", query_encoder=..., document_encoder=...)`
 - `register_encoder(...)`
+
+Examples:
+
+- [`python/examples/colbert_hf_encoder.py`](../examples/colbert_hf_encoder.py)
+- [`python/examples/byo_model_encoder.py`](../examples/byo_model_encoder.py)
 
 ## Text Retrievers
 
@@ -211,18 +327,32 @@ The retriever keeps the lower-level pieces injectable:
 - pass your own store object
 - or open both from the public factories
 
+For most users this is the best mental model:
+
+1. choose one encoder
+2. choose one store
+3. let the retriever own text ingest plus search
+
 The high-level contract stays narrow:
 - `upsert_texts(doc_ids, texts, metadata=None)`
 - `delete(doc_ids)`
+- `close()`
 - `load_index(...)`
 - `search_text(...)`
 - `search_query(...)`
+- `search_text_batch(...)`
+- `search_query_batch(...)`
 - `search_text_with_plan(...)`
 - `search_query_with_plan(...)`
 
 Use this when you want one object for normal text workflows.
 Use raw encoders, stores, and `LateIndex` objects when you want lower-level
 control over each step.
+
+For repeated traffic against one stable slice:
+- use `retriever.load_index(...)` when you want a reusable exact `LateIndex`
+- use `retriever.search_text_batch(...)` when the queries still start as text
+- use raw `query_batch(...)` and `search_batch(...)` when you already own the encoded queries
 
 ## Stores
 
@@ -264,6 +394,14 @@ store.upsert(documents)
 index = store.load_index()
 ```
 
+Optional database client packages stay separate from the core SDK:
+
+- `uv add lancedb pyarrow` or `pixi add --pypi lancedb pyarrow`
+- `uv add "psycopg[binary]" pgvector` or `pixi add --pypi "psycopg[binary]" pgvector`
+- `uv add qdrant-client` or `pixi add --pypi qdrant-client`
+- `uv add weaviate-client` or `pixi add --pypi weaviate-client`
+- `uv add chromadb` or `pixi add --pypi chromadb`
+
 Use `open_store("lancedb", ...)` when you want Kayak to materialize search-ready
 indexes from a LanceDB table while keeping persistence in the database:
 
@@ -279,10 +417,62 @@ store.upsert(documents, metadata=metadata_rows)
 index = store.load_index(where={"topic": "installation"}, include_text=True)
 ```
 
+Use the same store contract when your system of record is Postgres with
+pgvector, Qdrant, Weaviate, or Chroma:
+
+```python
+pgvector_store = kayak.open_store(
+    "pgvector",
+    dsn="postgresql://postgres:postgres@127.0.0.1:5432/postgres",
+    table_name="docs",
+)
+
+qdrant_store = kayak.open_store(
+    "qdrant",
+    client=my_qdrant_client,
+    collection_name="docs",
+)
+
+weaviate_store = kayak.open_store(
+    "weaviate",
+    client=my_weaviate_client,
+    collection_name="Doc",
+    vector_name="colbert",
+)
+
+chroma_store = kayak.open_store(
+    "chromadb",
+    client=my_chroma_client,
+    collection_name="docs",
+)
+
+for store in (pgvector_store, qdrant_store, weaviate_store, chroma_store):
+    store.upsert(documents, metadata=metadata_rows)
+    index = store.load_index(where={"topic": "installation"}, include_text=True)
+```
+
+Prefer the context-manager form for stores that may own client resources:
+
+```python
+with kayak.open_store("qdrant", client=my_qdrant_client, collection_name="docs") as store:
+    store.upsert(documents, metadata=metadata_rows)
+    index = store.load_index(include_text=True)
+```
+
+Store-specific filtering semantics are factual, not interchangeable:
+- PgVector pushes simple scalar `where=` filters into Postgres JSONB
+- Qdrant pushes simple scalar `where=` filters into Qdrant
+- Chroma pushes simple scalar `where=` filters into Chroma
+- Weaviate currently filters after collection iteration in the public adapter
+- LanceDB currently filters after Arrow materialization in the public adapter
+- PgVector stores the exact token matrix natively in Postgres as `vector(dim)[]`
+- Chroma stores one pooled dense vector per document plus the exact token matrix in metadata
+
 The store contract is intentionally narrow:
 - `upsert(...)`
 - `delete(...)`
 - `load_index(...)`
+- `close()`
 - `stats()`
 - `capabilities()`
 
@@ -290,6 +480,10 @@ The factory is intentionally small:
 - `open_store("kayak", path=...)`
 - `open_store("memory")`
 - `open_store("lancedb", path=..., table_name=...)`
+- `open_store("pgvector", dsn=... | connection=..., table_name=..., schema_name=...)`
+- `open_store("qdrant", client=... | path=..., collection_name=...)`
+- `open_store("weaviate", client=... | persistence_path=..., collection_name=..., vector_name=...)`
+- `open_store("chromadb", client=... | path=..., collection_name=...)`
 - `register_store(...)`
 
 ## Core API

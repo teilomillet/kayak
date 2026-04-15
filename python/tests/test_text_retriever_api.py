@@ -93,6 +93,34 @@ class LateTextRetrieverApiTests(unittest.TestCase):
         self.assertEqual(index.doc_texts, ("lancedb storage kayak",))
         self.assertEqual(hits[0].doc_id, "doc-storage")
 
+    def test_search_text_batch_matches_individual_search(self) -> None:
+        retriever = self._open_retriever(backend=kayak.NUMPY_REFERENCE_BACKEND)
+        retriever.upsert_texts(
+            ["doc-install", "doc-storage", "doc-search"],
+            [
+                "pixi mojo install kayak",
+                "lancedb storage kayak",
+                "kayak search mojo",
+            ],
+            metadata=[
+                {"topic": "install"},
+                {"topic": "storage"},
+                {"topic": "search"},
+            ],
+        )
+
+        expected = (
+            retriever.search_text("pixi install", k=1),
+            retriever.search_text("storage kayak", k=1),
+            retriever.search_text("search mojo", k=1),
+        )
+        actual = retriever.search_text_batch(
+            ["pixi install", "storage kayak", "search mojo"],
+            k=1,
+        )
+
+        self.assertEqual(actual, expected)
+
     def test_search_text_with_exact_full_scan_plan_reports_noop_stage2(self) -> None:
         retriever = self._open_retriever(backend=kayak.NUMPY_REFERENCE_BACKEND)
         retriever.upsert_texts(
@@ -188,6 +216,31 @@ class LateTextRetrieverApiTests(unittest.TestCase):
         retriever = self._open_retriever(backend=kayak.NUMPY_REFERENCE_BACKEND)
 
         self.assertEqual(retriever.default_backend, kayak.NUMPY_REFERENCE_BACKEND)
+
+    def test_retriever_context_manager_closes_owned_store(self) -> None:
+        class _ClosingStore(kayak.MemoryLateStore):
+            def __init__(self) -> None:
+                super().__init__()
+                self.closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        store = _ClosingStore()
+        retriever = kayak.open_text_retriever(
+            encoder="callable",
+            store=store,
+            encoder_kwargs={
+                "query_encoder": _token_vectors,
+                "document_encoder": _token_vectors,
+            },
+            backend=kayak.NUMPY_REFERENCE_BACKEND,
+        )
+
+        with retriever as entered:
+            self.assertIs(entered.store, store)
+
+        self.assertTrue(store.closed)
 
 
 if __name__ == "__main__":

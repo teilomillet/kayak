@@ -30,6 +30,9 @@ class PythonSdkDocsContractTests(unittest.TestCase):
         self.assertIn("docs/python_sdk_roadmap.md", root_readme)
         self.assertIn("docs/python_sdk_charter.md", package_readme)
         self.assertIn("docs/python_sdk_roadmap.md", package_readme)
+        self.assertIn("kayak.typing", package_readme)
+        self.assertIn('kayak.help("typing")', package_readme)
+        self.assertIn('kayak.help("TokenMatrixInput")', package_readme)
         self.assertIn("python_sdk_charter.md", sdk_doc)
         self.assertIn("python_sdk_roadmap.md", sdk_doc)
 

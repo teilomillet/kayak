@@ -12,6 +12,8 @@ STAGE3_REQUIRED_ARTIFACT_DOCUMENT_TEXT = "document_text"
 
 @dataclass(frozen=True, slots=True)
 class Stage3VerifierOperator:
+    """Declares how stage 3 verifies or adjusts stage-2 results."""
+
     kind: str
     family: str = field(init=False)
     required_artifact_families: tuple[str, ...] = field(init=False)
@@ -40,8 +42,10 @@ class Stage3VerifierOperator:
 
 
 def none_stage3_verifier_operator() -> Stage3VerifierOperator:
+    """Return the no-op stage-3 verifier."""
     return Stage3VerifierOperator("none")
 
 
 def clause_text_stage3_verifier_operator() -> Stage3VerifierOperator:
+    """Return the text-aware clause verifier for stage 3."""
     return Stage3VerifierOperator("clause_text")

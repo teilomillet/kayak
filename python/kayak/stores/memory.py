@@ -27,7 +27,11 @@ class _StoredDocument:
 
 
 class MemoryLateStore:
-    """Stores late-interaction documents in process memory."""
+    """Store late-interaction documents in process memory.
+
+    Use this for tests, notebooks, small in-process experiments, or when you
+    want zero external storage dependencies.
+    """
 
     def __init__(self) -> None:
         self._records: dict[str, _StoredDocument] = {}
@@ -41,6 +45,16 @@ class MemoryLateStore:
             supports_document_subset_load=True,
             supported_layouts=("packed", "hybrid_flat_dim128"),
         )
+
+    def close(self) -> None:
+        """Memory stores do not own external resources."""
+
+    def __enter__(self) -> "MemoryLateStore":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        del exc_type, exc, tb
+        self.close()
 
     def stats(self) -> LateStoreStats:
         document_count = len(self._order)

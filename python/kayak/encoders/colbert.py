@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 import warnings
@@ -11,6 +10,7 @@ from colbert.infra.config import ColBERTConfig
 from colbert.modeling.checkpoint import Checkpoint
 import torch
 
+from kayak_bridge.api_types import DocIdsInput, DocTextsInput, TokenMatrixInput
 from kayak_bridge import LateDocuments, LateQuery, documents, query
 
 
@@ -52,24 +52,38 @@ def _tensor_to_vectors(tensor: torch.Tensor) -> list[list[float]]:
 
 @dataclass(frozen=True, slots=True)
 class ColBERTTextEncoder:
-    """Encodes text with a ColBERT checkpoint into late-interaction objects."""
+    """Encode text with a ColBERT checkpoint into late-interaction objects.
+
+    Parameters
+    ----------
+    model_name:
+        Hugging Face repo id for the ColBERT checkpoint to load.
+    checkpoint:
+        Optional prebuilt ColBERT checkpoint object. When provided, Kayak uses
+        it directly instead of loading ``model_name``.
+    gpus:
+        ColBERT runtime GPU count. The public SDK defaults to CPU-friendly
+        single-process use with ``gpus=0``.
+    """
 
     model_name: str = DEFAULT_COLBERT_MODEL_NAME
-    checkpoint: object | None = None
+    checkpoint: Checkpoint | None = None
     gpus: int = 0
 
-    def _effective_checkpoint(self) -> object:
+    def _effective_checkpoint(self) -> Checkpoint:
         if self.checkpoint is not None:
             return self.checkpoint
         return _cached_checkpoint(self.model_name, self.gpus)
 
     def encode_query(self, text: str) -> LateQuery:
+        """Encode one query string into ``LateQuery`` using ColBERT."""
         checkpoint = self._effective_checkpoint()
         with torch.inference_mode():
             encoded = checkpoint.queryFromText([text], to_cpu=True)
         return query(_tensor_to_vectors(encoded[0]), text=text)
 
-    def encode_document_vectors(self, text: str) -> object:
+    def encode_document_vectors(self, text: str) -> TokenMatrixInput:
+        """Encode one document string into token-level vectors using ColBERT."""
         checkpoint = self._effective_checkpoint()
         with torch.inference_mode():
             encoded = checkpoint.docFromText([text], to_cpu=True)
@@ -77,9 +91,10 @@ class ColBERTTextEncoder:
 
     def encode_documents(
         self,
-        doc_ids: Sequence[object],
-        texts: Sequence[object],
+        doc_ids: DocIdsInput,
+        texts: DocTextsInput,
     ) -> LateDocuments:
+        """Encode aligned document ids and texts into ``LateDocuments``."""
         text_rows = tuple(str(text) for text in texts)
         token_vectors = tuple(
             self.encode_document_vectors(text) for text in text_rows

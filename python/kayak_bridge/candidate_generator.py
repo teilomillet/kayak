@@ -16,6 +16,8 @@ SUPPORTED_CANDIDATE_GENERATORS = (
 
 @dataclass(frozen=True, slots=True)
 class CandidateGenerator:
+    """One explicit stage-1 candidate-generator choice with vector budgets."""
+
     kind: str
     query_vector_budget: int = 0
     document_vector_budget: int = 0
@@ -57,6 +59,7 @@ class CandidateGenerator:
 
 
 def exact_full_scan_candidate_generator() -> CandidateGenerator:
+    """Return the exact full-scan candidate generator."""
     return CandidateGenerator(EXACT_FULL_SCAN_CANDIDATE_GENERATOR)
 
 
@@ -65,6 +68,7 @@ def document_proxy_candidate_generator(
     query_vector_budget: int = 0,
     document_vector_budget: int = 0,
 ) -> CandidateGenerator:
+    """Return the document-proxy candidate generator with explicit budgets."""
     return CandidateGenerator(
         DOCUMENT_PROXY_CANDIDATE_GENERATOR,
         query_vector_budget=query_vector_budget,

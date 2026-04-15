@@ -9,6 +9,8 @@ from .stage_artifact_materialization import StageArtifactMaterialization
 
 @dataclass(frozen=True, slots=True)
 class SearchStageProfile:
+    """Measured counts for one explicit search stage in the Python pipeline."""
+
     stage_name: str
     input_hit_count: int
     output_hit_count: int

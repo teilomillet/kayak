@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .api_types import QueryBatchInput
 from .array_conversions import to_query_matrices
 from .layouts import NUMPY_REFERENCE_BACKEND
 from .late_query import LateQuery
@@ -19,12 +20,15 @@ except ImportError:  # pragma: no cover - torch is present in the managed env.
 
 @dataclass(frozen=True, slots=True)
 class LateQueryBatch:
+    """One batch of late queries that keeps each query's vector count explicit."""
+
     queries: tuple[LateQuery, ...]
     batch_size: int
     vector_dim: int
 
     @classmethod
-    def from_inputs(cls, token_vectors: object) -> "LateQueryBatch":
+    def from_inputs(cls, token_vectors: QueryBatchInput) -> "LateQueryBatch":
+        """Build one query batch from matrices or prebuilt `LateQuery` objects."""
         if not isinstance(token_vectors, np.ndarray) and not (
             torch is not None and isinstance(token_vectors, torch.Tensor)
         ):
@@ -44,6 +48,7 @@ class LateQueryBatch:
 
     @classmethod
     def from_queries(cls, queries: Sequence[LateQuery]) -> "LateQueryBatch":
+        """Build one query batch from already-materialized `LateQuery` objects."""
         normalized = tuple(queries)
         if not normalized:
             raise ValueError("query batch must contain at least one query")
@@ -78,6 +83,7 @@ class LateQueryBatch:
         return tuple(query.layout for query in self.queries)
 
     def to_layout(self, layout: str) -> "LateQueryBatch":
+        """Convert every query in this batch into another supported layout."""
         return LateQueryBatch.from_queries(
             [query.to_layout(layout) for query in self.queries]
         )
@@ -85,6 +91,7 @@ class LateQueryBatch:
     def maxsim(
         self, index: "LateIndex", *, backend: str = NUMPY_REFERENCE_BACKEND
     ) -> tuple["LateScores", ...]:
+        """Return exact score vectors for every query in this batch."""
         from .batch_dispatch import maxsim_scores_batch
 
         return maxsim_scores_batch(self, index, backend=backend)
@@ -96,6 +103,7 @@ class LateQueryBatch:
         k: int,
         backend: str = NUMPY_REFERENCE_BACKEND,
     ) -> tuple[tuple["SearchHit", ...], ...]:
+        """Return exact top-k hits for every query in this batch."""
         from .late_ops import search_batch
 
         return search_batch(self, index, k=k, backend=backend)

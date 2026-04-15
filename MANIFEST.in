@@ -1,5 +1,7 @@
 include LICENSE
 include README.md
+include python/kayak/py.typed
 recursive-include python/kayak *.py *.md
 recursive-include python/kayak_bridge *.py *.mojo
 recursive-include kayak *.mojo
+prune python/kayak_engine

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import unittest
 
 import kayak
@@ -13,6 +14,7 @@ class PublicApiContractTests(unittest.TestCase):
             "CandidateGenerator",
             "CandidateStageResult",
             "CallableLateTextEncoder",
+            "ChromaLateStore",
             "ColBERTTextEncoder",
             "DEFAULT_COLBERT_MODEL_NAME",
             "DirectoryLateStore",
@@ -27,6 +29,8 @@ class PublicApiContractTests(unittest.TestCase):
             "LateTextRetriever",
             "LateTextEncoder",
             "MemoryLateStore",
+            "PgVectorLateStore",
+            "QdrantLateStore",
             "SearchHit",
             "SearchPlan",
             "SearchPlanResult",
@@ -36,8 +40,10 @@ class PublicApiContractTests(unittest.TestCase):
             "ReferenceScoringSemantics",
             "StageArtifactMaterialization",
             "MOJO_EXACT_CPU_BACKEND",
+            "MojoBridgeInfo",
             "NUMPY_REFERENCE_BACKEND",
             "StoreCapabilities",
+            "WeaviateLateStore",
             "available_backends",
             "backend_info",
             "clause_text_stage3_verifier_operator",
@@ -51,9 +57,11 @@ class PublicApiContractTests(unittest.TestCase):
             "exact_late_interaction_stage2_reference_operator",
             "flat_query_dim128",
             "generate_candidates",
+            "help",
             "hybrid_flat_dim128_index",
             "maxsim",
             "maxsim_batch",
+            "mojo_bridge_info",
             "none_stage3_verifier_operator",
             "noop_topk_stage2_reference_operator",
             "open_encoder",
@@ -67,6 +75,7 @@ class PublicApiContractTests(unittest.TestCase):
             "search",
             "search_batch",
             "search_with_plan",
+            "typing",
         }
 
         self.assertEqual(set(kayak.PUBLIC_API), expected)
@@ -87,6 +96,22 @@ class PublicApiContractTests(unittest.TestCase):
         self.assertIn("not the hosted engine surface", kayak.__doc__)
         self.assertIsNotNone(kayak_bridge.__doc__)
         self.assertIn("internal implementation layer", kayak_bridge.__doc__.lower())
+
+    def test_public_callables_have_docstrings(self) -> None:
+        undocumented: list[str] = []
+        for name in kayak.PUBLIC_API:
+            value = getattr(kayak, name)
+            if not (callable(value) or inspect.isclass(value)):
+                continue
+            if inspect.getdoc(value):
+                continue
+            undocumented.append(name)
+
+        self.assertEqual(
+            undocumented,
+            [],
+            f"public callables must carry docstrings: {undocumented}",
+        )
 
 
 if __name__ == "__main__":

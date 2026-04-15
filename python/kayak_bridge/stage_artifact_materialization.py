@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class StageArtifactMaterialization:
+    """Counts for one artifact family materialized during staged search."""
+
     family: str
     document_count: int
     document_vector_count: int = 0

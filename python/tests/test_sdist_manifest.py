@@ -36,7 +36,7 @@ class SdistManifestTests(unittest.TestCase):
 
         sources = set(SOURCES_PATH.read_text(encoding="utf-8").splitlines())
         required_paths = (
-            _tracked_paths("python/kayak", (".py", ".md"))
+            _tracked_paths("python/kayak", (".py", ".md", ".typed"))
             + _tracked_paths("python/kayak_bridge", (".py", ".mojo"))
             + _tracked_paths("kayak", (".mojo",))
         )
@@ -46,6 +46,25 @@ class SdistManifestTests(unittest.TestCase):
             missing,
             (),
             f"SOURCES.txt is missing build inputs: {missing}",
+        )
+
+    def test_egg_info_sources_exclude_internal_engine_package(self) -> None:
+        subprocess.run(
+            [sys.executable, "setup.py", "egg_info"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        sources = set(SOURCES_PATH.read_text(encoding="utf-8").splitlines())
+        leaked = tuple(
+            path for path in sources if path.startswith("python/kayak_engine/")
+        )
+        self.assertEqual(
+            leaked,
+            (),
+            f"SOURCES.txt must not ship internal engine files: {leaked}",
         )
 
 

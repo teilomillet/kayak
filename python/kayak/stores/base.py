@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Protocol, Self, runtime_checkable
 
+from kayak_bridge.api_types import DocIdsInput, MetadataFilterInput, MetadataRowsInput
 from kayak_bridge import LateDocuments, LateIndex
 
 
@@ -46,19 +47,28 @@ class LateStore(Protocol):
         self,
         documents: LateDocuments,
         *,
-        metadata: object | None = None,
+        metadata: MetadataRowsInput = None,
     ) -> None:
         """Insert or replace aligned late-interaction documents."""
 
-    def delete(self, doc_ids: object) -> None:
+    def delete(self, doc_ids: DocIdsInput) -> None:
         """Delete the requested document ids from the store."""
 
     def load_index(
         self,
         *,
-        doc_ids: object | None = None,
-        where: object | None = None,
+        doc_ids: DocIdsInput | None = None,
+        where: MetadataFilterInput = None,
         include_text: bool = False,
         layout: str = "packed",
     ) -> LateIndex:
         """Materialize one late-interaction index from persisted documents."""
+
+    def close(self) -> None:
+        """Release any optional client or filesystem resources owned by the store."""
+
+    def __enter__(self) -> Self:
+        """Return this store so callers can use `with open_store(...) as store:`."""
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        """Close the store at the end of one context-manager block."""

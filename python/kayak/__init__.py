@@ -21,6 +21,7 @@ from kayak_bridge import (
     LateQueryBatch,
     LateScores,
     MOJO_EXACT_CPU_BACKEND,
+    MojoBridgeInfo,
     NUMPY_REFERENCE_BACKEND,
     SearchHit,
     SearchPlan,
@@ -46,6 +47,7 @@ from kayak_bridge import (
     hybrid_flat_dim128_index,
     maxsim,
     maxsim_batch,
+    mojo_bridge_info,
     none_stage3_verifier_operator,
     noop_topk_stage2_reference_operator,
     packed_index,
@@ -64,12 +66,16 @@ from .encoders import (
     register_encoder,
 )
 from .stores import (
+    ChromaLateStore,
     DirectoryLateStore,
     LanceDBLateStore,
     LateStore,
     LateStoreStats,
     MemoryLateStore,
+    PgVectorLateStore,
+    QdrantLateStore,
     StoreCapabilities,
+    WeaviateLateStore,
     open_store,
     register_store,
 )
@@ -77,12 +83,15 @@ from .retrievers import (
     LateTextRetriever,
     open_text_retriever,
 )
+from .help_api import help
+from . import typing
 
 PUBLIC_API = (
     "BackendInfo",
     "CandidateGenerator",
     "CandidateStageResult",
     "CallableLateTextEncoder",
+    "ChromaLateStore",
     "ColBERTTextEncoder",
     "DEFAULT_COLBERT_MODEL_NAME",
     "DirectoryLateStore",
@@ -97,6 +106,8 @@ PUBLIC_API = (
     "LateTextRetriever",
     "LateTextEncoder",
     "MemoryLateStore",
+    "PgVectorLateStore",
+    "QdrantLateStore",
     "SearchHit",
     "SearchPlan",
     "SearchPlanResult",
@@ -106,8 +117,10 @@ PUBLIC_API = (
     "ReferenceScoringSemantics",
     "StageArtifactMaterialization",
     "MOJO_EXACT_CPU_BACKEND",
+    "MojoBridgeInfo",
     "NUMPY_REFERENCE_BACKEND",
     "StoreCapabilities",
+    "WeaviateLateStore",
     "available_backends",
     "backend_info",
     "clause_text_stage3_verifier_operator",
@@ -121,9 +134,11 @@ PUBLIC_API = (
     "exact_late_interaction_stage2_reference_operator",
     "flat_query_dim128",
     "generate_candidates",
+    "help",
     "hybrid_flat_dim128_index",
     "maxsim",
     "maxsim_batch",
+    "mojo_bridge_info",
     "none_stage3_verifier_operator",
     "noop_topk_stage2_reference_operator",
     "open_encoder",
@@ -137,6 +152,7 @@ PUBLIC_API = (
     "search",
     "search_batch",
     "search_with_plan",
+    "typing",
 )
 
 __all__ = [

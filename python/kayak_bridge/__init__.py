@@ -49,6 +49,7 @@ from .late_ops import (
 )
 from .late_query import LateQuery
 from .late_scores import LateScores, SearchHit
+from .mojo_bridge_info import MojoBridgeInfo, mojo_bridge_info
 
 __all__ = [
     "BackendInfo",
@@ -61,6 +62,7 @@ __all__ = [
     "LateScores",
     "SearchHit",
     "MOJO_EXACT_CPU_BACKEND",
+    "MojoBridgeInfo",
     "NUMPY_REFERENCE_BACKEND",
     "available_backends",
     "backend_info",
@@ -78,6 +80,7 @@ __all__ = [
     "hybrid_flat_dim128_index",
     "maxsim",
     "maxsim_batch",
+    "mojo_bridge_info",
     "none_stage3_verifier_operator",
     "noop_topk_stage2_reference_operator",
     "packed_index",

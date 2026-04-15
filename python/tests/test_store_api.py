@@ -128,6 +128,18 @@ class StoreApiTests(unittest.TestCase):
         custom = kayak.open_store("custom-memory")
         self.assertIsInstance(custom, _CustomStore)
 
+    def test_store_contract_supports_close_and_context_manager(self) -> None:
+        memory = kayak.MemoryLateStore()
+        memory.close()
+        with memory as entered_memory:
+            self.assertIs(entered_memory, memory)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            directory = kayak.DirectoryLateStore(Path(tmpdir) / "kayak-store")
+            directory.close()
+            with directory as entered_directory:
+                self.assertIs(entered_directory, directory)
+
 
 if __name__ == "__main__":
     unittest.main()
