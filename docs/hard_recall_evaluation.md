@@ -24,6 +24,9 @@ Verified from repo evidence:
 - the repo now also has one scalable synthetic conjunction-style hard-recall
   family with explicit vector-count control and exact-reference candidate
   recall reporting.
+- the repo now also has one polarity-sensitive synthetic hard-recall family
+  where opposite-polarity documents share every topical slot and differ only
+  on one contradiction-bearing vector.
 - the repo now also has one long-document synthetic hard-recall family where
   the exact matching vectors appear late behind a noisy shared prefix.
 
@@ -43,6 +46,8 @@ The current synthetic hard-recall family is:
 - `synthetic_hard_recall`
   - profile `slots6_values3_docs1530`
   - profile `slots6_values4_docs8288`
+- `contradiction_hard_recall`
+  - profile `slots6_values3_docs2988`
 - `long_document_hard_recall`
   - profile `late_suffix_docs544_vec100`
   - profile `late_suffix_docs2088_vec133`
@@ -53,6 +58,8 @@ Reason:
 - it creates measurable candidate-recall collapse before exact reranking
   recovers
 - it now also covers a second failure mode:
+  - same-topic opposite-polarity distractors
+- and it still covers a third failure mode:
   - long noisy prefixes with late exact evidence
 
 Evidence:
@@ -143,6 +150,7 @@ The current synthetic-family benchmark command is:
 
 ```bash
 pixi run bench_synthetic_hard_recall_stage_aware
+pixi run bench_contradiction_hard_recall_stage_aware
 pixi run bench_long_document_hard_recall_stage_aware
 ```
 
@@ -150,6 +158,7 @@ It writes:
 
 ```text
 .cache/kayak/synthetic_hard_recall_stage_aware_search.json
+.cache/kayak/contradiction_hard_recall_stage_aware_search.json
 .cache/kayak/long_document_hard_recall_stage_aware_search.json
 ```
 
@@ -167,6 +176,8 @@ The current plan families in that synthetic artifact are:
 This output is the current source of truth for:
 - how much candidate budget the tested stage-1 plans need to recover exact
   recall on a scalable conjunction-style family
+- how much candidate budget the tested stage-1 plans need to stop surfacing
+  same-topic opposite-polarity distractors ahead of the oracle documents
 - how those recovery points move as corpus size grows from `1530` to `8288`
   documents while query width stays fixed
 - which tighter native generators fail to beat the current recovery frontier on

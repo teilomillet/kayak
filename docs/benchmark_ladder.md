@@ -62,6 +62,7 @@ Exit criteria:
 
 Current families:
 - `synthetic_hard_recall`
+- `contradiction_hard_recall`
 - `long_document_hard_recall`
 
 Question this rung answers:
@@ -78,6 +79,7 @@ Exit criteria:
 
 Important distinction:
 - `synthetic_hard_recall` stresses conjunction-style ambiguity
+- `contradiction_hard_recall` stresses same-topic opposite-polarity confusion
 - `long_document_hard_recall` stresses long noisy prefixes with late exact
   evidence
 
@@ -128,6 +130,7 @@ Synthetic hard-recall paths:
 
 ```bash
 pixi run bench_synthetic_hard_recall_stage_aware
+pixi run bench_contradiction_hard_recall_stage_aware
 pixi run bench_long_document_hard_recall_stage_aware
 ```
 

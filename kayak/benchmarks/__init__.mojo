@@ -80,6 +80,12 @@ from .synthetic_hard_recall_fixture import (
     high_centroid_synthetic_hard_recall_profile,
     make_synthetic_hard_recall_fixture,
 )
+from .contradiction_hard_recall_fixture import (
+    ContradictionHardRecallFixture,
+    ContradictionHardRecallProfile,
+    default_contradiction_hard_recall_profiles,
+    make_contradiction_hard_recall_fixture,
+)
 from .long_document_hard_recall_fixture import (
     LongDocumentHardRecallFixture,
     LongDocumentHardRecallProfile,
