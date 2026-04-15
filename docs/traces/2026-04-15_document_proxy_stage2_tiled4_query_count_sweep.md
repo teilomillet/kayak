@@ -81,8 +81,7 @@ Measured fixed candidate-window shape:
 
 Measured query counts:
 
-- all multiples of `4` from `4` through `64`
-- tail probes at `5`, `17`, `33`, and `49`
+- every `q` from `4` through `64`
 
 ## Command
 
@@ -95,17 +94,17 @@ Artifact:
 - `.cache/kayak/profile_document_proxy_stage2_tiled4_query_count_sweep_browsecomp_gold.tsv`
 
 I did **not** wrap this benchmark with the quiet runner because it compares all
-counts inside one process. Instead, I bounded each case to `16` passes over the
-query set with:
+counts inside one process. Instead, I bounded each case with:
 
 - `num_warmup_iters = 0`
-- `max_iters = len(task.queries) * 16`
+- `max_iters = len(task.queries) * 16 * max(1, 64 // q)`
 - `min_runtime_secs = 0.0`
 - `max_batch_size = 1`
 
-That keeps the full sweep practical while still averaging over repeated passes.
-It still leaves host noise, so the rollout decision below relies on clear
-margins rather than tiny deltas.
+The `max(1, 64 // q)` scale factor matters. An earlier fixed-iteration version
+under-ran the smallest query counts and produced unstable low-`q` results on a
+busy host. The normalized schedule keeps total work much closer across counts,
+which is the version used for the rollout decision below.
 
 ## Correctness result
 
@@ -117,28 +116,25 @@ That verified correctness for all counts in the sweep.
 ## Timing result
 
 Measured `build_flat_query + tiled4` ratios versus the old nested dim128
-baseline:
+baseline still stayed below `1.0` for every count in `4..64`.
 
-- `q=4`: `0.342211`
-- `q=5`: `0.453222`
-- `q=8`: `0.389353`
-- `q=12`: `0.568487`
-- `q=16`: `0.631724`
-- `q=17`: `0.599615`
-- `q=20`: `0.352722`
-- `q=24`: `0.511748`
-- `q=28`: `0.413419`
-- `q=32`: `0.482242`
-- `q=33`: `0.427526`
-- `q=36`: `0.566350`
-- `q=40`: `0.481204`
-- `q=44`: `0.344364`
-- `q=48`: `0.474734`
-- `q=49`: `0.456069`
-- `q=52`: `0.565841`
-- `q=56`: `0.450768`
-- `q=60`: `0.505157`
-- `q=64`: `0.661017`
+Representative points:
+
+- `q=5`: `0.337015`
+- `q=7`: `0.611198`
+- `q=19`: `0.574508`
+- `q=26`: `0.711688`
+- `q=33`: `0.426296`
+- `q=49`: `0.521711`
+- `q=63`: `0.618680`
+
+Worst measured tail ratio:
+
+- `q=26`: `0.711688`
+
+Best measured tail ratio:
+
+- `q=5`: `0.337015`
 
 Interpreting those ratios:
 
@@ -147,13 +143,9 @@ Interpreting those ratios:
 
 What is clear from the sweep:
 
-- every measured multiple of `4` from `4` through `64` won comfortably
-- every sampled tail probe also won in this bounded sweep
-
-What is **not** established by this sweep:
-
-- that every non-multiple count between `4` and `64` also wins
-- that the remainder path is uniformly good beyond the sampled tail probes
+- every measured count in `4..64` won in the build-inclusive path
+- the previous tail ambiguity was a benchmark-design artifact from
+  under-running the smallest query counts, not a stable remainder-path loss
 
 ## Decision
 
@@ -164,19 +156,11 @@ Production exact-stage guard widened from:
 to:
 
 - `4 <= query.vector_count <= 64`
-- `query.vector_count % 4 == 0`
 
 In other words:
 
-- measured multiple-of-`4` counts are now enabled
-- odd and other non-multiple counts still use the previous scorer
-
-This is intentionally conservative.
-
-I did **not** widen to every tested tail count even though `q=5`, `q=17`,
-`q=33`, and `q=49` all won, because the production fast path is still a
-shape-specialized `4`-lane kernel and this benchmark only samples, rather than
-exhausts, the non-multiple remainder space.
+- every measured count in `4..64` is now enabled
+- counts outside that range still use the previous scorer
 
 ## Validation after widening
 
@@ -187,7 +171,7 @@ Updated:
 The exact-stage fast-path toggle test now compares default exact rerank against
 the generic fallback across every enabled query count:
 
-- `q = 4, 8, 12, ..., 64`
+- `q = 4, 5, 6, ..., 64`
 
 Command:
 
@@ -205,16 +189,13 @@ Results:
 
 What is now verified:
 
-- the tiled exact-stage kernel generalizes cleanly across measured
-  multiple-of-`4` query counts from `4` through `64`
+- the tiled exact-stage kernel generalizes cleanly across all measured query
+  counts from `4` through `64`
 - the broader range is correctness-checked at the exact-rerank seam
-- sampled tail counts also look promising, but the full non-multiple space is
-  still not exhaustively measured
 
 Current conclusion:
 
-- keep the widened production guard for measured multiple-of-`4` counts
-- keep non-multiples on the existing scorer for now
-- if more exact-stage work is needed, the next epistemic step is a focused tail
-  benchmark or tail-kernel refinement rather than further broadening by
-  assumption
+- keep the widened production guard for all measured counts in `4..64`
+- if more exact-stage work is needed after this, the next epistemic step is a
+  new kernel idea with a benchmark that beats the current tiled4 path, not more
+  rollout work

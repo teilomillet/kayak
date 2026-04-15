@@ -1788,7 +1788,7 @@ def test_exact_rerank_candidates_for_plan_dim128_fast_path_toggle_keeps_scores_i
             )
         )
 
-    for query_vector_count in range(4, 65, 4):
+    for query_vector_count in range(4, 65):
         var query_vectors = List[List[Float32]]()
         for hot_index in range(query_vector_count):
             query_vectors.append(basis_vector(128, hot_index % 128))

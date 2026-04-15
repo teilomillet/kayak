@@ -41,7 +41,8 @@ from kayak.scoring.maxsim import (
 
 # Keep the expanded count sweep bounded so the benchmark stays practical while
 # still cycling over the real query set multiple times per shape.
-comptime var SWEEP_PASSES = 16
+comptime SWEEP_PASSES = 16
+comptime TARGET_QUERY_COUNT = 64
 
 
 struct QueryCountSweepMeasurement(Copyable):
@@ -393,9 +394,15 @@ def benchmark_baseline_mean_seconds(
         if query_index == len(queries):
             query_index = 0
 
+    # Small q counts need more iterations than large q counts; otherwise their
+    # runtimes are too short and host jitter dominates the comparison.
+    var iteration_scale = TARGET_QUERY_COUNT // queries[0].vector_count
+    if iteration_scale < 1:
+        iteration_scale = 1
+
     var report = benchmark.run[score_once](
         num_warmup_iters=0,
-        max_iters=len(queries) * SWEEP_PASSES,
+        max_iters=len(queries) * SWEEP_PASSES * iteration_scale,
         min_runtime_secs=0.0,
         max_batch_size=1,
     )
@@ -425,9 +432,13 @@ def benchmark_prebuilt_tiled4_mean_seconds(
         if query_index == len(flat_queries):
             query_index = 0
 
+    var iteration_scale = TARGET_QUERY_COUNT // flat_queries[0].vector_count
+    if iteration_scale < 1:
+        iteration_scale = 1
+
     var report = benchmark.run[score_once](
         num_warmup_iters=0,
-        max_iters=len(flat_queries) * SWEEP_PASSES,
+        max_iters=len(flat_queries) * SWEEP_PASSES * iteration_scale,
         min_runtime_secs=0.0,
         max_batch_size=1,
     )
@@ -458,9 +469,13 @@ def benchmark_build_flat_query_and_tiled4_mean_seconds(
         if query_index == len(queries):
             query_index = 0
 
+    var iteration_scale = TARGET_QUERY_COUNT // queries[0].vector_count
+    if iteration_scale < 1:
+        iteration_scale = 1
+
     var report = benchmark.run[score_once](
         num_warmup_iters=0,
-        max_iters=len(queries) * SWEEP_PASSES,
+        max_iters=len(queries) * SWEEP_PASSES * iteration_scale,
         min_runtime_secs=0.0,
         max_batch_size=1,
     )
@@ -518,28 +533,9 @@ def main() raises:
     var measurements = List[QueryCountSweepMeasurement]()
     var total_candidate_document_count = Float64(0.0)
     var total_candidate_vector_count = Float64(0.0)
-    var query_vector_counts = [
-        4,
-        5,
-        8,
-        12,
-        16,
-        17,
-        20,
-        24,
-        28,
-        32,
-        33,
-        36,
-        40,
-        44,
-        48,
-        49,
-        52,
-        56,
-        60,
-        64,
-    ]
+    var query_vector_counts = List[Int]()
+    for query_vector_count in range(4, 65):
+        query_vector_counts.append(query_vector_count)
 
     for resolved in resolved_windows:
         total_candidate_document_count += Float64(len(resolved.documents))
