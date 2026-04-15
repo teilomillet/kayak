@@ -63,19 +63,42 @@ def test_build_task_comparison_bundle_extracts_key_ratios() -> None:
         },
         storage_compare_path="/tmp/storage_compare.json",
         storage_compare={
+            "kayak_load_from_lancedb_seconds": 0.25,
+            "lancedb_scan": {"mean_search_seconds": 0.03},
+            "kayak_exact_from_lancedb": {"mean_search_seconds": 0.01},
             "lancedb_scan_latency_ratio_vs_kayak_from_lancedb": 3.0,
         },
         storage_scale_path="/tmp/storage_scale.json",
         storage_scale={
             "rows": [
-                {"lancedb_storage_byte_ratio_vs_kayak": 1.2},
-                {"lancedb_storage_byte_ratio_vs_kayak": 1.8},
+                {
+                    "lancedb_storage_byte_ratio_vs_kayak": 1.2,
+                    "lancedb_build_seconds_ratio_vs_kayak": 2.4,
+                    "lancedb_search_seconds_ratio_vs_kayak": 3.2,
+                },
+                {
+                    "lancedb_storage_byte_ratio_vs_kayak": 1.8,
+                    "lancedb_build_seconds_ratio_vs_kayak": 1.9,
+                    "lancedb_search_seconds_ratio_vs_kayak": 2.7,
+                },
             ]
         },
     )
 
     assert bundle.dataset_id == "mock://dataset"
+    assert bundle.kayak_exact_mean_search_seconds == 0.01
+    assert bundle.lancedb_scan_mean_search_seconds == 0.02
     assert bundle.lancedb_scan_latency_ratio_vs_kayak == 2.0
+    assert bundle.lancedb_indexed_frozen_mean_search_seconds == 0.005
     assert bundle.lancedb_indexed_frozen_latency_ratio_vs_kayak == 0.5
     assert bundle.largest_scale_document_count == 800
+    assert bundle.storage_compare_kayak_load_from_lancedb_seconds == 0.25
+    assert bundle.storage_compare_lancedb_scan_mean_search_seconds == 0.03
+    assert (
+        bundle.storage_compare_kayak_exact_from_lancedb_mean_search_seconds == 0.01
+    )
+    assert bundle.base_storage_build_seconds_ratio_vs_kayak == 2.4
+    assert bundle.base_storage_search_seconds_ratio_vs_kayak == 3.2
     assert bundle.largest_storage_byte_ratio_vs_kayak == 1.8
+    assert bundle.largest_storage_build_seconds_ratio_vs_kayak == 1.9
+    assert bundle.largest_storage_search_seconds_ratio_vs_kayak == 2.7

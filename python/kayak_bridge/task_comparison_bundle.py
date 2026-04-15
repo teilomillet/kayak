@@ -52,9 +52,12 @@ class TaskComparisonBundle:
     storage_compare_path: str | None
     storage_scale_path: str | None
     kayak_exact_primary_value: float
+    kayak_exact_mean_search_seconds: float
     lancedb_scan_primary_value: float
+    lancedb_scan_mean_search_seconds: float
     lancedb_scan_latency_ratio_vs_kayak: float
     lancedb_indexed_frozen_primary_value: float
+    lancedb_indexed_frozen_mean_search_seconds: float
     lancedb_indexed_frozen_latency_ratio_vs_kayak: float
     indexed_freeze_policy: str
     indexed_rebuild_count: int
@@ -62,9 +65,16 @@ class TaskComparisonBundle:
     indexed_primary_value_max: float
     indexed_mean_search_seconds_min: float
     indexed_mean_search_seconds_max: float
+    storage_compare_kayak_load_from_lancedb_seconds: float | None
+    storage_compare_lancedb_scan_mean_search_seconds: float | None
+    storage_compare_kayak_exact_from_lancedb_mean_search_seconds: float | None
     storage_compare_lancedb_scan_latency_ratio_vs_kayak_from_lancedb: float | None
     base_storage_byte_ratio_vs_kayak: float | None
+    base_storage_build_seconds_ratio_vs_kayak: float | None
+    base_storage_search_seconds_ratio_vs_kayak: float | None
     largest_storage_byte_ratio_vs_kayak: float | None
+    largest_storage_build_seconds_ratio_vs_kayak: float | None
+    largest_storage_search_seconds_ratio_vs_kayak: float | None
     largest_scale_document_count: int | None
     largest_scale_lancedb_scan_latency_ratio_vs_kayak: float | None
 
@@ -106,23 +116,59 @@ def build_task_comparison_bundle(
         )
 
     base_storage_byte_ratio = None
+    base_storage_build_ratio = None
+    base_storage_search_ratio = None
     largest_storage_byte_ratio = None
+    largest_storage_build_ratio = None
+    largest_storage_search_ratio = None
     if storage_scale is not None:
         base_storage_row = _base_row(storage_scale)
         largest_storage_row = _largest_row(storage_scale)
         base_storage_byte_ratio = base_storage_row["lancedb_storage_byte_ratio_vs_kayak"]
+        base_storage_build_ratio = base_storage_row[
+            "lancedb_build_seconds_ratio_vs_kayak"
+        ]
+        base_storage_search_ratio = base_storage_row[
+            "lancedb_search_seconds_ratio_vs_kayak"
+        ]
         largest_storage_byte_ratio = largest_storage_row[
             "lancedb_storage_byte_ratio_vs_kayak"
         ]
+        largest_storage_build_ratio = largest_storage_row[
+            "lancedb_build_seconds_ratio_vs_kayak"
+        ]
+        largest_storage_search_ratio = largest_storage_row[
+            "lancedb_search_seconds_ratio_vs_kayak"
+        ]
         if base_storage_byte_ratio is not None:
             base_storage_byte_ratio = float(base_storage_byte_ratio)
+        if base_storage_build_ratio is not None:
+            base_storage_build_ratio = float(base_storage_build_ratio)
+        if base_storage_search_ratio is not None:
+            base_storage_search_ratio = float(base_storage_search_ratio)
         if largest_storage_byte_ratio is not None:
             largest_storage_byte_ratio = float(largest_storage_byte_ratio)
+        if largest_storage_build_ratio is not None:
+            largest_storage_build_ratio = float(largest_storage_build_ratio)
+        if largest_storage_search_ratio is not None:
+            largest_storage_search_ratio = float(largest_storage_search_ratio)
 
     storage_compare_latency_ratio = None
+    storage_compare_load_seconds = None
+    storage_compare_lancedb_search_seconds = None
+    storage_compare_kayak_search_seconds = None
     if storage_compare is not None:
         storage_compare_latency_ratio = float(
             storage_compare["lancedb_scan_latency_ratio_vs_kayak_from_lancedb"]
+        )
+        storage_compare_load_seconds = float(
+            storage_compare["kayak_load_from_lancedb_seconds"]
+        )
+        storage_compare_lancedb_search_seconds = float(
+            storage_compare["lancedb_scan"]["mean_search_seconds"]
+        )
+        storage_compare_kayak_search_seconds = float(
+            storage_compare["kayak_exact_from_lancedb"]["mean_search_seconds"]
         )
 
     return TaskComparisonBundle(
@@ -140,11 +186,16 @@ def build_task_comparison_bundle(
         storage_compare_path=storage_compare_path,
         storage_scale_path=storage_scale_path,
         kayak_exact_primary_value=float(kayak_exact["primary_value"]),
+        kayak_exact_mean_search_seconds=float(kayak_exact["mean_search_seconds"]),
         lancedb_scan_primary_value=float(lancedb_scan["primary_value"]),
+        lancedb_scan_mean_search_seconds=float(lancedb_scan["mean_search_seconds"]),
         lancedb_scan_latency_ratio_vs_kayak=float(
             scan_pairwise["mean_search_seconds_ratio_vs_baseline"]
         ),
         lancedb_indexed_frozen_primary_value=float(lancedb_indexed["primary_value"]),
+        lancedb_indexed_frozen_mean_search_seconds=float(
+            lancedb_indexed["mean_search_seconds"]
+        ),
         lancedb_indexed_frozen_latency_ratio_vs_kayak=float(
             indexed_pairwise["mean_search_seconds_ratio_vs_baseline"]
         ),
@@ -158,11 +209,22 @@ def build_task_comparison_bundle(
         indexed_mean_search_seconds_max=float(
             indexed_variance["mean_search_seconds_max"]
         ),
+        storage_compare_kayak_load_from_lancedb_seconds=storage_compare_load_seconds,
+        storage_compare_lancedb_scan_mean_search_seconds=(
+            storage_compare_lancedb_search_seconds
+        ),
+        storage_compare_kayak_exact_from_lancedb_mean_search_seconds=(
+            storage_compare_kayak_search_seconds
+        ),
         storage_compare_lancedb_scan_latency_ratio_vs_kayak_from_lancedb=(
             storage_compare_latency_ratio
         ),
         base_storage_byte_ratio_vs_kayak=base_storage_byte_ratio,
+        base_storage_build_seconds_ratio_vs_kayak=base_storage_build_ratio,
+        base_storage_search_seconds_ratio_vs_kayak=base_storage_search_ratio,
         largest_storage_byte_ratio_vs_kayak=largest_storage_byte_ratio,
+        largest_storage_build_seconds_ratio_vs_kayak=largest_storage_build_ratio,
+        largest_storage_search_seconds_ratio_vs_kayak=largest_storage_search_ratio,
         largest_scale_document_count=largest_scale_document_count,
         largest_scale_lancedb_scan_latency_ratio_vs_kayak=largest_scale_latency_ratio,
     )
