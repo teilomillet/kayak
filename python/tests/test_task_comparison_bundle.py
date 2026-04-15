@@ -53,6 +53,11 @@ def test_build_task_comparison_bundle_extracts_key_ratios() -> None:
         indexed_frozen={
             "freeze_policy": "mean_across_5_rebuilds",
             "rebuild_count": 5,
+            "index_num_partitions": 8,
+            "index_num_sub_vectors": 16,
+            "index_target_partition_size": 256,
+            "indexed_nprobes": 32,
+            "indexed_refine_factor": 2,
         },
         scale_sweep_path="/tmp/scale.json",
         scale_sweep={
@@ -91,6 +96,11 @@ def test_build_task_comparison_bundle_extracts_key_ratios() -> None:
     assert bundle.lancedb_scan_latency_ratio_vs_kayak == 2.0
     assert bundle.lancedb_indexed_frozen_mean_search_seconds == 0.005
     assert bundle.lancedb_indexed_frozen_latency_ratio_vs_kayak == 0.5
+    assert bundle.indexed_index_num_partitions == 8
+    assert bundle.indexed_index_num_sub_vectors == 16
+    assert bundle.indexed_index_target_partition_size == 256
+    assert bundle.indexed_nprobes == 32
+    assert bundle.indexed_refine_factor == 2
     assert bundle.largest_scale_document_count == 800
     assert bundle.storage_compare_kayak_load_from_lancedb_seconds == 0.25
     assert bundle.storage_compare_lancedb_scan_mean_search_seconds == 0.03

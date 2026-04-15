@@ -22,6 +22,7 @@ class BenchmarkVarianceSummary:
     family: str
     slice_name: str
     primary_metric: str
+    k: int
     index_kind: str
     index_num_partitions: int | None
     index_num_sub_vectors: int | None
@@ -92,6 +93,7 @@ def summarize_benchmark_variance(
     family = str(first["family"])
     slice_name = str(first["slice_name"])
     primary_metric = str(first["primary_metric"])
+    k = int(first["k"])
     index_kind = str(first.get("index_kind", "unknown"))
     index_num_partitions = _optional_int(first, "index_num_partitions")
     index_num_sub_vectors = _optional_int(first, "index_num_sub_vectors")
@@ -108,6 +110,8 @@ def summarize_benchmark_variance(
             raise ValueError("all runs must share slice_name")
         if str(run["primary_metric"]) != primary_metric:
             raise ValueError("all runs must share primary_metric")
+        if int(run["k"]) != k:
+            raise ValueError("all runs must share k")
         if str(run.get("index_kind", "unknown")) != index_kind:
             raise ValueError("all runs must share index_kind")
         if _optional_int(run, "index_num_partitions") != index_num_partitions:
@@ -132,6 +136,7 @@ def summarize_benchmark_variance(
         family=family,
         slice_name=slice_name,
         primary_metric=primary_metric,
+        k=k,
         index_kind=index_kind,
         index_num_partitions=index_num_partitions,
         index_num_sub_vectors=index_num_sub_vectors,

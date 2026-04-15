@@ -19,6 +19,10 @@ from kayak_bridge.benchmark_variance import (
 from kayak_bridge.comparison_scorecard import build_comparison_scorecard
 from kayak_bridge.json_task_loader import load_task_json
 from kayak_bridge.lancedb_benchmark import benchmark_task_with_lancedb
+from kayak_bridge.lancedb_index_controls import (
+    LanceDbIndexBuildControls,
+    LanceDbIndexedQueryControls,
+)
 from kayak_bridge.lancedb_lane_a_bundle import build_lancedb_lane_a_bundle
 
 
@@ -50,6 +54,11 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="Measured passes for each benchmark run.",
     )
+    parser.add_argument("--index-num-partitions", type=int)
+    parser.add_argument("--index-num-sub-vectors", type=int)
+    parser.add_argument("--index-target-partition-size", type=int)
+    parser.add_argument("--indexed-nprobes", type=int)
+    parser.add_argument("--indexed-refine-factor", type=int)
     return parser.parse_args()
 
 
@@ -104,6 +113,8 @@ def _benchmark_indexed_variance(
     rebuild_count: int,
     warmup_iterations: int,
     measurement_iterations: int,
+    index_build_controls: LanceDbIndexBuildControls,
+    indexed_query_controls: LanceDbIndexedQueryControls,
 ) -> dict:
     runs = []
     for rebuild_index in range(rebuild_count):
@@ -114,6 +125,8 @@ def _benchmark_indexed_variance(
             warmup_iterations=warmup_iterations,
             measurement_iterations=measurement_iterations,
             build_index=True,
+            index_build_controls=index_build_controls,
+            indexed_query_controls=indexed_query_controls,
         )
         runs.append(summary.to_json_ready())
 
@@ -168,6 +181,15 @@ def main() -> None:
     _run_task_builder()
     output_root = args.output_root
     output_root.mkdir(parents=True, exist_ok=True)
+    index_build_controls = LanceDbIndexBuildControls(
+        num_partitions=args.index_num_partitions,
+        num_sub_vectors=args.index_num_sub_vectors,
+        target_partition_size=args.index_target_partition_size,
+    )
+    indexed_query_controls = LanceDbIndexedQueryControls(
+        nprobes=args.indexed_nprobes,
+        refine_factor=args.indexed_refine_factor,
+    )
 
     evidence_task = load_task_json(
         str(output_root / "browsecomp_plus_real_subset" / "python_task_evidence.json")
@@ -209,6 +231,8 @@ def main() -> None:
         rebuild_count=args.rebuild_count,
         warmup_iterations=args.warmup_iterations,
         measurement_iterations=args.measurement_iterations,
+        index_build_controls=index_build_controls,
+        indexed_query_controls=indexed_query_controls,
     )
     gold_variance = _benchmark_indexed_variance(
         task=gold_task,
@@ -218,6 +242,8 @@ def main() -> None:
         rebuild_count=args.rebuild_count,
         warmup_iterations=args.warmup_iterations,
         measurement_iterations=args.measurement_iterations,
+        index_build_controls=index_build_controls,
+        indexed_query_controls=indexed_query_controls,
     )
 
     evidence_frozen_path = (

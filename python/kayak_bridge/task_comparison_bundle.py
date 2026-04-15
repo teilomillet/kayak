@@ -61,6 +61,11 @@ class TaskComparisonBundle:
     lancedb_indexed_frozen_latency_ratio_vs_kayak: float
     indexed_freeze_policy: str
     indexed_rebuild_count: int
+    indexed_index_num_partitions: int | None
+    indexed_index_num_sub_vectors: int | None
+    indexed_index_target_partition_size: int | None
+    indexed_nprobes: int | None
+    indexed_refine_factor: int | None
     indexed_primary_value_min: float
     indexed_primary_value_max: float
     indexed_mean_search_seconds_min: float
@@ -201,6 +206,31 @@ def build_task_comparison_bundle(
         ),
         indexed_freeze_policy=str(indexed_frozen["freeze_policy"]),
         indexed_rebuild_count=int(indexed_frozen["rebuild_count"]),
+        indexed_index_num_partitions=(
+            None
+            if indexed_frozen.get("index_num_partitions") is None
+            else int(indexed_frozen["index_num_partitions"])
+        ),
+        indexed_index_num_sub_vectors=(
+            None
+            if indexed_frozen.get("index_num_sub_vectors") is None
+            else int(indexed_frozen["index_num_sub_vectors"])
+        ),
+        indexed_index_target_partition_size=(
+            None
+            if indexed_frozen.get("index_target_partition_size") is None
+            else int(indexed_frozen["index_target_partition_size"])
+        ),
+        indexed_nprobes=(
+            None
+            if indexed_frozen.get("indexed_nprobes") is None
+            else int(indexed_frozen["indexed_nprobes"])
+        ),
+        indexed_refine_factor=(
+            None
+            if indexed_frozen.get("indexed_refine_factor") is None
+            else int(indexed_frozen["indexed_refine_factor"])
+        ),
         indexed_primary_value_min=float(indexed_variance["primary_value_min"]),
         indexed_primary_value_max=float(indexed_variance["primary_value_max"]),
         indexed_mean_search_seconds_min=float(
