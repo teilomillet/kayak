@@ -21,6 +21,9 @@ from kayak_bridge.json_task_loader import load_task_json
 from kayak_bridge.kayak_task_benchmark import benchmark_task_with_kayak_exact
 from kayak_bridge.lancedb_benchmark import benchmark_task_with_lancedb
 from kayak_bridge.lancedb_index_sweep import parse_lancedb_indexed_sweep_spec
+from kayak_bridge.lancedb_indexed_selection import (
+    select_lancedb_indexed_candidates_from_sweep_summary,
+)
 from kayak_bridge.lancedb_indexed_candidate_bundle import (
     build_lancedb_indexed_candidate_bundle,
 )
@@ -36,6 +39,11 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True)
         handle.write("\n")
+
+
+def _load_json(path: Path) -> dict[str, object]:
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,10 +68,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup-iterations", type=int, default=1)
     parser.add_argument("--measurement-iterations", type=int, default=3)
     parser.add_argument(
+        "--sweep-summary",
+        type=Path,
+        help=(
+            "Optional indexed sweep summary JSON. When provided, candidate configs "
+            "are selected automatically from the sweep summary."
+        ),
+    )
+    parser.add_argument(
         "--candidate-config",
         type=str,
         action="append",
-        required=True,
         help=(
             "Indexed candidate config in `name:key=value,key=value` form. "
             "Use just `name` for the default indexed setting."
@@ -76,6 +91,8 @@ def main() -> None:
     args = parse_args()
     if args.rebuild_count <= 0:
         raise ValueError("rebuild-count must be positive")
+    if args.sweep_summary is None and not args.candidate_config:
+        raise ValueError("provide either --candidate-config or --sweep-summary")
 
     task = load_task_json(str(args.task))
     output_root = args.output_root or args.task.parent
@@ -83,7 +100,15 @@ def main() -> None:
 
     artifact_prefix = args.artifact_prefix or _slugify(str(task["slice_name"]))
     table_name = artifact_prefix
-    specs = [parse_lancedb_indexed_sweep_spec(value) for value in args.candidate_config]
+    selection_summary = None
+    if args.sweep_summary is not None:
+        selection_summary, specs = select_lancedb_indexed_candidates_from_sweep_summary(
+            _load_json(args.sweep_summary)
+        )
+    else:
+        specs = [
+            parse_lancedb_indexed_sweep_spec(value) for value in args.candidate_config
+        ]
     spec_names = [spec.name for spec in specs]
     if len(set(spec_names)) != len(spec_names):
         raise ValueError("candidate config names must be unique")
@@ -92,6 +117,7 @@ def main() -> None:
     lancedb_scan_path = output_root / f"{artifact_prefix}_lancedb_scan_benchmark.json"
     scorecard_path = output_root / f"{artifact_prefix}_comparison_scorecard.json"
     bundle_path = output_root / f"{artifact_prefix}_candidate_bundle.json"
+    selection_path = output_root / f"{artifact_prefix}_candidate_selection.json"
 
     kayak_exact = benchmark_task_with_kayak_exact(
         task,
@@ -162,6 +188,8 @@ def main() -> None:
         candidates=candidates,
     ).to_json_ready()
     _write_json(bundle_path, bundle)
+    if selection_summary is not None:
+        _write_json(selection_path, selection_summary.to_json_ready())
 
     print(f"wrote {kayak_exact_path}")
     print(f"wrote {lancedb_scan_path}")
@@ -170,6 +198,8 @@ def main() -> None:
         print(f"wrote {output_root / f'{artifact_prefix}_{spec.name}_frozen.json'}")
     print(f"wrote {scorecard_path}")
     print(f"wrote {bundle_path}")
+    if selection_summary is not None:
+        print(f"wrote {selection_path}")
     mean_candidate_latency = sum(
         float(row["mean_search_seconds"]) for row in bundle["rows"]
     ) / float(len(bundle["rows"]))
