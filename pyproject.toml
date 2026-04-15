@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kayak"
-version = "0.2.1"
+version = "0.2.9"
 description = "Mojo-first late-interaction retrieval engine"
 readme = "python/kayak/README.md"
 requires-python = ">=3.11,<3.12"
