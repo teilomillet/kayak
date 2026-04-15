@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from .prepared_exact_types import (
+    ExactScoringOptions,
+    PreparedExactSearchRuntimeConfig,
+)
+
 
 class PayloadError(ValueError):
     """Raised when an HTTP payload is malformed."""
@@ -324,6 +329,70 @@ def exact_search_request_payload(
         "clause_operators": clause_operators,
         "clause_values": clause_values,
     }
+
+
+def exact_scoring_options_payload(
+    payload: dict[str, Any],
+    key: str,
+) -> ExactScoringOptions:
+    scoring = require_object(payload, key, default={})
+    return ExactScoringOptions(
+        enable_parallel_scoring=require_bool(
+            scoring,
+            "enable_parallel_scoring",
+            default=True,
+        ),
+        enable_dim128_fast_path=require_bool(
+            scoring,
+            "enable_dim128_fast_path",
+            default=True,
+        ),
+        enable_parallel_work_item_oversubscription=require_bool(
+            scoring,
+            "enable_parallel_work_item_oversubscription",
+            default=True,
+        ),
+        parallel_work_item_count_override=require_int(
+            scoring,
+            "parallel_work_item_count_override",
+            default=0,
+        ),
+    )
+
+
+def prepared_exact_runtime_config_payload(
+    payload: dict[str, Any],
+    key: str = "config",
+) -> PreparedExactSearchRuntimeConfig:
+    config = require_object(payload, key, default={})
+    return PreparedExactSearchRuntimeConfig(
+        execution_backend=require_string(
+            config,
+            "execution_backend",
+            default="process",
+        ),
+        concurrency_lane_count=require_int(
+            config,
+            "concurrency_lane_count",
+            default=1,
+        ),
+        worker_count=require_int(
+            config,
+            "worker_count",
+            default=1,
+        ),
+        max_batch_size=require_int(
+            config,
+            "max_batch_size",
+            default=32,
+        ),
+        max_batch_wait_ms=require_int(
+            config,
+            "max_batch_wait_ms",
+            default=1,
+        ),
+        scoring=exact_scoring_options_payload(config, "scoring"),
+    )
 
 
 def _reclaim_decision_payload(value: Any) -> dict[str, Any]:

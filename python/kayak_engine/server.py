@@ -10,6 +10,9 @@ from pathlib import Path
 import sys
 from typing import Any, Callable
 
+from .hosted_prepared_exact_runtime_registry import (
+    HostedPreparedExactRuntimeRegistry,
+)
 from .mojo_service import load_module
 from .payloads import (
     PayloadError,
@@ -21,17 +24,19 @@ from .payloads import (
     filter_payload_parts,
     import_snapshot_request_payload,
     lifecycle_request_payload,
+    prepared_exact_runtime_config_payload,
     retention_update_request_payload,
     require_bool,
     require_int,
     require_list,
+    require_object,
     require_query_vectors,
     require_string,
 )
 
 
 class KayakEngineHttpServer(HTTPServer):
-    """HTTP server carrying immutable service configuration."""
+    """HTTP server carrying service configuration plus explicit runtime state."""
 
     def __init__(
         self,
@@ -44,6 +49,13 @@ class KayakEngineHttpServer(HTTPServer):
         super().__init__(server_address, request_handler_class)
         self.service_root = service_root
         self.engine_module = engine_module
+        self.prepared_exact_runtime_registry = HostedPreparedExactRuntimeRegistry(
+            service_root=service_root
+        )
+
+    def server_close(self) -> None:
+        self.prepared_exact_runtime_registry.close_all()
+        super().server_close()
 
 
 class KayakEngineHandler(BaseHTTPRequestHandler):
@@ -74,6 +86,19 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
                     ),
                 )
                 return
+            if self.path == "/v1/prepared-exact-runtimes":
+                self._write_json(
+                    HTTPStatus.OK,
+                    json.dumps(
+                        {
+                            "active_runtime_count": (
+                                self.server.prepared_exact_runtime_registry.active_runtime_count()
+                            ),
+                            "runtimes": self.server.prepared_exact_runtime_registry.list_runtime_summaries(),
+                        }
+                    ),
+                )
+                return
             self._write_error(HTTPStatus.NOT_FOUND, "route not found")
         except Exception as exc:  # pragma: no cover - transport guardrail
             self._write_engine_error(exc)
@@ -88,6 +113,11 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
             "/v1/debug-search": self._exact_debug_search,
             "/v1/documents:delete": self._delete_documents,
             "/v1/documents:upsert": self._upsert_documents,
+            "/v1/prepared-exact-runtimes": self._prepare_exact_runtime,
+            "/v1/prepared-exact-runtimes:close": self._close_exact_runtime,
+            "/v1/prepared-exact-runtimes:stats": self._prepared_exact_runtime_stats,
+            "/v1/prepared-exact-search": self._prepared_exact_search,
+            "/v1/prepared-exact-search-batch": self._prepared_exact_search_batch,
             "/v1/snapshots": self._create_snapshot,
             "/v1/snapshots:export": self._export_snapshot,
             "/v1/snapshots:import": self._import_snapshot,
@@ -236,10 +266,31 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
         )
 
     def _execute_reclaim(self, payload: dict[str, Any]) -> str:
-        return self.server.engine_module.execute_reclaim_json(
-            str(self.server.service_root),
-            execute_reclaim_request_payload(payload),
+        request = execute_reclaim_request_payload(payload)
+        response = json.loads(
+            self.server.engine_module.execute_reclaim_json(
+                str(self.server.service_root),
+                request,
+            )
         )
+        invalidated: list[dict[str, object]] = []
+        if response["result"]["applied"]:
+            reclaimed_snapshot_ids = [
+                decision["snapshot_id"]
+                for decision in request["plan"]["decisions"]
+                if not decision["retain"]
+            ]
+            invalidated = (
+                self.server.prepared_exact_runtime_registry.invalidate_reclaimed_snapshots(
+                    collection_id=request["collection_id"],
+                    tenant_id=request["tenant_id"],
+                    namespace_id=request["namespace_id"],
+                    reclaimed_snapshot_ids=reclaimed_snapshot_ids,
+                )
+            )
+        response["invalidated_prepared_exact_runtime_count"] = len(invalidated)
+        response["invalidated_prepared_exact_runtimes"] = invalidated
+        return json.dumps(response)
 
     def _update_collection_retention(self, payload: dict[str, Any]) -> str:
         return self.server.engine_module.update_collection_retention_policy_json(
@@ -263,6 +314,77 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
         return self.server.engine_module.debug_search_json(
             str(self.server.service_root),
             exact_search_request_payload(payload, debug_mode_default=True),
+        )
+
+    def _prepare_exact_runtime(self, payload: dict[str, Any]) -> str:
+        runtime, reused = self.server.prepared_exact_runtime_registry.prepare_runtime(
+            collection_id=require_string(payload, "collection_id"),
+            tenant_id=require_string(payload, "tenant_id"),
+            namespace_id=require_string(payload, "namespace_id"),
+            snapshot_id=require_string(payload, "snapshot_id"),
+            load_text_corpus=require_bool(
+                payload,
+                "load_text_corpus",
+                default=True,
+            ),
+            config=prepared_exact_runtime_config_payload(payload),
+        )
+        return json.dumps(
+            {
+                "reused": reused,
+                "active_runtime_count": self.server.prepared_exact_runtime_registry.active_runtime_count(),
+                "runtime": runtime,
+            }
+        )
+
+    def _prepared_exact_runtime_stats(self, payload: dict[str, Any]) -> str:
+        runtime_id = require_string(payload, "runtime_id")
+        return json.dumps(
+            {
+                "active_runtime_count": self.server.prepared_exact_runtime_registry.active_runtime_count(),
+                "runtime": self.server.prepared_exact_runtime_registry.runtime_summary(
+                    runtime_id
+                ),
+            }
+        )
+
+    def _close_exact_runtime(self, payload: dict[str, Any]) -> str:
+        runtime_id = require_string(payload, "runtime_id")
+        closed_runtime = self.server.prepared_exact_runtime_registry.close_runtime(
+            runtime_id
+        )
+        return json.dumps(
+            {
+                "closed": True,
+                "active_runtime_count": self.server.prepared_exact_runtime_registry.active_runtime_count(),
+                "runtime": closed_runtime,
+            }
+        )
+
+    def _prepared_exact_search(self, payload: dict[str, Any]) -> str:
+        runtime_id = require_string(payload, "runtime_id")
+        request = require_object(payload, "request")
+        return json.dumps(
+            {
+                "runtime_id": runtime_id,
+                "search": self.server.prepared_exact_runtime_registry.search(
+                    runtime_id,
+                    request,
+                ),
+            }
+        )
+
+    def _prepared_exact_search_batch(self, payload: dict[str, Any]) -> str:
+        runtime_id = require_string(payload, "runtime_id")
+        requests = require_list(payload, "requests")
+        return json.dumps(
+            {
+                "runtime_id": runtime_id,
+                "responses": self.server.prepared_exact_runtime_registry.search_batch(
+                    runtime_id,
+                    requests,
+                ),
+            }
         )
 
     def _planned_search(self, payload: dict[str, Any]) -> str:

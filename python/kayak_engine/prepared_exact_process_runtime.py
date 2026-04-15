@@ -334,6 +334,40 @@ class PreparedExactProcessRuntime:
     ) -> dict[str, Any]:
         return self.submit(payload).result(timeout=timeout)
 
+    def search_batch(
+        self,
+        requests: list[dict[str, Any]],
+        *,
+        timeout: float | None = None,
+    ) -> list[dict[str, Any]]:
+        if not isinstance(requests, list):
+            raise TypeError("requests must be a list of exact-search payloads")
+        if len(requests) == 0:
+            return []
+
+        normalized_requests = [
+            _normalized_request_for_identity(
+                payload,
+                collection_id=self.collection_id,
+                tenant_id=self.tenant_id,
+                namespace_id=self.namespace_id,
+                snapshot_id=self.snapshot_id,
+            )
+            for payload in requests
+        ]
+        futures = [self.submit(request) for request in normalized_requests]
+        if timeout is None:
+            return [future.result() for future in futures]
+
+        deadline = time.perf_counter() + timeout
+        responses: list[dict[str, Any]] = []
+        for future in futures:
+            remaining = deadline - time.perf_counter()
+            if remaining < 0:
+                raise TimeoutError("prepared exact search runtime batch timed out")
+            responses.append(future.result(timeout=remaining))
+        return responses
+
     def close(self) -> None:
         with self._lifecycle_lock:
             if not self._closed:

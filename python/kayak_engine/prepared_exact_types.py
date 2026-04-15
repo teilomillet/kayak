@@ -148,6 +148,49 @@ def _scoring_payload(scoring: ExactScoringOptions) -> dict[str, object]:
     }
 
 
+def scoring_options_json(scoring: ExactScoringOptions) -> dict[str, object]:
+    """Return a JSON-ready view of explicit exact-scoring options."""
+
+    return _scoring_payload(scoring)
+
+
+def prepared_exact_runtime_config_json(
+    config: PreparedExactSearchRuntimeConfig,
+) -> dict[str, object]:
+    """Return a JSON-ready view of runtime config policy."""
+
+    return {
+        "execution_backend": config.execution_backend,
+        "concurrency_lane_count": config.concurrency_lane_count,
+        "worker_count": config.worker_count,
+        "max_batch_size": config.max_batch_size,
+        "max_batch_wait_ms": config.max_batch_wait_ms,
+        "scoring": scoring_options_json(config.scoring),
+    }
+
+
+def prepared_exact_runtime_stats_json(
+    stats: PreparedExactSearchRuntimeStats,
+) -> dict[str, object]:
+    """Return a JSON-ready view of runtime counters and derived averages."""
+
+    return {
+        "submitted_request_count": stats.submitted_request_count,
+        "completed_request_count": stats.completed_request_count,
+        "failed_request_count": stats.failed_request_count,
+        "processed_request_count": stats.processed_request_count,
+        "executed_batch_count": stats.executed_batch_count,
+        "last_batch_size": stats.last_batch_size,
+        "max_observed_batch_size": stats.max_observed_batch_size,
+        "max_observed_queue_depth": stats.max_observed_queue_depth,
+        "total_queue_wait_seconds": stats.total_queue_wait_seconds,
+        "total_batch_execution_seconds": stats.total_batch_execution_seconds,
+        "average_batch_size": stats.average_batch_size,
+        "average_queue_wait_ms": stats.average_queue_wait_ms,
+        "average_batch_execution_ms": stats.average_batch_execution_ms,
+    }
+
+
 def _runtime_config(
     config: PreparedExactSearchRuntimeConfig | None,
 ) -> PreparedExactSearchRuntimeConfig:

@@ -48,6 +48,15 @@ Verified on `2026-04-14`:
 - `POST /v1/planned-search` works
 - `POST /v1/planned-explain` works
 
+Verified on `2026-04-15`:
+
+- `GET /v1/prepared-exact-runtimes` works
+- `POST /v1/prepared-exact-runtimes` works
+- `POST /v1/prepared-exact-runtimes:stats` works
+- `POST /v1/prepared-exact-runtimes:close` works
+- `POST /v1/prepared-exact-search` works
+- `POST /v1/prepared-exact-search-batch` works
+
 For operator workflows beyond the raw endpoint list, see
 [docs/hosted_engine_operator_guide.md](hosted_engine_operator_guide.md).
 
@@ -69,6 +78,10 @@ Current consequence:
   - `prepare_exact_search_session(...)`
   - `prepare_exact_search_runtime(...)`
   - `prepare_exact_search_scheduler(...)` as a compatibility alias
+- hosted same-snapshot reuse now also has an explicit HTTP surface:
+  - `POST /v1/prepared-exact-runtimes`
+  - `POST /v1/prepared-exact-search`
+  - `POST /v1/prepared-exact-search-batch`
 
 Current verified backend:
 - the local prepared exact-search runtime only verifies
@@ -128,6 +141,12 @@ Current implemented endpoints:
 - `POST /v1/planned-debug-search`
 - `POST /v1/planned-search`
 - `POST /v1/planned-explain`
+- `GET /v1/prepared-exact-runtimes`
+- `POST /v1/prepared-exact-runtimes`
+- `POST /v1/prepared-exact-runtimes:stats`
+- `POST /v1/prepared-exact-runtimes:close`
+- `POST /v1/prepared-exact-search`
+- `POST /v1/prepared-exact-search-batch`
 
 Current design choice:
 - exact search and explain have a narrower wire shape
@@ -136,11 +155,61 @@ Current design choice:
   explicitly
 - lifecycle and reclaim routes keep plan-then-execute explicit rather than
   hiding cleanup behind implicit policy
+- prepared exact runtime reuse stays explicit through a separate runtime handle
+  rather than changing `/v1/search` semantics
 
 Reason:
 - ordinary callers should not need to materialize a full `SearchPlan`
 - planner-aware callers still need an explicit route into stage-1 selection
 - operator routes should stay auditable and predictable at the wire level
+- same-snapshot exact reuse is useful, but it should remain visible at the wire
+  instead of becoming a hidden per-process cache behind stateless search
+
+## Hosted Prepared Exact Runtime
+
+The hosted transport now exposes one explicit prepared exact-runtime registry.
+
+What it owns:
+
+- process-backed exact runtimes pinned to one
+  `(collection_id, tenant_id, namespace_id, snapshot_id)` tuple
+- explicit runtime policy:
+  - `execution_backend`
+  - `concurrency_lane_count`
+  - `worker_count`
+  - `max_batch_size`
+  - `max_batch_wait_ms`
+  - exact scoring options
+- per-runtime counters and derived averages
+
+What it does not own:
+
+- planned search
+- explain
+- automatic hidden reuse behind `/v1/search`
+- transport-level HTTP concurrency
+
+Current prepare/reuse rule:
+
+- `POST /v1/prepared-exact-runtimes` prepares a runtime when the
+  `(identity, load_text_corpus, config)` key is new
+- the same request reuses the existing hosted runtime and returns the same
+  `runtime_id`
+
+Current invalidation rule:
+
+- publishing a newer snapshot does **not** invalidate a runtime pinned to an
+  older snapshot
+- executing reclaim invalidates hosted runtimes whose pinned `snapshot_id`
+  appears in the reclaim plan with `retain = false`
+- reclaim dry runs do **not** invalidate hosted runtimes
+
+Reason:
+
+- the pinned-snapshot tests already verified that prepared exact search can stay
+  correct across newer publishes
+- reclaim is the first operator action that explicitly removes snapshot
+  artifacts, so the hosted runtime should not silently survive that policy
 
 ## Example
 
@@ -208,6 +277,64 @@ curl -sS http://127.0.0.1:8000/v1/search \
   }'
 ```
 
+Prepare one hosted exact runtime:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/prepared-exact-runtimes \
+  -H 'content-type: application/json' \
+  -d '{
+    "collection_id": "news",
+    "tenant_id": "tenant-a",
+    "namespace_id": "search",
+    "snapshot_id": "snapshot-0001",
+    "load_text_corpus": true,
+    "config": {
+      "execution_backend": "process",
+      "concurrency_lane_count": 1,
+      "worker_count": 2,
+      "max_batch_size": 8,
+      "max_batch_wait_ms": 25
+    }
+  }'
+```
+
+Search through one hosted prepared runtime:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/prepared-exact-search \
+  -H 'content-type: application/json' \
+  -d '{
+    "runtime_id": "prepared-exact-runtime-0001",
+    "request": {
+      "query_model_name": "colbertv2",
+      "query": [[1.0, 0.0], [0.0, 1.0]],
+      "final_k": 2
+    }
+  }'
+```
+
+Batch through one hosted prepared runtime:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/prepared-exact-search-batch \
+  -H 'content-type: application/json' \
+  -d '{
+    "runtime_id": "prepared-exact-runtime-0001",
+    "requests": [
+      {
+        "query_model_name": "colbertv2",
+        "query": [[1.0, 0.0], [0.0, 1.0]],
+        "final_k": 2
+      },
+      {
+        "query_model_name": "colbertv2",
+        "query": [[0.0, 1.0], [1.0, 0.0]],
+        "final_k": 2
+      }
+    ]
+  }'
+```
+
 Build a reclaim plan:
 
 ```bash
@@ -239,6 +366,8 @@ curl -sS http://127.0.0.1:8000/v1/snapshots:export \
 These are verified limits of the current transport:
 
 - single-process, single-threaded server
+- prepared exact runtime reuse improves repeated same-process snapshot loading,
+  but it does not make the HTTP server concurrent on its own
 - no auth yet
 - no streaming results
 - no binary ingest transport
