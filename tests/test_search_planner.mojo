@@ -67,6 +67,58 @@ def test_native_multivector_planner_prefers_current_warp_shaped_path() raises:
     )
 
 
+def test_balanced_planner_prefers_flat_native_path_for_wide_candidate_windows() raises:
+    var selection = select_search_plan_for_availability(
+        SnapshotSearchArtifactAvailability(
+            1,
+            ["document_proxy", "centroid_postings", "gem_graph"],
+            ["document_proxy", "centroid_postings", "gem_graph"],
+        ),
+        SearchPlanSelectionRequest(
+            5,
+            40,
+            best_effort_faithfulness_policy(),
+            match_all_filter(),
+            SEARCH_PLANNING_GOAL_BALANCED,
+        ),
+    )
+
+    assert_equal(
+        selection.plan.candidate_generator.kind,
+        "centroid_postings_flat",
+    )
+    assert_equal(
+        selection.decision.order_policy_kind,
+        SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+    )
+
+
+def test_native_multivector_planner_prefers_flat_native_path_for_wide_candidate_windows() raises:
+    var selection = select_search_plan_for_availability(
+        SnapshotSearchArtifactAvailability(
+            1,
+            ["document_proxy", "centroid_postings", "gem_graph"],
+            ["document_proxy", "centroid_postings", "gem_graph"],
+        ),
+        SearchPlanSelectionRequest(
+            5,
+            40,
+            best_effort_faithfulness_policy(),
+            match_all_filter(),
+            SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
+        ),
+    )
+
+    assert_equal(
+        selection.plan.candidate_generator.kind,
+        "centroid_postings_flat",
+    )
+    assert_equal(
+        selection.decision.order_policy_kind,
+        SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
+    )
+
+
 def test_planner_uses_explicit_preferred_order_when_supported() raises:
     var selection = select_search_plan_for_availability(
         SnapshotSearchArtifactAvailability(

@@ -236,7 +236,7 @@ def test_build_planner_benchmark_summary_reports_selected_generator() raises:
     assert_equal(summary.planning_goal, "balanced")
     assert_equal(summary.plan.reference_scoring_semantics.kind, "exact_late_interaction")
     assert_equal(summary.plan.stage2_reference_operator.kind, "exact_late_interaction")
-    assert_equal(summary.plan.candidate_generator.kind, "centroid_postings_imputed_flat")
+    assert_equal(summary.plan.candidate_generator.kind, "centroid_postings_flat")
     assert_equal(summary.selected_candidate_generator_status, "promoted")
     assert_equal(summary.selection_decision.order_policy_kind, "goal_default")
     assert_equal(summary.selection_decision.constraint_kind, "none")
@@ -296,7 +296,7 @@ def test_build_planner_benchmark_summary_supports_clause_text_on_mirrored_text_c
     )
 
     assert_equal(summary.plan.stage3_verifier.kind, "clause_text")
-    assert_equal(summary.plan.candidate_generator.kind, "centroid_postings_imputed_flat")
+    assert_equal(summary.plan.candidate_generator.kind, "centroid_postings_flat")
     assert_equal(summary.measured.stage1_byte_size > 0, True)
 
 

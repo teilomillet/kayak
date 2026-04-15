@@ -304,7 +304,7 @@ def test_build_planner_evidence_summary_reports_selected_candidate_and_stage2() 
     )
     assert_equal(
         summary.plan.candidate_generator.kind,
-        "centroid_postings_imputed_flat",
+        "centroid_postings_flat",
     )
     assert_equal(summary.selected_candidate_generator_status, "promoted")
     assert_equal(len(summary.candidates) > 0, True)

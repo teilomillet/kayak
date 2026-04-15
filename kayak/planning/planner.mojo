@@ -415,6 +415,54 @@ def effective_candidate_generator_order(
     )
 
 
+def move_generator_before(
+    mut order: List[String], generator_kind: String, before_generator_kind: String
+):
+    var source_index = -1
+    var target_index = -1
+    for index in range(len(order)):
+        if order[index] == generator_kind:
+            source_index = index
+        if order[index] == before_generator_kind:
+            target_index = index
+
+    if source_index < 0 or target_index < 0 or source_index < target_index:
+        return
+
+    var reordered = List[String]()
+    for index in range(len(order)):
+        if index == target_index:
+            reordered.append(order[source_index].copy())
+        if index == source_index:
+            continue
+        reordered.append(order[index].copy())
+
+    order = reordered^
+
+
+def adjusted_goal_default_candidate_generator_order(
+    read request: SearchPlanSelectionRequest
+) raises -> List[String]:
+    var order = search_planning_goal_kinds(request.goal)
+
+    # Wide candidate windows already preserve most of the shortlist semantics.
+    # The gold planner evidence showed that the imputed native path becomes a
+    # latency tax in that regime, while the flatter native path keeps the same
+    # judged quality. Keep the small-window WARP-shaped preference intact.
+    if request.candidate_budget.candidate_k >= request.candidate_budget.final_k * 8:
+        if (
+            request.goal == SEARCH_PLANNING_GOAL_BALANCED
+            or request.goal == SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR
+        ):
+            move_generator_before(
+                order,
+                "centroid_postings_flat",
+                "centroid_postings_imputed_flat",
+            )
+
+    return order^
+
+
 def effective_candidate_generator_order_for_filter_expression(
     read request: SearchPlanSelectionRequest,
     read filter_expression: FilterExpression,
@@ -479,7 +527,7 @@ def effective_candidate_generator_order_for_filter_expression(
         )
 
     return CandidateGeneratorOrderDecision(
-        search_planning_goal_kinds(request.goal),
+        adjusted_goal_default_candidate_generator_order(request),
         SEARCH_PLAN_ORDER_POLICY_GOAL_DEFAULT,
         default_constraint_kind,
         default_explanation,
