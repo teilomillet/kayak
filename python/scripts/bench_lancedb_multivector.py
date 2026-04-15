@@ -13,6 +13,10 @@ if str(PYTHON_ROOT) not in sys.path:
 
 from kayak_bridge.json_task_loader import load_task_json
 from kayak_bridge.lancedb_benchmark import benchmark_task_with_lancedb
+from kayak_bridge.lancedb_index_controls import (
+    LanceDbIndexBuildControls,
+    LanceDbIndexedQueryControls,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,6 +66,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Build a LanceDB IVF_PQ index before searching.",
     )
+    parser.add_argument("--index-num-partitions", type=int)
+    parser.add_argument("--index-num-sub-vectors", type=int)
+    parser.add_argument("--index-target-partition-size", type=int)
+    parser.add_argument("--indexed-nprobes", type=int)
+    parser.add_argument("--indexed-refine-factor", type=int)
     return parser.parse_args()
 
 
@@ -75,6 +84,15 @@ def main() -> None:
         warmup_iterations=args.warmup_iterations,
         measurement_iterations=args.measurement_iterations,
         build_index=args.build_index,
+        index_build_controls=LanceDbIndexBuildControls(
+            num_partitions=args.index_num_partitions,
+            num_sub_vectors=args.index_num_sub_vectors,
+            target_partition_size=args.index_target_partition_size,
+        ),
+        indexed_query_controls=LanceDbIndexedQueryControls(
+            nprobes=args.indexed_nprobes,
+            refine_factor=args.indexed_refine_factor,
+        ),
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

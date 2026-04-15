@@ -20,6 +20,10 @@ from kayak_bridge.comparison_scorecard import build_comparison_scorecard
 from kayak_bridge.json_task_loader import load_task_json
 from kayak_bridge.kayak_task_benchmark import benchmark_task_with_kayak_exact
 from kayak_bridge.lancedb_benchmark import benchmark_task_with_lancedb
+from kayak_bridge.lancedb_index_controls import (
+    LanceDbIndexBuildControls,
+    LanceDbIndexedQueryControls,
+)
 from kayak_bridge.lancedb_storage_comparison import (
     benchmark_task_with_lancedb_storage_compare,
 )
@@ -76,6 +80,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rebuild-count", type=int, default=5)
     parser.add_argument("--warmup-iterations", type=int, default=1)
     parser.add_argument("--measurement-iterations", type=int, default=3)
+    parser.add_argument("--index-num-partitions", type=int)
+    parser.add_argument("--index-num-sub-vectors", type=int)
+    parser.add_argument("--index-target-partition-size", type=int)
+    parser.add_argument("--indexed-nprobes", type=int)
+    parser.add_argument("--indexed-refine-factor", type=int)
     parser.add_argument(
         "--target-document-count",
         type=int,
@@ -122,6 +131,15 @@ def main() -> None:
 
     artifact_prefix = args.artifact_prefix or _slugify(str(task["slice_name"]))
     table_name = artifact_prefix
+    index_build_controls = LanceDbIndexBuildControls(
+        num_partitions=args.index_num_partitions,
+        num_sub_vectors=args.index_num_sub_vectors,
+        target_partition_size=args.index_target_partition_size,
+    )
+    indexed_query_controls = LanceDbIndexedQueryControls(
+        nprobes=args.indexed_nprobes,
+        refine_factor=args.indexed_refine_factor,
+    )
     target_document_counts = args.target_document_counts
     if not target_document_counts:
         target_document_counts = _default_target_document_counts(task)
@@ -168,6 +186,8 @@ def main() -> None:
                 warmup_iterations=args.warmup_iterations,
                 measurement_iterations=args.measurement_iterations,
                 build_index=True,
+                index_build_controls=index_build_controls,
+                indexed_query_controls=indexed_query_controls,
             ).to_json_ready()
         )
     indexed_variance = summarize_benchmark_variance(indexed_runs).to_json_ready()

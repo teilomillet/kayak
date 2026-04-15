@@ -18,6 +18,11 @@ from typing import Any, Mapping
 import numpy as np
 
 from .judged_metrics import summarize_ranked_task
+from .lancedb_index_controls import (
+    LanceDbIndexBuildControls,
+    LanceDbIndexedQueryControls,
+    validate_index_controls,
+)
 
 
 def _require_lancedb() -> tuple[Any, Any]:
@@ -168,8 +173,20 @@ def _filter_zero_vectors(
     )
 
 
-def _search_doc_ids(table: Any, query_vectors: np.ndarray, k: int) -> tuple[str, ...]:
-    rows = table.search(query_vectors).limit(k).to_arrow().to_pylist()
+def _search_doc_ids(
+    table: Any,
+    query_vectors: np.ndarray,
+    k: int,
+    *,
+    indexed_query_controls: LanceDbIndexedQueryControls | None = None,
+) -> tuple[str, ...]:
+    query = table.search(query_vectors)
+    if indexed_query_controls is not None:
+        if indexed_query_controls.nprobes is not None:
+            query = query.nprobes(indexed_query_controls.nprobes)
+        if indexed_query_controls.refine_factor is not None:
+            query = query.refine_factor(indexed_query_controls.refine_factor)
+    rows = query.limit(k).to_arrow().to_pylist()
     return tuple(str(row["doc_id"]) for row in rows)
 
 
@@ -205,6 +222,11 @@ class LanceDbBenchmarkSummary:
     engine: str
     engine_version: str
     index_kind: str
+    index_num_partitions: int | None
+    index_num_sub_vectors: int | None
+    index_target_partition_size: int | None
+    indexed_nprobes: int | None
+    indexed_refine_factor: int | None
     vector_metric: str
     storage_byte_size: int
     bytes_per_document: float
@@ -227,6 +249,8 @@ def benchmark_task_with_lancedb(
     warmup_iterations: int = 2,
     measurement_iterations: int = 25,
     build_index: bool = False,
+    index_build_controls: LanceDbIndexBuildControls | None = None,
+    indexed_query_controls: LanceDbIndexedQueryControls | None = None,
     unit_norm_tolerance: float = 1e-3,
 ) -> LanceDbBenchmarkSummary:
     lancedb, pa = _require_lancedb()
@@ -235,6 +259,14 @@ def benchmark_task_with_lancedb(
         raise ValueError("warmup_iterations must be non-negative")
     if measurement_iterations <= 0:
         raise ValueError("measurement_iterations must be positive")
+
+    normalized_index_build_controls, normalized_indexed_query_controls = (
+        validate_index_controls(
+            build_index=build_index,
+            index_build_controls=index_build_controls,
+            indexed_query_controls=indexed_query_controls,
+        )
+    )
 
     norm_error = _validate_unit_norm_vectors(task, tolerance=unit_norm_tolerance)
     (
@@ -268,7 +300,11 @@ def benchmark_task_with_lancedb(
     index_kind = "none"
     if build_index:
         _require_faiss_for_indexing()
-        table.create_index(vector_column_name="vector", metric="cosine")
+        table.create_index(
+            vector_column_name="vector",
+            metric="cosine",
+            **normalized_index_build_controls.create_index_kwargs(),
+        )
         # Indexed timings are only meaningful once LanceDB confirms the index is ready.
         _wait_for_vector_index(table)
         index_kind = "ivf_pq"
@@ -280,7 +316,14 @@ def benchmark_task_with_lancedb(
 
     for _ in range(warmup_iterations):
         for query_matrix in query_matrices:
-            _search_doc_ids(table, query_matrix, int(task["k"]))
+            _search_doc_ids(
+                table,
+                query_matrix,
+                int(task["k"]),
+                indexed_query_controls=(
+                    normalized_indexed_query_controls if build_index else None
+                ),
+            )
 
     elapsed_seconds: list[float] = []
     ranked_doc_ids_by_query: list[tuple[str, ...]] = []
@@ -288,7 +331,12 @@ def benchmark_task_with_lancedb(
         for query_index, query_matrix in enumerate(query_matrices):
             start = time.perf_counter()
             ranked_doc_ids = _search_doc_ids(
-                table, query_matrix, int(filtered_task["k"])
+                table,
+                query_matrix,
+                int(filtered_task["k"]),
+                indexed_query_controls=(
+                    normalized_indexed_query_controls if build_index else None
+                ),
             )
             elapsed_seconds.append(time.perf_counter() - start)
             if measurement_iteration == 0:
@@ -331,6 +379,13 @@ def benchmark_task_with_lancedb(
         engine="lancedb",
         engine_version=str(lancedb.__version__),
         index_kind=index_kind,
+        index_num_partitions=normalized_index_build_controls.num_partitions,
+        index_num_sub_vectors=normalized_index_build_controls.num_sub_vectors,
+        index_target_partition_size=(
+            normalized_index_build_controls.target_partition_size
+        ),
+        indexed_nprobes=normalized_indexed_query_controls.nprobes,
+        indexed_refine_factor=normalized_indexed_query_controls.refine_factor,
         vector_metric="cosine",
         storage_byte_size=storage_byte_size,
         bytes_per_document=float(storage_byte_size) / float(document_count),

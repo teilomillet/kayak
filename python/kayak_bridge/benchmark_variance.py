@@ -23,6 +23,11 @@ class BenchmarkVarianceSummary:
     slice_name: str
     primary_metric: str
     index_kind: str
+    index_num_partitions: int | None
+    index_num_sub_vectors: int | None
+    index_target_partition_size: int | None
+    indexed_nprobes: int | None
+    indexed_refine_factor: int | None
     rebuild_count: int
     primary_value_min: float
     primary_value_max: float
@@ -52,6 +57,11 @@ class FrozenBenchmarkSummary:
     engine: str
     engine_version: str
     index_kind: str
+    index_num_partitions: int | None
+    index_num_sub_vectors: int | None
+    index_target_partition_size: int | None
+    indexed_nprobes: int | None
+    indexed_refine_factor: int | None
     vector_metric: str | None
     freeze_policy: str
     rebuild_count: int
@@ -83,6 +93,11 @@ def summarize_benchmark_variance(
     slice_name = str(first["slice_name"])
     primary_metric = str(first["primary_metric"])
     index_kind = str(first.get("index_kind", "unknown"))
+    index_num_partitions = _optional_int(first, "index_num_partitions")
+    index_num_sub_vectors = _optional_int(first, "index_num_sub_vectors")
+    index_target_partition_size = _optional_int(first, "index_target_partition_size")
+    indexed_nprobes = _optional_int(first, "indexed_nprobes")
+    indexed_refine_factor = _optional_int(first, "indexed_refine_factor")
 
     for run in runs[1:]:
         if str(run["dataset_id"]) != dataset_id:
@@ -95,6 +110,19 @@ def summarize_benchmark_variance(
             raise ValueError("all runs must share primary_metric")
         if str(run.get("index_kind", "unknown")) != index_kind:
             raise ValueError("all runs must share index_kind")
+        if _optional_int(run, "index_num_partitions") != index_num_partitions:
+            raise ValueError("all runs must share index_num_partitions")
+        if _optional_int(run, "index_num_sub_vectors") != index_num_sub_vectors:
+            raise ValueError("all runs must share index_num_sub_vectors")
+        if (
+            _optional_int(run, "index_target_partition_size")
+            != index_target_partition_size
+        ):
+            raise ValueError("all runs must share index_target_partition_size")
+        if _optional_int(run, "indexed_nprobes") != indexed_nprobes:
+            raise ValueError("all runs must share indexed_nprobes")
+        if _optional_int(run, "indexed_refine_factor") != indexed_refine_factor:
+            raise ValueError("all runs must share indexed_refine_factor")
 
     primary_values = _float_values(runs, "primary_value")
     search_seconds = _float_values(runs, "mean_search_seconds")
@@ -105,6 +133,11 @@ def summarize_benchmark_variance(
         slice_name=slice_name,
         primary_metric=primary_metric,
         index_kind=index_kind,
+        index_num_partitions=index_num_partitions,
+        index_num_sub_vectors=index_num_sub_vectors,
+        index_target_partition_size=index_target_partition_size,
+        indexed_nprobes=indexed_nprobes,
+        indexed_refine_factor=indexed_refine_factor,
         rebuild_count=len(runs),
         primary_value_min=min(primary_values),
         primary_value_max=max(primary_values),
@@ -145,6 +178,11 @@ def freeze_benchmark_summary_mean(
         engine=str(first.get("engine", "")),
         engine_version=str(first.get("engine_version", "")),
         index_kind=variance.index_kind,
+        index_num_partitions=variance.index_num_partitions,
+        index_num_sub_vectors=variance.index_num_sub_vectors,
+        index_target_partition_size=variance.index_target_partition_size,
+        indexed_nprobes=variance.indexed_nprobes,
+        indexed_refine_factor=variance.indexed_refine_factor,
         vector_metric=(
             None if first.get("vector_metric") is None else str(first["vector_metric"])
         ),
@@ -166,3 +204,10 @@ def freeze_benchmark_summary_mean(
         source_mean_search_seconds_min=variance.mean_search_seconds_min,
         source_mean_search_seconds_max=variance.mean_search_seconds_max,
     )
+
+
+def _optional_int(summary: Mapping[str, Any], key: str) -> int | None:
+    value = summary.get(key)
+    if value is None:
+        return None
+    return int(value)
