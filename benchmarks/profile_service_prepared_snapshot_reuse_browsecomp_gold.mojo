@@ -28,6 +28,11 @@ from kayak import (
 from kayak.eval import JudgedTask
 from kayak.service.paths import service_collection_root
 
+# Bound each section so quiet-wrapper reruns stay comparable on a contended host.
+comptime PREPARE_MAX_ITERS = 256
+comptime STATELESS_SEARCH_MAX_ITERS = 256
+comptime PREPARED_SEARCH_MAX_ITERS = 1024
+
 
 struct PreparedSnapshotMeasurement(Copyable):
     var dataset_name: String
@@ -200,7 +205,7 @@ def benchmark_prepare_snapshot_mean_seconds(service_root: Path) raises -> Float6
         )
         bench_compiler.keep(len(prepared.snapshot.segments))
 
-    var report = benchmark.run[prepare_once]()
+    var report = benchmark.run[prepare_once](max_iters=PREPARE_MAX_ITERS)
     report.print()
     print("")
     return report.mean()
@@ -219,7 +224,7 @@ def benchmark_exact_search_mean_seconds(
         if query_index == len(requests):
             query_index = 0
 
-    var report = benchmark.run[search_once]()
+    var report = benchmark.run[search_once](max_iters=STATELESS_SEARCH_MAX_ITERS)
     report.print()
     print("")
     return report.mean()
@@ -252,7 +257,7 @@ def benchmark_exact_search_with_prepared_snapshot_mean_seconds(
         if query_index == len(requests):
             query_index = 0
 
-    var report = benchmark.run[search_once]()
+    var report = benchmark.run[search_once](max_iters=PREPARED_SEARCH_MAX_ITERS)
     report.print()
     print("")
     return report.mean()
@@ -273,7 +278,7 @@ def benchmark_planned_search_mean_seconds(
         if query_index == len(requests):
             query_index = 0
 
-    var report = benchmark.run[search_once]()
+    var report = benchmark.run[search_once](max_iters=STATELESS_SEARCH_MAX_ITERS)
     report.print()
     print("")
     return report.mean()
@@ -306,7 +311,7 @@ def benchmark_planned_search_with_prepared_snapshot_mean_seconds(
         if query_index == len(requests):
             query_index = 0
 
-    var report = benchmark.run[search_once]()
+    var report = benchmark.run[search_once](max_iters=PREPARED_SEARCH_MAX_ITERS)
     report.print()
     print("")
     return report.mean()
