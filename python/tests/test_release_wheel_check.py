@@ -74,6 +74,35 @@ class ReleaseWheelCheckTests(unittest.TestCase):
             ):
                 inspect_wheel(wheel_path)
 
+    def test_inspect_wheel_rejects_internal_bridge_helper_modules(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            wheel_path = (
+                Path(temp_dir) / f"kayak-{PROJECT_VERSION}-py3-none-any.whl"
+            )
+            with zipfile.ZipFile(wheel_path, "w") as wheel:
+                wheel.writestr(
+                    "kayak_bridge/_artifacts/kayak.mojopkg",
+                    b"placeholder",
+                )
+                wheel.writestr(
+                    "kayak_bridge/_artifacts/mojopkg_build.json",
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "project_version": PROJECT_VERSION,
+                            "mojo_version": "mojo 0.26.3",
+                            "artifact_filename": "kayak.mojopkg",
+                            "artifact_sha256": "abc123",
+                        }
+                    ),
+                )
+                wheel.writestr("kayak_bridge/trec_run.py", "")
+
+            with self.assertRaisesRegex(
+                AssertionError, "forbidden internal bridge modules"
+            ):
+                inspect_wheel(wheel_path)
+
 
 if __name__ == "__main__":
     unittest.main()

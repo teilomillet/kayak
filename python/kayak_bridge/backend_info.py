@@ -28,6 +28,22 @@ class BackendInfo:
     availability_reason: str
 
 
+_KNOWN_BACKENDS = (
+    NUMPY_REFERENCE_BACKEND,
+    MOJO_EXACT_CPU_BACKEND,
+)
+
+
+def _unsupported_backend_error(name: object) -> ValueError:
+    supported = ", ".join(_KNOWN_BACKENDS)
+    return ValueError(
+        f"unsupported backend: {name}. "
+        f"Supported backends: {supported}. "
+        'Use kayak.available_backends() to inspect runtime availability or '
+        'kayak.help("Backends") for usage.'
+    )
+
+
 @lru_cache(maxsize=1)
 def _mojo_backend_availability_reason() -> str:
     try:
@@ -63,7 +79,7 @@ def backend_info(name: str) -> BackendInfo:
             availability_reason=reason,
         )
 
-    raise ValueError(f"unsupported backend: {name}")
+    raise _unsupported_backend_error(name)
 
 
 def available_backends() -> tuple[str, ...]:

@@ -7,6 +7,7 @@ import numpy as np
 from .dtypes import SCORE_DTYPE
 from .late_scores import LateScores
 from .layouts import MOJO_EXACT_CPU_BACKEND, NUMPY_REFERENCE_BACKEND
+from .backend_info import _unsupported_backend_error
 from .mojo_exact_cpu import load_module as load_mojo_exact_cpu_module
 from .mojo_payloads import index_payload, query_payload, MojoIndexPayload
 from .prepared_index_cache import prepared_packed_index_object
@@ -86,4 +87,4 @@ def maxsim_scores(
         values = _mojo_scores_for_query_and_index(query, index)
         return LateScores.from_values(backend, index.doc_ids, values)
 
-    raise ValueError(f"unsupported backend: {backend}")
+    raise _unsupported_backend_error(backend)

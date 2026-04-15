@@ -294,7 +294,7 @@ def _render_overview() -> str:
     sections = [
         doc.splitlines()[0],
         "",
-        'Use `kayak.help("search")`, `kayak.help("stores")`, `kayak.help("typing")`, `kayak.help("mojo")`, `kayak.help("search_text")`, or `kayak.help(kayak.LateTextRetriever)`.',
+        'Use `kayak.help("search")`, `kayak.help("stores")`, `kayak.help("typing")`, `kayak.help("mojo")`, `kayak.help("doctor")`, `kayak.help("search_text")`, or `kayak.help(kayak.LateTextRetriever)`.',
         "",
     ]
     for category, members in _grouped_members().items():
@@ -438,6 +438,11 @@ def _topic_aliases() -> dict[str, str]:
         "annotations": "typing",
         "plan": "Search Plans",
         "plans": "Search Plans",
+        "session": "LateTextSearchSession",
+        "sessions": "LateTextSearchSession",
+        "prepared": "LateTextSearchSession",
+        "diagnostics": "doctor",
+        "environment": "doctor",
         "backend": "Backends",
         "mojo": "Backends",
     }
@@ -465,6 +470,11 @@ def _render_method_matches(
             else f"{owner_name}.{method_name}{signature}"
         )
         lines.append(f"- {call}\n  {_doc_summary(method)}")
+    related_topics: list[str] = []
+    for method_name, _obj, owner_name in matches[:12]:
+        related_topics.append(owner_name)
+        related_topics.append(f"{owner_name}.{method_name}")
+    lines.extend(_related_topics_block(related_topics[:6]))
     return "\n".join(lines).strip()
 
 

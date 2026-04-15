@@ -31,6 +31,11 @@ class _RuntimeRequestEnvelope:
 
 
 @dataclass(frozen=True, slots=True)
+class _RuntimeReadyEnvelope:
+    worker_index: int
+
+
+@dataclass(frozen=True, slots=True)
 class _RuntimeSuccessEnvelope:
     request_id: int
     response: dict[str, Any]
@@ -118,6 +123,7 @@ def _prepared_exact_search_runtime_worker(
             )
         )
         return
+    response_queue.put(_RuntimeReadyEnvelope(worker_index=worker_index))
 
     while True:
         item = request_queue.get()
@@ -206,6 +212,8 @@ class PreparedExactProcessRuntime:
         "_stats",
         "_closed",
         "_fatal_exception",
+        "_ready_event",
+        "_ready_worker_count",
         "_stopped_worker_count",
         "_next_request_id",
         "_pending_futures",
@@ -238,6 +246,8 @@ class PreparedExactProcessRuntime:
         self._stats = PreparedExactSearchRuntimeStats()
         self._closed = False
         self._fatal_exception: BaseException | None = None
+        self._ready_event = threading.Event()
+        self._ready_worker_count = 0
         self._stopped_worker_count = 0
         self._next_request_id = 0
         self._pending_futures: dict[int, Future[dict[str, Any]]] = {}
@@ -294,6 +304,39 @@ class PreparedExactProcessRuntime:
                 total_queue_wait_seconds=self._stats.total_queue_wait_seconds,
                 total_batch_execution_seconds=self._stats.total_batch_execution_seconds,
             )
+
+    def wait_until_ready(self, timeout: float | None = None) -> None:
+        if timeout is not None and timeout < 0:
+            raise ValueError("timeout must be non-negative")
+
+        deadline = None if timeout is None else (time.perf_counter() + timeout)
+        while True:
+            with self._lifecycle_lock:
+                if self._fatal_exception is not None:
+                    raise RuntimeError(
+                        "prepared exact search runtime failed during startup"
+                    ) from self._fatal_exception
+                if self._ready_event.is_set():
+                    return
+                if self._closed:
+                    raise RuntimeError(
+                        "prepared exact search runtime closed before startup completed"
+                    )
+
+            wait_timeout = 0.05
+            if deadline is not None:
+                remaining = deadline - time.perf_counter()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        "prepared exact search runtime did not become ready in time"
+                    )
+                wait_timeout = min(wait_timeout, remaining)
+
+            if self._ready_event.wait(timeout=wait_timeout):
+                return
+
+    def worker_pids(self) -> tuple[int, ...]:
+        return tuple(worker.pid for worker in self._workers if worker.pid is not None)
 
     def submit(self, payload: dict[str, Any]) -> Future[dict[str, Any]]:
         request = _normalized_request_for_identity(
@@ -509,6 +552,12 @@ class PreparedExactProcessRuntime:
                 future = self._resolve_pending_future(envelope.request_id)
                 if future is not None:
                     future.set_result(envelope.response)
+                continue
+
+            if isinstance(envelope, _RuntimeReadyEnvelope):
+                self._ready_worker_count += 1
+                if self._ready_worker_count >= len(self._workers):
+                    self._ready_event.set()
                 continue
 
             if isinstance(envelope, _RuntimeErrorEnvelope):

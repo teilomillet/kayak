@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .backend_info import _unsupported_backend_error
 from .dtypes import MIN_SCORE, SCORE_DTYPE
 from .late_scores import LateScores
 from .layouts import NUMPY_REFERENCE_BACKEND
@@ -16,7 +17,7 @@ def maxsim_scores(
     backend: str = NUMPY_REFERENCE_BACKEND,
 ) -> LateScores:
     if backend != NUMPY_REFERENCE_BACKEND:
-        raise ValueError(f"unsupported backend: {backend}")
+        raise _unsupported_backend_error(backend)
     if query.vector_dim != index.vector_dim:
         raise ValueError("query and index must share the same vector dimension")
 

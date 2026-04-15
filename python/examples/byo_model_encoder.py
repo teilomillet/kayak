@@ -41,14 +41,8 @@ class ToyLateInteractionModel:
 
 def main() -> None:
     model = ToyLateInteractionModel()
-    encoder = kayak.open_encoder(
-        "callable",
-        query_encoder=model.encode_query_tokens,
-        document_encoder=model.encode_document_tokens,
-    )
-
     retriever = kayak.open_text_retriever(
-        encoder=encoder,
+        encoder=model,
         store="memory",
         backend=kayak.NUMPY_REFERENCE_BACKEND,
     )

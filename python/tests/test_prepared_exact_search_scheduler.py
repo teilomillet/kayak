@@ -168,6 +168,7 @@ class PreparedExactSearchRuntimeTests(unittest.TestCase):
             )
         )
         self.addCleanup(runtime.close)
+        runtime.wait_until_ready(timeout=30.0)
 
         request = {
             "query_model_name": "colbertv2",
@@ -176,6 +177,31 @@ class PreparedExactSearchRuntimeTests(unittest.TestCase):
         }
 
         self.assertEqual(runtime.search(request), session.search(request))
+
+    def test_runtime_wait_until_ready_exposes_worker_pids(self) -> None:
+        service_root, _module, _session, temp_dir = self._seed_snapshot()
+        self.addCleanup(temp_dir.cleanup)
+
+        runtime = prepare_exact_search_runtime(
+            service_root=service_root,
+            collection_id="news",
+            tenant_id="tenant-a",
+            namespace_id="search",
+            snapshot_id="snapshot-0001",
+            config=PreparedExactSearchRuntimeConfig(
+                concurrency_lane_count=2,
+                worker_count=1,
+                max_batch_size=8,
+                max_batch_wait_ms=1,
+            ),
+        )
+        self.addCleanup(runtime.close)
+
+        runtime.wait_until_ready(timeout=30.0)
+        worker_pids = runtime.worker_pids()
+
+        self.assertEqual(len(worker_pids), 2)
+        self.assertTrue(all(isinstance(pid, int) and pid > 0 for pid in worker_pids))
 
     def test_runtime_coalesces_concurrent_submitters(self) -> None:
         service_root, _module, session, temp_dir = self._seed_snapshot()

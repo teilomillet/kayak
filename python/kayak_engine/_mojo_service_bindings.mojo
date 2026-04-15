@@ -74,7 +74,7 @@ from kayak.service import (
     planned_debug_search_response_json,
     planned_explain_response_json,
     planned_search_response_json,
-    prepare_service_search_snapshot,
+    prepare_service_exact_search_snapshot,
     search_response_json,
     service_health_status_json,
     service_metrics_snapshot_json,
@@ -978,7 +978,7 @@ def prepare_exact_search_session(
 ) raises -> PythonObject:
     return PythonObject(
         alloc=PreparedExactSearchSession(
-            prepare_service_search_snapshot(
+            prepare_service_exact_search_snapshot(
                 Path(String(py=py_service_root)),
                 CollectionId(String(py=py_collection_id)),
                 TenantId(String(py=py_tenant_id)),

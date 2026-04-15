@@ -33,6 +33,27 @@ _STORE_FACTORIES: dict[str, StoreFactory] = {
 }
 
 
+def available_store_kinds() -> tuple[str, ...]:
+    """Return the registered store kind strings accepted by ``open_store``."""
+    return tuple(sorted(_STORE_FACTORIES))
+
+
+def _unknown_store_kind_error(kind: object) -> ValueError | TypeError:
+    available = ", ".join(available_store_kinds())
+    if not isinstance(kind, str):
+        return TypeError(
+            "store kind must be a string; "
+            f"got {type(kind).__name__}. "
+            f"Available kinds: {available}. "
+            'Use kayak.available_store_kinds() or kayak.help("Stores").'
+        )
+    return ValueError(
+        f"unknown store kind: {kind.strip().lower()}. "
+        f"Available kinds: {available}. "
+        'Use kayak.available_store_kinds() or kayak.help("Stores").'
+    )
+
+
 def register_store(
     kind: str,
     factory: StoreFactory,
@@ -136,7 +157,10 @@ def open_store(kind: str, /, **kwargs: object) -> LateStore:
     >>> store = kayak.open_store("memory")
     >>> store = kayak.open_store("kayak", path="./kayak-index")
     """
+    if not isinstance(kind, str):
+        raise _unknown_store_kind_error(kind)
+
     normalized_kind = kind.strip().lower()
     if normalized_kind not in _STORE_FACTORIES:
-        raise ValueError(f"unknown store kind: {normalized_kind}")
+        raise _unknown_store_kind_error(normalized_kind)
     return _STORE_FACTORIES[normalized_kind](**kwargs)

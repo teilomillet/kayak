@@ -12,9 +12,11 @@ from kayak.collections import (
     CollectionId,
     NamespaceId,
     ResolvedCollectionSnapshot,
+    SnapshotLoadRequirements,
     SnapshotId,
     SnapshotSearchArtifactAvailability,
     TenantId,
+    exact_only_snapshot_requirements,
     load_all_snapshot_requirements,
     load_resolved_collection_snapshot,
     load_snapshot_search_artifact_availability,
@@ -99,13 +101,13 @@ struct PreparedSearchSnapshot(Movable, Writable):
 def prepare_collection_search_snapshot(
     collection_root: Path,
     snapshot_id: SnapshotId,
-    load_text_corpus: Bool = True,
+    read requirements: SnapshotLoadRequirements,
     load_dim128_segment_mirrors: Bool = False,
 ) raises -> PreparedSearchSnapshot:
     var snapshot = load_resolved_collection_snapshot(
         collection_root,
         snapshot_id,
-        load_all_snapshot_requirements(load_text_corpus),
+        requirements,
     )
     if load_dim128_segment_mirrors and snapshot.collection.vector_dim != 128:
         raise Error(
@@ -119,9 +121,23 @@ def prepare_collection_search_snapshot(
     return PreparedSearchSnapshot(
         snapshot,
         load_snapshot_search_artifact_availability(collection_root, snapshot_id),
-        load_text_corpus,
+        requirements.load_text_corpus,
         load_dim128_segment_mirrors,
         dim128_segment_mirrors,
+    )
+
+
+def prepare_collection_search_snapshot(
+    collection_root: Path,
+    snapshot_id: SnapshotId,
+    load_text_corpus: Bool = True,
+    load_dim128_segment_mirrors: Bool = False,
+) raises -> PreparedSearchSnapshot:
+    return prepare_collection_search_snapshot(
+        collection_root,
+        snapshot_id,
+        load_all_snapshot_requirements(load_text_corpus),
+        load_dim128_segment_mirrors,
     )
 
 
@@ -152,6 +168,46 @@ def prepare_service_search_snapshot(
         snapshot_id,
         load_text_corpus,
         load_dim128_segment_mirrors,
+    )
+
+
+def prepare_collection_exact_search_snapshot(
+    collection_root: Path,
+    snapshot_id: SnapshotId,
+    load_text_corpus: Bool = True,
+) raises -> PreparedSearchSnapshot:
+    return prepare_collection_search_snapshot(
+        collection_root,
+        snapshot_id,
+        exact_only_snapshot_requirements(load_text_corpus),
+    )
+
+
+def prepare_service_exact_search_snapshot(
+    service_root: Path,
+    collection_id: CollectionId,
+    tenant_id: TenantId,
+    namespace_id: NamespaceId,
+    snapshot_id: SnapshotId,
+    load_text_corpus: Bool = True,
+) raises -> PreparedSearchSnapshot:
+    var collection_root = service_collection_root(
+        service_root,
+        tenant_id,
+        namespace_id,
+        collection_id,
+    )
+    _ = load_collection_for_request(
+        service_root,
+        collection_id.value,
+        tenant_id.value,
+        namespace_id.value,
+        collection_root,
+    )
+    return prepare_collection_exact_search_snapshot(
+        collection_root,
+        snapshot_id,
+        load_text_corpus,
     )
 
 

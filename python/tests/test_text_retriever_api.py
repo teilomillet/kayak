@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 from unittest.mock import patch
 
@@ -64,6 +65,128 @@ class LateTextRetrieverApiTests(unittest.TestCase):
         self.assertEqual(retriever.stats().document_count, 3)
         self.assertTrue(retriever.capabilities().supports_metadata_filter)
 
+    def test_open_text_retriever_can_bind_model_object_directly(self) -> None:
+        class _Model:
+            def encode_query_tokens(self, text: str) -> np.ndarray:
+                return _token_vectors(text)
+
+            def encode_document_tokens(self, text: str) -> np.ndarray:
+                return _token_vectors(text)
+
+        retriever = kayak.open_text_retriever(
+            encoder=_Model(),
+            store="memory",
+            backend=kayak.NUMPY_REFERENCE_BACKEND,
+        )
+        retriever.upsert_texts(
+            ["doc-install", "doc-storage"],
+            [
+                "pixi mojo install kayak",
+                "lancedb storage kayak",
+            ],
+        )
+
+        hits = retriever.search_text("pixi mojo install", k=1)
+
+        self.assertEqual(hits[0].doc_id, "doc-install")
+
+    def test_open_text_retriever_accepts_model_method_overrides(self) -> None:
+        class _Model:
+            def query_tokens(self, text: str) -> np.ndarray:
+                return _token_vectors(text)
+
+            def document_tokens(self, text: str) -> np.ndarray:
+                return _token_vectors(text)
+
+        retriever = kayak.open_text_retriever(
+            encoder=_Model(),
+            store="memory",
+            backend=kayak.NUMPY_REFERENCE_BACKEND,
+            encoder_kwargs={
+                "query_method": "query_tokens",
+                "document_method": "document_tokens",
+            },
+        )
+        retriever.upsert_texts(
+            ["doc-install", "doc-storage"],
+            [
+                "pixi mojo install kayak",
+                "lancedb storage kayak",
+            ],
+        )
+
+        hits = retriever.search_text("storage kayak", k=1)
+
+        self.assertEqual(hits[0].doc_id, "doc-storage")
+
+    def test_open_text_retriever_rejects_encoder_kwargs_for_ready_encoder(
+        self,
+    ) -> None:
+        encoder = kayak.CallableLateTextEncoder(
+            query_encoder=_token_vectors,
+            document_encoder=_token_vectors,
+        )
+
+        with self.assertRaisesRegex(TypeError, "already-constructed encoder"):
+            kayak.open_text_retriever(
+                encoder=encoder,
+                store="memory",
+                encoder_kwargs={"query_method": "query_tokens"},
+            )
+
+    def test_open_text_retriever_rejects_store_kwargs_for_ready_store(self) -> None:
+        store = kayak.MemoryLateStore()
+
+        with self.assertRaisesRegex(TypeError, "already-constructed store"):
+            kayak.open_text_retriever(
+                encoder="callable",
+                store=store,
+                encoder_kwargs={
+                    "query_encoder": _token_vectors,
+                    "document_encoder": _token_vectors,
+                },
+                store_kwargs={"path": "/tmp/unused"},
+            )
+
+    def test_open_text_retriever_rejects_invalid_store_object(self) -> None:
+        class _NotAStore:
+            pass
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "LateStore protocol",
+        ):
+            kayak.open_text_retriever(
+                encoder="callable",
+                store=_NotAStore(),
+                encoder_kwargs={
+                    "query_encoder": _token_vectors,
+                    "document_encoder": _token_vectors,
+                },
+            )
+
+    def test_retriever_exposes_side_effect_free_encoding_helpers(self) -> None:
+        retriever = self._open_retriever(backend=kayak.NUMPY_REFERENCE_BACKEND)
+
+        encoded_query = retriever.encode_query("pixi mojo install")
+        encoded_vectors = retriever.encode_document_vectors(
+            "lancedb storage kayak"
+        )
+        encoded_documents = retriever.encode_documents(
+            ["doc-a", "doc-b"],
+            [
+                "pixi mojo install kayak",
+                "lancedb storage kayak",
+            ],
+        )
+
+        self.assertIsInstance(encoded_query, kayak.LateQuery)
+        self.assertEqual(encoded_query.vector_count, 3)
+        self.assertEqual(tuple(encoded_vectors.shape), (3, 8))
+        self.assertIsInstance(encoded_documents, kayak.LateDocuments)
+        self.assertEqual(encoded_documents.doc_ids, ("doc-a", "doc-b"))
+        self.assertEqual(retriever.stats().document_count, 0)
+
     def test_search_text_supports_store_filters_and_text_materialization(self) -> None:
         retriever = self._open_retriever(
             backend=kayak.NUMPY_REFERENCE_BACKEND,
@@ -118,6 +241,104 @@ class LateTextRetrieverApiTests(unittest.TestCase):
             ["pixi install", "storage kayak", "search mojo"],
             k=1,
         )
+
+        self.assertEqual(actual, expected)
+
+    def test_session_reuses_one_loaded_index_across_repeated_searches(self) -> None:
+        class _CountingStore(kayak.MemoryLateStore):
+            def __init__(self) -> None:
+                super().__init__()
+                self.load_calls = 0
+
+            def load_index(self, **kwargs: object) -> kayak.LateIndex:
+                self.load_calls += 1
+                return super().load_index(**kwargs)
+
+        store = _CountingStore()
+        retriever = kayak.open_text_retriever(
+            encoder="callable",
+            store=store,
+            encoder_kwargs={
+                "query_encoder": _token_vectors,
+                "document_encoder": _token_vectors,
+            },
+            backend=kayak.NUMPY_REFERENCE_BACKEND,
+        )
+        retriever.upsert_texts(
+            ["doc-install", "doc-storage", "doc-search"],
+            [
+                "pixi mojo install kayak",
+                "lancedb storage kayak",
+                "kayak search mojo",
+            ],
+            metadata=[
+                {"topic": "install"},
+                {"topic": "storage"},
+                {"topic": "search"},
+            ],
+        )
+
+        session = retriever.session(where={"topic": "search"}, include_text=True)
+        first = session.search_text("search mojo", k=1)
+        second = session.search_text("kayak search", k=1)
+
+        self.assertEqual(store.load_calls, 1)
+        self.assertEqual(session.index.doc_ids, ("doc-search",))
+        self.assertEqual(session.index.doc_texts, ("kayak search mojo",))
+        self.assertEqual(first[0].doc_id, "doc-search")
+        self.assertEqual(second[0].doc_id, "doc-search")
+
+    def test_session_batch_and_plan_calls_match_direct_search(self) -> None:
+        retriever = self._open_retriever(backend=kayak.NUMPY_REFERENCE_BACKEND)
+        retriever.upsert_texts(
+            ["doc-a", "doc-b"],
+            [
+                "kayak search mojo",
+                "lancedb storage kayak",
+            ],
+        )
+
+        session = retriever.session()
+        batch_hits = session.search_text_batch(
+            ["kayak search", "storage kayak"],
+            k=1,
+        )
+        planned = session.search_text_with_plan(
+            "kayak search",
+            kayak.exact_full_scan_search_plan(final_k=1),
+        )
+
+        self.assertEqual(batch_hits[0][0].doc_id, "doc-a")
+        self.assertEqual(batch_hits[1][0].doc_id, "doc-b")
+        self.assertEqual(planned.hits[0].doc_id, "doc-a")
+
+    def test_session_can_serve_parallel_queries_from_one_loaded_slice(self) -> None:
+        retriever = self._open_retriever(backend=kayak.NUMPY_REFERENCE_BACKEND)
+        retriever.upsert_texts(
+            ["doc-install", "doc-storage", "doc-search"],
+            [
+                "pixi mojo install kayak",
+                "lancedb storage kayak",
+                "kayak search mojo",
+            ],
+        )
+        session = retriever.session()
+
+        query_texts = (
+            "pixi install",
+            "storage kayak",
+            "search mojo",
+            "kayak mojo",
+        )
+        expected = [session.search_text(text, k=1) for text in query_texts]
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            actual = list(
+                executor.map(
+                    lambda text: session.search_text(text, k=1),
+                    query_texts,
+                )
+            )
 
         self.assertEqual(actual, expected)
 

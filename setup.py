@@ -16,6 +16,40 @@ from setuptools.command.build_py import build_py as _build_py
 REPO_ROOT = Path(__file__).resolve().parent
 MOJO_SOURCE_ROOT = REPO_ROOT / "kayak"
 BUNDLED_ARTIFACTS_ROOT = Path("kayak_bridge") / "_artifacts"
+RUNTIME_BRIDGE_MODULE_STEMS = (
+    "__init__",
+    "api_types",
+    "array_conversions",
+    "backend_dispatch",
+    "backend_info",
+    "batch_dispatch",
+    "bundled_mojopkg_metadata",
+    "cache_paths",
+    "candidate_generator",
+    "candidate_stage",
+    "clause_text",
+    "dtypes",
+    "late_documents",
+    "late_index",
+    "late_ops",
+    "late_query",
+    "late_query_batch",
+    "late_scores",
+    "layouts",
+    "mojo_bridge_info",
+    "mojo_exact_cpu",
+    "mojo_payloads",
+    "planned_search",
+    "prepared_index_cache",
+    "prepared_index_storage_artifact",
+    "reference_maxsim",
+    "reference_scoring_semantics",
+    "search_plan",
+    "search_stage_profile",
+    "stage2_reference_operator",
+    "stage3_verifier_operator",
+    "stage_artifact_materialization",
+)
 
 
 def _mojo_binary_names() -> tuple[str, ...]:
@@ -102,6 +136,7 @@ class build_py(_build_py):
     def run(self) -> None:
         super().run()
         self._prune_stale_release_payloads()
+        self._prune_internal_bridge_helpers()
         self._build_bundled_mojopkg()
 
     def _prune_stale_release_payloads(self) -> None:
@@ -118,6 +153,20 @@ class build_py(_build_py):
                 stale_path.unlink()
             self.announce(
                 f"removed stale packaged payload at {stale_path}",
+                level=2,
+            )
+
+    def _prune_internal_bridge_helpers(self) -> None:
+        bridge_root = Path(self.build_lib) / "kayak_bridge"
+        if not bridge_root.exists():
+            return
+
+        for module_path in bridge_root.glob("*.py"):
+            if module_path.stem in RUNTIME_BRIDGE_MODULE_STEMS:
+                continue
+            module_path.unlink()
+            self.announce(
+                f"removed internal bridge helper from release payload: {module_path}",
                 level=2,
             )
 

@@ -314,6 +314,32 @@ class MojoPackagingTests(unittest.TestCase):
                 ["bash", "/tmp/run_mojo_with_pixi_python.sh"],
             )
 
+    def test_detect_mojo_command_reports_diagnostics_hint_when_missing(self) -> None:
+        with (
+            mock.patch.dict(
+                mojo_exact_cpu.os.environ,
+                {},
+                clear=True,
+            ),
+            mock.patch.object(
+                mojo_exact_cpu,
+                "REPO_MOJO_WRAPPER",
+                Path("/tmp/missing-wrapper.sh"),
+            ),
+            mock.patch.object(
+                mojo_exact_cpu.shutil,
+                "which",
+                return_value=None,
+            ),
+            mock.patch.object(
+                mojo_exact_cpu,
+                "_candidate_mojo_directories",
+                return_value=(),
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "kayak\\.doctor\\(\\)"):
+                mojo_exact_cpu._detect_mojo_command()
+
     def test_bundled_version_error_reports_wheel_and_mojo_versions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)
@@ -348,7 +374,44 @@ class MojoPackagingTests(unittest.TestCase):
                 self.assertIn(f"Kayak {PROJECT_VERSION}", message)
                 self.assertIn("mojo 0.26.3", message)
                 self.assertIn("mojo 0.26.2", message)
+                self.assertIn("kayak.doctor()", message)
+                self.assertIn("kayak.mojo_bridge_info(probe_load=True)", message)
                 self.assertIn("runtime source rebuild is not available", message)
+
+    def test_build_extension_failure_reports_diagnostics_hint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            extension_root = temp_root / ".cache"
+            mojopkg_path = temp_root / "kayak.mojopkg"
+            mojopkg_path.write_bytes(b"placeholder mojopkg")
+
+            with (
+                mock.patch.object(
+                    mojo_exact_cpu,
+                    "PYTHON_MOJO_CACHE",
+                    extension_root,
+                ),
+                mock.patch.object(
+                    mojo_exact_cpu,
+                    "_detect_mojo_command",
+                    return_value=["mojo"],
+                ),
+                mock.patch.object(
+                    mojo_exact_cpu.subprocess,
+                    "run",
+                    return_value=subprocess.CompletedProcess(
+                        ["mojo"],
+                        1,
+                        "",
+                        "build failed",
+                    ),
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "kayak\\.mojo_bridge_info\\(probe_load=True\\)",
+                ):
+                    mojo_exact_cpu._build_extension("cache-key", mojopkg_path)
 
     def test_load_module_raises_explicit_error_for_bundled_version_mismatch(self) -> None:
         mojo_exact_cpu.load_module.cache_clear()

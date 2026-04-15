@@ -36,9 +36,13 @@ with:
 import kayak
 
 print(kayak.help())
+print(kayak.doctor())
 print(kayak.help("search"))
 print(kayak.help("search_text"))
+print(kayak.help("session"))
 print(kayak.help("typing"))
+print(kayak.available_encoder_kinds())
+print(kayak.available_store_kinds())
 print(kayak.help("TokenMatrixInput"))
 print(kayak.help("mojo"))
 print(kayak.help("stores"))
@@ -47,6 +51,20 @@ print(kayak.help(kayak.LateTextRetriever))
 
 That help text is generated from the current public API, signatures, and
 docstrings instead of a separate handwritten help registry.
+
+When you want to verify the active environment before you code further, use:
+
+```python
+import kayak
+
+print(kayak.doctor())
+```
+
+That report is factual. It tells you:
+- which encoder and store kinds are currently registered
+- which exact backend the high-level retriever would default to
+- whether the Mojo bridge is available
+- whether optional store adapter dependencies are importable
 
 If you prefer normal Python introspection in an editor or REPL, the same
 descriptions are available through public docstrings:
@@ -177,6 +195,14 @@ There are two main user paths:
 2. use the callable encoder when you already have your own model methods and
    just want Kayak to wrap them into late-interaction objects
 
+To inspect the currently registered public encoder kinds at runtime:
+
+```python
+import kayak
+
+print(kayak.available_encoder_kinds())
+```
+
 Use the first-party ColBERT encoder when you want a ready-made text path:
 
 ```python
@@ -221,7 +247,49 @@ encoder = kayak.open_encoder(
 )
 ```
 
+If your model already exposes the usual method names, you can skip the wrapper
+glue and pass the object directly:
+
+```python
+encoder = kayak.open_encoder("callable", model=my_model)
+```
+
+Or make the method names explicit when your model uses different names:
+
+```python
+encoder = kayak.open_encoder(
+    "callable",
+    model=my_model,
+    query_method="query_tokens",
+    document_method="document_tokens",
+)
+```
+
 That is the intended path for non-ColBERT Hugging Face or custom models today.
+
+The same shortcut works at the retriever layer, which is the simplest path when
+you want one object for ingest and search:
+
+```python
+retriever = kayak.open_text_retriever(
+    encoder=my_model,
+    store="memory",
+)
+```
+
+If the model uses different method names, keep the same retriever abstraction
+and specify those names through `encoder_kwargs`:
+
+```python
+retriever = kayak.open_text_retriever(
+    encoder=my_model,
+    store="memory",
+    encoder_kwargs={
+        "query_method": "query_tokens",
+        "document_method": "document_tokens",
+    },
+)
+```
 
 The contract stays narrow:
 - `encode_query(text)`
@@ -334,10 +402,14 @@ For most users this is the best mental model:
 3. let the retriever own text ingest plus search
 
 The high-level contract stays narrow:
+- `encode_query(text)`
+- `encode_document_vectors(text)`
+- `encode_documents(doc_ids, texts)`
 - `upsert_texts(doc_ids, texts, metadata=None)`
 - `delete(doc_ids)`
 - `close()`
 - `load_index(...)`
+- `session(...)`
 - `search_text(...)`
 - `search_query(...)`
 - `search_text_batch(...)`
@@ -350,9 +422,61 @@ Use raw encoders, stores, and `LateIndex` objects when you want lower-level
 control over each step.
 
 For repeated traffic against one stable slice:
-- use `retriever.load_index(...)` when you want a reusable exact `LateIndex`
+- use `retriever.session(...)` when you want Kayak to load one exact slice once
+  and keep one clean object for repeated search calls
+- use `retriever.load_index(...)` when you want the raw reusable exact `LateIndex`
 - use `retriever.search_text_batch(...)` when the queries still start as text
-- use raw `query_batch(...)` and `search_batch(...)` when you already own the encoded queries
+- use raw `query_batch(...)` and `search_batch(...)` when you already own the
+  encoded queries
+
+One reusable search session looks like this:
+
+```python
+session = retriever.session(
+    where={"topic": "installation"},
+    include_text=True,
+)
+
+hits = session.search_text("install python mojo together", k=2)
+batch_hits = session.search_text_batch(
+    [
+        "install python mojo together",
+        "storage rows",
+    ],
+    k=2,
+)
+```
+
+If your application already owns the query fan-out, the same session object can
+serve repeated calls from your own executor without reloading the slice:
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+session = retriever.session()
+query_texts = ["install kayak", "exact search", "vector db storage"]
+
+def run_query(text: str):
+    return session.search_text(text, k=5)
+
+with ThreadPoolExecutor(max_workers=3) as executor:
+    hit_lists = list(executor.map(run_query, query_texts))
+```
+
+If you want one object that owns the encoder but you still want manual control
+over persistence or search, the retriever also exposes side-effect-free
+encoding helpers:
+
+```python
+encoded_query = retriever.encode_query("install python mojo together")
+encoded_documents = retriever.encode_documents(
+    ["doc-a", "doc-b"],
+    [
+        "Pixi installs Python, Mojo, and kayak together.",
+        "LanceDB can keep multivector rows on disk.",
+    ],
+)
+```
 
 ## Stores
 
@@ -484,6 +608,7 @@ The factory is intentionally small:
 - `open_store("qdrant", client=... | path=..., collection_name=...)`
 - `open_store("weaviate", client=... | persistence_path=..., collection_name=..., vector_name=...)`
 - `open_store("chromadb", client=... | path=..., collection_name=...)`
+- `available_store_kinds()`
 - `register_store(...)`
 
 ## Core API

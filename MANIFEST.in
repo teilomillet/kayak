@@ -2,6 +2,39 @@ include LICENSE
 include README.md
 include python/kayak/py.typed
 recursive-include python/kayak *.py *.md
-recursive-include python/kayak_bridge *.py *.mojo
+recursive-exclude python/kayak_bridge *.py
+include python/kayak_bridge/__init__.py
+include python/kayak_bridge/api_types.py
+include python/kayak_bridge/array_conversions.py
+include python/kayak_bridge/backend_dispatch.py
+include python/kayak_bridge/backend_info.py
+include python/kayak_bridge/batch_dispatch.py
+include python/kayak_bridge/bundled_mojopkg_metadata.py
+include python/kayak_bridge/cache_paths.py
+include python/kayak_bridge/candidate_generator.py
+include python/kayak_bridge/candidate_stage.py
+include python/kayak_bridge/clause_text.py
+include python/kayak_bridge/dtypes.py
+include python/kayak_bridge/late_documents.py
+include python/kayak_bridge/late_index.py
+include python/kayak_bridge/late_ops.py
+include python/kayak_bridge/late_query.py
+include python/kayak_bridge/late_query_batch.py
+include python/kayak_bridge/late_scores.py
+include python/kayak_bridge/layouts.py
+include python/kayak_bridge/mojo_bridge_info.py
+include python/kayak_bridge/mojo_exact_cpu.py
+include python/kayak_bridge/mojo_payloads.py
+include python/kayak_bridge/planned_search.py
+include python/kayak_bridge/prepared_index_cache.py
+include python/kayak_bridge/prepared_index_storage_artifact.py
+include python/kayak_bridge/reference_maxsim.py
+include python/kayak_bridge/reference_scoring_semantics.py
+include python/kayak_bridge/search_plan.py
+include python/kayak_bridge/search_stage_profile.py
+include python/kayak_bridge/stage2_reference_operator.py
+include python/kayak_bridge/stage3_verifier_operator.py
+include python/kayak_bridge/stage_artifact_materialization.py
+recursive-include python/kayak_bridge *.mojo
 recursive-include kayak *.mojo
 prune python/kayak_engine

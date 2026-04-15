@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .backend_info import _unsupported_backend_error
 from .dtypes import SCORE_DTYPE
 from .backend_dispatch import _mojo_scores_for_query_and_index, maxsim_scores
 from .late_scores import LateScores
@@ -62,4 +63,4 @@ def maxsim_scores_batch(
             for query in query_batch.queries
         )
 
-    raise ValueError(f"unsupported backend: {backend}")
+    raise _unsupported_backend_error(backend)

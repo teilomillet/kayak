@@ -26,6 +26,7 @@ from kayak import (
     execute_search,
     execute_search_with_prepared_snapshot,
     match_all_filter,
+    prepare_service_exact_search_snapshot,
     prepare_service_search_snapshot,
     upsert_documents,
 )
@@ -181,6 +182,56 @@ def test_prepared_snapshot_stays_pinned_after_new_snapshot_publish() raises:
         updated_request,
     )
     assert_equal(updated_from_prepared.hits[0].doc_id, "doc-new")
+
+
+def test_prepared_exact_snapshot_loads_exact_only_artifacts() raises:
+    var service_root = unique_service_root("kayak-service-prepared-exact-only")
+    build_service_fixture(service_root)
+    var backend = ExactCpuBackend()
+    var request = default_exact_search_request(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        make_query(),
+        1,
+        "colbertv2",
+    )
+
+    var stateless = execute_search(
+        backend,
+        service_root,
+        request,
+    )
+    var prepared_exact = prepare_service_exact_search_snapshot(
+        service_root,
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        False,
+    )
+    var prepared_all = prepare_service_search_snapshot(
+        service_root,
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        SnapshotId("snapshot-0001"),
+        False,
+    )
+    var prepared_exact_result = execute_search_with_prepared_snapshot(
+        backend,
+        prepared_exact,
+        request,
+    )
+
+    assert_equal(prepared_exact_result.hits[0].doc_id, stateless.hits[0].doc_id)
+    assert_equal(prepared_exact.snapshot.segments[0].has_text_corpus, False)
+    assert_equal(len(prepared_exact.snapshot.segments[0].search_artifacts), 0)
+    assert_equal(
+        len(prepared_all.snapshot.segments[0].search_artifacts) > 0,
+        True,
+    )
 
 
 def test_planned_search_with_prepared_snapshot_matches_stateless_runtime() raises:

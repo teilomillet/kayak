@@ -39,6 +39,64 @@ class _FakeCheckpoint:
 
 
 class EncoderApiTests(unittest.TestCase):
+    def test_callable_text_encoder_can_bind_model_methods_directly(self) -> None:
+        class _Model:
+            def encode_query_tokens(self, text: str) -> list[list[float]]:
+                return [[float(len(text)), 0.0], [0.0, 1.0]]
+
+            def encode_document_tokens(self, text: str) -> list[list[float]]:
+                return [[1.0, float(len(text))], [0.5, 0.5]]
+
+        encoder = kayak.CallableLateTextEncoder.from_model(_Model())
+
+        query = encoder.encode_query("hello")
+        documents = encoder.encode_documents(["doc-a"], ["world"])
+
+        np.testing.assert_allclose(
+            query.as_vector_matrix(),
+            np.array([[5.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+        )
+        np.testing.assert_allclose(
+            documents.token_matrices[0],
+            np.array([[1.0, 5.0], [0.5, 0.5]], dtype=np.float32),
+        )
+
+    def test_callable_text_encoder_from_model_supports_custom_method_names(
+        self,
+    ) -> None:
+        class _Model:
+            def query_tokens(self, text: str) -> list[list[float]]:
+                return [[float(len(text)), 1.0]]
+
+            def document_tokens(self, text: str) -> list[list[float]]:
+                return [[1.0, float(len(text))]]
+
+        encoder = kayak.CallableLateTextEncoder.from_model(
+            _Model(),
+            query_method="query_tokens",
+            document_method="document_tokens",
+        )
+
+        query = encoder.encode_query("hello")
+        documents = encoder.encode_documents(["doc-a"], ["world"])
+
+        np.testing.assert_allclose(
+            query.as_vector_matrix(),
+            np.array([[5.0, 1.0]], dtype=np.float32),
+        )
+        np.testing.assert_allclose(
+            documents.token_matrices[0],
+            np.array([[1.0, 5.0]], dtype=np.float32),
+        )
+
+    def test_callable_text_encoder_from_model_reports_missing_methods(self) -> None:
+        class _Model:
+            def encode_document_tokens(self, text: str) -> list[list[float]]:
+                return [[1.0, float(len(text))]]
+
+        with self.assertRaisesRegex(ValueError, "query method"):
+            kayak.CallableLateTextEncoder.from_model(_Model())
+
     def test_callable_text_encoder_emits_public_late_objects(self) -> None:
         encoder = kayak.CallableLateTextEncoder(
             query_encoder=lambda text: [[len(text), 0.0], [0.0, 1.0]],
@@ -102,6 +160,56 @@ class EncoderApiTests(unittest.TestCase):
             document_encoder=lambda text: [[1.0, len(text)]],
         )
         self.assertIsInstance(custom, _CustomEncoder)
+
+    def test_encoder_registry_supports_model_backed_callable_variant(self) -> None:
+        class _Model:
+            def encode_query_tokens(self, text: str) -> list[list[float]]:
+                return [[float(len(text)), 0.0]]
+
+            def encode_document_tokens(self, text: str) -> list[list[float]]:
+                return [[0.0, float(len(text))]]
+
+        builtin = kayak.open_encoder("callable", model=_Model())
+
+        self.assertIsInstance(builtin, kayak.CallableLateTextEncoder)
+        np.testing.assert_allclose(
+            builtin.encode_query("hello").as_vector_matrix(),
+            np.array([[5.0, 0.0]], dtype=np.float32),
+        )
+
+    def test_open_encoder_unknown_kind_reports_available_kinds(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "Available kinds: callable, colbert",
+        ):
+            kayak.open_encoder("missing-encoder")
+
+    def test_open_encoder_non_string_kind_reports_type_error(self) -> None:
+        with self.assertRaisesRegex(
+            TypeError,
+            'kayak.help\\("Encoders"\\)',
+        ):
+            kayak.open_encoder(object())  # type: ignore[arg-type]
+
+    def test_encoder_registry_rejects_mixed_callable_and_model_arguments(
+        self,
+    ) -> None:
+        class _Model:
+            def encode_query_tokens(self, text: str) -> list[list[float]]:
+                return [[float(len(text)), 0.0]]
+
+            def encode_document_tokens(self, text: str) -> list[list[float]]:
+                return [[0.0, float(len(text))]]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "cannot be combined",
+        ):
+            kayak.open_encoder(
+                "callable",
+                model=_Model(),
+                query_encoder=lambda text: [[len(text), 0.0]],
+            )
 
 
 if __name__ == "__main__":

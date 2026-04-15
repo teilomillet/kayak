@@ -30,6 +30,13 @@ ARTIFACTS_DIR = Path(__file__).with_name("_artifacts")
 REPO_MOJO_WRAPPER = REPO_ROOT / "scripts" / "run_mojo_with_pixi_python.sh"
 
 
+def _diagnostics_hint() -> str:
+    return (
+        "Run print(kayak.doctor()) for a quick environment report, or "
+        "kayak.mojo_bridge_info(probe_load=True) for bridge-specific diagnostics."
+    )
+
+
 def _hash_inputs(
     paths: list[Path],
     *,
@@ -160,7 +167,7 @@ def _detect_mojo_command() -> list[str]:
     raise RuntimeError(
         "Kayak could not find a usable Mojo CLI. Set KAYAK_MOJO_CLI, install "
         "Mojo into the active Python environment, or make `mojo` available "
-        "on PATH."
+        f"on PATH. {_diagnostics_hint()}"
     )
 
 
@@ -209,7 +216,8 @@ def _build_mojopkg(cache_key: str) -> Path:
     if source_root is None:
         raise RuntimeError(
             "Kayak could not find Mojo sources in the repo or the installed "
-            "package, and no bundled kayak.mojopkg artifact was present."
+            "package, and no bundled kayak.mojopkg artifact was present. "
+            f"{_diagnostics_hint()}"
         )
 
     artifact_dir = PYTHON_MOJO_CACHE / cache_key
@@ -237,7 +245,8 @@ def _build_mojopkg(cache_key: str) -> Path:
             "failed to build kayak.mojopkg for mojo_exact_cpu backend\n"
             f"command: {' '.join(command)}\n"
             f"stdout:\n{result.stdout}\n"
-            f"stderr:\n{result.stderr}"
+            f"stderr:\n{result.stderr}\n"
+            f"{_diagnostics_hint()}"
         )
 
     return artifact
@@ -275,7 +284,8 @@ def _build_extension(cache_key: str, mojopkg_path: Path) -> Path:
             "failed to build Mojo extension module for mojo_exact_cpu backend\n"
             f"command: {' '.join(command)}\n"
             f"stdout:\n{result.stdout}\n"
-            f"stderr:\n{result.stderr}"
+            f"stderr:\n{result.stderr}\n"
+            f"{_diagnostics_hint()}"
         )
 
     return extension_path
@@ -480,6 +490,7 @@ def _bundled_mojopkg_version_error(
         "Install a compatible `mojo` release or upgrade `kayak` so the "
         "published wheel is rebuilt against your current Mojo toolchain."
     )
+    lines.append(_diagnostics_hint())
     lines.append(
         "Kayak wheels do not ship engine sources, so runtime source rebuild is "
         "not available."

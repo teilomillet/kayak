@@ -10,6 +10,7 @@ from kayak_bridge.api_types import (
     MetadataFilterInput,
     MetadataRowsInput,
     QueryTextsInput,
+    TokenMatrixInput,
 )
 from kayak_bridge import (
     LateDocuments,
@@ -28,6 +29,7 @@ from kayak_bridge import (
 from ..encoders import LateTextEncoder
 from ..stores import LateStore, LateStoreStats, StoreCapabilities
 from .backend_policy import default_text_retriever_backend
+from .session import LateTextSearchSession
 
 
 @dataclass(slots=True)
@@ -43,6 +45,7 @@ class LateTextRetriever:
     - encoding and upserting document texts
     - loading exact index slices from the configured store
     - running exact or staged search over those slices
+    - opening reusable search sessions over one loaded slice
     """
 
     encoder: LateTextEncoder
@@ -73,6 +76,31 @@ class LateTextRetriever:
     def stats(self) -> LateStoreStats:
         """Return measurable state for the underlying store."""
         return self.store.stats()
+
+    def encode_query(self, text: str) -> LateQuery:
+        """Encode one query string without touching the configured store.
+
+        Use this when you want the retriever to own model access but your
+        calling code still wants to keep late-interaction queries explicit.
+        """
+        return self.encoder.encode_query(text)
+
+    def encode_document_vectors(self, text: str) -> TokenMatrixInput:
+        """Encode one document string into token vectors without storing it."""
+        return self.encoder.encode_document_vectors(text)
+
+    def encode_documents(
+        self,
+        doc_ids: DocIdsInput,
+        texts: DocTextsInput,
+    ) -> LateDocuments:
+        """Encode aligned document ids and texts without upserting them.
+
+        This is the side-effect-free counterpart to ``upsert_texts(...)`` for
+        cases where the caller wants to keep persistence or materialization
+        explicit.
+        """
+        return self.encoder.encode_documents(doc_ids, texts)
 
     def upsert_texts(
         self,
@@ -140,6 +168,32 @@ class LateTextRetriever:
             if include_text is None
             else include_text,
             layout=self.default_layout if layout is None else layout,
+        )
+
+    def session(
+        self,
+        *,
+        doc_ids: DocIdsInput | None = None,
+        where: MetadataFilterInput = None,
+        include_text: bool | None = None,
+        layout: str | None = None,
+        backend: str | None = None,
+    ) -> LateTextSearchSession:
+        """Load one exact slice once and return a reusable search session.
+
+        Use this when many queries should hit the same filtered subset or the
+        same materialized index layout without reloading that slice on each
+        call.
+        """
+        return LateTextSearchSession(
+            encoder=self.encoder,
+            index=self.load_index(
+                doc_ids=doc_ids,
+                where=where,
+                include_text=include_text,
+                layout=layout,
+            ),
+            default_backend=self.default_backend if backend is None else backend,
         )
 
     def search_text(

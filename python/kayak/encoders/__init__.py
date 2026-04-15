@@ -10,9 +10,10 @@ from .colbert import (
     DEFAULT_COLBERT_MODEL_NAME,
     ColBERTTextEncoder,
 )
-from .registry import open_encoder, register_encoder
+from .registry import available_encoder_kinds, open_encoder, register_encoder
 
 __all__ = [
+    "available_encoder_kinds",
     "CallableLateTextEncoder",
     "ColBERTTextEncoder",
     "DEFAULT_COLBERT_MODEL_NAME",

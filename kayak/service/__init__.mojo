@@ -84,7 +84,9 @@ from .prepared_snapshot_runtime import (
     execute_planned_explain_with_prepared_snapshot,
     execute_planned_search_with_prepared_snapshot,
     execute_search_with_prepared_snapshot,
+    prepare_collection_exact_search_snapshot,
     prepare_collection_search_snapshot,
+    prepare_service_exact_search_snapshot,
     prepare_service_search_snapshot,
     select_search_plan_for_prepared_snapshot,
 )

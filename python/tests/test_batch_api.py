@@ -71,6 +71,13 @@ class BatchApiTests(unittest.TestCase):
         self.assertFalse(info.requires_mojo)
         self.assertIn(kayak.NUMPY_REFERENCE_BACKEND, kayak.available_backends())
 
+    def test_backend_info_unknown_backend_reports_supported_names(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "Supported backends: numpy_reference, mojo_exact_cpu",
+        ):
+            kayak.backend_info("missing-backend")
+
     def test_query_batch_exposes_vector_counts_and_layout_conversion(self) -> None:
         query_batch = self._build_query_batch()
 
@@ -116,6 +123,20 @@ class BatchApiTests(unittest.TestCase):
         )
 
         self.assertEqual(actual, expected)
+
+    def test_maxsim_batch_unknown_backend_reports_supported_names(self) -> None:
+        query_batch = self._build_query_batch()
+        index = self._build_index()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            'kayak.help\\("Backends"\\)',
+        ):
+            kayak.maxsim_batch(
+                query_batch,
+                index,
+                backend="missing-backend",
+            )
 
     def test_index_select_preserves_requested_document_order(self) -> None:
         index = self._build_index()

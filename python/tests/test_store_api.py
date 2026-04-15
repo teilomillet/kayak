@@ -128,6 +128,20 @@ class StoreApiTests(unittest.TestCase):
         custom = kayak.open_store("custom-memory")
         self.assertIsInstance(custom, _CustomStore)
 
+    def test_open_store_unknown_kind_reports_available_kinds(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "Available kinds: .*memory",
+        ):
+            kayak.open_store("missing-store")
+
+    def test_open_store_non_string_kind_reports_type_error(self) -> None:
+        with self.assertRaisesRegex(
+            TypeError,
+            'kayak.help\\("Stores"\\)',
+        ):
+            kayak.open_store(object())  # type: ignore[arg-type]
+
     def test_store_contract_supports_close_and_context_manager(self) -> None:
         memory = kayak.MemoryLateStore()
         memory.close()

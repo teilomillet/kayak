@@ -12,6 +12,7 @@ class HelpApiTests(unittest.TestCase):
 
         self.assertIn("Public Python SDK", text)
         self.assertIn('kayak.help("mojo")', text)
+        self.assertIn('kayak.help("doctor")', text)
         self.assertIn('kayak.help("search_text")', text)
         self.assertIn('kayak.help("typing")', text)
         self.assertIn("Encoders:", text)
@@ -73,10 +74,19 @@ class HelpApiTests(unittest.TestCase):
         text = kayak.help(kayak.LateTextRetriever)
 
         self.assertIn("LateTextRetriever", text)
+        self.assertIn("encode_query", text)
         self.assertIn("search_text", text)
         self.assertIn("search_text_batch", text)
         self.assertIn("load_index", text)
+        self.assertIn("session", text)
         self.assertIn('kayak.help("Retrievers")', text)
+
+    def test_help_session_topic_is_discoverable(self) -> None:
+        text = kayak.help("session")
+
+        self.assertIn("LateTextSearchSession", text)
+        self.assertIn("search_text", text)
+        self.assertIn("search_query_batch", text)
 
     def test_help_class_includes_classmethods(self) -> None:
         text = kayak.help(kayak.LateQuery)
@@ -87,10 +97,18 @@ class HelpApiTests(unittest.TestCase):
     def test_help_public_method_topic_renders_owner_and_related_topics(self) -> None:
         text = kayak.help("search_text")
 
+        self.assertIn('Closest public methods for "search_text"', text)
         self.assertIn("LateTextRetriever.search_text", text)
-        self.assertIn("Encode one query string and run top-k search", text)
+        self.assertIn("LateTextSearchSession.search_text", text)
         self.assertIn('kayak.help("LateTextRetriever")', text)
-        self.assertIn('kayak.help("search_text_batch")', text)
+        self.assertIn('kayak.help("LateTextSearchSession")', text)
+
+    def test_help_callable_encoder_model_binding_method_is_discoverable(self) -> None:
+        text = kayak.help("from_model")
+
+        self.assertIn("CallableLateTextEncoder.from_model", text)
+        self.assertIn("query_method", text)
+        self.assertIn("document_method", text)
 
     def test_help_factory_topic_includes_coding_guidance(self) -> None:
         text = kayak.help("open_text_retriever")
@@ -100,21 +118,34 @@ class HelpApiTests(unittest.TestCase):
         self.assertIn("encoder:", text)
         self.assertIn("Example", text)
         self.assertIn("retriever = kayak.open_text_retriever", text)
+        self.assertIn("model object", text)
+
+    def test_help_doctor_topic_is_discoverable(self) -> None:
+        text = kayak.help("doctor")
+        alias_text = kayak.help("diagnostics")
+
+        self.assertIn("doctor", text)
+        self.assertIn("KayakDoctorReport", text)
+        self.assertIn("probe_mojo_load", text)
+        self.assertIn("doctor", alias_text)
 
     def test_standard_python_docstrings_are_useful_for_editor_help(self) -> None:
         store_doc = inspect.getdoc(kayak.open_store)
         retriever_doc = inspect.getdoc(kayak.open_text_retriever)
         method_doc = inspect.getdoc(kayak.LateTextRetriever.search_query)
+        doctor_doc = inspect.getdoc(kayak.doctor)
 
         assert store_doc is not None
         assert retriever_doc is not None
         assert method_doc is not None
+        assert doctor_doc is not None
 
         self.assertIn("Built-in kinds:", store_doc)
         self.assertIn('"pgvector"', store_doc)
         self.assertIn("Use this when you want one object", retriever_doc)
         self.assertIn("Returns", method_doc)
         self.assertIn("tuple[SearchHit, ...]", method_doc)
+        self.assertIn("factual environment report", doctor_doc)
 
     def test_help_unknown_topic_suggests_public_names(self) -> None:
         text = kayak.help("bridge")

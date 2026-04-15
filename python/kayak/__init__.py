@@ -62,6 +62,7 @@ from .encoders import (
     ColBERTTextEncoder,
     DEFAULT_COLBERT_MODEL_NAME,
     LateTextEncoder,
+    available_encoder_kinds,
     open_encoder,
     register_encoder,
 )
@@ -76,12 +77,19 @@ from .stores import (
     QdrantLateStore,
     StoreCapabilities,
     WeaviateLateStore,
+    available_store_kinds,
     open_store,
     register_store,
 )
 from .retrievers import (
+    LateTextSearchSession,
     LateTextRetriever,
     open_text_retriever,
+)
+from .doctor import (
+    KayakDoctorReport,
+    KayakFeatureStatus,
+    doctor,
 )
 from .help_api import help
 from . import typing
@@ -98,6 +106,8 @@ PUBLIC_API = (
     "LanceDBLateStore",
     "LateDocuments",
     "LateIndex",
+    "KayakDoctorReport",
+    "KayakFeatureStatus",
     "LateQuery",
     "LateQueryBatch",
     "LateScores",
@@ -105,6 +115,7 @@ PUBLIC_API = (
     "LateStoreStats",
     "LateTextRetriever",
     "LateTextEncoder",
+    "LateTextSearchSession",
     "MemoryLateStore",
     "PgVectorLateStore",
     "QdrantLateStore",
@@ -122,8 +133,11 @@ PUBLIC_API = (
     "StoreCapabilities",
     "WeaviateLateStore",
     "available_backends",
+    "available_encoder_kinds",
+    "available_store_kinds",
     "backend_info",
     "clause_text_stage3_verifier_operator",
+    "doctor",
     "exact_late_interaction_reference_scoring_semantics",
     "document_proxy_candidate_generator",
     "document_proxy_search_plan",

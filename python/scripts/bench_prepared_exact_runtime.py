@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import time
@@ -41,12 +42,17 @@ class RuntimeBenchmarkRow:
     concurrency_lane_count: int
     worker_count: int
     request_pool_count: int
+    prepare_ready_seconds: float
     mean_batch_seconds: float
     throughput_queries_per_second: float
     executed_batch_count: int
     average_batch_size: float
     average_queue_wait_ms: float
     average_batch_execution_ms: float
+    ready_parent_rss_kib: int
+    ready_worker_rss_kib: int
+    ready_total_rss_kib: int
+    ready_worker_pid_count: int
     enable_parallel_scoring: bool
     enable_parallel_work_item_oversubscription: bool
     parallel_work_item_count_override: int
@@ -57,12 +63,17 @@ class RuntimeBenchmarkRow:
             "concurrency_lane_count": self.concurrency_lane_count,
             "worker_count": self.worker_count,
             "request_pool_count": self.request_pool_count,
+            "prepare_ready_seconds": self.prepare_ready_seconds,
             "mean_batch_seconds": self.mean_batch_seconds,
             "throughput_queries_per_second": self.throughput_queries_per_second,
             "executed_batch_count": self.executed_batch_count,
             "average_batch_size": self.average_batch_size,
             "average_queue_wait_ms": self.average_queue_wait_ms,
             "average_batch_execution_ms": self.average_batch_execution_ms,
+            "ready_parent_rss_kib": self.ready_parent_rss_kib,
+            "ready_worker_rss_kib": self.ready_worker_rss_kib,
+            "ready_total_rss_kib": self.ready_total_rss_kib,
+            "ready_worker_pid_count": self.ready_worker_pid_count,
             "enable_parallel_scoring": self.enable_parallel_scoring,
             "enable_parallel_work_item_oversubscription": (
                 self.enable_parallel_work_item_oversubscription
@@ -288,6 +299,32 @@ def _stats_delta(
     )
 
 
+def _rss_kib_for_pids(pids: list[int]) -> int:
+    live_pids = [pid for pid in pids if pid > 0]
+    if len(live_pids) == 0:
+        return 0
+
+    result = subprocess.run(
+        [
+            "ps",
+            "-o",
+            "rss=",
+            "-p",
+            ",".join(str(pid) for pid in live_pids),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    total_rss_kib = 0
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if stripped == "":
+            continue
+        total_rss_kib += int(stripped)
+    return total_rss_kib
+
+
 def _assert_runtime_matches_session(
     *,
     session: object,
@@ -368,6 +405,7 @@ def main() -> None:
         _upsert_documents(module=module, service_root=service_root, task=task)
         _create_snapshot(module=module, service_root=service_root)
 
+        session_prepare_started_at = time.perf_counter()
         session = prepare_exact_search_session(
             service_root=service_root,
             collection_id=COLLECTION_ID,
@@ -375,6 +413,7 @@ def main() -> None:
             namespace_id=NAMESPACE_ID,
             snapshot_id=SNAPSHOT_ID,
         )
+        session_prepare_seconds = time.perf_counter() - session_prepare_started_at
 
         print(f"task={task_path}")
         print(f"dataset_id={task['dataset_id']}")
@@ -386,6 +425,7 @@ def main() -> None:
         print(f"query_count={len(task['queries'])}")
         print(f"vector_dim={task['vector_dim']}")
         print(f"service_root={service_root}")
+        print(f"session_prepare_seconds={session_prepare_seconds:.12f}")
 
         for concurrency_lane_count in lane_counts:
             for worker_count in worker_counts:
@@ -395,6 +435,7 @@ def main() -> None:
                         concurrency_lane_count=concurrency_lane_count,
                         worker_count=worker_count,
                     )
+                    prepare_started_at = time.perf_counter()
                     runtime = prepare_exact_search_runtime(
                         service_root=service_root,
                         collection_id=COLLECTION_ID,
@@ -410,6 +451,13 @@ def main() -> None:
                         ),
                     )
                     try:
+                        runtime.wait_until_ready(timeout=60.0)
+                        prepare_ready_seconds = (
+                            time.perf_counter() - prepare_started_at
+                        )
+                        ready_parent_rss_kib = _rss_kib_for_pids([os.getpid()])
+                        ready_worker_pids = list(runtime.worker_pids())
+                        ready_worker_rss_kib = _rss_kib_for_pids(ready_worker_pids)
                         _assert_runtime_matches_session(
                             session=session,
                             runtime=runtime,
@@ -436,6 +484,7 @@ def main() -> None:
                         concurrency_lane_count=concurrency_lane_count,
                         worker_count=worker_count,
                         request_pool_count=len(request_pool),
+                        prepare_ready_seconds=prepare_ready_seconds,
                         mean_batch_seconds=mean_batch_seconds,
                         throughput_queries_per_second=(
                             len(request_pool) / mean_batch_seconds
@@ -444,6 +493,12 @@ def main() -> None:
                         average_batch_size=average_batch_size,
                         average_queue_wait_ms=average_queue_wait_ms,
                         average_batch_execution_ms=average_batch_execution_ms,
+                        ready_parent_rss_kib=ready_parent_rss_kib,
+                        ready_worker_rss_kib=ready_worker_rss_kib,
+                        ready_total_rss_kib=(
+                            ready_parent_rss_kib + ready_worker_rss_kib
+                        ),
+                        ready_worker_pid_count=len(ready_worker_pids),
                         enable_parallel_scoring=scoring.enable_parallel_scoring,
                         enable_parallel_work_item_oversubscription=(
                             scoring.enable_parallel_work_item_oversubscription
@@ -458,12 +513,17 @@ def main() -> None:
                         f"\tlanes={row.concurrency_lane_count}"
                         f"\tworkers={row.worker_count}"
                         f"\tscoring_mode={row.scoring_mode}"
+                        f"\tprepare_ready_seconds={row.prepare_ready_seconds:.12f}"
                         f"\tmean_batch_seconds={row.mean_batch_seconds:.12f}"
                         f"\tthroughput_qps={row.throughput_queries_per_second:.3f}"
                         f"\texecuted_batch_count={row.executed_batch_count}"
                         f"\taverage_batch_size={row.average_batch_size:.3f}"
                         f"\taverage_queue_wait_ms={row.average_queue_wait_ms:.3f}"
                         f"\taverage_batch_execution_ms={row.average_batch_execution_ms:.3f}"
+                        f"\tready_parent_rss_kib={row.ready_parent_rss_kib}"
+                        f"\tready_worker_rss_kib={row.ready_worker_rss_kib}"
+                        f"\tready_total_rss_kib={row.ready_total_rss_kib}"
+                        f"\tready_worker_pid_count={row.ready_worker_pid_count}"
                         f"\tparallel_override={row.parallel_work_item_count_override}"
                     )
 
@@ -475,6 +535,7 @@ def main() -> None:
         "warmup_iterations": args.warmup_iterations,
         "measurement_iterations": args.measurement_iterations,
         "host_cpu_count": os.cpu_count() or 1,
+        "session_prepare_seconds": session_prepare_seconds,
         "results": [row.to_json_ready() for row in rows],
     }
     if args.output is not None:
