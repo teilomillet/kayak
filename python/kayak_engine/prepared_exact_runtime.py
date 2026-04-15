@@ -22,7 +22,7 @@ def prepare_exact_search_runtime(
     tenant_id: str,
     namespace_id: str,
     snapshot_id: str,
-    load_text_corpus: bool = True,
+    load_text_corpus: bool = False,
     config: PreparedExactSearchRuntimeConfig | None = None,
 ) -> PreparedExactSearchRuntime:
     """Prepare one local exact-search runtime pinned to one hosted snapshot."""
@@ -58,7 +58,7 @@ def prepare_exact_search_scheduler(
     tenant_id: str,
     namespace_id: str,
     snapshot_id: str,
-    load_text_corpus: bool = True,
+    load_text_corpus: bool = False,
     config: PreparedExactSearchRuntimeConfig | None = None,
 ) -> PreparedExactSearchRuntime:
     """Compatibility alias for the prepared exact-search runtime constructor."""

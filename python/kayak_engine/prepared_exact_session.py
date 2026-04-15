@@ -202,7 +202,7 @@ def prepare_exact_search_session(
     tenant_id: str,
     namespace_id: str,
     snapshot_id: str,
-    load_text_corpus: bool = True,
+    load_text_corpus: bool = False,
 ) -> PreparedExactSearchSession:
     """Prepare one local exact-search session pinned to one hosted snapshot."""
 

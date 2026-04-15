@@ -187,7 +187,7 @@ What it does not own:
 - planned search
 - explain
 - automatic hidden reuse behind `/v1/search`
-- transport-level HTTP concurrency
+- full threaded execution of direct Mojo service routes
 
 Current prepare/reuse rule:
 
@@ -195,6 +195,8 @@ Current prepare/reuse rule:
   `(identity, load_text_corpus, config)` key is new
 - the same request reuses the existing hosted runtime and returns the same
   `runtime_id`
+- preparing one new hosted runtime does not block searches on already-active
+  hosted runtimes
 
 Current invalidation rule:
 
@@ -287,7 +289,6 @@ curl -sS http://127.0.0.1:8000/v1/prepared-exact-runtimes \
     "tenant_id": "tenant-a",
     "namespace_id": "search",
     "snapshot_id": "snapshot-0001",
-    "load_text_corpus": true,
     "config": {
       "execution_backend": "process",
       "concurrency_lane_count": 1,
@@ -297,6 +298,16 @@ curl -sS http://127.0.0.1:8000/v1/prepared-exact-runtimes \
     }
   }'
 ```
+
+`load_text_corpus` is optional on this exact-only runtime surface and defaults to
+`false`. Set it explicitly only if you need prepared document text loaded for a
+future text-dependent extension on the same pinned snapshot.
+
+Prepared exact runtime routes are now the only hosted routes that intentionally
+overlap across HTTP requests. They can batch concurrent searches onto one
+prepared runtime handle. The generic collection, snapshot, search, and planned
+search routes still execute through one dedicated engine thread so the direct
+Mojo service bindings remain serialized and predictable.
 
 Search through one hosted prepared runtime:
 
@@ -365,9 +376,12 @@ curl -sS http://127.0.0.1:8000/v1/snapshots:export \
 
 These are verified limits of the current transport:
 
-- single-process, single-threaded server
-- prepared exact runtime reuse improves repeated same-process snapshot loading,
-  but it does not make the HTTP server concurrent on its own
+- single-process server
+- direct collection, snapshot, stateless exact-search, and planned-search routes
+  still execute through one dedicated engine thread
+- only prepared exact-runtime routes intentionally overlap across HTTP requests
+- extra process lanes still duplicate prepared snapshot memory; concurrency is
+  not free
 - no auth yet
 - no streaming results
 - no binary ingest transport
@@ -376,21 +390,27 @@ These are verified limits of the current transport:
 
 Reason:
 - this step solves the deployable-service and operator-surface gap first
-- auth, concurrency, and richer I/O should stay separate follow-on decisions
+- auth, broader concurrency, and richer I/O should stay separate follow-on
+  decisions
 
-## Why Single-Threaded For Now
+## Why Concurrency Is Split
 
-The first implementation intentionally uses `HTTPServer`, not
-`ThreadingHTTPServer`.
+The hosted transport now uses `ThreadingHTTPServer`, but it does **not** treat
+all routes as equally thread-safe.
 
 Reason:
-- the Mojo service binding path was validated in-process and over the network
-- the threaded stdlib server crashed during live search
-- the single-threaded server was then verified by the end-to-end test
+- direct Mojo service calls from arbitrary handler threads were reproduced as
+  unsafe during live validation
+- prepared exact-runtime routes were then isolated because they hand work off to
+  the verified process-backed runtime
+- direct engine routes still go through one dedicated engine thread so the
+  service binding stays serialized and predictable
 
 This is the sound epistemic choice:
-- prefer the narrower transport that is currently verified
-- add concurrency only after the binding/runtime path is proven safe under it
+- allow concurrency only where the runtime contract is already explicit and
+  verified
+- keep direct Mojo binding calls serialized until that path is proven safe under
+  broader threading
 
 Local follow-on note:
 - the repo now has a verified process-backed Python runtime for same-snapshot

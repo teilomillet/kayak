@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import Future
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
+from queue import Queue
 import sys
+import threading
 from typing import Any, Callable
 
 from .hosted_prepared_exact_runtime_registry import (
@@ -35,8 +38,76 @@ from .payloads import (
 )
 
 
-class KayakEngineHttpServer(HTTPServer):
+PREPARED_EXACT_ROUTE_PATHS = frozenset(
+    {
+        "/v1/prepared-exact-runtimes",
+        "/v1/prepared-exact-runtimes:close",
+        "/v1/prepared-exact-runtimes:stats",
+        "/v1/prepared-exact-search",
+        "/v1/prepared-exact-search-batch",
+    }
+)
+
+
+class HostedEngineExecutor:
+    """Runs all direct Mojo engine calls on one dedicated thread."""
+
+    __slots__ = ("_queue", "_ready", "_startup_error", "engine_module", "_thread")
+
+    def __init__(self) -> None:
+        self._queue: Queue[tuple[Callable[[], str], Future[str]] | None] = Queue()
+        self._ready = threading.Event()
+        self._startup_error: BaseException | None = None
+        self.engine_module: Any | None = None
+        self._thread = threading.Thread(
+            target=self._run,
+            name="KayakHostedEngineExecutor",
+            daemon=True,
+        )
+        self._thread.start()
+        self._ready.wait(timeout=180.0)
+        if self._startup_error is not None:
+            raise RuntimeError("failed to start hosted engine executor") from self._startup_error
+        if self.engine_module is None:
+            raise RuntimeError("hosted engine executor did not initialize")
+
+    def _run(self) -> None:
+        try:
+            self.engine_module = load_module()
+        except BaseException as exc:  # pragma: no cover - startup guardrail
+            self._startup_error = exc
+            self._ready.set()
+            return
+
+        self._ready.set()
+        while True:
+            item = self._queue.get()
+            if item is None:
+                return
+            callback, future = item
+            if future.cancelled():
+                continue
+            try:
+                future.set_result(callback())
+            except BaseException as exc:  # pragma: no cover - surfaced to caller
+                future.set_exception(exc)
+
+    def call(self, callback: Callable[[], str]) -> str:
+        future: Future[str] = Future()
+        self._queue.put((callback, future))
+        return future.result(timeout=180.0)
+
+    def close(self) -> None:
+        self._queue.put(None)
+        self._thread.join(timeout=30.0)
+        if self._thread.is_alive():
+            raise RuntimeError("hosted engine executor did not stop")
+
+
+class KayakEngineHttpServer(ThreadingHTTPServer):
     """HTTP server carrying service configuration plus explicit runtime state."""
+
+    daemon_threads = True
 
     def __init__(
         self,
@@ -44,17 +115,18 @@ class KayakEngineHttpServer(HTTPServer):
         request_handler_class: type[BaseHTTPRequestHandler],
         *,
         service_root: Path,
-        engine_module: Any,
     ) -> None:
         super().__init__(server_address, request_handler_class)
         self.service_root = service_root
-        self.engine_module = engine_module
+        self.engine_executor = HostedEngineExecutor()
+        self.engine_module = self.engine_executor.engine_module
         self.prepared_exact_runtime_registry = HostedPreparedExactRuntimeRegistry(
             service_root=service_root
         )
 
     def server_close(self) -> None:
         self.prepared_exact_runtime_registry.close_all()
+        self.engine_executor.close()
         super().server_close()
 
 
@@ -73,16 +145,20 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
             if self.path == "/health":
                 self._write_json(
                     HTTPStatus.OK,
-                    self.server.engine_module.service_health_json(
-                        str(self.server.service_root)
+                    self.server.engine_executor.call(
+                        lambda: self.server.engine_module.service_health_json(
+                            str(self.server.service_root)
+                        )
                     ),
                 )
                 return
             if self.path == "/metrics":
                 self._write_json(
                     HTTPStatus.OK,
-                    self.server.engine_module.service_metrics_json(
-                        str(self.server.service_root)
+                    self.server.engine_executor.call(
+                        lambda: self.server.engine_module.service_metrics_json(
+                            str(self.server.service_root)
+                        )
                     ),
                 )
                 return
@@ -134,7 +210,11 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
 
         try:
             payload = self._read_json_body()
-            self._write_json(HTTPStatus.OK, handler(payload))
+            if self.path in PREPARED_EXACT_ROUTE_PATHS:
+                response = handler(payload)
+            else:
+                response = self.server.engine_executor.call(lambda: handler(payload))
+            self._write_json(HTTPStatus.OK, response)
         except PayloadError as exc:
             self._write_error(HTTPStatus.BAD_REQUEST, str(exc))
         except Exception as exc:  # pragma: no cover - transport guardrail
@@ -325,7 +405,7 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
             load_text_corpus=require_bool(
                 payload,
                 "load_text_corpus",
-                default=True,
+                default=False,
             ),
             config=prepared_exact_runtime_config_payload(payload),
         )
@@ -546,12 +626,10 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
 
 def serve(*, root: Path, host: str, port: int) -> int:
     root.mkdir(parents=True, exist_ok=True)
-    engine_module = load_module()
     server = KayakEngineHttpServer(
         (host, port),
         KayakEngineHandler,
         service_root=root,
-        engine_module=engine_module,
     )
     actual_host, actual_port = server.server_address[:2]
     print(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 
 from hosted_engine_test_support import HostedEngineServer, http_json
@@ -67,7 +68,6 @@ class HostedPreparedExactRuntimeHttpTest(unittest.TestCase):
                     "tenant_id": "tenant-a",
                     "namespace_id": "search",
                     "snapshot_id": "snapshot-0001",
-                    "load_text_corpus": True,
                     "config": {
                         "execution_backend": "process",
                         "concurrency_lane_count": 1,
@@ -93,6 +93,7 @@ class HostedPreparedExactRuntimeHttpTest(unittest.TestCase):
                 runtime = payload["runtime"]
                 runtime_id = runtime["runtime_id"]
                 self.assertEqual(runtime["snapshot_id"], "snapshot-0001")
+                self.assertFalse(runtime["load_text_corpus"])
                 self.assertEqual(runtime["config"]["worker_count"], 2)
                 self.assertEqual(
                     runtime["config"]["scoring"]["parallel_work_item_count_override"],
@@ -222,16 +223,164 @@ class HostedPreparedExactRuntimeHttpTest(unittest.TestCase):
                 self.assertEqual(status, 404)
                 self.assertIn("does not exist", payload["error"])
 
+    def test_network_prepared_exact_runtime_coalesces_concurrent_search_requests(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="kayak-http-prepared-runtime-batch-") as temp_dir:
+            with HostedEngineServer(Path(temp_dir) / "service-root") as server:
+                for path, payload in (
+                    (
+                        "/v1/collections",
+                        {
+                            "collection_id": "news",
+                            "tenant_id": "tenant-a",
+                            "namespace_id": "search",
+                            "model_name": "colbertv2",
+                            "vector_dim": 2,
+                        },
+                    ),
+                    (
+                        "/v1/documents:upsert",
+                        {
+                            "collection_id": "news",
+                            "tenant_id": "tenant-a",
+                            "namespace_id": "search",
+                            "documents": [
+                                {
+                                    "doc_id": "doc-a",
+                                    "vectors": [[1.0, 0.0], [0.0, 1.0]],
+                                    "text": "alpha evidence document",
+                                },
+                                {
+                                    "doc_id": "doc-b",
+                                    "vectors": [[0.0, 1.0], [1.0, 0.0]],
+                                    "text": "beta evidence document",
+                                },
+                            ],
+                        },
+                    ),
+                    (
+                        "/v1/snapshots",
+                        {
+                            "collection_id": "news",
+                            "tenant_id": "tenant-a",
+                            "namespace_id": "search",
+                            "snapshot_id": "snapshot-0001",
+                            "reason": "publish prepared runtime snapshot",
+                        },
+                    ),
+                ):
+                    status, _payload = http_json(
+                        "POST",
+                        f"{server.base_url}{path}",
+                        payload,
+                    )
+                    self.assertEqual(status, 200)
+
                 status, payload = http_json(
                     "POST",
-                    f"{server.base_url}/v1/prepared-exact-search",
+                    f"{server.base_url}/v1/prepared-exact-runtimes",
                     {
-                        "runtime_id": runtime_id,
-                        "request": query_alpha,
+                        "collection_id": "news",
+                        "tenant_id": "tenant-a",
+                        "namespace_id": "search",
+                        "snapshot_id": "snapshot-0001",
+                        "config": {
+                            "execution_backend": "process",
+                            "concurrency_lane_count": 1,
+                            "worker_count": 2,
+                            "max_batch_size": 8,
+                            "max_batch_wait_ms": 25,
+                        },
                     },
                 )
-                self.assertEqual(status, 404)
-                self.assertIn("does not exist", payload["error"])
+                self.assertEqual(status, 200)
+                runtime_id = payload["runtime"]["runtime_id"]
+
+                requests = [
+                    {
+                        "query_model_name": "colbertv2",
+                        "query": [[1.0, 0.0], [0.0, 1.0]],
+                        "final_k": 2,
+                    },
+                    {
+                        "query_model_name": "colbertv2",
+                        "query": [[0.0, 1.0], [1.0, 0.0]],
+                        "final_k": 2,
+                    },
+                    {
+                        "query_model_name": "colbertv2",
+                        "query": [[1.0, 0.0], [1.0, 0.0]],
+                        "final_k": 2,
+                    },
+                    {
+                        "query_model_name": "colbertv2",
+                        "query": [[0.0, 1.0], [0.0, 1.0]],
+                        "final_k": 2,
+                    },
+                ]
+                expected: list[dict] = []
+                for request in requests:
+                    status, payload = http_json(
+                        "POST",
+                        f"{server.base_url}/v1/search",
+                        {
+                            "collection_id": "news",
+                            "tenant_id": "tenant-a",
+                            "namespace_id": "search",
+                            "snapshot_id": "snapshot-0001",
+                            **request,
+                        },
+                    )
+                    self.assertEqual(status, 200)
+                    expected.append(payload)
+
+                barrier = threading.Barrier(len(requests) + 1)
+                responses: list[dict | None] = [None] * len(requests)
+                failures: list[BaseException] = []
+
+                def run(index: int, request: dict) -> None:
+                    try:
+                        barrier.wait()
+                        status, payload = http_json(
+                            "POST",
+                            f"{server.base_url}/v1/prepared-exact-search",
+                            {
+                                "runtime_id": runtime_id,
+                                "request": request,
+                            },
+                        )
+                        if status != 200:
+                            raise AssertionError(f"unexpected status: {status}")
+                        responses[index] = payload["search"]
+                    except BaseException as exc:  # pragma: no cover - surfaced below
+                        failures.append(exc)
+
+                threads = [
+                    threading.Thread(target=run, args=(index, request), daemon=True)
+                    for index, request in enumerate(requests)
+                ]
+                for thread in threads:
+                    thread.start()
+                barrier.wait()
+                for thread in threads:
+                    thread.join(timeout=30.0)
+
+                self.assertEqual(failures, [])
+                self.assertEqual(responses, expected)
+
+                status, payload = http_json(
+                    "POST",
+                    f"{server.base_url}/v1/prepared-exact-runtimes:stats",
+                    {"runtime_id": runtime_id},
+                )
+                self.assertEqual(status, 200)
+                stats = payload["runtime"]["stats"]
+                self.assertEqual(stats["submitted_request_count"], len(requests))
+                self.assertEqual(stats["completed_request_count"], len(requests))
+                self.assertEqual(stats["failed_request_count"], 0)
+                self.assertLess(stats["executed_batch_count"], len(requests))
+                self.assertGreater(stats["max_observed_batch_size"], 1)
 
     def test_network_prepared_exact_runtime_is_invalidated_by_reclaim(self) -> None:
         with tempfile.TemporaryDirectory(prefix="kayak-http-prepared-runtime-reclaim-") as temp_dir:

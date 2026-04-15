@@ -228,7 +228,7 @@ class PreparedExactProcessRuntime:
         tenant_id: str,
         namespace_id: str,
         snapshot_id: str,
-        load_text_corpus: bool = True,
+        load_text_corpus: bool = False,
         config: PreparedExactSearchRuntimeConfig | None = None,
     ) -> None:
         self.service_root = Path(service_root)

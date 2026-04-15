@@ -147,6 +147,7 @@ class PreparedExactSearchSessionTests(unittest.TestCase):
         )
 
         self.assertEqual(actual, expected)
+        self.assertFalse(session.load_text_corpus)
 
     def test_prepared_batch_matches_repeated_prepared_search(self) -> None:
         module, temp_dir, service_root = self._build_service_root()

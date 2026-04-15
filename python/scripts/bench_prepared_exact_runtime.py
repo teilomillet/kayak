@@ -42,6 +42,7 @@ class RuntimeBenchmarkRow:
     concurrency_lane_count: int
     worker_count: int
     request_pool_count: int
+    load_text_corpus: bool
     prepare_ready_seconds: float
     mean_batch_seconds: float
     throughput_queries_per_second: float
@@ -63,6 +64,7 @@ class RuntimeBenchmarkRow:
             "concurrency_lane_count": self.concurrency_lane_count,
             "worker_count": self.worker_count,
             "request_pool_count": self.request_pool_count,
+            "load_text_corpus": self.load_text_corpus,
             "prepare_ready_seconds": self.prepare_ready_seconds,
             "mean_batch_seconds": self.mean_batch_seconds,
             "throughput_queries_per_second": self.throughput_queries_per_second,
@@ -106,6 +108,27 @@ def _parse_csv_strings(value: str) -> list[str]:
     return values
 
 
+def _parse_csv_bools(value: str) -> list[bool]:
+    values: list[bool] = []
+    for part in value.split(","):
+        normalized = part.strip().lower()
+        if normalized == "":
+            continue
+        if normalized == "true":
+            values.append(True)
+            continue
+        if normalized == "false":
+            values.append(False)
+            continue
+        raise ValueError(
+            "boolean CSV values must be 'true' or 'false'; "
+            f"got {part!r}"
+        )
+    if len(values) == 0:
+        raise ValueError("at least one boolean value is required")
+    return values
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -121,6 +144,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--request-pool-count", type=int, default=32)
     parser.add_argument("--max-batch-size", type=int, default=32)
     parser.add_argument("--max-batch-wait-ms", type=int, default=1)
+    parser.add_argument(
+        "--load-text-corpus-values",
+        type=str,
+        default="false",
+        help="Comma-separated boolean values such as false,true",
+    )
     parser.add_argument("--lane-counts", type=str, default="1,2,4")
     parser.add_argument("--worker-counts", type=str, default="1,2,4")
     parser.add_argument(
@@ -380,6 +409,7 @@ def main() -> None:
     lane_counts = _parse_csv_ints(args.lane_counts)
     worker_counts = _parse_csv_ints(args.worker_counts)
     scoring_modes = _parse_csv_strings(args.scoring_modes)
+    load_text_corpus_values = _parse_csv_bools(args.load_text_corpus_values)
 
     if args.warmup_iterations < 0:
         raise ValueError("warmup-iterations must be non-negative")
@@ -412,6 +442,7 @@ def main() -> None:
             tenant_id=TENANT_ID,
             namespace_id=NAMESPACE_ID,
             snapshot_id=SNAPSHOT_ID,
+            load_text_corpus=False,
         )
         session_prepare_seconds = time.perf_counter() - session_prepare_started_at
 
@@ -427,105 +458,109 @@ def main() -> None:
         print(f"service_root={service_root}")
         print(f"session_prepare_seconds={session_prepare_seconds:.12f}")
 
-        for concurrency_lane_count in lane_counts:
-            for worker_count in worker_counts:
-                for scoring_mode in scoring_modes:
-                    scoring = _scoring_options(
-                        scoring_mode=scoring_mode,
-                        concurrency_lane_count=concurrency_lane_count,
-                        worker_count=worker_count,
-                    )
-                    prepare_started_at = time.perf_counter()
-                    runtime = prepare_exact_search_runtime(
-                        service_root=service_root,
-                        collection_id=COLLECTION_ID,
-                        tenant_id=TENANT_ID,
-                        namespace_id=NAMESPACE_ID,
-                        snapshot_id=SNAPSHOT_ID,
-                        config=PreparedExactSearchRuntimeConfig(
+        for load_text_corpus in load_text_corpus_values:
+            for concurrency_lane_count in lane_counts:
+                for worker_count in worker_counts:
+                    for scoring_mode in scoring_modes:
+                        scoring = _scoring_options(
+                            scoring_mode=scoring_mode,
                             concurrency_lane_count=concurrency_lane_count,
                             worker_count=worker_count,
-                            max_batch_size=args.max_batch_size,
-                            max_batch_wait_ms=args.max_batch_wait_ms,
-                            scoring=scoring,
-                        ),
-                    )
-                    try:
-                        runtime.wait_until_ready(timeout=60.0)
-                        prepare_ready_seconds = (
-                            time.perf_counter() - prepare_started_at
                         )
-                        ready_parent_rss_kib = _rss_kib_for_pids([os.getpid()])
-                        ready_worker_pids = list(runtime.worker_pids())
-                        ready_worker_rss_kib = _rss_kib_for_pids(ready_worker_pids)
-                        _assert_runtime_matches_session(
-                            session=session,
-                            runtime=runtime,
-                            requests=request_pool,
-                            scoring=scoring,
+                        prepare_started_at = time.perf_counter()
+                        runtime = prepare_exact_search_runtime(
+                            service_root=service_root,
+                            collection_id=COLLECTION_ID,
+                            tenant_id=TENANT_ID,
+                            namespace_id=NAMESPACE_ID,
+                            snapshot_id=SNAPSHOT_ID,
+                            load_text_corpus=load_text_corpus,
+                            config=PreparedExactSearchRuntimeConfig(
+                                concurrency_lane_count=concurrency_lane_count,
+                                worker_count=worker_count,
+                                max_batch_size=args.max_batch_size,
+                                max_batch_wait_ms=args.max_batch_wait_ms,
+                                scoring=scoring,
+                            ),
                         )
-                        (
-                            mean_batch_seconds,
-                            executed_batch_count,
-                            average_batch_size,
-                            average_queue_wait_ms,
-                            average_batch_execution_ms,
-                        ) = _measure_runtime(
-                            runtime=runtime,
-                            requests=request_pool,
-                            warmup_iterations=args.warmup_iterations,
-                            measurement_iterations=args.measurement_iterations,
-                        )
-                    finally:
-                        runtime.close()
+                        try:
+                            runtime.wait_until_ready(timeout=60.0)
+                            prepare_ready_seconds = (
+                                time.perf_counter() - prepare_started_at
+                            )
+                            ready_parent_rss_kib = _rss_kib_for_pids([os.getpid()])
+                            ready_worker_pids = list(runtime.worker_pids())
+                            ready_worker_rss_kib = _rss_kib_for_pids(ready_worker_pids)
+                            _assert_runtime_matches_session(
+                                session=session,
+                                runtime=runtime,
+                                requests=request_pool,
+                                scoring=scoring,
+                            )
+                            (
+                                mean_batch_seconds,
+                                executed_batch_count,
+                                average_batch_size,
+                                average_queue_wait_ms,
+                                average_batch_execution_ms,
+                            ) = _measure_runtime(
+                                runtime=runtime,
+                                requests=request_pool,
+                                warmup_iterations=args.warmup_iterations,
+                                measurement_iterations=args.measurement_iterations,
+                            )
+                        finally:
+                            runtime.close()
 
-                    row = RuntimeBenchmarkRow(
-                        scoring_mode=scoring_mode,
-                        concurrency_lane_count=concurrency_lane_count,
-                        worker_count=worker_count,
-                        request_pool_count=len(request_pool),
-                        prepare_ready_seconds=prepare_ready_seconds,
-                        mean_batch_seconds=mean_batch_seconds,
-                        throughput_queries_per_second=(
-                            len(request_pool) / mean_batch_seconds
-                        ),
-                        executed_batch_count=executed_batch_count,
-                        average_batch_size=average_batch_size,
-                        average_queue_wait_ms=average_queue_wait_ms,
-                        average_batch_execution_ms=average_batch_execution_ms,
-                        ready_parent_rss_kib=ready_parent_rss_kib,
-                        ready_worker_rss_kib=ready_worker_rss_kib,
-                        ready_total_rss_kib=(
-                            ready_parent_rss_kib + ready_worker_rss_kib
-                        ),
-                        ready_worker_pid_count=len(ready_worker_pids),
-                        enable_parallel_scoring=scoring.enable_parallel_scoring,
-                        enable_parallel_work_item_oversubscription=(
-                            scoring.enable_parallel_work_item_oversubscription
-                        ),
-                        parallel_work_item_count_override=(
-                            scoring.parallel_work_item_count_override
-                        ),
-                    )
-                    rows.append(row)
-                    print(
-                        "RESULT"
-                        f"\tlanes={row.concurrency_lane_count}"
-                        f"\tworkers={row.worker_count}"
-                        f"\tscoring_mode={row.scoring_mode}"
-                        f"\tprepare_ready_seconds={row.prepare_ready_seconds:.12f}"
-                        f"\tmean_batch_seconds={row.mean_batch_seconds:.12f}"
-                        f"\tthroughput_qps={row.throughput_queries_per_second:.3f}"
-                        f"\texecuted_batch_count={row.executed_batch_count}"
-                        f"\taverage_batch_size={row.average_batch_size:.3f}"
-                        f"\taverage_queue_wait_ms={row.average_queue_wait_ms:.3f}"
-                        f"\taverage_batch_execution_ms={row.average_batch_execution_ms:.3f}"
-                        f"\tready_parent_rss_kib={row.ready_parent_rss_kib}"
-                        f"\tready_worker_rss_kib={row.ready_worker_rss_kib}"
-                        f"\tready_total_rss_kib={row.ready_total_rss_kib}"
-                        f"\tready_worker_pid_count={row.ready_worker_pid_count}"
-                        f"\tparallel_override={row.parallel_work_item_count_override}"
-                    )
+                        row = RuntimeBenchmarkRow(
+                            scoring_mode=scoring_mode,
+                            concurrency_lane_count=concurrency_lane_count,
+                            worker_count=worker_count,
+                            request_pool_count=len(request_pool),
+                            load_text_corpus=load_text_corpus,
+                            prepare_ready_seconds=prepare_ready_seconds,
+                            mean_batch_seconds=mean_batch_seconds,
+                            throughput_queries_per_second=(
+                                len(request_pool) / mean_batch_seconds
+                            ),
+                            executed_batch_count=executed_batch_count,
+                            average_batch_size=average_batch_size,
+                            average_queue_wait_ms=average_queue_wait_ms,
+                            average_batch_execution_ms=average_batch_execution_ms,
+                            ready_parent_rss_kib=ready_parent_rss_kib,
+                            ready_worker_rss_kib=ready_worker_rss_kib,
+                            ready_total_rss_kib=(
+                                ready_parent_rss_kib + ready_worker_rss_kib
+                            ),
+                            ready_worker_pid_count=len(ready_worker_pids),
+                            enable_parallel_scoring=scoring.enable_parallel_scoring,
+                            enable_parallel_work_item_oversubscription=(
+                                scoring.enable_parallel_work_item_oversubscription
+                            ),
+                            parallel_work_item_count_override=(
+                                scoring.parallel_work_item_count_override
+                            ),
+                        )
+                        rows.append(row)
+                        print(
+                            "RESULT"
+                            f"\tload_text_corpus={str(row.load_text_corpus).lower()}"
+                            f"\tlanes={row.concurrency_lane_count}"
+                            f"\tworkers={row.worker_count}"
+                            f"\tscoring_mode={row.scoring_mode}"
+                            f"\tprepare_ready_seconds={row.prepare_ready_seconds:.12f}"
+                            f"\tmean_batch_seconds={row.mean_batch_seconds:.12f}"
+                            f"\tthroughput_qps={row.throughput_queries_per_second:.3f}"
+                            f"\texecuted_batch_count={row.executed_batch_count}"
+                            f"\taverage_batch_size={row.average_batch_size:.3f}"
+                            f"\taverage_queue_wait_ms={row.average_queue_wait_ms:.3f}"
+                            f"\taverage_batch_execution_ms={row.average_batch_execution_ms:.3f}"
+                            f"\tready_parent_rss_kib={row.ready_parent_rss_kib}"
+                            f"\tready_worker_rss_kib={row.ready_worker_rss_kib}"
+                            f"\tready_total_rss_kib={row.ready_total_rss_kib}"
+                            f"\tready_worker_pid_count={row.ready_worker_pid_count}"
+                            f"\tparallel_override={row.parallel_work_item_count_override}"
+                        )
 
     payload = {
         "task_path": str(task_path),
@@ -535,6 +570,7 @@ def main() -> None:
         "warmup_iterations": args.warmup_iterations,
         "measurement_iterations": args.measurement_iterations,
         "host_cpu_count": os.cpu_count() or 1,
+        "load_text_corpus_values": load_text_corpus_values,
         "session_prepare_seconds": session_prepare_seconds,
         "results": [row.to_json_ready() for row in rows],
     }

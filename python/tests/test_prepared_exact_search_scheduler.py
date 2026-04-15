@@ -222,6 +222,7 @@ class PreparedExactSearchRuntimeTests(unittest.TestCase):
         )
         self.addCleanup(runtime.close)
         self.assertEqual(runtime.config.concurrency_lane_count, 2)
+        self.assertFalse(runtime.load_text_corpus)
 
         requests = [
             {
