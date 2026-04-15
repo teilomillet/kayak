@@ -18,22 +18,35 @@ from .centroid_postings_head_stage import top_centroid_indices_for_query_token_h
 
 comptime DEFAULT_AUTO_CENTROID_HEAD_POSTING_CAP = 16
 comptime EXPANDED_AUTO_CENTROID_HEAD_POSTING_CAP = 32
+comptime SHRUNK_AUTO_CENTROID_HEAD_POSTING_CAP = 4
+comptime MID_WINDOW_AUTO_CENTROID_HEAD_POSTING_CAP = 8
 
 
 def auto_centroid_head_base_posting_cap(
-    read index: CentroidPostingIndex, candidate_k: Int, query_vector_count: Int
+    candidate_k: Int, query_vector_count: Int, centroid_count: Int
 ) -> Int:
     var posting_cap = DEFAULT_AUTO_CENTROID_HEAD_POSTING_CAP
+
+    # Long-query hard-recall slices were measured to benefit from a tighter
+    # per-centroid head when the shortlist itself is already tiny. Keep that
+    # shrink narrowly scoped until a broader public sweep justifies more.
+    if query_vector_count >= 24:
+        if candidate_k <= 10:
+            posting_cap = SHRUNK_AUTO_CENTROID_HEAD_POSTING_CAP
+        elif candidate_k <= 20:
+            posting_cap = MID_WINDOW_AUTO_CENTROID_HEAD_POSTING_CAP
+        elif candidate_k <= 40:
+            posting_cap = SHRUNK_AUTO_CENTROID_HEAD_POSTING_CAP
 
     # The public posting-cap sweep showed that low query-vector budgets often
     # need a wider head window, especially when the centroid budget is either
     # very large. The fixed-cap `16` baseline was already strong, so the safe
     # policy is expansion-only and only on the high-centroid-budget regime.
     if query_vector_count <= 8:
-        if index.centroid_count >= 96:
+        if centroid_count >= 96:
             posting_cap = candidate_k
     elif query_vector_count <= 16:
-        if index.centroid_count >= 96:
+        if centroid_count >= 96:
             posting_cap = EXPANDED_AUTO_CENTROID_HEAD_POSTING_CAP
 
     if posting_cap > candidate_k:
@@ -53,7 +66,7 @@ def auto_centroid_head_posting_cap_for_centroid(
         return 0
 
     var posting_cap = auto_centroid_head_base_posting_cap(
-        index, candidate_k, query_vector_count
+        candidate_k, query_vector_count, index.centroid_count
     )
 
     # Keep full access to rare centroids because they are already cheap and are
