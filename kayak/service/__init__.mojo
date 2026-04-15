@@ -96,6 +96,10 @@ from .prepared_exact_search_executor import (
     prepare_service_exact_search_executor,
     prepare_service_exact_search_executor_with_config,
 )
+from .prepared_exact_search_batch import (
+    PreparedExactSearchBatchConfig,
+    execute_search_batch_with_prepared_snapshot,
+)
 from .runtime import (
     create_collection,
     create_snapshot,
