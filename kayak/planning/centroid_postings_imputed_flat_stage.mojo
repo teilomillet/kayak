@@ -25,10 +25,44 @@ from .centroid_segment_score_result import (
 from .centroid_postings_flat_stage import dot_product_flat_pair_at_generic
 from .centroid_postings_stage import insert_descending_centroid_match
 from .centroid_postings_imputed_stage import (
+    exact_small_count_imputed_centroid_selection_limit,
     effective_imputed_centroid_bound,
     finalize_imputed_centroid_selection,
     small_count_imputed_centroid_selection_limit,
 )
+
+
+def centroid_selection_for_flat_query_token_generic_with_small_count_limit(
+    read flat_query_values: List[VectorScalar],
+    query_offset: Int,
+    read index: CentroidPostingIndex,
+    final_k: Int,
+    selection_limit: Int,
+) -> ScoredCentroidSelection:
+    var sorted_centroid_indices = List[Int]()
+    var sorted_centroid_scores = List[ScoreScalar]()
+
+    for centroid_index in range(index.centroid_count):
+        insert_descending_centroid_match(
+            sorted_centroid_indices,
+            sorted_centroid_scores,
+            centroid_index,
+            dot_product_flat_pair_at_generic(
+                flat_query_values,
+                query_offset,
+                index.flat_centroid_values,
+                centroid_index * index.vector_dim,
+                index.vector_dim,
+            ),
+            selection_limit,
+        )
+
+    return finalize_imputed_centroid_selection(
+        sorted_centroid_indices^,
+        sorted_centroid_scores^,
+        index,
+        final_k,
+    )
 
 
 def centroid_selection_for_flat_query_token_generic(
@@ -38,38 +72,16 @@ def centroid_selection_for_flat_query_token_generic(
     final_k: Int,
 ) -> ScoredCentroidSelection:
     var bound = effective_imputed_centroid_bound(index.centroid_count)
-    var selection_limit = bound
     if index.centroid_count <= bound:
-        selection_limit = small_count_imputed_centroid_selection_limit(
+        return centroid_selection_for_flat_query_token_generic_with_small_count_limit(
+            flat_query_values,
+            query_offset,
             index,
             final_k,
-            bound,
+            small_count_imputed_centroid_selection_limit(index, final_k, bound),
         )
     var sorted_centroid_indices = List[Int]()
     var sorted_centroid_scores = List[ScoreScalar]()
-
-    if index.centroid_count <= bound:
-        for centroid_index in range(index.centroid_count):
-            insert_descending_centroid_match(
-                sorted_centroid_indices,
-                sorted_centroid_scores,
-                centroid_index,
-                dot_product_flat_pair_at_generic(
-                    flat_query_values,
-                    query_offset,
-                    index.flat_centroid_values,
-                    centroid_index * index.vector_dim,
-                    index.vector_dim,
-                ),
-                selection_limit,
-            )
-
-        return finalize_imputed_centroid_selection(
-            sorted_centroid_indices^,
-            sorted_centroid_scores^,
-            index,
-            final_k,
-        )
 
     for centroid_index in range(index.centroid_count):
         insert_top_bound_centroid_match(
@@ -99,6 +111,39 @@ def centroid_selection_for_flat_query_token_generic(
     )
 
 
+def centroid_selection_for_flat_query_token_dim128_with_small_count_limit(
+    read query: FlatQueryDim128,
+    query_index: Int,
+    read index: CentroidPostingIndex,
+    final_k: Int,
+    selection_limit: Int,
+) -> ScoredCentroidSelection:
+    var sorted_centroid_indices = List[Int]()
+    var sorted_centroid_scores = List[ScoreScalar]()
+    var query_offset = query_index * COLBERT_VECTOR_DIM
+
+    for centroid_index in range(index.centroid_count):
+        insert_descending_centroid_match(
+            sorted_centroid_indices,
+            sorted_centroid_scores,
+            centroid_index,
+            dot_product_dim128_flat_pair_at(
+                query.token_values,
+                query_offset,
+                index.flat_centroid_values,
+                centroid_index * COLBERT_VECTOR_DIM,
+            ),
+            selection_limit,
+        )
+
+    return finalize_imputed_centroid_selection(
+        sorted_centroid_indices^,
+        sorted_centroid_scores^,
+        index,
+        final_k,
+    )
+
+
 def centroid_selection_for_flat_query_token_dim128(
     read query: FlatQueryDim128,
     query_index: Int,
@@ -106,38 +151,17 @@ def centroid_selection_for_flat_query_token_dim128(
     final_k: Int,
 ) -> ScoredCentroidSelection:
     var bound = effective_imputed_centroid_bound(index.centroid_count)
-    var selection_limit = bound
     if index.centroid_count <= bound:
-        selection_limit = small_count_imputed_centroid_selection_limit(
+        return centroid_selection_for_flat_query_token_dim128_with_small_count_limit(
+            query,
+            query_index,
             index,
             final_k,
-            bound,
+            small_count_imputed_centroid_selection_limit(index, final_k, bound),
         )
     var sorted_centroid_indices = List[Int]()
     var sorted_centroid_scores = List[ScoreScalar]()
     var query_offset = query_index * COLBERT_VECTOR_DIM
-
-    if index.centroid_count <= bound:
-        for centroid_index in range(index.centroid_count):
-            insert_descending_centroid_match(
-                sorted_centroid_indices,
-                sorted_centroid_scores,
-                centroid_index,
-                dot_product_dim128_flat_pair_at(
-                    query.token_values,
-                    query_offset,
-                    index.flat_centroid_values,
-                    centroid_index * COLBERT_VECTOR_DIM,
-                ),
-                selection_limit,
-            )
-
-        return finalize_imputed_centroid_selection(
-            sorted_centroid_indices^,
-            sorted_centroid_scores^,
-            index,
-            final_k,
-        )
 
     for centroid_index in range(index.centroid_count):
         insert_top_bound_centroid_match(
@@ -176,20 +200,41 @@ def centroid_posting_imputed_flat_score_result_for_segment_generic_with_workspac
     var flat_query_values = List[VectorScalar]()
     var selections = List[ScoredCentroidSelection]()
     var base_score = zero_score_scalar()
+    var bound = effective_imputed_centroid_bound(index.centroid_count)
+    var use_small_count_limit = index.centroid_count <= bound
+    var small_count_selection_limit = bound
+    if use_small_count_limit:
+        small_count_selection_limit = exact_small_count_imputed_centroid_selection_limit(
+            index,
+            final_k,
+            bound,
+        )
 
     for token_vector in query.token_vectors:
         for value in token_vector:
             flat_query_values.append(value)
 
-    for query_index in range(query.vector_count):
-        var selection = centroid_selection_for_flat_query_token_generic(
-            flat_query_values,
-            query_index * query.vector_dim,
-            index,
-            final_k,
-        )
-        base_score += selection.baseline_correction
-        selections.append(selection^)
+    if use_small_count_limit:
+        for query_index in range(query.vector_count):
+            var selection = centroid_selection_for_flat_query_token_generic_with_small_count_limit(
+                flat_query_values,
+                query_index * query.vector_dim,
+                index,
+                final_k,
+                small_count_selection_limit,
+            )
+            base_score += selection.baseline_correction
+            selections.append(selection^)
+    else:
+        for query_index in range(query.vector_count):
+            var selection = centroid_selection_for_flat_query_token_generic(
+                flat_query_values,
+                query_index * query.vector_dim,
+                index,
+                final_k,
+            )
+            base_score += selection.baseline_correction
+            selections.append(selection^)
 
     workspace.begin_segment(index.document_count)
     for selection in selections:
@@ -213,13 +258,37 @@ def centroid_posting_imputed_flat_score_result_for_segment_dim128_with_workspace
 ) -> CentroidSegmentScoreResult:
     var selections = List[ScoredCentroidSelection]()
     var base_score = zero_score_scalar()
-
-    for query_index in range(query.vector_count):
-        var selection = centroid_selection_for_flat_query_token_dim128(
-            query, query_index, index, final_k
+    var bound = effective_imputed_centroid_bound(index.centroid_count)
+    var use_small_count_limit = index.centroid_count <= bound
+    var small_count_selection_limit = bound
+    if use_small_count_limit:
+        small_count_selection_limit = exact_small_count_imputed_centroid_selection_limit(
+            index,
+            final_k,
+            bound,
         )
-        base_score += selection.baseline_correction
-        selections.append(selection^)
+
+    if use_small_count_limit:
+        for query_index in range(query.vector_count):
+            var selection = centroid_selection_for_flat_query_token_dim128_with_small_count_limit(
+                query,
+                query_index,
+                index,
+                final_k,
+                small_count_selection_limit,
+            )
+            base_score += selection.baseline_correction
+            selections.append(selection^)
+    else:
+        for query_index in range(query.vector_count):
+            var selection = centroid_selection_for_flat_query_token_dim128(
+                query,
+                query_index,
+                index,
+                final_k,
+            )
+            base_score += selection.baseline_correction
+            selections.append(selection^)
 
     workspace.begin_segment(index.document_count)
     for selection in selections:

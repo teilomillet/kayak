@@ -25,8 +25,10 @@ from kayak.planning.centroid_primitives import ScoredCentroidSelection
 from kayak.planning.centroid_postings_imputed_stage import (
     centroid_selection_for_query_token,
     centroid_token_count,
+    exact_small_count_imputed_centroid_selection_limit,
     effective_imputed_centroid_bound,
     effective_imputed_centroid_nprobe,
+    small_count_imputed_centroid_selection_limit,
     warp_like_t_prime,
 )
 from kayak.planning.centroid_postings_imputed_flat_stage import (
@@ -231,6 +233,40 @@ def small_count_dim128_zero_token_index() raises -> CentroidPostingIndex:
         posting_doc_indices.append(0)
         posting_weights.append(1)
         posting_offsets.append(len(posting_doc_indices))
+
+    return CentroidPostingIndex(
+        centroid_dims^,
+        centroid_vectors^,
+        posting_offsets^,
+        posting_doc_indices^,
+        posting_weights^,
+        128,
+        1,
+    )
+
+
+def small_count_dim128_weighted_index(
+    last_centroid_value: Float64, token_weight: Int
+) raises -> CentroidPostingIndex:
+    var centroid_dims = List[Int]()
+    var centroid_vectors = List[List[VectorScalar]]()
+    var posting_offsets = List[Int]()
+    var posting_doc_indices = List[Int]()
+    var posting_weights = List[Int]()
+
+    posting_offsets.append(0)
+    for _ in range(127):
+        centroid_dims.append(0)
+        centroid_vectors.append(constant_vector(128, 1.0))
+        posting_doc_indices.append(0)
+        posting_weights.append(token_weight)
+        posting_offsets.append(len(posting_doc_indices))
+
+    centroid_dims.append(0)
+    centroid_vectors.append(constant_vector(128, last_centroid_value))
+    posting_doc_indices.append(0)
+    posting_weights.append(token_weight)
+    posting_offsets.append(len(posting_doc_indices))
 
     return CentroidPostingIndex(
         centroid_dims^,
@@ -459,6 +495,34 @@ def test_imputed_flat_dim128_small_count_evicts_tail_for_better_late_centroid() 
 
 def test_imputed_flat_small_count_zero_token_centroids_matches_nested() raises:
     var index = small_count_dim128_zero_token_index()
+    var query_token = constant_vector(128, 1.0)
+    var flat_query = FlatQueryDim128(query_token.copy(), 128)
+
+    assert_scored_centroid_selection_equal(
+        centroid_selection_for_flat_query_token_dim128(flat_query, 0, index, 10),
+        centroid_selection_for_query_token(query_token, index, 10),
+    )
+
+
+def test_exact_small_count_imputed_selection_limit_uses_centroid_token_counts() raises:
+    var index = small_count_dim128_weighted_index(1.0, 8)
+    var bound = effective_imputed_centroid_bound(index.centroid_count)
+
+    assert_equal(bound, 128)
+    assert_equal(effective_imputed_centroid_nprobe(bound), 32)
+    assert_equal(warp_like_t_prime(index, 10), 90)
+    assert_equal(
+        exact_small_count_imputed_centroid_selection_limit(index, 10, bound),
+        32,
+    )
+    assert_equal(
+        small_count_imputed_centroid_selection_limit(index, 10, bound),
+        90,
+    )
+
+
+def test_imputed_flat_small_count_token_rich_prefix_matches_nested() raises:
+    var index = small_count_dim128_weighted_index(2.0, 8)
     var query_token = constant_vector(128, 1.0)
     var flat_query = FlatQueryDim128(query_token.copy(), 128)
 

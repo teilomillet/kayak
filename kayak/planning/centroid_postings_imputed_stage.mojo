@@ -127,6 +127,46 @@ def small_count_imputed_centroid_selection_limit(
     return selection_limit
 
 
+def exact_small_count_imputed_centroid_selection_limit(
+    read index: CentroidPostingIndex, final_k: Int, bound: Int
+) -> Int:
+    if bound <= 0:
+        return 0
+
+    var nprobe = effective_imputed_centroid_nprobe(bound)
+    if nprobe >= bound:
+        return bound
+
+    var t_prime = warp_like_t_prime(index, final_k)
+    var sorted_token_counts = List[Int]()
+
+    # The smallest centroid token counts form the worst-case sorted prefix for
+    # the t' walk. If they cross t' after p entries then every score-ordered
+    # prefix of length p crosses it as well. This tighter bound is exact, but
+    # it is only worth computing when the caller can amortize it across many
+    # query tokens.
+    for centroid_index in range(index.centroid_count):
+        var token_count = centroid_token_count(index, centroid_index)
+        if token_count <= 0:
+            return bound
+
+        var insert_at = len(sorted_token_counts)
+        sorted_token_counts.append(token_count)
+        while insert_at > 0 and sorted_token_counts[insert_at - 1] > token_count:
+            sorted_token_counts[insert_at] = sorted_token_counts[insert_at - 1]
+            insert_at -= 1
+        sorted_token_counts[insert_at] = token_count
+
+    var cumulative_token_count = 0
+    for prefix_index in range(len(sorted_token_counts)):
+        cumulative_token_count += sorted_token_counts[prefix_index]
+        var selection_limit = prefix_index + 1
+        if selection_limit >= nprobe and cumulative_token_count >= t_prime:
+            return selection_limit
+
+    return bound
+
+
 def centroid_selection_for_query_token(
     read query_token: List[VectorScalar],
     read index: CentroidPostingIndex,
