@@ -65,6 +65,19 @@ Current consequence:
 - `import kayak` remains the SDK
 - `python -m kayak_engine.server ...` is the local server startup path
 - installed environments also expose `kayak-engine-serve`
+- local same-snapshot Python reuse now also has an explicit non-HTTP surface:
+  - `prepare_exact_search_session(...)`
+  - `prepare_exact_search_runtime(...)`
+  - `prepare_exact_search_scheduler(...)` as a compatibility alias
+
+Current verified backend:
+- the local prepared exact-search runtime only verifies
+  `execution_backend="process"`
+
+Reason:
+- the runtime contract can stay stable even if the backend changes later
+- the threaded Python-to-Mojo exact-search path was not stable in local testing
+- documenting only the verified backend keeps the surface honest
 
 ## Startup
 
@@ -247,3 +260,10 @@ Reason:
 This is the sound epistemic choice:
 - prefer the narrower transport that is currently verified
 - add concurrency only after the binding/runtime path is proven safe under it
+
+Local follow-on note:
+- the repo now has a verified process-backed Python runtime for same-snapshot
+  exact search
+- the earlier scheduler naming remains as a compatibility alias
+- it is process-backed on purpose because the background-thread Mojo path
+  segfaulted during direct validation

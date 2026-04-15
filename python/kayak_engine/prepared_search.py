@@ -1,23 +1,24 @@
-"""Hosted-engine Python package for the real network service.
+"""Compatibility facade for the prepared exact-search Python surface."""
 
-This package is intentionally separate from ``import kayak``.
-It owns the deployable service edge and its Mojo-backed engine bindings rather
-than the public local late-interaction SDK surface.
-"""
+from __future__ import annotations
 
-from .prepared_search import (
-    ExactScoringOptions,
+from .prepared_exact_runtime import (
     PreparedExactSearchRuntime,
     PreparedExactSearchRuntimeConfig,
     PreparedExactSearchRuntimeStats,
-    PreparedExactSearchSession,
     PreparedExactSearchScheduler,
     PreparedExactSearchSchedulerConfig,
     PreparedExactSearchSchedulerStats,
-    SUPPORTED_PREPARED_EXACT_RUNTIME_BACKENDS,
     prepare_exact_search_runtime,
-    prepare_exact_search_session,
     prepare_exact_search_scheduler,
+)
+from .prepared_exact_session import (
+    PreparedExactSearchSession,
+    prepare_exact_search_session,
+)
+from .prepared_exact_types import (
+    ExactScoringOptions,
+    SUPPORTED_PREPARED_EXACT_RUNTIME_BACKENDS,
 )
 
 __all__ = [
@@ -25,12 +26,12 @@ __all__ = [
     "PreparedExactSearchRuntime",
     "PreparedExactSearchRuntimeConfig",
     "PreparedExactSearchRuntimeStats",
-    "PreparedExactSearchSession",
     "PreparedExactSearchScheduler",
     "PreparedExactSearchSchedulerConfig",
     "PreparedExactSearchSchedulerStats",
+    "PreparedExactSearchSession",
     "SUPPORTED_PREPARED_EXACT_RUNTIME_BACKENDS",
     "prepare_exact_search_runtime",
-    "prepare_exact_search_session",
     "prepare_exact_search_scheduler",
+    "prepare_exact_search_session",
 ]

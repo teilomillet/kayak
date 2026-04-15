@@ -1,0 +1,464 @@
+"""Process-backed implementation of the prepared exact-search runtime."""
+
+from __future__ import annotations
+
+from concurrent.futures import Future
+from dataclasses import dataclass
+import multiprocessing as mp
+from pathlib import Path
+from queue import Empty
+import threading
+import time
+from typing import Any
+
+from .prepared_exact_session import (
+    _normalized_request_for_identity,
+    prepare_exact_search_session,
+)
+from .prepared_exact_types import (
+    PreparedExactSearchRuntimeConfig,
+    PreparedExactSearchRuntimeStats,
+    _require_bool,
+    _runtime_config,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeRequestEnvelope:
+    request_id: int
+    request: dict[str, Any]
+    submitted_at: float
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeSuccessEnvelope:
+    request_id: int
+    response: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeErrorEnvelope:
+    request_id: int
+    error_message: str
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeBatchMetricsEnvelope:
+    batch_size: int
+    queue_wait_seconds: float
+    batch_execution_seconds: float
+    failed_request_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeStopEnvelope:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeFatalEnvelope:
+    error_message: str
+
+
+def _collect_process_batch(
+    first_request: _RuntimeRequestEnvelope,
+    request_queue: Any,
+    *,
+    max_batch_size: int,
+    max_batch_wait_ms: int,
+) -> tuple[list[_RuntimeRequestEnvelope], bool]:
+    batch = [first_request]
+    stop_after_batch = False
+    deadline = time.perf_counter() + (max_batch_wait_ms / 1000.0)
+
+    while len(batch) < max_batch_size:
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            break
+        try:
+            item = request_queue.get(timeout=remaining)
+        except Empty:
+            break
+        if isinstance(item, _RuntimeStopEnvelope):
+            stop_after_batch = True
+            break
+        batch.append(item)
+
+    return batch, stop_after_batch
+
+
+def _prepared_exact_search_runtime_worker(
+    *,
+    request_queue: Any,
+    response_queue: Any,
+    service_root: str,
+    collection_id: str,
+    tenant_id: str,
+    namespace_id: str,
+    snapshot_id: str,
+    load_text_corpus: bool,
+    config: PreparedExactSearchRuntimeConfig,
+) -> None:
+    try:
+        session = prepare_exact_search_session(
+            service_root=service_root,
+            collection_id=collection_id,
+            tenant_id=tenant_id,
+            namespace_id=namespace_id,
+            snapshot_id=snapshot_id,
+            load_text_corpus=load_text_corpus,
+        )
+    except Exception as exc:
+        response_queue.put(
+            _RuntimeFatalEnvelope(
+                f"failed to prepare runtime worker session: {exc}"
+            )
+        )
+        return
+
+    while True:
+        item = request_queue.get()
+        if isinstance(item, _RuntimeStopEnvelope):
+            response_queue.put(_RuntimeStopEnvelope())
+            return
+
+        batch, stop_after_batch = _collect_process_batch(
+            item,
+            request_queue,
+            max_batch_size=config.max_batch_size,
+            max_batch_wait_ms=config.max_batch_wait_ms,
+        )
+        batch_start = time.perf_counter()
+        total_queue_wait_seconds = sum(
+            batch_start - entry.submitted_at for entry in batch
+        )
+        try:
+            responses = session._search_batch_normalized(
+                [entry.request for entry in batch],
+                worker_count=config.worker_count,
+                scoring=config.scoring,
+            )
+        except Exception as exc:
+            batch_execution_seconds = time.perf_counter() - batch_start
+            message = f"{type(exc).__name__}: {exc}"
+            for entry in batch:
+                response_queue.put(
+                    _RuntimeErrorEnvelope(
+                        request_id=entry.request_id,
+                        error_message=message,
+                    )
+                )
+            response_queue.put(
+                _RuntimeBatchMetricsEnvelope(
+                    batch_size=len(batch),
+                    queue_wait_seconds=total_queue_wait_seconds,
+                    batch_execution_seconds=batch_execution_seconds,
+                    failed_request_count=len(batch),
+                )
+            )
+            if stop_after_batch:
+                response_queue.put(_RuntimeStopEnvelope())
+                return
+            continue
+
+        batch_execution_seconds = time.perf_counter() - batch_start
+        for entry, response in zip(batch, responses, strict=True):
+            response_queue.put(
+                _RuntimeSuccessEnvelope(
+                    request_id=entry.request_id,
+                    response=response,
+                )
+            )
+        response_queue.put(
+            _RuntimeBatchMetricsEnvelope(
+                batch_size=len(batch),
+                queue_wait_seconds=total_queue_wait_seconds,
+                batch_execution_seconds=batch_execution_seconds,
+                failed_request_count=0,
+            )
+        )
+        if stop_after_batch:
+            response_queue.put(_RuntimeStopEnvelope())
+            return
+
+
+class PreparedExactProcessRuntime:
+    """Explicit process-backed batching for one prepared exact-search snapshot."""
+
+    __slots__ = (
+        "service_root",
+        "collection_id",
+        "tenant_id",
+        "namespace_id",
+        "snapshot_id",
+        "load_text_corpus",
+        "_config",
+        "_context",
+        "_request_queue",
+        "_response_queue",
+        "_worker",
+        "_listener",
+        "_lifecycle_lock",
+        "_stats_lock",
+        "_stats",
+        "_closed",
+        "_fatal_exception",
+        "_next_request_id",
+        "_pending_futures",
+        "_pending_request_count",
+    )
+
+    def __init__(
+        self,
+        *,
+        service_root: str | Path,
+        collection_id: str,
+        tenant_id: str,
+        namespace_id: str,
+        snapshot_id: str,
+        load_text_corpus: bool = True,
+        config: PreparedExactSearchRuntimeConfig | None = None,
+    ) -> None:
+        self.service_root = Path(service_root)
+        self.collection_id = collection_id
+        self.tenant_id = tenant_id
+        self.namespace_id = namespace_id
+        self.snapshot_id = snapshot_id
+        self.load_text_corpus = _require_bool("load_text_corpus", load_text_corpus)
+        self._config = _runtime_config(config)
+        self._context = mp.get_context("spawn")
+        self._request_queue = self._context.Queue()
+        self._response_queue = self._context.Queue()
+        self._lifecycle_lock = threading.Lock()
+        self._stats_lock = threading.Lock()
+        self._stats = PreparedExactSearchRuntimeStats()
+        self._closed = False
+        self._fatal_exception: BaseException | None = None
+        self._next_request_id = 0
+        self._pending_futures: dict[int, Future[dict[str, Any]]] = {}
+        self._pending_request_count = 0
+        self._worker = self._context.Process(
+            target=_prepared_exact_search_runtime_worker,
+            kwargs={
+                "request_queue": self._request_queue,
+                "response_queue": self._response_queue,
+                "service_root": str(self.service_root),
+                "collection_id": self.collection_id,
+                "tenant_id": self.tenant_id,
+                "namespace_id": self.namespace_id,
+                "snapshot_id": self.snapshot_id,
+                "load_text_corpus": self.load_text_corpus,
+                "config": self._config,
+            },
+            daemon=True,
+        )
+        self._listener = threading.Thread(
+            target=self._listener_loop,
+            name=(
+                "PreparedExactProcessRuntimeListener"
+                f"[{self.collection_id}/{self.snapshot_id}]"
+            ),
+            daemon=True,
+        )
+        self._worker.start()
+        self._listener.start()
+
+    @property
+    def config(self) -> PreparedExactSearchRuntimeConfig:
+        return self._config
+
+    def stats(self) -> PreparedExactSearchRuntimeStats:
+        with self._stats_lock:
+            return PreparedExactSearchRuntimeStats(
+                submitted_request_count=self._stats.submitted_request_count,
+                completed_request_count=self._stats.completed_request_count,
+                failed_request_count=self._stats.failed_request_count,
+                executed_batch_count=self._stats.executed_batch_count,
+                last_batch_size=self._stats.last_batch_size,
+                max_observed_batch_size=self._stats.max_observed_batch_size,
+                max_observed_queue_depth=self._stats.max_observed_queue_depth,
+                total_queue_wait_seconds=self._stats.total_queue_wait_seconds,
+                total_batch_execution_seconds=self._stats.total_batch_execution_seconds,
+            )
+
+    def submit(self, payload: dict[str, Any]) -> Future[dict[str, Any]]:
+        request = _normalized_request_for_identity(
+            payload,
+            collection_id=self.collection_id,
+            tenant_id=self.tenant_id,
+            namespace_id=self.namespace_id,
+            snapshot_id=self.snapshot_id,
+        )
+        future: Future[dict[str, Any]] = Future()
+        with self._lifecycle_lock:
+            if self._closed:
+                raise RuntimeError("prepared exact search runtime is closed")
+            if self._fatal_exception is not None:
+                raise RuntimeError(
+                    "prepared exact search runtime failed"
+                ) from self._fatal_exception
+            request_id = self._next_request_id
+            self._next_request_id += 1
+            self._pending_futures[request_id] = future
+            self._pending_request_count += 1
+            pending_request_count = self._pending_request_count
+        self._request_queue.put(
+            _RuntimeRequestEnvelope(
+                request_id=request_id,
+                request=request,
+                submitted_at=time.perf_counter(),
+            )
+        )
+        self._record_submission(pending_request_count)
+        return future
+
+    def search(
+        self,
+        payload: dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        return self.submit(payload).result(timeout=timeout)
+
+    def close(self) -> None:
+        with self._lifecycle_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._request_queue.put(_RuntimeStopEnvelope())
+        self._worker.join(timeout=15.0)
+        if self._worker.is_alive():
+            self._worker.terminate()
+            self._worker.join(timeout=15.0)
+        self._listener.join(timeout=15.0)
+        if self._listener.is_alive():
+            raise RuntimeError("prepared exact search runtime listener did not stop")
+
+    def __enter__(self) -> PreparedExactProcessRuntime:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        del exc_type, exc, tb
+        self.close()
+
+    def _record_submission(self, pending_request_count: int) -> None:
+        with self._stats_lock:
+            self._stats = PreparedExactSearchRuntimeStats(
+                submitted_request_count=self._stats.submitted_request_count + 1,
+                completed_request_count=self._stats.completed_request_count,
+                failed_request_count=self._stats.failed_request_count,
+                executed_batch_count=self._stats.executed_batch_count,
+                last_batch_size=self._stats.last_batch_size,
+                max_observed_batch_size=self._stats.max_observed_batch_size,
+                max_observed_queue_depth=max(
+                    self._stats.max_observed_queue_depth,
+                    pending_request_count,
+                ),
+                total_queue_wait_seconds=self._stats.total_queue_wait_seconds,
+                total_batch_execution_seconds=self._stats.total_batch_execution_seconds,
+            )
+
+    def _record_batch(
+        self,
+        *,
+        batch_size: int,
+        queue_wait_seconds: float,
+        batch_execution_seconds: float,
+        failed_request_count: int,
+    ) -> None:
+        completed_request_count = batch_size - failed_request_count
+        with self._stats_lock:
+            self._stats = PreparedExactSearchRuntimeStats(
+                submitted_request_count=self._stats.submitted_request_count,
+                completed_request_count=(
+                    self._stats.completed_request_count + completed_request_count
+                ),
+                failed_request_count=(
+                    self._stats.failed_request_count + failed_request_count
+                ),
+                executed_batch_count=self._stats.executed_batch_count + 1,
+                last_batch_size=batch_size,
+                max_observed_batch_size=max(
+                    self._stats.max_observed_batch_size,
+                    batch_size,
+                ),
+                max_observed_queue_depth=self._stats.max_observed_queue_depth,
+                total_queue_wait_seconds=(
+                    self._stats.total_queue_wait_seconds + queue_wait_seconds
+                ),
+                total_batch_execution_seconds=(
+                    self._stats.total_batch_execution_seconds
+                    + batch_execution_seconds
+                ),
+            )
+
+    def _resolve_pending_future(
+        self, request_id: int
+    ) -> Future[dict[str, Any]] | None:
+        with self._lifecycle_lock:
+            future = self._pending_futures.pop(request_id, None)
+            if future is not None:
+                self._pending_request_count -= 1
+            return future
+
+    def _set_fatal_exception(self, exc: BaseException) -> None:
+        with self._lifecycle_lock:
+            if self._fatal_exception is None:
+                self._fatal_exception = exc
+            self._closed = True
+
+    def _fail_pending_futures(self, exc: BaseException) -> None:
+        with self._lifecycle_lock:
+            pending_futures = list(self._pending_futures.values())
+            self._pending_futures.clear()
+            self._pending_request_count = 0
+        for future in pending_futures:
+            future.set_exception(exc)
+
+    def _listener_loop(self) -> None:
+        while True:
+            try:
+                envelope = self._response_queue.get(timeout=0.1)
+            except Empty:
+                if self._worker.is_alive():
+                    continue
+                exitcode = self._worker.exitcode
+                if self._closed and exitcode == 0:
+                    return
+                exc = RuntimeError(
+                    "prepared exact search runtime worker exited unexpectedly"
+                    f" with code {exitcode}"
+                )
+                self._set_fatal_exception(exc)
+                self._fail_pending_futures(exc)
+                return
+
+            if isinstance(envelope, _RuntimeSuccessEnvelope):
+                future = self._resolve_pending_future(envelope.request_id)
+                if future is not None:
+                    future.set_result(envelope.response)
+                continue
+
+            if isinstance(envelope, _RuntimeErrorEnvelope):
+                future = self._resolve_pending_future(envelope.request_id)
+                if future is not None:
+                    future.set_exception(RuntimeError(envelope.error_message))
+                continue
+
+            if isinstance(envelope, _RuntimeBatchMetricsEnvelope):
+                self._record_batch(
+                    batch_size=envelope.batch_size,
+                    queue_wait_seconds=envelope.queue_wait_seconds,
+                    batch_execution_seconds=envelope.batch_execution_seconds,
+                    failed_request_count=envelope.failed_request_count,
+                )
+                continue
+
+            if isinstance(envelope, _RuntimeFatalEnvelope):
+                exc = RuntimeError(envelope.error_message)
+                self._set_fatal_exception(exc)
+                self._fail_pending_futures(exc)
+                return
+
+            if isinstance(envelope, _RuntimeStopEnvelope):
+                return

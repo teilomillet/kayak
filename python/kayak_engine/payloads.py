@@ -302,6 +302,30 @@ def lifecycle_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def exact_search_request_payload(
+    payload: dict[str, Any],
+    *,
+    debug_mode_default: bool = False,
+) -> dict[str, Any]:
+    clause_fields, clause_operators, clause_values = filter_payload_parts(payload)
+    return {
+        **collection_identity_payload(payload),
+        "snapshot_id": require_string(payload, "snapshot_id"),
+        "query": require_query_vectors(payload),
+        "query_model_name": require_string(payload, "query_model_name"),
+        "query_text": require_string(payload, "query_text", default=""),
+        "final_k": require_int(payload, "final_k"),
+        "debug_mode": require_bool(
+            payload,
+            "debug_mode",
+            default=debug_mode_default,
+        ),
+        "clause_fields": clause_fields,
+        "clause_operators": clause_operators,
+        "clause_values": clause_values,
+    }
+
+
 def _reclaim_decision_payload(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise PayloadError("reclaim plan decisions must be objects")

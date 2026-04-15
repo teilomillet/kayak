@@ -15,6 +15,7 @@ from .payloads import (
     PayloadError,
     delete_documents_request_payload,
     document_payload_parts,
+    exact_search_request_payload,
     execute_reclaim_request_payload,
     export_snapshot_request_payload,
     filter_payload_parts,
@@ -247,63 +248,21 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
         )
 
     def _exact_search(self, payload: dict[str, Any]) -> str:
-        clause_fields, clause_operators, clause_values = filter_payload_parts(payload)
         return self.server.engine_module.exact_search_json(
             str(self.server.service_root),
-            {
-                "collection_id": require_string(payload, "collection_id"),
-                "tenant_id": require_string(payload, "tenant_id"),
-                "namespace_id": require_string(payload, "namespace_id"),
-                "snapshot_id": require_string(payload, "snapshot_id"),
-                "query": require_query_vectors(payload),
-                "query_model_name": require_string(payload, "query_model_name"),
-                "query_text": require_string(payload, "query_text", default=""),
-                "final_k": require_int(payload, "final_k"),
-                "debug_mode": require_bool(payload, "debug_mode", default=False),
-                "clause_fields": clause_fields,
-                "clause_operators": clause_operators,
-                "clause_values": clause_values,
-            },
+            exact_search_request_payload(payload),
         )
 
     def _exact_explain(self, payload: dict[str, Any]) -> str:
-        clause_fields, clause_operators, clause_values = filter_payload_parts(payload)
         return self.server.engine_module.exact_explain_json(
             str(self.server.service_root),
-            {
-                "collection_id": require_string(payload, "collection_id"),
-                "tenant_id": require_string(payload, "tenant_id"),
-                "namespace_id": require_string(payload, "namespace_id"),
-                "snapshot_id": require_string(payload, "snapshot_id"),
-                "query": require_query_vectors(payload),
-                "query_model_name": require_string(payload, "query_model_name"),
-                "query_text": require_string(payload, "query_text", default=""),
-                "final_k": require_int(payload, "final_k"),
-                "debug_mode": require_bool(payload, "debug_mode", default=False),
-                "clause_fields": clause_fields,
-                "clause_operators": clause_operators,
-                "clause_values": clause_values,
-            },
+            exact_search_request_payload(payload),
         )
 
     def _exact_debug_search(self, payload: dict[str, Any]) -> str:
-        clause_fields, clause_operators, clause_values = filter_payload_parts(payload)
         return self.server.engine_module.debug_search_json(
             str(self.server.service_root),
-            {
-                "collection_id": require_string(payload, "collection_id"),
-                "tenant_id": require_string(payload, "tenant_id"),
-                "namespace_id": require_string(payload, "namespace_id"),
-                "snapshot_id": require_string(payload, "snapshot_id"),
-                "query": require_query_vectors(payload),
-                "query_model_name": require_string(payload, "query_model_name"),
-                "query_text": require_string(payload, "query_text", default=""),
-                "final_k": require_int(payload, "final_k"),
-                "debug_mode": require_bool(payload, "debug_mode", default=True),
-                "clause_fields": clause_fields,
-                "clause_operators": clause_operators,
-                "clause_values": clause_values,
-            },
+            exact_search_request_payload(payload, debug_mode_default=True),
         )
 
     def _planned_search(self, payload: dict[str, Any]) -> str:

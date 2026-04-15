@@ -1,4 +1,5 @@
 from std.collections import List
+from std.format import Writable, Writer
 from std.os import abort
 from std.pathlib import Path
 from std.python import Python, PythonObject
@@ -25,6 +26,7 @@ from kayak.planning import (
     best_effort_faithfulness_policy,
 )
 from kayak.runtime import ExactCpuBackend
+from kayak.scoring import ExactScoringConfig
 from kayak.service import (
     BuildReclaimPlanRequest,
     CollectionLifecycleRequest,
@@ -35,6 +37,8 @@ from kayak.service import (
     ExecuteReclaimRequest,
     ExportSnapshotRequest,
     ImportSnapshotRequest,
+    PreparedExactSearchBatchConfig,
+    PreparedSearchSnapshot,
     PlannedDebugSearchResponse,
     PlannedExplainResponse,
     PlannedSearchRequest,
@@ -62,11 +66,15 @@ from kayak.service import (
     execute_reclaim,
     execute_reclaim_response_json,
     execute_search,
+    execute_search_batch_with_prepared_snapshot,
+    execute_search_with_prepared_snapshot,
     explain_response_json,
+    exact_cpu_backend_for_scoring_config,
     export_snapshot,
     planned_debug_search_response_json,
     planned_explain_response_json,
     planned_search_response_json,
+    prepare_service_search_snapshot,
     search_response_json,
     service_health_status_json,
     service_metrics_snapshot_json,
@@ -84,6 +92,27 @@ from kayak.service.search_contracts import (
     SearchRequest,
     default_exact_search_request,
 )
+
+
+struct PreparedExactSearchSession(Movable, Writable):
+    var prepared: PreparedSearchSnapshot
+
+    def __init__(out self, var prepared: PreparedSearchSnapshot):
+        self.prepared = prepared^
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write(
+            "PreparedExactSearchSession(collection_id=",
+            self.prepared.snapshot.collection.collection_id.value,
+            ", snapshot_id=",
+            self.prepared.snapshot.snapshot.snapshot_id.value,
+            ", text_corpus_loaded=",
+            self.prepared.text_corpus_loaded,
+            ")",
+        )
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
 
 
 def decode_string_list(py_values: PythonObject) raises -> List[String]:
@@ -126,6 +155,22 @@ def decode_float_vectors(py_values: PythonObject) raises -> List[List[VectorScal
     for index in range(len(py_values)):
         vectors.append(decode_float_vector(py_values[index]))
     return vectors^
+
+
+def exact_scoring_config_from_python(
+    enable_parallel_scoring: Bool,
+    enable_dim128_fast_path: Bool,
+    enable_parallel_work_item_oversubscription: Bool,
+    parallel_work_item_count_override: Int,
+) -> ExactScoringConfig:
+    var config = ExactScoringConfig()
+    config.enable_parallel_scoring = enable_parallel_scoring
+    config.enable_dim128_fast_path = enable_dim128_fast_path
+    config.enable_parallel_work_item_oversubscription = (
+        enable_parallel_work_item_oversubscription
+    )
+    config.parallel_work_item_count_override = parallel_work_item_count_override
+    return config^
 
 
 def decode_document_vectors(
@@ -724,6 +769,29 @@ def exact_search_request_from_python(
     )
 
 
+def decode_exact_search_requests(py_requests: PythonObject) raises -> List[SearchRequest]:
+    var requests = List[SearchRequest]()
+    for index in range(len(py_requests)):
+        var py_request = py_requests[index]
+        requests.append(
+            exact_search_request_from_python(
+                String(py=py_request["collection_id"]),
+                String(py=py_request["tenant_id"]),
+                String(py=py_request["namespace_id"]),
+                String(py=py_request["snapshot_id"]),
+                py_request["query"],
+                String(py=py_request["query_model_name"]),
+                String(py=py_request["query_text"]),
+                Int(py=py_request["final_k"]),
+                Bool(py=py_request["debug_mode"]),
+                py_request["clause_fields"],
+                py_request["clause_operators"],
+                py_request["clause_values"],
+            )
+        )
+    return requests^
+
+
 def planned_search_request_from_python(
     collection_id: String,
     tenant_id: String,
@@ -778,6 +846,15 @@ def planned_search_request_from_python(
             gem_graph_beam_width,
         ),
     )
+
+
+def search_responses_json_to_python(
+    read responses: List[SearchResponse]
+) raises -> PythonObject:
+    var py_responses = Python.list()
+    for response in responses:
+        py_responses.append(Python.str(search_response_json(response)))
+    return py_responses
 
 
 def exact_search_json(
@@ -889,6 +966,96 @@ def debug_search_json(
         ),
     )
     return python_string(debug_search_response_json(response))
+
+
+def prepare_exact_search_session(
+    py_service_root: PythonObject,
+    py_collection_id: PythonObject,
+    py_tenant_id: PythonObject,
+    py_namespace_id: PythonObject,
+    py_snapshot_id: PythonObject,
+    py_load_text_corpus: PythonObject,
+) raises -> PythonObject:
+    return PythonObject(
+        alloc=PreparedExactSearchSession(
+            prepare_service_search_snapshot(
+                Path(String(py=py_service_root)),
+                CollectionId(String(py=py_collection_id)),
+                TenantId(String(py=py_tenant_id)),
+                NamespaceId(String(py=py_namespace_id)),
+                SnapshotId(String(py=py_snapshot_id)),
+                Bool(py=py_load_text_corpus),
+            )
+        )
+    )
+
+
+def prepared_exact_search_json(
+    py_prepared_session: PythonObject,
+    py_request: PythonObject,
+    py_enable_parallel_scoring: PythonObject,
+    py_enable_dim128_fast_path: PythonObject,
+    py_enable_parallel_work_item_oversubscription: PythonObject,
+    py_parallel_work_item_count_override: PythonObject,
+) raises -> PythonObject:
+    var prepared_session = py_prepared_session.downcast_value_ptr[
+        PreparedExactSearchSession
+    ]()
+    var backend = exact_cpu_backend_for_scoring_config(
+        exact_scoring_config_from_python(
+            Bool(py=py_enable_parallel_scoring),
+            Bool(py=py_enable_dim128_fast_path),
+            Bool(py=py_enable_parallel_work_item_oversubscription),
+            Int(py=py_parallel_work_item_count_override),
+        )
+    )
+    var response = execute_search_with_prepared_snapshot(
+        backend,
+        prepared_session[].prepared,
+        exact_search_request_from_python(
+            String(py=py_request["collection_id"]),
+            String(py=py_request["tenant_id"]),
+            String(py=py_request["namespace_id"]),
+            String(py=py_request["snapshot_id"]),
+            py_request["query"],
+            String(py=py_request["query_model_name"]),
+            String(py=py_request["query_text"]),
+            Int(py=py_request["final_k"]),
+            Bool(py=py_request["debug_mode"]),
+            py_request["clause_fields"],
+            py_request["clause_operators"],
+            py_request["clause_values"],
+        ),
+    )
+    return python_string(search_response_json(response))
+
+
+def prepared_exact_search_batch_json(
+    py_prepared_session: PythonObject,
+    py_requests: PythonObject,
+    py_worker_count: PythonObject,
+    py_enable_parallel_scoring: PythonObject,
+    py_enable_dim128_fast_path: PythonObject,
+    py_enable_parallel_work_item_oversubscription: PythonObject,
+    py_parallel_work_item_count_override: PythonObject,
+) raises -> PythonObject:
+    var prepared_session = py_prepared_session.downcast_value_ptr[
+        PreparedExactSearchSession
+    ]()
+    var responses = execute_search_batch_with_prepared_snapshot(
+        prepared_session[].prepared,
+        decode_exact_search_requests(py_requests),
+        PreparedExactSearchBatchConfig(
+            Int(py=py_worker_count),
+            exact_scoring_config_from_python(
+                Bool(py=py_enable_parallel_scoring),
+                Bool(py=py_enable_dim128_fast_path),
+                Bool(py=py_enable_parallel_work_item_oversubscription),
+                Int(py=py_parallel_work_item_count_override),
+            ),
+        ),
+    )
+    return search_responses_json_to_python(responses)
 
 
 def planned_search_json(
@@ -1222,6 +1389,37 @@ def exact_search_json_bridge(
     )
 
 
+def prepared_exact_search_json_bridge(
+    py_prepared_session: PythonObject,
+    py_request: PythonObject,
+    py_scoring_config: PythonObject,
+) raises -> PythonObject:
+    return prepared_exact_search_json(
+        py_prepared_session,
+        py_request,
+        py_scoring_config["enable_parallel_scoring"],
+        py_scoring_config["enable_dim128_fast_path"],
+        py_scoring_config["enable_parallel_work_item_oversubscription"],
+        py_scoring_config["parallel_work_item_count_override"],
+    )
+
+
+def prepared_exact_search_batch_json_bridge(
+    py_prepared_session: PythonObject,
+    py_requests: PythonObject,
+    py_batch_config: PythonObject,
+) raises -> PythonObject:
+    return prepared_exact_search_batch_json(
+        py_prepared_session,
+        py_requests,
+        py_batch_config["worker_count"],
+        py_batch_config["enable_parallel_scoring"],
+        py_batch_config["enable_dim128_fast_path"],
+        py_batch_config["enable_parallel_work_item_oversubscription"],
+        py_batch_config["parallel_work_item_count_override"],
+    )
+
+
 def debug_search_json_bridge(
     py_service_root: PythonObject, py_request: PythonObject
 ) raises -> PythonObject:
@@ -1350,6 +1548,7 @@ def planned_explain_json_bridge(
 def PyInit__mojo_service_bindings() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojo_service_bindings")
+        _ = module.add_type[PreparedExactSearchSession]("PreparedExactSearchSession")
         module.def_function[create_collection_json_bridge](
             "create_collection_json",
             docstring="Create a hosted collection and return a JSON response payload.",
@@ -1390,9 +1589,21 @@ def PyInit__mojo_service_bindings() -> PythonObject:
             "execute_reclaim_json",
             docstring="Execute a reclaim plan and return a JSON response payload.",
         )
+        module.def_function[prepare_exact_search_session](
+            "prepare_exact_search_session",
+            docstring="Prepare a hosted exact-search session pinned to one published snapshot.",
+        )
         module.def_function[exact_search_json_bridge](
             "exact_search_json",
             docstring="Execute exact hosted search and return a JSON response payload.",
+        )
+        module.def_function[prepared_exact_search_json_bridge](
+            "prepared_exact_search_json",
+            docstring="Execute exact hosted search on a prepared pinned snapshot and return a JSON response payload.",
+        )
+        module.def_function[prepared_exact_search_batch_json_bridge](
+            "prepared_exact_search_batch_json",
+            docstring="Execute a batch of exact hosted searches on a prepared pinned snapshot and return JSON response payloads.",
         )
         module.def_function[debug_search_json_bridge](
             "debug_search_json",
