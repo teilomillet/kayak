@@ -17,6 +17,11 @@ from kayak import (
     search_exact,
 )
 from kayak.storage.manifest import ManifestEntry, write_manifest
+from kayak.storage.binary_int_codec import (
+    NON_NEGATIVE_INT_PAYLOAD_ENCODING_BINARY_U64_LE,
+    write_non_negative_int_payload_with_encoding,
+)
+from kayak.storage.binary_vector_codec import write_binary_vector_payload
 from kayak.storage.text_codec import (
     append_line,
     encode_vector_line,
@@ -190,6 +195,128 @@ def test_load_stored_packed_index_supports_v1_text_payloads() raises:
 
     assert_equal(loaded_index.dataset_id, "mock://storage-compat-index-v1")
     assert_equal(loaded_index.model_name, "mock-model")
+    assert_equal(loaded_index.index.document_count, 2)
+    assert_equal(hits[0].doc_id, "doc-a")
+
+
+def write_v2_stored_packed_index_without_doc_offsets_encoding(
+    root: Path, stored: StoredPackedIndex
+) raises:
+    makedirs(root, exist_ok=True)
+
+    write_manifest(
+        root / "manifest.tsv",
+        [
+            ManifestEntry("format_version", "2"),
+            ManifestEntry("artifact_kind", "packed_index"),
+            ManifestEntry("vector_scalar_name", stored.vector_scalar_name),
+            ManifestEntry("dataset_id", stored.dataset_id),
+            ManifestEntry("model_name", stored.model_name),
+            ManifestEntry("vector_payload_encoding", "binary_le"),
+            ManifestEntry("vector_dim", String(stored.index.vector_dim)),
+            ManifestEntry("document_count", String(stored.index.document_count)),
+            ManifestEntry(
+                "total_vector_count", String(stored.index.total_vector_count)
+            ),
+        ],
+    )
+
+    var doc_id_lines = String()
+    for doc_id in stored.index.doc_ids:
+        append_line(doc_id_lines, doc_id)
+    (root / "doc_ids.tsv").write_text(doc_id_lines)
+
+    var doc_offset_lines = String()
+    for doc_offset in stored.index.doc_offsets:
+        append_line(doc_offset_lines, String(doc_offset))
+    (root / "doc_offsets.tsv").write_text(doc_offset_lines)
+
+    write_binary_vector_payload(root / "token_vectors.bin", stored.index.token_vectors)
+
+
+def test_load_stored_packed_index_supports_v2_without_doc_offsets_encoding() raises:
+    var root = Path("/tmp/kayak-storage-compat-index-v2-no-offset-encoding")
+    var task = make_storage_roundtrip_task()
+    var stored_index = StoredPackedIndex(
+        "mock://storage-compat-index-v2-no-offset-encoding",
+        "mock-model",
+        VECTOR_SCALAR_NAME,
+        pack_documents(task.documents),
+    )
+
+    write_v2_stored_packed_index_without_doc_offsets_encoding(root, stored_index)
+    var loaded_index = load_stored_packed_index(root)
+    var hits = search_exact(
+        ExactCpuBackend(), task.queries[0].query, loaded_index.index, task.k
+    )
+
+    assert_equal(
+        loaded_index.dataset_id,
+        "mock://storage-compat-index-v2-no-offset-encoding",
+    )
+    assert_equal(loaded_index.index.document_count, 2)
+    assert_equal(hits[0].doc_id, "doc-a")
+
+
+def write_v2_stored_packed_index_with_binary_doc_offsets(
+    root: Path, stored: StoredPackedIndex
+) raises:
+    makedirs(root, exist_ok=True)
+
+    write_manifest(
+        root / "manifest.tsv",
+        [
+            ManifestEntry("format_version", "2"),
+            ManifestEntry("artifact_kind", "packed_index"),
+            ManifestEntry("vector_scalar_name", stored.vector_scalar_name),
+            ManifestEntry("dataset_id", stored.dataset_id),
+            ManifestEntry("model_name", stored.model_name),
+            ManifestEntry("vector_payload_encoding", "binary_le"),
+            ManifestEntry(
+                "doc_offsets_encoding",
+                NON_NEGATIVE_INT_PAYLOAD_ENCODING_BINARY_U64_LE,
+            ),
+            ManifestEntry("vector_dim", String(stored.index.vector_dim)),
+            ManifestEntry("document_count", String(stored.index.document_count)),
+            ManifestEntry(
+                "total_vector_count", String(stored.index.total_vector_count)
+            ),
+        ],
+    )
+
+    var doc_id_lines = String()
+    for doc_id in stored.index.doc_ids:
+        append_line(doc_id_lines, doc_id)
+    (root / "doc_ids.tsv").write_text(doc_id_lines)
+
+    write_non_negative_int_payload_with_encoding(
+        root / "doc_offsets.bin",
+        stored.index.doc_offsets,
+        NON_NEGATIVE_INT_PAYLOAD_ENCODING_BINARY_U64_LE,
+    )
+    write_binary_vector_payload(root / "token_vectors.bin", stored.index.token_vectors)
+
+
+def test_load_stored_packed_index_supports_v2_binary_doc_offsets() raises:
+    var root = Path("/tmp/kayak-storage-compat-index-v2-binary-offsets")
+    var task = make_storage_roundtrip_task()
+    var stored_index = StoredPackedIndex(
+        "mock://storage-compat-index-v2-binary-offsets",
+        "mock-model",
+        VECTOR_SCALAR_NAME,
+        pack_documents(task.documents),
+    )
+
+    write_v2_stored_packed_index_with_binary_doc_offsets(root, stored_index)
+    var loaded_index = load_stored_packed_index(root)
+    var hits = search_exact(
+        ExactCpuBackend(), task.queries[0].query, loaded_index.index, task.k
+    )
+
+    assert_equal(
+        loaded_index.dataset_id,
+        "mock://storage-compat-index-v2-binary-offsets",
+    )
     assert_equal(loaded_index.index.document_count, 2)
     assert_equal(hits[0].doc_id, "doc-a")
 

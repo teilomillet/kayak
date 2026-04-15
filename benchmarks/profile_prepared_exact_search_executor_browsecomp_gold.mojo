@@ -168,7 +168,7 @@ def benchmark_prepare_executor_default_mean_seconds(service_root: Path) raises -
             SnapshotId("snapshot-0001"),
             False,
         )
-        bench_compiler.keep(len(executor.prepared.snapshot.segments))
+        bench_compiler.keep(len(executor.prepared.segments))
 
     var report = benchmark.run[prepare_once](max_iters=PREPARE_MAX_ITERS)
     report.print()

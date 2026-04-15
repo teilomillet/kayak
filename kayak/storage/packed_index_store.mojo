@@ -1,16 +1,21 @@
 from std.collections import List
+from std.os import remove
 from std.os import makedirs
 from std.pathlib import Path
 
 from kayak.index import PackedIndex
 from kayak.numeric import STORAGE_FORMAT_VERSION, VectorScalar
 
+from .binary_int_codec import (
+    read_non_negative_int_payload_with_encoding,
+)
 from .binary_vector_codec import (
     read_binary_vector_payload_with_encoding,
     write_binary_vector_payload_with_encoding,
 )
 from .manifest import (
     ManifestEntry,
+    load_optional_manifest_value,
     read_manifest,
     require_manifest_value,
     require_supported_storage_format,
@@ -74,11 +79,14 @@ def save_stored_packed_index_with_encoding(
     var doc_ids_path = root / "doc_ids.tsv"
     doc_ids_path.write_text(doc_id_lines)
 
+    var doc_offsets_bin_path = root / "doc_offsets.bin"
+    if doc_offsets_bin_path.exists():
+        remove(doc_offsets_bin_path)
     var doc_offset_lines = String()
     for doc_offset in stored.index.doc_offsets:
         append_line(doc_offset_lines, String(doc_offset))
-    var doc_offsets_path = root / "doc_offsets.tsv"
-    doc_offsets_path.write_text(doc_offset_lines)
+    var doc_offsets_tsv_path = root / "doc_offsets.tsv"
+    doc_offsets_tsv_path.write_text(doc_offset_lines)
 
     write_binary_vector_payload_with_encoding(
         root / "token_vectors.bin",
@@ -100,8 +108,17 @@ def load_stored_packed_index(root: Path) raises -> StoredPackedIndex:
     )
     var doc_ids = read_non_empty_lines(root / "doc_ids.tsv")
     var doc_offsets = List[Int]()
-    for line in read_non_empty_lines(root / "doc_offsets.tsv"):
-        doc_offsets.append(parse_int(line, "doc offset"))
+    var doc_offsets_encoding = load_optional_manifest_value(
+        manifest, "doc_offsets_encoding"
+    )
+    if doc_offsets_encoding.byte_length() != 0:
+        doc_offsets = read_non_negative_int_payload_with_encoding(
+            root / "doc_offsets.bin",
+            doc_offsets_encoding,
+        )
+    else:
+        for line in read_non_empty_lines(root / "doc_offsets.tsv"):
+            doc_offsets.append(parse_int(line, "doc offset"))
 
     var token_vectors = List[List[VectorScalar]]()
     if format_version >= 2:

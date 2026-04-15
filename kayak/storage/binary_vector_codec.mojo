@@ -215,6 +215,12 @@ def decode_binary_vector_payload_with_encoding(
     if vector_dim <= 0:
         raise Error("binary vector payload requires a positive vector_dim")
 
+    if vector_payload_encoding == VECTOR_PAYLOAD_ENCODING_BINARY_LE:
+        return decode_binary_vector_payload_native_le_fast(bytes, vector_dim)
+
+    if vector_payload_encoding == VECTOR_PAYLOAD_ENCODING_BINARY_F16_LE:
+        return decode_binary_vector_payload_f16_le_fast(bytes, vector_dim)
+
     var scalar_width = vector_payload_scalar_byte_width(vector_payload_encoding)
     if len(bytes) % scalar_width != 0:
         raise Error("binary vector payload byte length does not match scalar width")
@@ -236,6 +242,116 @@ def decode_binary_vector_payload_with_encoding(
                 )
             )
             cursor += scalar_width
+
+        vectors.append(vector^)
+
+    return vectors^
+
+
+def require_binary_vector_payload_vector_count(
+    byte_count: Int, vector_dim: Int, scalar_width: Int
+) raises -> Int:
+    if byte_count % scalar_width != 0:
+        raise Error("binary vector payload byte length does not match scalar width")
+
+    var scalar_count = byte_count // scalar_width
+    if scalar_count % vector_dim != 0:
+        raise Error("binary vector payload scalar count does not match vector_dim")
+
+    return scalar_count // vector_dim
+
+
+def decode_binary_vector_payload_native_le_fast(
+    read bytes: List[Byte], vector_dim: Int
+) raises -> List[List[VectorScalar]]:
+    if VECTOR_SCALAR_NAME == "Float32":
+        return decode_binary_vector_payload_float32_le_fast(bytes, vector_dim)
+
+    if VECTOR_SCALAR_NAME == "Float64":
+        return decode_binary_vector_payload_float64_le_fast(bytes, vector_dim)
+
+    raise Error("unsupported vector scalar type for binary storage")
+
+
+def decode_binary_vector_payload_float32_le_fast(
+    read bytes: List[Byte], vector_dim: Int
+) raises -> List[List[VectorScalar]]:
+    var vector_count = require_binary_vector_payload_vector_count(
+        len(bytes), vector_dim, 4
+    )
+    var vectors = List[List[VectorScalar]](capacity=vector_count)
+    var bytes_ptr = bytes.unsafe_ptr()
+    var cursor = 0
+
+    for _ in range(vector_count):
+        var vector = List[VectorScalar](capacity=vector_dim)
+        for _ in range(vector_dim):
+            var bits = (
+                UInt32(bytes_ptr[cursor])
+                | (UInt32(bytes_ptr[cursor + 1]) << 8)
+                | (UInt32(bytes_ptr[cursor + 2]) << 16)
+                | (UInt32(bytes_ptr[cursor + 3]) << 24)
+            )
+            var bits_union = UnsafeUnion[Float32, UInt32](bits)
+            vector.append(VectorScalar(bits_union.unsafe_get[Float32]()))
+            cursor += 4
+
+        vectors.append(vector^)
+
+    return vectors^
+
+
+def decode_binary_vector_payload_float64_le_fast(
+    read bytes: List[Byte], vector_dim: Int
+) raises -> List[List[VectorScalar]]:
+    var vector_count = require_binary_vector_payload_vector_count(
+        len(bytes), vector_dim, 8
+    )
+    var vectors = List[List[VectorScalar]](capacity=vector_count)
+    var bytes_ptr = bytes.unsafe_ptr()
+    var cursor = 0
+
+    for _ in range(vector_count):
+        var vector = List[VectorScalar](capacity=vector_dim)
+        for _ in range(vector_dim):
+            var bits = (
+                UInt64(bytes_ptr[cursor])
+                | (UInt64(bytes_ptr[cursor + 1]) << 8)
+                | (UInt64(bytes_ptr[cursor + 2]) << 16)
+                | (UInt64(bytes_ptr[cursor + 3]) << 24)
+                | (UInt64(bytes_ptr[cursor + 4]) << 32)
+                | (UInt64(bytes_ptr[cursor + 5]) << 40)
+                | (UInt64(bytes_ptr[cursor + 6]) << 48)
+                | (UInt64(bytes_ptr[cursor + 7]) << 56)
+            )
+            var bits_union = UnsafeUnion[Float64, UInt64](bits)
+            vector.append(VectorScalar(bits_union.unsafe_get[Float64]()))
+            cursor += 8
+
+        vectors.append(vector^)
+
+    return vectors^
+
+
+def decode_binary_vector_payload_f16_le_fast(
+    read bytes: List[Byte], vector_dim: Int
+) raises -> List[List[VectorScalar]]:
+    var vector_count = require_binary_vector_payload_vector_count(
+        len(bytes), vector_dim, 2
+    )
+    var vectors = List[List[VectorScalar]](capacity=vector_count)
+    var bytes_ptr = bytes.unsafe_ptr()
+    var cursor = 0
+
+    for _ in range(vector_count):
+        var vector = List[VectorScalar](capacity=vector_dim)
+        for _ in range(vector_dim):
+            var bits = (
+                UInt16(bytes_ptr[cursor]) | (UInt16(bytes_ptr[cursor + 1]) << 8)
+            )
+            var bits_union = UnsafeUnion[Float16, UInt16](bits)
+            vector.append(VectorScalar(bits_union.unsafe_get[Float16]()))
+            cursor += 2
 
         vectors.append(vector^)
 

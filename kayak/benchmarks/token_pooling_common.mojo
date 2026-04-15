@@ -26,7 +26,10 @@ def file_size_bytes(path: Path) raises -> Int:
 def packed_index_storage_byte_size(root: Path) raises -> Int:
     var total = file_size_bytes(root / "manifest.tsv")
     total += file_size_bytes(root / "doc_ids.tsv")
-    total += file_size_bytes(root / "doc_offsets.tsv")
+    if (root / "doc_offsets.bin").exists():
+        total += file_size_bytes(root / "doc_offsets.bin")
+    else:
+        total += file_size_bytes(root / "doc_offsets.tsv")
     total += file_size_bytes(root / "token_vectors.bin")
     return total
 

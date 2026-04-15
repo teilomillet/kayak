@@ -45,6 +45,14 @@ def require_manifest_value(
     raise Error("missing manifest key: " + key)
 
 
+def load_optional_manifest_value(read entries: List[ManifestEntry], key: String) -> String:
+    for entry in entries:
+        if entry.key == key:
+            return entry.value.copy()
+
+    return ""
+
+
 def require_supported_storage_format(entries: List[ManifestEntry]) raises -> Int:
     var format_version = parse_int(
         require_manifest_value(entries, "format_version"),

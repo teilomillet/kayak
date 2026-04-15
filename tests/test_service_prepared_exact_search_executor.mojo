@@ -5,8 +5,6 @@ from std.testing import TestSuite, assert_equal
 from kayak import (
     CollectionHit,
     CollectionId,
-    collection_segment_root,
-    collection_snapshot_root,
     CreateCollectionRequest,
     CreateSnapshotRequest,
     EncodedDocument,
@@ -21,7 +19,6 @@ from kayak import (
     VECTOR_SCALAR_NAME,
     default_exact_search_request,
     execute_search_with_prepared_snapshot,
-    hybrid_flat_dim128_default_root,
     load_snapshot_manifest,
     prepare_service_exact_search_executor,
     prepare_service_exact_search_executor_with_config,
@@ -30,7 +27,12 @@ from kayak import (
     create_snapshot,
     upsert_documents,
 )
+from kayak.collections.paths import (
+    collection_segment_root,
+    collection_snapshot_root,
+)
 from kayak.service.paths import service_collection_root
+from kayak.storage import hybrid_flat_dim128_default_root
 
 
 def unique_service_root(prefix: String) -> Path:

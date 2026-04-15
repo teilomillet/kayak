@@ -52,8 +52,11 @@ from .hybrid_flat_dim128_store import (
     HybridFlatDim128CacheEntry,
     build_stored_hybrid_flat_dim128_index,
     ensure_stored_hybrid_flat_dim128_index,
+    hybrid_flat_dim128_default_root,
     hybrid_flat_dim128_index_exists,
     load_stored_hybrid_flat_dim128_index,
+    materialize_stored_hybrid_flat_dim128_index_from_packed_storage,
+    packed_storage_supports_direct_hybrid_flat_dim128_materialization,
     save_stored_hybrid_flat_dim128_index,
 )
 from .judged_task_store import (

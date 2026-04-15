@@ -4,6 +4,7 @@ from kayak import (
     FlatQueryDim128,
     HybridFlatDim128Index,
     StoredHybridFlatDim128Index,
+    StoredPackedIndex,
     VECTOR_SCALAR_NAME,
     build_flat_query_dim128,
     build_hybrid_flat_dim128_index,
@@ -17,6 +18,11 @@ from kayak import (
 from kayak.benchmarks import make_exact_search_fixture
 from kayak.runtime import ExactCpuBackend
 from kayak.search import search_exact
+from kayak.storage import (
+    materialize_stored_hybrid_flat_dim128_index_from_packed_storage,
+    packed_storage_supports_direct_hybrid_flat_dim128_materialization,
+    save_stored_packed_index,
+)
 from std.pathlib import Path
 
 
@@ -157,6 +163,39 @@ def test_hybrid_flat_dim128_storage_roundtrip_preserves_layout() raises:
     assert_equal(loaded.model_name, "mock-model")
     assert_equal(loaded.vector_scalar_name, VECTOR_SCALAR_NAME)
     assert_hybrid_indexes_equal(expected.index, loaded.index)
+
+
+def test_hybrid_flat_dim128_direct_materialization_matches_nested_build() raises:
+    var fixture = make_exact_search_fixture(24, 12, 6, 128, 5)
+    var packed_root = Path("/tmp/kayak-hybrid-flat-dim128-packed-storage")
+    var hybrid_root = Path("/tmp/kayak-hybrid-flat-dim128-direct-materialized")
+    var packed = StoredPackedIndex(
+        "mock://hybrid-direct",
+        "mock-model",
+        VECTOR_SCALAR_NAME,
+        fixture.index.copy(),
+    )
+
+    save_stored_packed_index(packed_root, packed)
+    assert_equal(
+        packed_storage_supports_direct_hybrid_flat_dim128_materialization(
+            packed_root
+        ),
+        True,
+    )
+
+    materialize_stored_hybrid_flat_dim128_index_from_packed_storage(
+        hybrid_root,
+        packed_root,
+    )
+    var loaded = load_stored_hybrid_flat_dim128_index(hybrid_root)
+    var expected = build_hybrid_flat_dim128_index(fixture.index)
+
+    assert_hybrid_indexes_equal(expected, loaded.index)
+    assert_equal(
+        (packed_root / "token_vectors.bin").read_bytes(),
+        (hybrid_root / "token_values.bin").read_bytes(),
+    )
 
 
 def test_build_flat_query_dim128_preserves_query_shape() raises:

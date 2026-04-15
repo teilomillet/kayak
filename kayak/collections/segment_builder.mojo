@@ -45,7 +45,10 @@ from .text_corpus_store import save_stored_document_text_corpus
 def packed_index_storage_byte_size(root: Path) raises -> Int:
     var total = (root / "manifest.tsv").read_text().byte_length()
     total += (root / "doc_ids.tsv").read_text().byte_length()
-    total += (root / "doc_offsets.tsv").read_text().byte_length()
+    if (root / "doc_offsets.bin").exists():
+        total += len((root / "doc_offsets.bin").read_bytes())
+    else:
+        total += (root / "doc_offsets.tsv").read_text().byte_length()
     if (root / "token_vectors.bin").exists():
         total += len((root / "token_vectors.bin").read_bytes())
     else:

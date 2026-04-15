@@ -125,6 +125,8 @@ def test_storage_roundtrip_supports_binary_f16_packed_index_payloads() raises:
         ) != -1,
         True,
     )
+    assert_equal((index_root / "doc_offsets.tsv").exists(), True)
+    assert_equal((index_root / "doc_offsets.bin").exists(), False)
     assert_equal(len(token_bytes), 16)
     assert_equal(hits[0].doc_id, "doc-a")
 
