@@ -52,11 +52,12 @@ class _RuntimeBatchMetricsEnvelope:
 
 @dataclass(frozen=True, slots=True)
 class _RuntimeStopEnvelope:
-    pass
+    worker_index: int
 
 
 @dataclass(frozen=True, slots=True)
 class _RuntimeFatalEnvelope:
+    worker_index: int
     error_message: str
 
 
@@ -89,6 +90,7 @@ def _collect_process_batch(
 
 def _prepared_exact_search_runtime_worker(
     *,
+    worker_index: int,
     request_queue: Any,
     response_queue: Any,
     service_root: str,
@@ -111,7 +113,8 @@ def _prepared_exact_search_runtime_worker(
     except Exception as exc:
         response_queue.put(
             _RuntimeFatalEnvelope(
-                f"failed to prepare runtime worker session: {exc}"
+                worker_index=worker_index,
+                error_message=f"failed to prepare runtime worker session: {exc}",
             )
         )
         return
@@ -119,7 +122,7 @@ def _prepared_exact_search_runtime_worker(
     while True:
         item = request_queue.get()
         if isinstance(item, _RuntimeStopEnvelope):
-            response_queue.put(_RuntimeStopEnvelope())
+            response_queue.put(_RuntimeStopEnvelope(worker_index=worker_index))
             return
 
         batch, stop_after_batch = _collect_process_batch(
@@ -157,7 +160,7 @@ def _prepared_exact_search_runtime_worker(
                 )
             )
             if stop_after_batch:
-                response_queue.put(_RuntimeStopEnvelope())
+                response_queue.put(_RuntimeStopEnvelope(worker_index=worker_index))
                 return
             continue
 
@@ -178,7 +181,7 @@ def _prepared_exact_search_runtime_worker(
             )
         )
         if stop_after_batch:
-            response_queue.put(_RuntimeStopEnvelope())
+            response_queue.put(_RuntimeStopEnvelope(worker_index=worker_index))
             return
 
 
@@ -196,13 +199,14 @@ class PreparedExactProcessRuntime:
         "_context",
         "_request_queue",
         "_response_queue",
-        "_worker",
+        "_workers",
         "_listener",
         "_lifecycle_lock",
         "_stats_lock",
         "_stats",
         "_closed",
         "_fatal_exception",
+        "_stopped_worker_count",
         "_next_request_id",
         "_pending_futures",
         "_pending_request_count",
@@ -234,24 +238,33 @@ class PreparedExactProcessRuntime:
         self._stats = PreparedExactSearchRuntimeStats()
         self._closed = False
         self._fatal_exception: BaseException | None = None
+        self._stopped_worker_count = 0
         self._next_request_id = 0
         self._pending_futures: dict[int, Future[dict[str, Any]]] = {}
         self._pending_request_count = 0
-        self._worker = self._context.Process(
-            target=_prepared_exact_search_runtime_worker,
-            kwargs={
-                "request_queue": self._request_queue,
-                "response_queue": self._response_queue,
-                "service_root": str(self.service_root),
-                "collection_id": self.collection_id,
-                "tenant_id": self.tenant_id,
-                "namespace_id": self.namespace_id,
-                "snapshot_id": self.snapshot_id,
-                "load_text_corpus": self.load_text_corpus,
-                "config": self._config,
-            },
-            daemon=True,
-        )
+        self._workers = [
+            self._context.Process(
+                target=_prepared_exact_search_runtime_worker,
+                kwargs={
+                    "worker_index": worker_index,
+                    "request_queue": self._request_queue,
+                    "response_queue": self._response_queue,
+                    "service_root": str(self.service_root),
+                    "collection_id": self.collection_id,
+                    "tenant_id": self.tenant_id,
+                    "namespace_id": self.namespace_id,
+                    "snapshot_id": self.snapshot_id,
+                    "load_text_corpus": self.load_text_corpus,
+                    "config": self._config,
+                },
+                name=(
+                    "PreparedExactProcessRuntimeWorker"
+                    f"[{worker_index}:{self.collection_id}/{self.snapshot_id}]"
+                ),
+                daemon=True,
+            )
+            for worker_index in range(self._config.concurrency_lane_count)
+        ]
         self._listener = threading.Thread(
             target=self._listener_loop,
             name=(
@@ -260,7 +273,8 @@ class PreparedExactProcessRuntime:
             ),
             daemon=True,
         )
-        self._worker.start()
+        for worker in self._workers:
+            worker.start()
         self._listener.start()
 
     @property
@@ -322,14 +336,14 @@ class PreparedExactProcessRuntime:
 
     def close(self) -> None:
         with self._lifecycle_lock:
-            if self._closed:
-                return
-            self._closed = True
-            self._request_queue.put(_RuntimeStopEnvelope())
-        self._worker.join(timeout=15.0)
-        if self._worker.is_alive():
-            self._worker.terminate()
-            self._worker.join(timeout=15.0)
+            if not self._closed:
+                self._closed = True
+                self._broadcast_stop_envelopes_locked()
+        for worker in self._workers:
+            worker.join(timeout=15.0)
+            if worker.is_alive():
+                worker.terminate()
+                worker.join(timeout=15.0)
         self._listener.join(timeout=15.0)
         if self._listener.is_alive():
             raise RuntimeError("prepared exact search runtime listener did not stop")
@@ -403,9 +417,12 @@ class PreparedExactProcessRuntime:
 
     def _set_fatal_exception(self, exc: BaseException) -> None:
         with self._lifecycle_lock:
+            broadcast_stop = not self._closed
             if self._fatal_exception is None:
                 self._fatal_exception = exc
             self._closed = True
+            if broadcast_stop:
+                self._broadcast_stop_envelopes_locked()
 
     def _fail_pending_futures(self, exc: BaseException) -> None:
         with self._lifecycle_lock:
@@ -415,19 +432,40 @@ class PreparedExactProcessRuntime:
         for future in pending_futures:
             future.set_exception(exc)
 
+    def _broadcast_stop_envelopes_locked(self) -> None:
+        for _ in self._workers:
+            self._request_queue.put(_RuntimeStopEnvelope(worker_index=-1))
+
+    def _unexpected_worker_exit_exception(self) -> RuntimeError | None:
+        for worker in self._workers:
+            if worker.is_alive():
+                continue
+            if worker.exitcode is None:
+                continue
+            if self._closed and worker.exitcode == 0:
+                continue
+            return RuntimeError(
+                "prepared exact search runtime worker exited unexpectedly"
+                f" with code {worker.exitcode}: {worker.name}"
+            )
+        return None
+
     def _listener_loop(self) -> None:
         while True:
             try:
                 envelope = self._response_queue.get(timeout=0.1)
             except Empty:
-                if self._worker.is_alive():
+                unexpected_worker_exit = self._unexpected_worker_exit_exception()
+                if unexpected_worker_exit is not None:
+                    self._set_fatal_exception(unexpected_worker_exit)
+                    self._fail_pending_futures(unexpected_worker_exit)
+                    return
+                if any(worker.is_alive() for worker in self._workers):
                     continue
-                exitcode = self._worker.exitcode
-                if self._closed and exitcode == 0:
+                if self._closed:
                     return
                 exc = RuntimeError(
-                    "prepared exact search runtime worker exited unexpectedly"
-                    f" with code {exitcode}"
+                    "prepared exact search runtime workers exited unexpectedly"
                 )
                 self._set_fatal_exception(exc)
                 self._fail_pending_futures(exc)
@@ -455,10 +493,14 @@ class PreparedExactProcessRuntime:
                 continue
 
             if isinstance(envelope, _RuntimeFatalEnvelope):
-                exc = RuntimeError(envelope.error_message)
+                exc = RuntimeError(
+                    f"{envelope.error_message} [worker_index={envelope.worker_index}]"
+                )
                 self._set_fatal_exception(exc)
                 self._fail_pending_futures(exc)
                 return
 
             if isinstance(envelope, _RuntimeStopEnvelope):
-                return
+                self._stopped_worker_count += 1
+                if self._stopped_worker_count >= len(self._workers):
+                    return

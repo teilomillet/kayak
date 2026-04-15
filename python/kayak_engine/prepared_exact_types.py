@@ -48,6 +48,7 @@ class PreparedExactSearchRuntimeConfig:
     """Explicit local runtime policy for same-snapshot exact search."""
 
     execution_backend: str = "process"
+    concurrency_lane_count: int = 1
     worker_count: int = 1
     max_batch_size: int = 32
     max_batch_wait_ms: int = 1
@@ -55,12 +56,18 @@ class PreparedExactSearchRuntimeConfig:
 
     def __post_init__(self) -> None:
         _require_runtime_backend("execution_backend", self.execution_backend)
+        concurrency_lane_count = _require_non_bool_int(
+            "concurrency_lane_count",
+            self.concurrency_lane_count,
+        )
         worker_count = _require_non_bool_int("worker_count", self.worker_count)
         max_batch_size = _require_non_bool_int("max_batch_size", self.max_batch_size)
         max_batch_wait_ms = _require_non_bool_int(
             "max_batch_wait_ms",
             self.max_batch_wait_ms,
         )
+        if concurrency_lane_count < 1:
+            raise ValueError("concurrency_lane_count must be positive")
         if worker_count < 1:
             raise ValueError("worker_count must be positive")
         if max_batch_size < 1:

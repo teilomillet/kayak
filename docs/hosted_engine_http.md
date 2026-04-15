@@ -73,6 +73,8 @@ Current consequence:
 Current verified backend:
 - the local prepared exact-search runtime only verifies
   `execution_backend="process"`
+- in that backend, `concurrency_lane_count` maps to the number of worker
+  processes holding prepared same-snapshot state
 
 Reason:
 - the runtime contract can stay stable even if the backend changes later

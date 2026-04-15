@@ -30,6 +30,7 @@ The stronger contract is:
 - explicit batching and scoring policy
 - one local runtime for multiple same-process callers
 - backend choice kept explicit and replaceable
+- explicit concurrency lanes above the batch kernel
 
 Reason:
 
@@ -56,6 +57,8 @@ So the sound runtime contract is:
 - support `execution_backend="process"`
 - reject unverified backends early
 - keep compatibility aliases, but do not imply thread safety
+- expose independent runtime-lane count explicitly instead of implying that the
+  batch-kernel `worker_count` already means multiple runtime workers
 
 ## Implementation
 
@@ -93,10 +96,12 @@ What it verifies:
 
 1. scheduler names are aliases to the runtime surface
 2. unsupported backends such as `"thread"` are rejected
-3. runtime search matches direct prepared-session search
-4. concurrent submitters are coalesced into fewer executed batches than raw
+3. non-positive `concurrency_lane_count` is rejected
+4. runtime search matches direct prepared-session search
+5. a multi-lane runtime configuration executes correctly
+6. concurrent submitters are coalesced into fewer executed batches than raw
    request count
-5. closed runtimes reject new submissions
+7. closed runtimes reject new submissions
 
 ### Prepared-session regression test
 
@@ -115,6 +120,8 @@ Result:
 - the local Python API is explicit about runtime semantics rather than centering
   implementation mechanism in the naming
 - only the process backend is represented as supported today
+- the runtime now exposes `concurrency_lane_count` explicitly so same-snapshot
+  concurrent search is not limited to one process lane by construction
 - compatibility aliases preserve the earlier scheduler surface
 - the code is easier to inspect because session, config, runtime contract, and
   process backend are now separated

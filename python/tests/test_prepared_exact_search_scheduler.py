@@ -97,6 +97,10 @@ class PreparedExactSearchRuntimeApiTests(unittest.TestCase):
         )
         self.assertEqual(SUPPORTED_PREPARED_EXACT_RUNTIME_BACKENDS, ("process",))
         self.assertEqual(
+            PreparedExactSearchRuntimeConfig().concurrency_lane_count,
+            1,
+        )
+        self.assertEqual(
             PreparedExactSearchRuntimeConfig().execution_backend,
             "process",
         )
@@ -104,6 +108,10 @@ class PreparedExactSearchRuntimeApiTests(unittest.TestCase):
     def test_runtime_config_rejects_unverified_backend(self) -> None:
         with self.assertRaises(ValueError):
             PreparedExactSearchRuntimeConfig(execution_backend="thread")
+
+    def test_runtime_config_rejects_non_positive_concurrency_lane_count(self) -> None:
+        with self.assertRaises(ValueError):
+            PreparedExactSearchRuntimeConfig(concurrency_lane_count=0)
 
 
 @unittest.skipUnless(
@@ -153,6 +161,7 @@ class PreparedExactSearchRuntimeTests(unittest.TestCase):
 
         runtime = session.runtime(
             config=PreparedExactSearchRuntimeConfig(
+                concurrency_lane_count=2,
                 worker_count=1,
                 max_batch_size=32,
                 max_batch_wait_ms=1,
@@ -179,12 +188,14 @@ class PreparedExactSearchRuntimeTests(unittest.TestCase):
             namespace_id="search",
             snapshot_id="snapshot-0001",
             config=PreparedExactSearchRuntimeConfig(
+                concurrency_lane_count=2,
                 worker_count=2,
                 max_batch_size=8,
                 max_batch_wait_ms=25,
             ),
         )
         self.addCleanup(runtime.close)
+        self.assertEqual(runtime.config.concurrency_lane_count, 2)
 
         requests = [
             {
