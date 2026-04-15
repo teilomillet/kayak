@@ -286,6 +286,7 @@ from .service import (
     ExplainResponse,
     ExportSnapshotRequest,
     ImportSnapshotRequest,
+    PreparedExactSearchExecutor,
     PreparedSearchSnapshot,
     PlannedDebugSearchResponse,
     PlannedExplainResponse,
@@ -337,7 +338,11 @@ from .service import (
     planned_explain_response_json,
     planned_search_request_json,
     planned_search_response_json,
+    prepare_collection_exact_search_executor,
+    prepare_collection_exact_search_executor_with_config,
     prepare_collection_search_snapshot,
+    prepare_service_exact_search_executor,
+    prepare_service_exact_search_executor_with_config,
     prepare_service_search_snapshot,
     search_request_json,
     search_response_json,
@@ -350,6 +355,7 @@ from .service import (
     update_collection_retention_policy_response_json,
     upsert_documents,
     upsert_documents_request_json,
+    exact_cpu_backend_for_scoring_config,
 )
 from .scoring import ExactScoringConfig
 from .scoring import (

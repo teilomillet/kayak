@@ -88,6 +88,14 @@ from .prepared_snapshot_runtime import (
     prepare_service_search_snapshot,
     select_search_plan_for_prepared_snapshot,
 )
+from .prepared_exact_search_executor import (
+    PreparedExactSearchExecutor,
+    exact_cpu_backend_for_scoring_config,
+    prepare_collection_exact_search_executor,
+    prepare_collection_exact_search_executor_with_config,
+    prepare_service_exact_search_executor,
+    prepare_service_exact_search_executor_with_config,
+)
 from .runtime import (
     create_collection,
     create_snapshot,
