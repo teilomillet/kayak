@@ -343,7 +343,9 @@ def should_use_dim128_tiled4_exact_stage(
         backend.scoring_config.enable_dim128_fast_path
         and VECTOR_SCALAR_NAME == "Float32"
         and query.vector_dim == COLBERT_VECTOR_DIM
-        and query.vector_count == 32
+        and query.vector_count >= 4
+        and query.vector_count <= 64
+        and query.vector_count % 4 == 0
     )
 
 
@@ -416,8 +418,9 @@ def score_resolved_candidate_window_for_cpu(
     read snapshot: ResolvedCollectionSnapshot,
     read resolved: ResolvedCandidateWindow,
 ) raises -> List[ScoreScalar]:
-    # This path is only enabled for the measured dim128 q=32 exact-stage shape.
-    # Other shapes continue to use the existing scorer until they are benchmarked.
+    # This path is only enabled for the measured dim128 exact-stage shapes:
+    # q in {4, 8, 12, ..., 64} where q % 4 == 0. Other shapes continue to use
+    # the existing scorer until they are benchmarked.
     if should_use_dim128_tiled4_exact_stage(backend, query):
         return score_resolved_candidate_window_for_cpu_dim128_tiled4(
             backend,
