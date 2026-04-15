@@ -133,6 +133,44 @@ def unique_collection_root(prefix: String) -> Path:
         suffix += 1
 
 
+def singleton_vector(value: Float64) -> List[VectorScalar]:
+    var values = List[VectorScalar]()
+    values.append(VectorScalar(value))
+    return values^
+
+
+def equal_score_overflow_index(last_centroid_value: Float64) raises -> CentroidPostingIndex:
+    var centroid_dims = List[Int]()
+    var centroid_vectors = List[List[VectorScalar]]()
+    var posting_offsets = List[Int]()
+    var posting_doc_indices = List[Int]()
+    var posting_weights = List[Int]()
+
+    posting_offsets.append(0)
+    for _ in range(128):
+        centroid_dims.append(0)
+        centroid_vectors.append(singleton_vector(1.0))
+        posting_doc_indices.append(0)
+        posting_weights.append(1)
+        posting_offsets.append(len(posting_doc_indices))
+
+    centroid_dims.append(0)
+    centroid_vectors.append(singleton_vector(last_centroid_value))
+    posting_doc_indices.append(0)
+    posting_weights.append(1)
+    posting_offsets.append(len(posting_doc_indices))
+
+    return CentroidPostingIndex(
+        centroid_dims^,
+        centroid_vectors^,
+        posting_offsets^,
+        posting_doc_indices^,
+        posting_weights^,
+        1,
+        1,
+    )
+
+
 def test_high_centroid_imputed_probe_exceeds_current_imputed_bound() raises:
     var profile = high_centroid_synthetic_hard_recall_profile()
     var fixture = make_synthetic_hard_recall_fixture(profile)
@@ -272,6 +310,56 @@ def test_high_centroid_imputed_flat_selector_matches_nested_selector() raises:
             index,
             profile.final_k,
         ),
+    )
+
+
+def test_imputed_selector_keeps_earlier_equal_score_tail_entries() raises:
+    var index = equal_score_overflow_index(1.0)
+    var query_token = singleton_vector(1.0)
+
+    assert_scored_centroid_selection_equal(
+        centroid_selection_for_query_token(query_token, index, 1),
+        reference_centroid_selection_for_query_token(query_token, index, 1),
+    )
+
+
+def test_imputed_selector_evicts_tail_for_better_late_centroid() raises:
+    var index = equal_score_overflow_index(2.0)
+    var query_token = singleton_vector(1.0)
+
+    assert_scored_centroid_selection_equal(
+        centroid_selection_for_query_token(query_token, index, 1),
+        reference_centroid_selection_for_query_token(query_token, index, 1),
+    )
+
+
+def test_imputed_flat_selector_keeps_earlier_equal_score_tail_entries() raises:
+    var index = equal_score_overflow_index(1.0)
+    var flat_query_values = singleton_vector(1.0)
+
+    assert_scored_centroid_selection_equal(
+        centroid_selection_for_flat_query_token_generic(
+            flat_query_values,
+            0,
+            index,
+            1,
+        ),
+        centroid_selection_for_query_token(flat_query_values, index, 1),
+    )
+
+
+def test_imputed_flat_selector_evicts_tail_for_better_late_centroid() raises:
+    var index = equal_score_overflow_index(2.0)
+    var flat_query_values = singleton_vector(1.0)
+
+    assert_scored_centroid_selection_equal(
+        centroid_selection_for_flat_query_token_generic(
+            flat_query_values,
+            0,
+            index,
+            1,
+        ),
+        centroid_selection_for_query_token(flat_query_values, index, 1),
     )
 
 

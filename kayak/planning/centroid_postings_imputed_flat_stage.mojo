@@ -14,6 +14,10 @@ from .centroid_primitives import (
     ScoredCentroidSelection,
     accumulate_selected_centroid_scores_with_accumulator,
 )
+from .imputed_centroid_shortlist import (
+    insert_top_bound_centroid_match,
+    sort_top_bound_centroid_matches_descending,
+)
 from .centroid_segment_score_result import (
     CentroidSegmentScoreResult,
     materialize_centroid_segment_scores,
@@ -36,8 +40,31 @@ def centroid_selection_for_flat_query_token_generic(
     var sorted_centroid_indices = List[Int]()
     var sorted_centroid_scores = List[ScoreScalar]()
 
+    if index.centroid_count <= bound:
+        for centroid_index in range(index.centroid_count):
+            insert_descending_centroid_match(
+                sorted_centroid_indices,
+                sorted_centroid_scores,
+                centroid_index,
+                dot_product_flat_pair_at_generic(
+                    flat_query_values,
+                    query_offset,
+                    index.flat_centroid_values,
+                    centroid_index * index.vector_dim,
+                    index.vector_dim,
+                ),
+                bound,
+            )
+
+        return finalize_imputed_centroid_selection(
+            sorted_centroid_indices^,
+            sorted_centroid_scores^,
+            index,
+            final_k,
+        )
+
     for centroid_index in range(index.centroid_count):
-        insert_descending_centroid_match(
+        insert_top_bound_centroid_match(
             sorted_centroid_indices,
             sorted_centroid_scores,
             centroid_index,
@@ -50,6 +77,11 @@ def centroid_selection_for_flat_query_token_generic(
             ),
             bound,
         )
+
+    sort_top_bound_centroid_matches_descending(
+        sorted_centroid_indices,
+        sorted_centroid_scores,
+    )
 
     return finalize_imputed_centroid_selection(
         sorted_centroid_indices^,
@@ -70,8 +102,30 @@ def centroid_selection_for_flat_query_token_dim128(
     var sorted_centroid_scores = List[ScoreScalar]()
     var query_offset = query_index * COLBERT_VECTOR_DIM
 
+    if index.centroid_count <= bound:
+        for centroid_index in range(index.centroid_count):
+            insert_descending_centroid_match(
+                sorted_centroid_indices,
+                sorted_centroid_scores,
+                centroid_index,
+                dot_product_dim128_flat_pair_at(
+                    query.token_values,
+                    query_offset,
+                    index.flat_centroid_values,
+                    centroid_index * COLBERT_VECTOR_DIM,
+                ),
+                bound,
+            )
+
+        return finalize_imputed_centroid_selection(
+            sorted_centroid_indices^,
+            sorted_centroid_scores^,
+            index,
+            final_k,
+        )
+
     for centroid_index in range(index.centroid_count):
-        insert_descending_centroid_match(
+        insert_top_bound_centroid_match(
             sorted_centroid_indices,
             sorted_centroid_scores,
             centroid_index,
@@ -83,6 +137,11 @@ def centroid_selection_for_flat_query_token_dim128(
             ),
             bound,
         )
+
+    sort_top_bound_centroid_matches_descending(
+        sorted_centroid_indices,
+        sorted_centroid_scores,
+    )
 
     return finalize_imputed_centroid_selection(
         sorted_centroid_indices^,
