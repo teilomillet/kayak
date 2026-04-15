@@ -27,6 +27,7 @@ from .centroid_postings_stage import insert_descending_centroid_match
 from .centroid_postings_imputed_stage import (
     effective_imputed_centroid_bound,
     finalize_imputed_centroid_selection,
+    small_count_imputed_centroid_selection_limit,
 )
 
 
@@ -37,6 +38,13 @@ def centroid_selection_for_flat_query_token_generic(
     final_k: Int,
 ) -> ScoredCentroidSelection:
     var bound = effective_imputed_centroid_bound(index.centroid_count)
+    var selection_limit = bound
+    if index.centroid_count <= bound:
+        selection_limit = small_count_imputed_centroid_selection_limit(
+            index,
+            final_k,
+            bound,
+        )
     var sorted_centroid_indices = List[Int]()
     var sorted_centroid_scores = List[ScoreScalar]()
 
@@ -53,7 +61,7 @@ def centroid_selection_for_flat_query_token_generic(
                     centroid_index * index.vector_dim,
                     index.vector_dim,
                 ),
-                bound,
+                selection_limit,
             )
 
         return finalize_imputed_centroid_selection(
@@ -98,6 +106,13 @@ def centroid_selection_for_flat_query_token_dim128(
     final_k: Int,
 ) -> ScoredCentroidSelection:
     var bound = effective_imputed_centroid_bound(index.centroid_count)
+    var selection_limit = bound
+    if index.centroid_count <= bound:
+        selection_limit = small_count_imputed_centroid_selection_limit(
+            index,
+            final_k,
+            bound,
+        )
     var sorted_centroid_indices = List[Int]()
     var sorted_centroid_scores = List[ScoreScalar]()
     var query_offset = query_index * COLBERT_VECTOR_DIM
@@ -114,7 +129,7 @@ def centroid_selection_for_flat_query_token_dim128(
                     index.flat_centroid_values,
                     centroid_index * COLBERT_VECTOR_DIM,
                 ),
-                bound,
+                selection_limit,
             )
 
         return finalize_imputed_centroid_selection(

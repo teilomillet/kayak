@@ -104,6 +104,29 @@ def finalize_imputed_centroid_selection(
     )
 
 
+def small_count_imputed_centroid_selection_limit(
+    read index: CentroidPostingIndex, final_k: Int, bound: Int
+) -> Int:
+    var nprobe = effective_imputed_centroid_nprobe(bound)
+    var t_prime = warp_like_t_prime(index, final_k)
+    var selection_limit = nprobe
+    if t_prime > selection_limit:
+        selection_limit = t_prime
+
+    if selection_limit >= bound:
+        return bound
+
+    # finalize_imputed_centroid_selection() only needs the sorted prefix up to
+    # max(nprobe, t_prime) when each centroid contributes at least one token.
+    # Zero-token centroids can delay that cumulative token-count crossing, so
+    # they fall back to the exact full-bound scan.
+    for centroid_index in range(index.centroid_count):
+        if centroid_token_count(index, centroid_index) <= 0:
+            return bound
+
+    return selection_limit
+
+
 def centroid_selection_for_query_token(
     read query_token: List[VectorScalar],
     read index: CentroidPostingIndex,
