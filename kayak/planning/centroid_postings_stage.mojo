@@ -19,9 +19,6 @@ from .centroid_segment_score_result import (
 )
 
 
-comptime QUERY_TOKEN_CENTROID_PROBE_COUNT = 2
-
-
 def insert_descending_centroid_match(
     mut centroid_indices: List[Int],
     mut centroid_scores: List[ScoreScalar],
@@ -64,22 +61,86 @@ def insert_descending_centroid_match(
     centroid_scores[insert_at] = centroid_score
 
 
-def top_centroid_selection_for_query_token(
-    read query_token: List[VectorScalar], read index: CentroidPostingIndex
+    # The exact path always keeps the best two centroids, so preserving the
+    # generic inserter's stable tie behavior does not require dynamic Lists.
+def insert_exact_top2_centroid_match(
+    mut selected_count: Int,
+    mut first_centroid_index: Int,
+    mut first_centroid_score: ScoreScalar,
+    mut second_centroid_index: Int,
+    mut second_centroid_score: ScoreScalar,
+    centroid_index: Int,
+    centroid_score: ScoreScalar,
+):
+    if selected_count == 0:
+        selected_count = 1
+        first_centroid_index = centroid_index
+        first_centroid_score = centroid_score
+        return
+
+    if centroid_score > first_centroid_score:
+        second_centroid_index = first_centroid_index
+        second_centroid_score = first_centroid_score
+        first_centroid_index = centroid_index
+        first_centroid_score = centroid_score
+        if selected_count == 1:
+            selected_count = 2
+        return
+
+    if selected_count == 1 or centroid_score > second_centroid_score:
+        second_centroid_index = centroid_index
+        second_centroid_score = centroid_score
+        selected_count = 2
+
+
+def scored_centroid_selection_from_exact_top2(
+    selected_count: Int,
+    first_centroid_index: Int,
+    first_centroid_score: ScoreScalar,
+    second_centroid_index: Int,
+    second_centroid_score: ScoreScalar,
 ) -> ScoredCentroidSelection:
     var centroid_indices = List[Int]()
     var centroid_scores = List[ScoreScalar]()
 
-    for centroid_index in range(index.centroid_count):
-        insert_descending_centroid_match(
-            centroid_indices,
-            centroid_scores,
-            centroid_index,
-            dot_product(query_token, index.centroid_vectors[centroid_index]),
-            QUERY_TOKEN_CENTROID_PROBE_COUNT,
-        )
+    if selected_count >= 1:
+        centroid_indices.append(first_centroid_index)
+        centroid_scores.append(first_centroid_score)
+
+    if selected_count >= 2:
+        centroid_indices.append(second_centroid_index)
+        centroid_scores.append(second_centroid_score)
 
     return ScoredCentroidSelection(centroid_indices^, centroid_scores^, ScoreScalar(0.0))
+
+
+def top_centroid_selection_for_query_token(
+    read query_token: List[VectorScalar], read index: CentroidPostingIndex
+) -> ScoredCentroidSelection:
+    var selected_count = 0
+    var first_centroid_index = 0
+    var second_centroid_index = 0
+    var first_centroid_score = zero_score_scalar()
+    var second_centroid_score = zero_score_scalar()
+
+    for centroid_index in range(index.centroid_count):
+        insert_exact_top2_centroid_match(
+            selected_count,
+            first_centroid_index,
+            first_centroid_score,
+            second_centroid_index,
+            second_centroid_score,
+            centroid_index,
+            dot_product(query_token, index.centroid_vectors[centroid_index]),
+        )
+
+    return scored_centroid_selection_from_exact_top2(
+        selected_count,
+        first_centroid_index,
+        first_centroid_score,
+        second_centroid_index,
+        second_centroid_score,
+    )
 
 
 def top_centroid_indices_for_query_token(

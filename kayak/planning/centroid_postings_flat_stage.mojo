@@ -19,10 +19,10 @@ from .centroid_segment_score_result import (
     CentroidSegmentScoreResult,
     materialize_centroid_segment_scores,
 )
-from .centroid_postings_stage import insert_descending_centroid_match
-
-
-comptime QUERY_TOKEN_CENTROID_FLAT_PROBE_COUNT = 2
+from .centroid_postings_stage import (
+    insert_exact_top2_centroid_match,
+    scored_centroid_selection_from_exact_top2,
+)
 
 
 def dot_product_flat_pair_at_generic(
@@ -47,13 +47,19 @@ def top_centroid_selection_for_flat_query_token_generic(
     query_offset: Int,
     read index: CentroidPostingIndex,
 ) -> ScoredCentroidSelection:
-    var centroid_indices = List[Int]()
-    var centroid_scores = List[ScoreScalar]()
+    var selected_count = 0
+    var first_centroid_index = 0
+    var second_centroid_index = 0
+    var first_centroid_score = zero_score_scalar()
+    var second_centroid_score = zero_score_scalar()
 
     for centroid_index in range(index.centroid_count):
-        insert_descending_centroid_match(
-            centroid_indices,
-            centroid_scores,
+        insert_exact_top2_centroid_match(
+            selected_count,
+            first_centroid_index,
+            first_centroid_score,
+            second_centroid_index,
+            second_centroid_score,
             centroid_index,
             dot_product_flat_pair_at_generic(
                 flat_query_values,
@@ -62,23 +68,34 @@ def top_centroid_selection_for_flat_query_token_generic(
                 centroid_index * index.vector_dim,
                 index.vector_dim,
             ),
-            QUERY_TOKEN_CENTROID_FLAT_PROBE_COUNT,
         )
 
-    return ScoredCentroidSelection(centroid_indices^, centroid_scores^, ScoreScalar(0.0))
+    return scored_centroid_selection_from_exact_top2(
+        selected_count,
+        first_centroid_index,
+        first_centroid_score,
+        second_centroid_index,
+        second_centroid_score,
+    )
 
 
 def top_centroid_selection_for_flat_query_token_dim128(
     read query: FlatQueryDim128, query_index: Int, read index: CentroidPostingIndex
 ) -> ScoredCentroidSelection:
-    var centroid_indices = List[Int]()
-    var centroid_scores = List[ScoreScalar]()
+    var selected_count = 0
+    var first_centroid_index = 0
+    var second_centroid_index = 0
+    var first_centroid_score = zero_score_scalar()
+    var second_centroid_score = zero_score_scalar()
     var query_offset = query_index * COLBERT_VECTOR_DIM
 
     for centroid_index in range(index.centroid_count):
-        insert_descending_centroid_match(
-            centroid_indices,
-            centroid_scores,
+        insert_exact_top2_centroid_match(
+            selected_count,
+            first_centroid_index,
+            first_centroid_score,
+            second_centroid_index,
+            second_centroid_score,
             centroid_index,
             dot_product_dim128_flat_pair_at(
                 query.token_values,
@@ -86,10 +103,15 @@ def top_centroid_selection_for_flat_query_token_dim128(
                 index.flat_centroid_values,
                 centroid_index * COLBERT_VECTOR_DIM,
             ),
-            QUERY_TOKEN_CENTROID_FLAT_PROBE_COUNT,
         )
 
-    return ScoredCentroidSelection(centroid_indices^, centroid_scores^, ScoreScalar(0.0))
+    return scored_centroid_selection_from_exact_top2(
+        selected_count,
+        first_centroid_index,
+        first_centroid_score,
+        second_centroid_index,
+        second_centroid_score,
+    )
 
 
 def centroid_posting_flat_score_result_for_segment_generic_with_workspace(
