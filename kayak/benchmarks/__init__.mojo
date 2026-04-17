@@ -128,6 +128,17 @@ from .query_vector_bucket import (
     subset_judged_task_queries_to_query_vector_bucket,
     subset_stored_judged_task_queries_to_query_vector_bucket,
 )
+from .training_free_sequence_compression_json import (
+    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_FULL_EXACT,
+    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_PREFIX_PRUNING,
+    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING,
+    TrainingFreeSequenceCompressionSummary,
+    build_training_free_sequence_compression_summary,
+    pool_factor_for_target_document_vector_budget,
+    standard_training_free_sequence_compression_budget_sizes,
+    training_free_sequence_compression_summaries_json,
+    training_free_sequence_compression_summary_json,
+)
 from .vector_pruning_json import (
     VectorPruningSummary,
     build_vector_pruning_summary,
