@@ -59,6 +59,13 @@ from .hybrid_flat_dim128_store import (
     packed_storage_supports_direct_hybrid_flat_dim128_materialization,
     save_stored_hybrid_flat_dim128_index,
 )
+from .latent_proxy_store import (
+    LATENT_PROXY_ARTIFACT_KIND,
+    latent_proxy_index_exists,
+    latent_proxy_storage_byte_size,
+    load_stored_latent_proxy_index,
+    save_stored_latent_proxy_index,
+)
 from .judged_task_store import (
     judged_task_exists,
     load_stored_judged_task,
@@ -78,6 +85,7 @@ from .metadata import (
     StoredGemGraphIndex,
     StoredHybridFlatDim128Index,
     StoredJudgedTask,
+    StoredLatentProxyIndex,
     StoredPackedIndex,
 )
 from .limit_small_cache import (

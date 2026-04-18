@@ -181,6 +181,21 @@ def document_proxy_stage1_capabilities() raises -> Stage1Capabilities:
     )
 
 
+def latent_proxy_stage1_capabilities() raises -> Stage1Capabilities:
+    return Stage1Capabilities(
+        "latent_proxy",
+        "proxy",
+        STAGE1_INTERACTION_SEMANTICS_NONE,
+        STAGE1_ALIGNMENT_GRANULARITY_DOCUMENT,
+        STAGE1_SCORE_KIND_PROXY_SCORE,
+        ["latent_proxy"],
+        False,
+        True,
+        True,
+        True,
+    )
+
+
 def centroid_heads_stage1_capabilities() raises -> Stage1Capabilities:
     return Stage1Capabilities(
         "centroid_heads",
@@ -233,6 +248,8 @@ def stage1_capabilities_for_candidate_generator_kind(
         return exact_stage1_capabilities()
     if kind == "document_proxy":
         return document_proxy_stage1_capabilities()
+    if kind == "latent_proxy":
+        return latent_proxy_stage1_capabilities()
     if kind == "centroid_heads":
         return centroid_heads_stage1_capabilities()
     if (

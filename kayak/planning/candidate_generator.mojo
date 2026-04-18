@@ -136,6 +136,10 @@ def document_proxy_candidate_generator() raises -> CandidateGenerator:
     return CandidateGenerator("document_proxy")
 
 
+def latent_proxy_candidate_generator() raises -> CandidateGenerator:
+    return CandidateGenerator("latent_proxy")
+
+
 def centroid_postings_candidate_generator() raises -> CandidateGenerator:
     return CandidateGenerator("centroid_postings")
 

@@ -12,6 +12,7 @@ from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
     SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
+    SEARCH_ARTIFACT_FAMILY_LATENT_PROXY,
     SearchArtifactManifest,
     centroid_heads_search_artifact,
     centroid_postings_search_artifact,
@@ -258,6 +259,14 @@ def sealed_segment_document_proxy_root(
     )
 
 
+def sealed_segment_latent_proxy_root(
+    read segment: SealedSegmentManifest
+) -> String:
+    return sealed_segment_search_artifact_root(
+        segment, SEARCH_ARTIFACT_FAMILY_LATENT_PROXY
+    )
+
+
 def sealed_segment_has_centroid_postings_index(
     read segment: SealedSegmentManifest
 ) -> Bool:
@@ -279,6 +288,14 @@ def sealed_segment_has_document_proxy_index(
 ) -> Bool:
     return sealed_segment_has_search_artifact(
         segment, SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY
+    )
+
+
+def sealed_segment_has_latent_proxy_index(
+    read segment: SealedSegmentManifest
+) -> Bool:
+    return sealed_segment_has_search_artifact(
+        segment, SEARCH_ARTIFACT_FAMILY_LATENT_PROXY
     )
 
 

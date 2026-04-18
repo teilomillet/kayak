@@ -1,12 +1,20 @@
 from std.collections import List
 from std.pathlib import Path
 
-from kayak.index import CentroidPostingIndex, DocumentProxyIndex, GemGraphIndex
+from kayak.index import (
+    CentroidPostingIndex,
+    DocumentProxyIndex,
+    GemGraphIndex,
+    LatentProxyIndex,
+    LatentQueryProjection,
+)
 from kayak.storage import (
     StoredCentroidPostingIndex,
     StoredDocumentProxyIndex,
     StoredGemGraphIndex,
+    StoredLatentProxyIndex,
     load_stored_gem_graph_index,
+    load_stored_latent_proxy_index,
     load_stored_centroid_heads_index,
     load_stored_centroid_posting_index,
     load_stored_document_proxy_index,
@@ -46,6 +54,7 @@ from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
+    SEARCH_ARTIFACT_FAMILY_LATENT_PROXY,
     SearchArtifactManifest,
 )
 from .segment import (
@@ -143,6 +152,20 @@ def empty_stored_gem_graph_index(
         0,
         0,
         GemGraphIndex(),
+    )
+
+
+def empty_stored_latent_proxy_index(
+    model_name: String, vector_scalar_name: String, input_vector_dim: Int
+) raises -> StoredLatentProxyIndex:
+    return StoredLatentProxyIndex(
+        "",
+        model_name.copy(),
+        vector_scalar_name.copy(),
+        input_vector_dim,
+        0,
+        LatentQueryProjection(input_vector_dim, 1, 1.0, []),
+        LatentProxyIndex([], [], 1),
     )
 
 
@@ -245,6 +268,23 @@ def require_loaded_document_proxy_matches_segment(
         != segment.stats.document_count
     ):
         raise Error("document proxy document_count does not match segment stats")
+
+
+def require_loaded_latent_proxy_matches_segment(
+    read segment: SealedSegmentManifest,
+    read stored_latent_proxy_index: StoredLatentProxyIndex,
+) raises:
+    if stored_latent_proxy_index.model_name != segment.model_name:
+        raise Error("latent proxy model_name does not match segment manifest")
+    if stored_latent_proxy_index.vector_scalar_name != segment.vector_scalar_name:
+        raise Error("latent proxy vector_scalar_name does not match segment manifest")
+    if stored_latent_proxy_index.input_vector_dim != segment.vector_dim:
+        raise Error("latent proxy input_vector_dim does not match segment manifest")
+    if (
+        stored_latent_proxy_index.index.document_count
+        != segment.stats.document_count
+    ):
+        raise Error("latent proxy document_count does not match segment stats")
 
 
 def require_loaded_document_metadata_matches_segment(
@@ -396,6 +436,11 @@ def load_search_artifact_for_segment(
         segment.model_name,
         segment.vector_scalar_name,
     )
+    var stored_latent_proxy_index = empty_stored_latent_proxy_index(
+        segment.model_name,
+        segment.vector_scalar_name,
+        segment.vector_dim,
+    )
 
     if search_artifact.family == SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS:
         stored_centroid_postings_index = load_stored_centroid_posting_index(
@@ -465,6 +510,17 @@ def load_search_artifact_for_segment(
         require_loaded_gem_graph_matches_segment(
             segment, stored_gem_graph_index
         )
+    elif search_artifact.family == SEARCH_ARTIFACT_FAMILY_LATENT_PROXY:
+        stored_latent_proxy_index = load_stored_latent_proxy_index(
+            resolve_segment_artifact_root(
+                segment_root,
+                search_artifact.root,
+                "search_artifact root for " + search_artifact.family,
+            )
+        )
+        require_loaded_latent_proxy_matches_segment(
+            segment, stored_latent_proxy_index
+        )
     else:
         raise Error(
             "unsupported search artifact family while resolving snapshot: "
@@ -478,6 +534,7 @@ def load_search_artifact_for_segment(
         stored_document_metadata_corpus,
         stored_document_proxy_index,
         stored_gem_graph_index,
+        stored_latent_proxy_index,
     )
 
 

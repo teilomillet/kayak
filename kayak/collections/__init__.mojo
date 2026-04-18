@@ -172,6 +172,7 @@ from .resolved_snapshot import (
     loaded_search_artifact_stored_document_metadata,
     loaded_search_artifact_stored_document_proxy_index,
     loaded_search_artifact_stored_gem_graph_index,
+    loaded_search_artifact_stored_latent_proxy_index,
     loaded_segment_has_document_filter_index,
     loaded_segment_document_metadata_for_doc_index,
     loaded_segment_has_centroid_heads_index,
@@ -179,6 +180,7 @@ from .resolved_snapshot import (
     loaded_segment_has_document_metadata,
     loaded_segment_has_document_proxy_index,
     loaded_segment_has_gem_graph_index,
+    loaded_segment_has_latent_proxy_index,
     loaded_segment_has_search_artifact,
     loaded_segment_search_artifact,
     loaded_segment_search_artifact_families,
@@ -187,6 +189,7 @@ from .resolved_snapshot import (
     loaded_segment_stored_document_metadata,
     loaded_segment_stored_document_proxy_index,
     loaded_segment_stored_gem_graph_index,
+    loaded_segment_stored_latent_proxy_index,
 )
 from .resolver import load_resolved_collection_snapshot
 from .search_artifact import (
@@ -196,6 +199,7 @@ from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
+    SEARCH_ARTIFACT_FAMILY_LATENT_PROXY,
     SearchArtifactManifest,
     centroid_heads_search_artifact,
     centroid_postings_search_artifact,
@@ -203,6 +207,7 @@ from .search_artifact import (
     document_metadata_search_artifact,
     document_proxy_search_artifact,
     gem_graph_search_artifact,
+    latent_proxy_search_artifact,
     has_search_artifact,
     search_artifact_root,
 )
@@ -213,11 +218,13 @@ from .segment import (
     sealed_segment_centroid_heads_root,
     sealed_segment_centroid_postings_root,
     sealed_segment_document_proxy_root,
+    sealed_segment_latent_proxy_root,
     sealed_segment_has_centroid_heads_index,
     sealed_segment_has_centroid_postings_index,
     sealed_segment_has_document_representation_transform_kind,
     sealed_segment_has_document_representation_transforms,
     sealed_segment_has_document_proxy_index,
+    sealed_segment_has_latent_proxy_index,
     sealed_segment_has_search_artifact,
     sealed_segment_search_artifact_root,
     sealed_segment_has_text_corpus,

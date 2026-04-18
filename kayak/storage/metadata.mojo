@@ -3,6 +3,8 @@ from kayak.index import CentroidPostingIndex
 from kayak.index import DocumentProxyIndex
 from kayak.index import GemGraphIndex
 from kayak.index import HybridFlatDim128Index
+from kayak.index import LatentProxyIndex
+from kayak.index import LatentQueryProjection
 from kayak.index import PackedIndex
 
 
@@ -120,6 +122,51 @@ struct StoredDocumentProxyIndex(Copyable):
         self.document_vector_budget = document_vector_budget
         self.proxy_vector_count_per_document = proxy_vector_count_per_document
         self.artifact_byte_size = artifact_byte_size
+        self.index = index^
+
+
+struct StoredLatentProxyIndex(Copyable):
+    var dataset_id: String
+    var model_name: String
+    var vector_scalar_name: String
+    var input_vector_dim: Int
+    var artifact_byte_size: Int
+    var query_projection: LatentQueryProjection
+    var index: LatentProxyIndex
+
+    def __init__(
+        out self,
+        var dataset_id: String,
+        var model_name: String,
+        var vector_scalar_name: String,
+        input_vector_dim: Int,
+        artifact_byte_size: Int,
+        query_projection: LatentQueryProjection,
+        var index: LatentProxyIndex,
+    ) raises:
+        if input_vector_dim <= 0:
+            raise Error("stored latent proxy input_vector_dim must be positive")
+        if artifact_byte_size < 0:
+            raise Error("stored latent proxy artifact_byte_size must be non-negative")
+        if query_projection.input_vector_dim != input_vector_dim:
+            raise Error(
+                "stored latent proxy input_vector_dim must match the query projection"
+            )
+        if query_projection.output_vector_dim != index.vector_dim:
+            raise Error(
+                "stored latent proxy query projection output must match index vector_dim"
+            )
+        if index.document_count > 0 and len(query_projection.blocks) == 0:
+            raise Error(
+                "stored latent proxy artifacts with documents must define a query projection"
+            )
+
+        self.dataset_id = dataset_id^
+        self.model_name = model_name^
+        self.vector_scalar_name = vector_scalar_name^
+        self.input_vector_dim = input_vector_dim
+        self.artifact_byte_size = artifact_byte_size
+        self.query_projection = query_projection.copy()
         self.index = index^
 
 

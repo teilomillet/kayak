@@ -6,6 +6,7 @@ from kayak.storage import (
     StoredCentroidPostingIndex,
     StoredDocumentProxyIndex,
     StoredGemGraphIndex,
+    StoredLatentProxyIndex,
     StoredPackedIndex,
 )
 
@@ -23,6 +24,7 @@ from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
+    SEARCH_ARTIFACT_FAMILY_LATENT_PROXY,
     SearchArtifactManifest,
 )
 from .segment import SealedSegmentManifest
@@ -37,6 +39,7 @@ struct LoadedSearchArtifact(Copyable):
     var stored_document_metadata_corpus: StoredDocumentMetadataCorpus
     var stored_document_proxy_index: StoredDocumentProxyIndex
     var stored_gem_graph_index: StoredGemGraphIndex
+    var stored_latent_proxy_index: StoredLatentProxyIndex
 
     def __init__(
         out self,
@@ -46,6 +49,7 @@ struct LoadedSearchArtifact(Copyable):
         stored_document_metadata_corpus: StoredDocumentMetadataCorpus,
         stored_document_proxy_index: StoredDocumentProxyIndex,
         stored_gem_graph_index: StoredGemGraphIndex,
+        stored_latent_proxy_index: StoredLatentProxyIndex,
     ):
         self.manifest = manifest.copy()
         self.stored_centroid_postings_index = stored_centroid_postings_index.copy()
@@ -55,6 +59,7 @@ struct LoadedSearchArtifact(Copyable):
         )
         self.stored_document_proxy_index = stored_document_proxy_index.copy()
         self.stored_gem_graph_index = stored_gem_graph_index.copy()
+        self.stored_latent_proxy_index = stored_latent_proxy_index.copy()
 
 
 def loaded_search_artifact_family(read artifact: LoadedSearchArtifact) -> String:
@@ -100,6 +105,12 @@ def loaded_search_artifact_is_document_filter_index(
 
 def loaded_search_artifact_is_gem_graph(read artifact: LoadedSearchArtifact) -> Bool:
     return artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_GEM_GRAPH
+
+
+def loaded_search_artifact_is_latent_proxy(
+    read artifact: LoadedSearchArtifact
+) -> Bool:
+    return artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_LATENT_PROXY
 
 
 def loaded_search_artifact_stored_centroid_postings_index(
@@ -160,6 +171,18 @@ def loaded_search_artifact_stored_gem_graph_index(
         )
 
     return artifact.stored_gem_graph_index.copy()
+
+
+def loaded_search_artifact_stored_latent_proxy_index(
+    read artifact: LoadedSearchArtifact
+) raises -> StoredLatentProxyIndex:
+    if not loaded_search_artifact_is_latent_proxy(artifact):
+        raise Error(
+            "loaded search artifact family is not a latent proxy artifact: "
+            + artifact.manifest.family
+        )
+
+    return artifact.stored_latent_proxy_index.copy()
 
 
 struct LoadedSealedSegment(Copyable):
@@ -259,6 +282,12 @@ def loaded_segment_has_gem_graph_index(read segment: LoadedSealedSegment) -> Boo
     )
 
 
+def loaded_segment_has_latent_proxy_index(read segment: LoadedSealedSegment) -> Bool:
+    return loaded_segment_has_search_artifact(
+        segment, SEARCH_ARTIFACT_FAMILY_LATENT_PROXY
+    )
+
+
 def loaded_segment_stored_centroid_postings_index(
     read segment: LoadedSealedSegment,
     family: String = SEARCH_ARTIFACT_FAMILY_CENTROID_POSTINGS,
@@ -275,6 +304,17 @@ def loaded_segment_stored_document_proxy_index(
         loaded_segment_search_artifact(
             segment,
             SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
+        )
+    )
+
+
+def loaded_segment_stored_latent_proxy_index(
+    read segment: LoadedSealedSegment
+) raises -> StoredLatentProxyIndex:
+    return loaded_search_artifact_stored_latent_proxy_index(
+        loaded_segment_search_artifact(
+            segment,
+            SEARCH_ARTIFACT_FAMILY_LATENT_PROXY,
         )
     )
 

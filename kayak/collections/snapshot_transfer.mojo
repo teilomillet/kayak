@@ -5,6 +5,7 @@ from kayak.storage import (
     save_stored_centroid_posting_index,
     save_stored_document_proxy_index,
     save_stored_gem_graph_index,
+    save_stored_latent_proxy_index,
     save_stored_packed_index,
 )
 
@@ -26,6 +27,7 @@ from .resolved_snapshot import (
     loaded_search_artifact_stored_document_metadata,
     loaded_search_artifact_stored_document_proxy_index,
     loaded_search_artifact_stored_gem_graph_index,
+    loaded_search_artifact_stored_latent_proxy_index,
 )
 from .resolver import load_resolved_collection_snapshot
 from .search_artifact import (
@@ -35,6 +37,7 @@ from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA,
     SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY,
     SEARCH_ARTIFACT_FAMILY_GEM_GRAPH,
+    SEARCH_ARTIFACT_FAMILY_LATENT_PROXY,
     same_search_artifacts,
 )
 from .search_artifact_policy import same_search_artifact_build_policy
@@ -339,6 +342,13 @@ def write_loaded_search_artifact(
         save_stored_gem_graph_index(
             segment_root / artifact.manifest.root,
             loaded_search_artifact_stored_gem_graph_index(artifact),
+        )
+        return
+
+    if artifact.manifest.family == SEARCH_ARTIFACT_FAMILY_LATENT_PROXY:
+        save_stored_latent_proxy_index(
+            segment_root / artifact.manifest.root,
+            loaded_search_artifact_stored_latent_proxy_index(artifact),
         )
         return
 

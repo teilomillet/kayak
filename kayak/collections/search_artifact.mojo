@@ -9,6 +9,7 @@ comptime SEARCH_ARTIFACT_FAMILY_DOCUMENT_FILTER_INDEX = "document_filter_index"
 comptime SEARCH_ARTIFACT_FAMILY_DOCUMENT_METADATA = "document_metadata"
 comptime SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY = "document_proxy"
 comptime SEARCH_ARTIFACT_FAMILY_GEM_GRAPH = "gem_graph"
+comptime SEARCH_ARTIFACT_FAMILY_LATENT_PROXY = "latent_proxy"
 
 
 struct SearchArtifactManifest(Copyable):
@@ -30,6 +31,10 @@ def centroid_postings_search_artifact(root: String) raises -> SearchArtifactMani
 
 def document_proxy_search_artifact(root: String) raises -> SearchArtifactManifest:
     return SearchArtifactManifest(SEARCH_ARTIFACT_FAMILY_DOCUMENT_PROXY, root)
+
+
+def latent_proxy_search_artifact(root: String) raises -> SearchArtifactManifest:
+    return SearchArtifactManifest(SEARCH_ARTIFACT_FAMILY_LATENT_PROXY, root)
 
 
 def document_filter_index_search_artifact(

@@ -31,5 +31,18 @@ from .hybrid_flat_dim128 import (
     HybridFlatDim128Index,
     build_hybrid_flat_dim128_index,
 )
+from .latent_proxy import (
+    LATENT_PROXY_ACTIVATION_GELU,
+    LATENT_PROXY_ACTIVATION_MISH,
+    LATENT_PROXY_ACTIVATION_RELU,
+    LATENT_PROXY_ACTIVATION_SILU,
+    LATENT_PROXY_BLOCK_ORDER_LINEAR_ACTIVATION_NORM,
+    LATENT_PROXY_BLOCK_ORDER_LINEAR_NORM_ACTIVATION,
+    LatentProxyIndex,
+    LatentQueryProjection,
+    LatentQueryProjectionBlock,
+    build_query_latent_proxy_vector,
+    score_query_against_latent_proxy,
+)
 from .packed_index import PackedIndex
 from .unpack import unpack_documents

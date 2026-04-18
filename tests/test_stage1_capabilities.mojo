@@ -93,6 +93,23 @@ def test_candidate_generator_carries_stage1_contract_metadata() raises:
     assert_equal(generator.requires_artifact_family("gem_graph"), False)
 
 
+def test_latent_proxy_candidate_generator_keeps_proxy_contract_shape() raises:
+    var generator = CandidateGenerator("latent_proxy")
+
+    assert_equal(generator.family, "proxy")
+    assert_equal(generator.interaction_semantics, "none")
+    assert_equal(generator.alignment_granularity, "document")
+    assert_equal(generator.score_kind, "proxy_score")
+    assert_equal(generator.artifact_family, "latent_proxy")
+    assert_equal(generator.required_search_artifact_families[0], "latent_proxy")
+    assert_equal(generator.is_exact, False)
+    assert_equal(generator.requires_artifact_family("latent_proxy"), True)
+    assert_equal(
+        stage1_requires_search_artifact_family("latent_proxy", "latent_proxy"),
+        True,
+    )
+
+
 def test_stage1_build_policy_support_check_is_requirement_driven() raises:
     var proxy_policy = SearchArtifactBuildPolicy(
         [SearchArtifactBuildSpec("document_proxy", "proxy_sidecar")]
