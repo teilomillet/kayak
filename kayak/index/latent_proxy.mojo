@@ -1,5 +1,5 @@
 from std.collections import List
-from std.math import exp, log, sqrt, tanh
+from std.math import erf, exp, log, sqrt, tanh
 
 from kayak.contracts import EncodedQuery
 from kayak.numeric import VectorScalar, zero_vector_scalar
@@ -183,10 +183,9 @@ struct LatentProxyIndex(Copyable):
 
 def latent_proxy_gelu(value: VectorScalar) -> VectorScalar:
     var x = Float64(value)
-    var scaled = sqrt(Float64(2.0 / 3.141592653589793)) * (
-        x + Float64(0.044715) * x * x * x
+    return VectorScalar(
+        Float64(0.5) * x * (Float64(1.0) + erf(x / sqrt(Float64(2.0))))
     )
-    return VectorScalar(Float64(0.5) * x * (Float64(1.0) + tanh(scaled)))
 
 
 def latent_proxy_mish(value: VectorScalar) -> VectorScalar:
