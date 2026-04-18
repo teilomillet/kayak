@@ -4,11 +4,12 @@ from std.collections import List
 from std.pathlib import Path
 
 from kayak.collections import (
+    DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_FIRST,
     DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_HIERARCHICAL,
     DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX,
     apply_document_representation_transforms_to_documents,
+    budgeted_token_pooling_document_representation_transform,
     prefix_pruning_document_representation_transform,
-    token_pooling_document_representation_transform,
 )
 from kayak.index import pack_documents
 from kayak.runtime import ExactCpuBackend
@@ -34,6 +35,10 @@ comptime TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING = "token_poolin
 comptime TRAINING_FREE_SEQUENCE_COMPRESSION_SEARCH_MIN_SECONDS = 0.05
 comptime TRAINING_FREE_SEQUENCE_COMPRESSION_SEARCH_MAX_SECONDS = 0.25
 comptime TRAINING_FREE_SEQUENCE_COMPRESSION_SEARCH_MAX_ITERS = 200
+comptime TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_COUNT = 1
+comptime TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_POSITION = (
+    DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_FIRST
+)
 
 
 struct TrainingFreeSequenceCompressionSummary(Copyable):
@@ -46,7 +51,9 @@ struct TrainingFreeSequenceCompressionSummary(Copyable):
     var method_kind: String
     var transform_policy: String
     var requested_document_vector_budget: Int
-    var pool_factor: Int
+    var derived_pool_factor: Int
+    var protected_token_count: Int
+    var protected_token_position: String
     var query_count: Int
     var document_count: Int
     var full_vector_count: Int
@@ -73,7 +80,9 @@ struct TrainingFreeSequenceCompressionSummary(Copyable):
         var method_kind: String,
         var transform_policy: String,
         requested_document_vector_budget: Int,
-        pool_factor: Int,
+        derived_pool_factor: Int,
+        protected_token_count: Int,
+        var protected_token_position: String,
         query_count: Int,
         document_count: Int,
         full_vector_count: Int,
@@ -98,7 +107,9 @@ struct TrainingFreeSequenceCompressionSummary(Copyable):
         self.method_kind = method_kind^
         self.transform_policy = transform_policy^
         self.requested_document_vector_budget = requested_document_vector_budget
-        self.pool_factor = pool_factor
+        self.derived_pool_factor = derived_pool_factor
+        self.protected_token_count = protected_token_count
+        self.protected_token_position = protected_token_position^
         self.query_count = query_count
         self.document_count = document_count
         self.full_vector_count = full_vector_count
@@ -168,10 +179,6 @@ def build_transformed_stored_index_for_sequence_compression(
         )
 
     if method_kind == TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING:
-        var pool_factor = pool_factor_for_target_document_vector_budget(
-            stored_task.task.nominal_document_vector_count,
-            requested_document_vector_budget,
-        )
         return StoredPackedIndex(
             stored_task.dataset_id.copy(),
             stored_task.model_name.copy(),
@@ -180,8 +187,11 @@ def build_transformed_stored_index_for_sequence_compression(
                 apply_document_representation_transforms_to_documents(
                     stored_task.task.documents,
                     [
-                        token_pooling_document_representation_transform(
-                            pool_factor, transform_policy
+                        budgeted_token_pooling_document_representation_transform(
+                            requested_document_vector_budget,
+                            transform_policy,
+                            TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_COUNT,
+                            TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_POSITION,
                         )
                     ],
                 )
@@ -247,12 +257,20 @@ def build_training_free_sequence_compression_summary(
     )
 
     var summary_budget = requested_document_vector_budget
-    var summary_pool_factor = 0
+    var summary_derived_pool_factor = 0
+    var summary_protected_token_count = 0
+    var summary_protected_token_position = String()
     if method_kind == TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_FULL_EXACT:
         summary_budget = task.nominal_document_vector_count
     if method_kind == TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING:
-        summary_pool_factor = pool_factor_for_target_document_vector_budget(
+        summary_derived_pool_factor = pool_factor_for_target_document_vector_budget(
             task.nominal_document_vector_count, requested_document_vector_budget
+        )
+        summary_protected_token_count = (
+            TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_COUNT
+        )
+        summary_protected_token_position = (
+            TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_POSITION
         )
 
     return TrainingFreeSequenceCompressionSummary(
@@ -265,7 +283,9 @@ def build_training_free_sequence_compression_summary(
         method_kind.copy(),
         transform_policy.copy(),
         summary_budget,
-        summary_pool_factor,
+        summary_derived_pool_factor,
+        summary_protected_token_count,
+        summary_protected_token_position,
         len(task.queries),
         len(task.documents),
         full_index.index.total_vector_count,
@@ -298,7 +318,12 @@ def append_training_free_sequence_compression_summary_json(
     buffer += "\"transform_policy\":\"" + json_escape(summary.transform_policy) + "\","
     buffer += "\"requested_document_vector_budget\":"
     buffer += String(summary.requested_document_vector_budget) + ","
-    buffer += "\"pool_factor\":" + String(summary.pool_factor) + ","
+    buffer += "\"derived_pool_factor\":"
+    buffer += String(summary.derived_pool_factor) + ","
+    buffer += "\"protected_token_count\":"
+    buffer += String(summary.protected_token_count) + ","
+    buffer += "\"protected_token_position\":\""
+    buffer += json_escape(summary.protected_token_position) + "\","
     buffer += "\"query_count\":" + String(summary.query_count) + ","
     buffer += "\"document_count\":" + String(summary.document_count) + ","
     buffer += "\"full_vector_count\":" + String(summary.full_vector_count) + ","

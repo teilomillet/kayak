@@ -1,6 +1,10 @@
 from std.collections import List
 
-from .validation import require_non_empty_string, require_positive_int
+from .validation import (
+    require_non_empty_string,
+    require_non_negative_int,
+    require_positive_int,
+)
 
 
 comptime DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_DOCUMENT_VECTOR_BUDGET = (
@@ -8,6 +12,12 @@ comptime DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_DOCUMENT_VECTOR_BUDGET = (
 )
 comptime DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POOL_FACTOR = "pool_factor"
 comptime DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POLICY = "policy"
+comptime DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_PROTECTED_TOKEN_COUNT = (
+    "protected_token_count"
+)
+comptime DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_PROTECTED_TOKEN_POSITION = (
+    "protected_token_position"
+)
 
 comptime DOCUMENT_REPRESENTATION_TRANSFORM_KIND_PREFIX_PRUNING = "prefix_pruning"
 comptime DOCUMENT_REPRESENTATION_TRANSFORM_KIND_TOKEN_POOLING = "token_pooling"
@@ -15,6 +25,11 @@ comptime DOCUMENT_REPRESENTATION_TRANSFORM_KIND_TOKEN_POOLING = "token_pooling"
 comptime DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_HIERARCHICAL = "hierarchical"
 comptime DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX = "prefix"
 comptime DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_SEQUENTIAL = "sequential"
+
+comptime DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_FIRST = (
+    "first"
+)
+comptime DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_LAST = "last"
 
 
 struct DocumentRepresentationTransformConfigEntry(Copyable):
@@ -134,6 +149,27 @@ def document_representation_transforms_have_kind(
     return False
 
 
+def require_document_representation_transform_protected_token_position_supported(
+    value: String
+) raises -> String:
+    var position = require_non_empty_string(
+        value,
+        "document representation transform protected_token_position",
+    )
+    if (
+        position
+        != DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_FIRST
+        and position
+        != DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_LAST
+    ):
+        raise Error(
+            "unsupported document representation transform protected_token_position: "
+            + position
+        )
+
+    return position^
+
+
 def prefix_pruning_document_representation_transform(
     document_vector_budget: Int,
     policy: String = DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX,
@@ -178,6 +214,50 @@ def token_pooling_document_representation_transform(
                 DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POLICY,
                 require_non_empty_string(
                     policy, "document representation transform policy"
+                ),
+            ),
+        ],
+    )
+
+
+def budgeted_token_pooling_document_representation_transform(
+    document_vector_budget: Int,
+    policy: String = DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_HIERARCHICAL,
+    protected_token_count: Int = 0,
+    protected_token_position: String = (
+        DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_FIRST
+    ),
+) raises -> DocumentRepresentationTransformManifest:
+    _ = require_positive_int(
+        document_vector_budget,
+        "document representation transform document_vector_budget",
+    )
+    _ = require_non_negative_int(
+        protected_token_count,
+        "document representation transform protected_token_count",
+    )
+
+    return DocumentRepresentationTransformManifest(
+        DOCUMENT_REPRESENTATION_TRANSFORM_KIND_TOKEN_POOLING,
+        [
+            DocumentRepresentationTransformConfigEntry(
+                DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_DOCUMENT_VECTOR_BUDGET,
+                String(document_vector_budget),
+            ),
+            DocumentRepresentationTransformConfigEntry(
+                DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POLICY,
+                require_non_empty_string(
+                    policy, "document representation transform policy"
+                ),
+            ),
+            DocumentRepresentationTransformConfigEntry(
+                DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_PROTECTED_TOKEN_COUNT,
+                String(protected_token_count),
+            ),
+            DocumentRepresentationTransformConfigEntry(
+                DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_PROTECTED_TOKEN_POSITION,
+                require_document_representation_transform_protected_token_position_supported(
+                    protected_token_position
                 ),
             ),
         ],

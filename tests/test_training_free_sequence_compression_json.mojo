@@ -110,11 +110,15 @@ def test_training_free_sequence_compression_summary_json_contains_method_fields(
     assert_equal(baseline_summary.method_kind, "full_exact")
     assert_equal(baseline_summary.mean_reference_recall_at_k, 1.0)
     assert_equal(pruning_summary.transformed_vector_count < pruning_summary.full_vector_count, True)
-    assert_equal(pooling_summary.pool_factor, 2)
+    assert_equal(pooling_summary.derived_pool_factor, 2)
+    assert_equal(pooling_summary.protected_token_count, 1)
+    assert_equal(pooling_summary.protected_token_position, "first")
     assert_equal(json.find("\"method_kind\":\"token_pooling\"") != -1, True)
     assert_equal(json.find("\"transform_policy\":\"hierarchical\"") != -1, True)
     assert_equal(json.find("\"requested_document_vector_budget\":2") != -1, True)
-    assert_equal(json.find("\"pool_factor\":2") != -1, True)
+    assert_equal(json.find("\"derived_pool_factor\":2") != -1, True)
+    assert_equal(json.find("\"protected_token_count\":1") != -1, True)
+    assert_equal(json.find("\"protected_token_position\":\"first\"") != -1, True)
 
 
 def main() raises:

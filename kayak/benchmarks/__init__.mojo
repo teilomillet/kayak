@@ -134,10 +134,10 @@ from .training_free_sequence_compression_json import (
     TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING,
     TrainingFreeSequenceCompressionSummary,
     build_training_free_sequence_compression_summary,
-    pool_factor_for_target_document_vector_budget,
     standard_training_free_sequence_compression_budget_sizes,
     training_free_sequence_compression_summaries_json,
     training_free_sequence_compression_summary_json,
+    pool_factor_for_target_document_vector_budget,
 )
 from .vector_pruning_json import (
     VectorPruningSummary,
@@ -151,6 +151,12 @@ from .token_pooling_json import (
     build_token_pooling_summary,
     token_pooling_summaries_json,
     token_pooling_summary_json,
+)
+from .late_interaction_pooling_json import (
+    LateInteractionPoolingSummary,
+    build_late_interaction_pooling_summary,
+    late_interaction_pooling_summaries_json,
+    late_interaction_pooling_summary_json,
 )
 from .token_pooling_common import (
     standard_token_pooling_factors,

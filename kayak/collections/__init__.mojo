@@ -70,6 +70,8 @@ from .document_filter_runtime import (
     document_filter_allowlist_for_expression,
 )
 from .document_representation_transform import (
+    DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_PROTECTED_TOKEN_COUNT,
+    DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_PROTECTED_TOKEN_POSITION,
     DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_DOCUMENT_VECTOR_BUDGET,
     DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POLICY,
     DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POOL_FACTOR,
@@ -78,27 +80,36 @@ from .document_representation_transform import (
     DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_HIERARCHICAL,
     DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX,
     DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_SEQUENTIAL,
+    DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_FIRST,
+    DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_LAST,
     DocumentRepresentationTransformConfigEntry,
     DocumentRepresentationTransformManifest,
+    budgeted_token_pooling_document_representation_transform,
     copy_document_representation_transform_config_entries,
     copy_document_representation_transforms,
     document_representation_transform_config_value,
     document_representation_transforms_have_kind,
     prefix_pruning_document_representation_transform,
+    require_document_representation_transform_protected_token_position_supported,
     same_document_representation_transform_config_entries,
     same_document_representation_transforms,
     token_pooling_document_representation_transform,
 )
 from .document_representation_transform_runtime import (
-    TokenPoolCluster,
     apply_document_representation_transform_to_document,
     apply_document_representation_transforms_to_document,
     apply_document_representation_transforms_to_documents,
     apply_document_representation_transforms_to_packed_index,
-    hierarchical_token_pool_document,
-    merge_token_pool_clusters,
     prefix_prune_document,
+)
+from .token_pooling_runtime import (
+    TokenPoolCluster,
+    hierarchical_token_pool_document,
+    hierarchical_token_pool_document_to_target,
+    merge_token_pool_clusters,
+    resolved_token_pooling_protected_token_count,
     sequential_token_pool_document,
+    sequential_token_pool_document_to_target,
     target_pooled_vector_count,
     ward_merge_cost,
 )

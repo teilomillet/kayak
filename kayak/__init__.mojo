@@ -364,10 +364,17 @@ from .service import (
 )
 from .scoring import ExactScoringConfig
 from .scoring import (
+    LATE_INTERACTION_POOLING_KIND_MAXSIM,
+    LATE_INTERACTION_POOLING_KIND_TOPK_MEAN,
     exact_score_for_hybrid_flat_document_dim128,
     exact_score_for_hybrid_flat_document_dim128_with_flat_query,
+    exact_scores_for_index,
+    exact_scores_for_index_with_config,
     exact_scores_for_hybrid_flat_index_dim128,
     exact_scores_for_hybrid_flat_index_dim128_with_flat_query,
+    require_late_interaction_pooling_kind_supported,
+    topk_mean_score_for_document,
+    topk_mean_scores_for_index,
 )
 from .search import (
     SearchHit,
@@ -530,7 +537,10 @@ from .collections import (
     sealed_segment_centroid_postings_root,
     sealed_segment_document_proxy_root,
     sealed_segment_has_centroid_heads_index,
+    sealed_segment_has_document_representation_transform_kind,
+    sealed_segment_has_document_representation_transforms,
     sealed_segment_has_search_artifact,
+    sealed_segment_has_text_corpus,
     sealed_segment_search_artifact_root,
     save_collection_manifest,
     save_sealed_segment_manifest,
@@ -545,10 +555,15 @@ from .collections import (
     gem_graph_build_spec,
     snapshot_export_bundle_manifest_exists,
     stored_document_filter_index_exists,
+    sequential_token_pool_document_to_target,
     sequential_token_pool_document,
+    resolved_token_pooling_protected_token_count,
     target_pooled_vector_count,
     token_pooling_document_representation_transform,
+    hierarchical_token_pool_document_to_target,
     TokenPoolCluster,
+    DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_PROTECTED_TOKEN_COUNT,
+    DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_PROTECTED_TOKEN_POSITION,
     DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_DOCUMENT_VECTOR_BUDGET,
     DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POLICY,
     DOCUMENT_REPRESENTATION_TRANSFORM_CONFIG_POOL_FACTOR,
@@ -557,6 +572,9 @@ from .collections import (
     DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_HIERARCHICAL,
     DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX,
     DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_SEQUENTIAL,
+    DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_FIRST,
+    DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_LAST,
+    budgeted_token_pooling_document_representation_transform,
     ward_merge_cost,
 )
 from .storage import (
