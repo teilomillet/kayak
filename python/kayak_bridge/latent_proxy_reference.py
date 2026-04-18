@@ -12,6 +12,7 @@ This module does not own:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,52 @@ from .latent_proxy_artifact import (
     LatentProxyArtifact,
     LatentProxyProjectionBlock,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedLatentProxyReferenceModel:
+    """One loaded latent-proxy artifact exposed through the LEMUR-like scorer API."""
+
+    doc_ids: tuple[str, ...]
+    vector_dim: int
+    latent_dim: int
+    activation: str
+    query_divisor: float
+    apply_layer_norm: bool
+    landmark_count: int
+    model_type: str
+    device: str
+    artifact: LatentProxyArtifact
+
+    def __post_init__(self) -> None:
+        if self.vector_dim <= 0:
+            raise ValueError("vector_dim must be positive")
+        if self.latent_dim <= 0:
+            raise ValueError("latent_dim must be positive")
+        if self.query_divisor <= 0.0:
+            raise ValueError("query_divisor must be positive")
+        if len(self.doc_ids) <= 0:
+            raise ValueError("doc_ids must not be empty")
+
+    def compute_query_features(self, query: "LateQuery") -> np.ndarray:
+        return compute_query_latent_proxy_features(
+            query,
+            self.artifact,
+            device=self.device,
+        )
+
+    def similarity_scores(
+        self,
+        query: "LateQuery",
+        *,
+        backend: str | None = None,
+    ) -> LateScores:
+        return latent_proxy_similarity_scores(
+            query,
+            self.artifact,
+            device=self.device,
+            backend=backend,
+        )
 
 
 def _read_manifest(root: Path) -> dict[str, str]:
@@ -66,6 +113,13 @@ def _parse_layer_norm_affine(value: str) -> bool:
     if value == "0":
         return False
     raise ValueError("latent proxy layer_norm_affine must be encoded as 0 or 1")
+
+
+def _activation_label(blocks: tuple[LatentProxyProjectionBlock, ...]) -> str:
+    activations = {block.activation_kind for block in blocks}
+    if len(activations) == 1:
+        return next(iter(activations))
+    return "mixed"
 
 
 def load_latent_proxy_artifact(root: str | Path) -> LatentProxyArtifact:
@@ -152,6 +206,26 @@ def load_latent_proxy_artifact(root: str | Path) -> LatentProxyArtifact:
         doc_ids=doc_ids,
         proxy_vectors=proxy_vectors,
         blocks=tuple(blocks),
+    )
+
+
+def load_latent_proxy_reference_model(
+    root: str | Path,
+    *,
+    device: str = "cpu",
+) -> LoadedLatentProxyReferenceModel:
+    artifact = load_latent_proxy_artifact(root)
+    return LoadedLatentProxyReferenceModel(
+        doc_ids=artifact.doc_ids,
+        vector_dim=artifact.input_vector_dim,
+        latent_dim=int(artifact.proxy_vectors.shape[1]),
+        activation=_activation_label(artifact.blocks),
+        query_divisor=artifact.query_divisor,
+        apply_layer_norm=True,
+        landmark_count=0,
+        model_type="latent_proxy_artifact",
+        device=device,
+        artifact=artifact,
     )
 
 
