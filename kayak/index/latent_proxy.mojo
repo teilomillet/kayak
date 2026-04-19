@@ -223,12 +223,10 @@ def linear_block_output(
         raise Error("latent proxy linear block input dimension mismatch")
     var output = List[VectorScalar]()
     for row_index in range(block.output_dim):
-        var total = zero_vector_scalar()
-        for dim_index in range(block.input_dim):
-            total += (
-                block.linear_rows[row_index][dim_index] * input_vector[dim_index]
-            )
-        output.append(total + block.linear_bias[row_index])
+        output.append(
+            VectorScalar(dot_product(block.linear_rows[row_index], input_vector))
+            + block.linear_bias[row_index]
+        )
     return output^
 
 
@@ -282,7 +280,106 @@ def projected_query_token_for_block(
     return layer_normalized_output(projected, block)
 
 
-def build_query_latent_proxy_vector(
+def build_query_latent_proxy_vector_single_block(
+    read query: EncodedQuery,
+    read projection: LatentQueryProjection,
+) raises -> List[VectorScalar]:
+    if query.vector_dim != projection.input_vector_dim:
+        raise Error(
+            "latent query projection input_vector_dim does not match query vector_dim"
+        )
+    if len(projection.blocks) == 0:
+        raise Error("latent query projection requires at least one block")
+    if len(projection.blocks) != 1:
+        raise Error("single-block latent query projection requires exactly one block")
+    var block = projection.blocks[0].copy()
+    var pooled = List[VectorScalar]()
+    for _ in range(projection.output_vector_dim):
+        pooled.append(zero_vector_scalar())
+    var projected = List[VectorScalar]()
+    for _ in range(projection.output_vector_dim):
+        projected.append(zero_vector_scalar())
+
+    for token_vector in query.token_vectors:
+        for row_index in range(block.output_dim):
+            projected[row_index] = (
+                VectorScalar(
+                    dot_product(
+                        block.linear_rows[row_index],
+                        token_vector,
+                    )
+                )
+                + block.linear_bias[row_index]
+            )
+
+        if block.order_kind == LATENT_PROXY_BLOCK_ORDER_LINEAR_NORM_ACTIVATION:
+            var mean = Float64(0.0)
+            for value in projected:
+                mean += Float64(value)
+            mean = mean / Float64(len(projected))
+
+            var variance = Float64(0.0)
+            for value in projected:
+                var centered = Float64(value) - mean
+                variance += centered * centered
+            variance = variance / Float64(len(projected))
+            var denom = sqrt(variance + Float64(block.layer_norm_epsilon))
+
+            for dim_index in range(block.output_dim):
+                var value = VectorScalar(
+                    (Float64(projected[dim_index]) - mean) / denom
+                )
+                if block.layer_norm_affine:
+                    value = (
+                        value * block.layer_norm_weight[dim_index]
+                        + block.layer_norm_bias[dim_index]
+                    )
+                value = apply_latent_proxy_activation(
+                    value,
+                    block.activation_kind,
+                )
+                pooled[dim_index] += (
+                    value * block.activation_output_scale
+                )
+            continue
+
+        for dim_index in range(block.output_dim):
+            projected[dim_index] = (
+                apply_latent_proxy_activation(
+                    projected[dim_index],
+                    block.activation_kind,
+                )
+                * block.activation_output_scale
+            )
+
+        var mean = Float64(0.0)
+        for value in projected:
+            mean += Float64(value)
+        mean = mean / Float64(len(projected))
+
+        var variance = Float64(0.0)
+        for value in projected:
+            var centered = Float64(value) - mean
+            variance += centered * centered
+        variance = variance / Float64(len(projected))
+        var denom = sqrt(variance + Float64(block.layer_norm_epsilon))
+
+        for dim_index in range(block.output_dim):
+            var value = VectorScalar(
+                (Float64(projected[dim_index]) - mean) / denom
+            )
+            if block.layer_norm_affine:
+                value = (
+                    value * block.layer_norm_weight[dim_index]
+                    + block.layer_norm_bias[dim_index]
+                )
+            pooled[dim_index] += value
+    for dim_index in range(projection.output_vector_dim):
+        pooled[dim_index] = pooled[dim_index] / projection.query_divisor
+    return pooled^
+
+
+def build_query_latent_proxy_vector_multi_block(
     read query: EncodedQuery,
     read projection: LatentQueryProjection,
 ) raises -> List[VectorScalar]:
@@ -304,6 +401,13 @@ def build_query_latent_proxy_vector(
     for dim_index in range(projection.output_vector_dim):
         pooled[dim_index] = pooled[dim_index] / projection.query_divisor
     return pooled^
+
+
+def build_query_latent_proxy_vector(
+    read query: EncodedQuery,
+    read projection: LatentQueryProjection,
+) raises -> List[VectorScalar]:
+    return build_query_latent_proxy_vector_multi_block(query, projection)
 
 
 def score_query_against_latent_proxy(

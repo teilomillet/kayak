@@ -158,6 +158,11 @@ from .late_interaction_pooling_json import (
     late_interaction_pooling_summaries_json,
     late_interaction_pooling_summary_json,
 )
+from .latent_proxy_projection_profile import (
+    LatentProxyProjectionProfileSummary,
+    build_latent_proxy_projection_profile_summary,
+    latent_proxy_projection_profile_summary_json,
+)
 from .token_pooling_common import (
     standard_token_pooling_factors,
     supported_token_pooling_policies,
@@ -180,6 +185,12 @@ from .json_report import (
     build_real_slice_benchmark_summary,
     real_slice_benchmark_summary_json,
     real_slice_benchmark_summaries_json,
+)
+from .native_latent_proxy_task import (
+    NativeLatentProxyCollectionSummary,
+    build_materialized_collection_search_summary,
+    materialize_native_latent_proxy_task_collection,
+    native_latent_proxy_collection_summary_json,
 )
 from .stage_aware_json import (
     StageDensitySummary,

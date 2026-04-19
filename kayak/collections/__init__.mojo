@@ -144,6 +144,10 @@ from .publish import (
 )
 from .ids import CollectionId, NamespaceId, SegmentId, SnapshotId, TenantId
 from .mirror import ensure_one_segment_collection_mirror
+from .mirror_latent_proxy import (
+    ensure_one_segment_collection_mirror_with_latent_proxy,
+    require_latent_proxy_matches_packed_index,
+)
 from .report import (
     CollectionStorageReport,
     build_collection_storage_report,

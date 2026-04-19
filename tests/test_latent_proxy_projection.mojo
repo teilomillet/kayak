@@ -9,6 +9,7 @@ from kayak.index import (
     LatentQueryProjectionBlock,
     build_query_latent_proxy_vector,
 )
+from kayak.index.latent_proxy import build_query_latent_proxy_vector_multi_block
 
 
 def test_latent_proxy_gelu_matches_exact_erf_formulation() raises:
@@ -42,6 +43,46 @@ def test_latent_proxy_gelu_matches_exact_erf_formulation() raises:
     var denom = sqrt(variance + Float64(0.00001))
     var expected = (gelu - mean) / denom
     assert_equal(abs(Float64(projected[0]) - expected) < 0.0000001, True)
+
+
+def test_single_block_fast_path_matches_generic_multi_block_path() raises:
+    var projection = LatentQueryProjection(
+        2,
+        3,
+        4.0,
+        [
+            LatentQueryProjectionBlock(
+                LATENT_PROXY_BLOCK_ORDER_LINEAR_ACTIVATION_NORM,
+                LATENT_PROXY_ACTIVATION_GELU,
+                2,
+                3,
+                [[1.0, 0.5], [0.0, 1.0], [0.25, -0.25]],
+                [0.0, 0.25, -0.5],
+                1.0,
+                True,
+                0.00001,
+                [1.0, 0.75, 1.25],
+                [0.0, 0.125, -0.25],
+            )
+        ],
+    )
+    var query = EncodedQuery(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [0.5, 0.5],
+            [0.25, -0.75],
+        ]
+    )
+    var optimized = build_query_latent_proxy_vector(query, projection)
+    var generic = build_query_latent_proxy_vector_multi_block(query, projection)
+
+    assert_equal(len(optimized), len(generic))
+    for index in range(len(optimized)):
+        assert_equal(
+            abs(Float64(optimized[index]) - Float64(generic[index])) < 0.0000001,
+            True,
+        )
 
 
 def main() raises:

@@ -5,6 +5,14 @@ from std.pathlib import Path
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 
+from kayak.benchmarks import (
+    build_materialized_collection_search_summary,
+    build_latent_proxy_projection_profile_summary,
+    faithfulness_frontier_summary_json,
+    latent_proxy_projection_profile_summary_json,
+    materialize_native_latent_proxy_task_collection,
+    native_latent_proxy_collection_summary_json,
+)
 from kayak.collections import (
     COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     CollectionReclaimPlan,
@@ -1233,6 +1241,60 @@ def service_metrics_json(py_service_root: PythonObject) raises -> PythonObject:
     )
 
 
+def materialize_latent_proxy_collection_json_bridge(
+    py_request: PythonObject
+) raises -> PythonObject:
+    return python_string(
+        native_latent_proxy_collection_summary_json(
+            materialize_native_latent_proxy_task_collection(
+                String(py=py_request["dataset_id"]),
+                String(py=py_request["model_name"]),
+                String(py=py_request["task_path"]),
+                Path(String(py=py_request["artifact_root"])),
+                Path(String(py=py_request["collection_root"])),
+                CollectionId(String(py=py_request["collection_id"])),
+                TenantId(String(py=py_request["tenant_id"])),
+                NamespaceId(String(py=py_request["namespace_id"])),
+                SnapshotId(String(py=py_request["snapshot_id"])),
+                Bool(py=py_request["load_text_corpus"]),
+            )
+        )
+    )
+
+
+def benchmark_materialized_collection_search_json_bridge(
+    py_request: PythonObject
+) raises -> PythonObject:
+    return python_string(
+        faithfulness_frontier_summary_json(
+            build_materialized_collection_search_summary(
+                String(py=py_request["dataset_id"]),
+                String(py=py_request["model_name"]),
+                String(py=py_request["task_path"]),
+                Path(String(py=py_request["collection_root"])),
+                SnapshotId(String(py=py_request["snapshot_id"])),
+                String(py=py_request["candidate_generator_kind"]),
+                Int(py=py_request["candidate_k"]),
+            )
+        )
+    )
+
+
+def benchmark_latent_proxy_projection_profile_json_bridge(
+    py_request: PythonObject
+) raises -> PythonObject:
+    return python_string(
+        latent_proxy_projection_profile_summary_json(
+            build_latent_proxy_projection_profile_summary(
+                String(py=py_request["dataset_id"]),
+                String(py=py_request["model_name"]),
+                String(py=py_request["task_path"]),
+                String(py=py_request["artifact_root"]),
+            )
+        )
+    )
+
+
 def create_collection_json_bridge(
     py_service_root: PythonObject, py_request: PythonObject
 ) raises -> PythonObject:
@@ -1632,6 +1694,18 @@ def PyInit__mojo_service_bindings() -> PythonObject:
         module.def_function[service_metrics_json](
             "service_metrics_json",
             docstring="Build the hosted service metrics payload as JSON.",
+        )
+        module.def_function[materialize_latent_proxy_collection_json_bridge](
+            "materialize_latent_proxy_collection_json",
+            docstring="Materialize one packed-index plus latent-proxy collection mirror and return a JSON summary.",
+        )
+        module.def_function[benchmark_materialized_collection_search_json_bridge](
+            "benchmark_materialized_collection_search_json",
+            docstring="Benchmark one explicit candidate-generator plan on a materialized collection and return a JSON summary.",
+        )
+        module.def_function[benchmark_latent_proxy_projection_profile_json_bridge](
+            "benchmark_latent_proxy_projection_profile_json",
+            docstring="Benchmark latent-proxy projection and scan microkernels and return a JSON summary.",
         )
         return module.finalize()
     except e:
