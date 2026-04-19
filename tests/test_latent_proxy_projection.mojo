@@ -9,7 +9,12 @@ from kayak.index import (
     LatentQueryProjectionBlock,
     build_query_latent_proxy_vector,
 )
-from kayak.index.latent_proxy import build_query_latent_proxy_vector_multi_block
+from kayak.index.latent_proxy import (
+    MutableLatentQueryProjectionScratch,
+    build_query_latent_proxy_vector_multi_block,
+    build_query_latent_proxy_vector_multi_block_reference,
+    build_query_latent_proxy_vector_multi_block_with_scratch,
+)
 
 
 def test_latent_proxy_gelu_matches_exact_erf_formulation() raises:
@@ -81,6 +86,72 @@ def test_single_block_fast_path_matches_generic_multi_block_path() raises:
     for index in range(len(optimized)):
         assert_equal(
             abs(Float64(optimized[index]) - Float64(generic[index])) < 0.0000001,
+            True,
+        )
+
+
+def test_multi_block_scratch_path_matches_reference_multi_block_path() raises:
+    var projection = LatentQueryProjection(
+        2,
+        2,
+        3.0,
+        [
+            LatentQueryProjectionBlock(
+                LATENT_PROXY_BLOCK_ORDER_LINEAR_ACTIVATION_NORM,
+                LATENT_PROXY_ACTIVATION_GELU,
+                2,
+                3,
+                [[1.0, 0.5], [0.0, 1.0], [0.25, -0.25]],
+                [0.0, 0.25, -0.5],
+                1.0,
+                True,
+                0.00001,
+                [1.0, 0.75, 1.25],
+                [0.0, 0.125, -0.25],
+            ),
+            LatentQueryProjectionBlock(
+                LATENT_PROXY_BLOCK_ORDER_LINEAR_ACTIVATION_NORM,
+                LATENT_PROXY_ACTIVATION_GELU,
+                3,
+                2,
+                [[0.5, -0.25, 1.0], [1.0, 0.25, -0.5]],
+                [0.1, -0.2],
+                1.0,
+                True,
+                0.00001,
+                [1.0, 0.9],
+                [0.0, 0.05],
+            ),
+        ],
+    )
+    var query = EncodedQuery(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [0.5, 0.5],
+            [0.25, -0.75],
+        ]
+    )
+    var scratch = MutableLatentQueryProjectionScratch()
+    var optimized = build_query_latent_proxy_vector_multi_block_with_scratch(
+        query,
+        projection,
+        scratch,
+    )
+    var reference = build_query_latent_proxy_vector_multi_block_reference(
+        query, projection
+    )
+    var selected = build_query_latent_proxy_vector_multi_block(query, projection)
+
+    assert_equal(len(optimized), len(reference))
+    assert_equal(len(selected), len(reference))
+    for index in range(len(reference)):
+        assert_equal(
+            abs(Float64(optimized[index]) - Float64(reference[index])) < 0.0000001,
+            True,
+        )
+        assert_equal(
+            abs(Float64(selected[index]) - Float64(reference[index])) < 0.0000001,
             True,
         )
 

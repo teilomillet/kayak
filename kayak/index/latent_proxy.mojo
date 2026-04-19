@@ -181,6 +181,32 @@ struct LatentProxyIndex(Copyable):
         self.document_count = len(self.doc_ids)
 
 
+struct MutableLatentQueryProjectionScratch:
+    var linear_values: List[VectorScalar]
+    var buffer_a: List[VectorScalar]
+    var buffer_b: List[VectorScalar]
+
+    def __init__(out self):
+        self.linear_values = List[VectorScalar]()
+        self.buffer_a = List[VectorScalar]()
+        self.buffer_b = List[VectorScalar]()
+
+    def ensure_projection(mut self, read projection: LatentQueryProjection):
+        var max_width = projection.input_vector_dim
+        for block in projection.blocks:
+            if block.input_dim > max_width:
+                max_width = block.input_dim
+            if block.output_dim > max_width:
+                max_width = block.output_dim
+
+        while len(self.linear_values) < max_width:
+            self.linear_values.append(zero_vector_scalar())
+        while len(self.buffer_a) < max_width:
+            self.buffer_a.append(zero_vector_scalar())
+        while len(self.buffer_b) < max_width:
+            self.buffer_b.append(zero_vector_scalar())
+
+
 def latent_proxy_gelu(value: VectorScalar) -> VectorScalar:
     var x = Float64(value)
     return VectorScalar(
@@ -230,6 +256,22 @@ def linear_block_output(
     return output^
 
 
+def linear_block_output_into(
+    read input_vector: List[VectorScalar],
+    read block: LatentQueryProjectionBlock,
+    mut output: List[VectorScalar],
+) raises:
+    if len(input_vector) < block.input_dim:
+        raise Error("latent proxy linear block input dimension mismatch")
+    if len(output) < block.output_dim:
+        raise Error("latent proxy linear block output buffer is too small")
+    for row_index in range(block.output_dim):
+        output[row_index] = (
+            VectorScalar(dot_product(block.linear_rows[row_index], input_vector))
+            + block.linear_bias[row_index]
+        )
+
+
 def layer_normalized_output(
     read values: List[VectorScalar],
     read block: LatentQueryProjectionBlock,
@@ -257,6 +299,34 @@ def layer_normalized_output(
     return normalized^
 
 
+def layer_normalized_output_into(
+    read values: List[VectorScalar],
+    read block: LatentQueryProjectionBlock,
+    mut output: List[VectorScalar],
+) raises:
+    if len(values) < block.output_dim:
+        raise Error("latent proxy layer norm dimension mismatch")
+    if len(output) < block.output_dim:
+        raise Error("latent proxy layer norm output buffer is too small")
+    var mean = Float64(0.0)
+    for index in range(block.output_dim):
+        mean += Float64(values[index])
+    mean = mean / Float64(block.output_dim)
+    var variance = Float64(0.0)
+    for index in range(block.output_dim):
+        var centered = Float64(values[index]) - mean
+        variance += centered * centered
+    variance = variance / Float64(block.output_dim)
+    var denom = sqrt(variance + Float64(block.layer_norm_epsilon))
+    for index in range(block.output_dim):
+        var value = VectorScalar((Float64(values[index]) - mean) / denom)
+        if block.layer_norm_affine:
+            value = (
+                value * block.layer_norm_weight[index] + block.layer_norm_bias[index]
+            )
+        output[index] = value
+
+
 def projected_query_token_for_block(
     read input_vector: List[VectorScalar],
     read block: LatentQueryProjectionBlock,
@@ -278,6 +348,33 @@ def projected_query_token_for_block(
         )
         projected[index] = projected[index] * block.activation_output_scale
     return layer_normalized_output(projected, block)
+
+
+def projected_query_token_for_block_into(
+    read input_vector: List[VectorScalar],
+    read block: LatentQueryProjectionBlock,
+    mut linear_values: List[VectorScalar],
+    mut output: List[VectorScalar],
+) raises:
+    linear_block_output_into(input_vector, block, linear_values)
+    if block.order_kind == LATENT_PROXY_BLOCK_ORDER_LINEAR_NORM_ACTIVATION:
+        layer_normalized_output_into(linear_values, block, output)
+        for index in range(block.output_dim):
+            output[index] = apply_latent_proxy_activation(
+                output[index], block.activation_kind
+            )
+            output[index] = output[index] * block.activation_output_scale
+        return
+
+    for index in range(block.output_dim):
+        linear_values[index] = apply_latent_proxy_activation(
+            linear_values[index],
+            block.activation_kind,
+        )
+        linear_values[index] = (
+            linear_values[index] * block.activation_output_scale
+        )
+    layer_normalized_output_into(linear_values, block, output)
 
 
 def build_query_latent_proxy_vector_single_block(
@@ -379,7 +476,7 @@ def build_query_latent_proxy_vector_single_block(
     return pooled^
 
 
-def build_query_latent_proxy_vector_multi_block(
+def build_query_latent_proxy_vector_multi_block_reference(
     read query: EncodedQuery,
     read projection: LatentQueryProjection,
 ) raises -> List[VectorScalar]:
@@ -401,6 +498,68 @@ def build_query_latent_proxy_vector_multi_block(
     for dim_index in range(projection.output_vector_dim):
         pooled[dim_index] = pooled[dim_index] / projection.query_divisor
     return pooled^
+
+
+def build_query_latent_proxy_vector_multi_block_with_scratch(
+    read query: EncodedQuery,
+    read projection: LatentQueryProjection,
+    mut scratch: MutableLatentQueryProjectionScratch,
+) raises -> List[VectorScalar]:
+    if query.vector_dim != projection.input_vector_dim:
+        raise Error(
+            "latent query projection input_vector_dim does not match query vector_dim"
+        )
+    if len(projection.blocks) == 0:
+        raise Error("latent query projection requires at least one block")
+    scratch.ensure_projection(projection)
+
+    var pooled = List[VectorScalar]()
+    for _ in range(projection.output_vector_dim):
+        pooled.append(zero_vector_scalar())
+
+    for token_vector in query.token_vectors:
+        projected_query_token_for_block_into(
+            token_vector,
+            projection.blocks[0],
+            scratch.linear_values,
+            scratch.buffer_a,
+        )
+        var final_in_buffer_a = True
+        for block_index in range(1, len(projection.blocks)):
+            if final_in_buffer_a:
+                projected_query_token_for_block_into(
+                    scratch.buffer_a,
+                    projection.blocks[block_index],
+                    scratch.linear_values,
+                    scratch.buffer_b,
+                )
+                final_in_buffer_a = False
+            else:
+                projected_query_token_for_block_into(
+                    scratch.buffer_b,
+                    projection.blocks[block_index],
+                    scratch.linear_values,
+                    scratch.buffer_a,
+                )
+                final_in_buffer_a = True
+        if final_in_buffer_a:
+            for dim_index in range(projection.output_vector_dim):
+                pooled[dim_index] += scratch.buffer_a[dim_index]
+        else:
+            for dim_index in range(projection.output_vector_dim):
+                pooled[dim_index] += scratch.buffer_b[dim_index]
+    for dim_index in range(projection.output_vector_dim):
+        pooled[dim_index] = pooled[dim_index] / projection.query_divisor
+    return pooled^
+
+
+def build_query_latent_proxy_vector_multi_block(
+    read query: EncodedQuery,
+    read projection: LatentQueryProjection,
+) raises -> List[VectorScalar]:
+    return build_query_latent_proxy_vector_multi_block_reference(
+        query, projection
+    )
 
 
 def build_query_latent_proxy_vector(
