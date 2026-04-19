@@ -2,16 +2,14 @@ from std.benchmark import run
 import std.benchmark.compiler as bench_compiler
 from std.collections import List
 
-from kayak.index import (
-    LatentProxyIndex,
-    build_query_latent_proxy_vector,
-)
-from kayak.index.latent_proxy import (
-    build_query_latent_proxy_vector_multi_block,
-    build_query_latent_proxy_vector_single_block,
-)
 from kayak.interop import load_task_json
-from kayak.numeric import VectorScalar
+from kayak.planning import (
+    ProjectedLatentQuery,
+    project_query_with_latent_proxy,
+    project_query_with_latent_proxy_generic,
+    project_query_with_latent_proxy_single_block,
+    sum_projected_latent_query_scores_against_index,
+)
 from kayak.storage import load_stored_latent_proxy_index
 
 from .json_common import json_escape
@@ -77,21 +75,6 @@ struct LatentProxyProjectionProfileSummary(Copyable):
         self.mean_scan_seconds = mean_scan_seconds
         self.mean_projection_plus_scan_seconds = mean_projection_plus_scan_seconds
 
-
-def score_query_proxy_against_index(
-    read query_proxy: List[VectorScalar],
-    read proxy_index: LatentProxyIndex,
-) raises -> Float64:
-    var total = Float64(0.0)
-    for document_index in range(proxy_index.document_count):
-        for dim_index in range(proxy_index.vector_dim):
-            total += (
-                Float64(query_proxy[dim_index])
-                * Float64(proxy_index.proxy_vectors[document_index][dim_index])
-            )
-    return total
-
-
 def max_query_vector_budget_for_task(path: String) raises -> Int:
     var task = load_task_json(path)
     var max_budget = 0
@@ -122,7 +105,7 @@ def build_latent_proxy_projection_profile_summary(
 
     def projection_once() capturing raises:
         bench_compiler.keep(
-            build_query_latent_proxy_vector(
+            project_query_with_latent_proxy(
                 task.queries[query_index].query,
                 projection,
             )
@@ -142,7 +125,7 @@ def build_latent_proxy_projection_profile_summary(
 
     def projection_generic_once() capturing raises:
         bench_compiler.keep(
-            build_query_latent_proxy_vector_multi_block(
+            project_query_with_latent_proxy_generic(
                 task.queries[query_index].query,
                 projection,
             )
@@ -164,7 +147,7 @@ def build_latent_proxy_projection_profile_summary(
 
         def projection_single_block_once() capturing raises:
             bench_compiler.keep(
-                build_query_latent_proxy_vector_single_block(
+                project_query_with_latent_proxy_single_block(
                     task.queries[query_index].query,
                     projection,
                 )
@@ -181,17 +164,20 @@ def build_latent_proxy_projection_profile_summary(
         )
         projection_single_block_mean = Float64(projection_single_block_report.mean())
 
-    var projected_queries = List[List[VectorScalar]]()
+    var projected_queries = List[ProjectedLatentQuery]()
     for judged_query in task.queries:
         projected_queries.append(
-            build_query_latent_proxy_vector(judged_query.query, projection)
+            project_query_with_latent_proxy(judged_query.query, projection)
         )
 
     query_index = 0
 
     def scan_once() capturing raises:
         bench_compiler.keep(
-            score_query_proxy_against_index(projected_queries[query_index], index)
+            sum_projected_latent_query_scores_against_index(
+                projected_queries[query_index],
+                index,
+            )
         )
         query_index += 1
         if query_index == len(task.queries):
@@ -207,11 +193,13 @@ def build_latent_proxy_projection_profile_summary(
     query_index = 0
 
     def projection_plus_scan_once() capturing raises:
-        var projected = build_query_latent_proxy_vector(
+        var projected = project_query_with_latent_proxy(
             task.queries[query_index].query,
             projection,
         )
-        bench_compiler.keep(score_query_proxy_against_index(projected, index))
+        bench_compiler.keep(
+            sum_projected_latent_query_scores_against_index(projected, index)
+        )
         query_index += 1
         if query_index == len(task.queries):
             query_index = 0

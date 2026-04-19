@@ -15,7 +15,7 @@ from kayak.filters import (
     filter_expression_requires_document_metadata,
     match_all_filter,
 )
-from kayak.index import build_query_latent_proxy_vector, build_query_proxy_vector
+from kayak.index import build_query_proxy_vector
 from kayak.runtime import ExactScoringBackend
 from kayak.scoring.dot import dot_product
 
@@ -31,6 +31,10 @@ from .filter_application_profile import (
 from .filter_scope import (
     effective_filter_expression_for_collection,
     effective_filter_expression_for_segment,
+)
+from .latent_proxy_primitives import (
+    project_query_with_latent_proxy,
+    segment_hits_for_projected_latent_query,
 )
 from .search_plan import SearchPlan
 from .topk import insert_descending_collection_hit
@@ -112,25 +116,21 @@ def candidate_generation_for_proxy_family[Backend: ExactScoringBackend](
             filter_matching_document_count += matching_document_count
             if matching_document_count == 0:
                 continue
-            var query_proxy = build_query_latent_proxy_vector(
+            var query_proxy = project_query_with_latent_proxy(
                 query, stored_proxy.query_projection
             )
-            for document_index in range(stored_proxy.index.document_count):
-                if len(allowed_flags) != 0 and allowed_flags[document_index] == 0:
-                    continue
-                var doc_id = stored_proxy.index.doc_ids[document_index]
+            var segment_hits = segment_hits_for_projected_latent_query(
+                query_proxy,
+                snapshot.segments[segment_index].manifest.segment_id.value.copy(),
+                segment_index,
+                stored_proxy.index,
+                plan.candidate_budget.candidate_k,
+                allowed_flags,
+            )
+            for hit in segment_hits:
                 insert_descending_collection_hit(
                     hits,
-                    CollectionHit(
-                        snapshot.segments[segment_index].manifest.segment_id.value.copy(),
-                        doc_id.copy(),
-                        dot_product(
-                            query_proxy,
-                            stored_proxy.index.proxy_vectors[document_index],
-                        ),
-                        segment_index,
-                        document_index,
-                    ),
+                    hit.copy(),
                     plan.candidate_budget.candidate_k,
                 )
             continue

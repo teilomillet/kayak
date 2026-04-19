@@ -83,6 +83,16 @@ from .centroid_primitives import (
     accumulate_selected_centroid_scores_with_accumulator,
     accumulate_selected_centroid_scores_with_scratch,
 )
+from .latent_proxy_primitives import (
+    ProjectedLatentQuery,
+    project_query_with_latent_proxy,
+    project_query_with_latent_proxy_generic,
+    project_query_with_latent_proxy_single_block,
+    score_projected_latent_query_against_document,
+    segment_hits_for_latent_proxy,
+    segment_hits_for_projected_latent_query,
+    sum_projected_latent_query_scores_against_index,
+)
 from .centroid_candidate_generation_workspace import (
     MutableCentroidCandidateGenerationWorkspace,
 )
