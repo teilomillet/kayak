@@ -17,6 +17,10 @@ from kayak.index import (
     DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
 )
 
+from .graph_frontier_policy import (
+    DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
+    require_graph_frontier_policy_kind,
+)
 from .planning_goal import (
     SEARCH_PLANNING_GOAL_BALANCED,
     SEARCH_PLANNING_GOAL_EXACT_ONLY,
@@ -191,6 +195,7 @@ struct SearchPlanSelectionRequest(Copyable):
     var debug_mode: Bool
     var gem_graph_cluster_top_k_per_query_token: Int
     var gem_graph_beam_width: Int
+    var gem_graph_frontier_policy_kind: String
 
     def __init__(
         out self,
@@ -202,6 +207,7 @@ struct SearchPlanSelectionRequest(Copyable):
         debug_mode: Bool = False,
         gem_graph_cluster_top_k_per_query_token: Int = DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
         gem_graph_beam_width: Int = DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
+        var gem_graph_frontier_policy_kind: String = DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
     ) raises:
         self = SearchPlanSelectionRequest(
             final_k,
@@ -213,6 +219,7 @@ struct SearchPlanSelectionRequest(Copyable):
             debug_mode,
             gem_graph_cluster_top_k_per_query_token,
             gem_graph_beam_width,
+            gem_graph_frontier_policy_kind,
             layout_rooted_search_serving_scope(),
         )
 
@@ -227,6 +234,7 @@ struct SearchPlanSelectionRequest(Copyable):
         debug_mode: Bool = False,
         gem_graph_cluster_top_k_per_query_token: Int = DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
         gem_graph_beam_width: Int = DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
+        var gem_graph_frontier_policy_kind: String = DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
     ) raises:
         self = SearchPlanSelectionRequest(
             final_k,
@@ -238,6 +246,7 @@ struct SearchPlanSelectionRequest(Copyable):
             debug_mode,
             gem_graph_cluster_top_k_per_query_token,
             gem_graph_beam_width,
+            gem_graph_frontier_policy_kind,
             layout_rooted_search_serving_scope(),
         )
 
@@ -252,6 +261,7 @@ struct SearchPlanSelectionRequest(Copyable):
         debug_mode: Bool,
         gem_graph_cluster_top_k_per_query_token: Int,
         gem_graph_beam_width: Int,
+        var gem_graph_frontier_policy_kind: String,
         serving_scope: SearchServingScope,
     ) raises:
         if gem_graph_cluster_top_k_per_query_token <= 0:
@@ -282,6 +292,9 @@ struct SearchPlanSelectionRequest(Copyable):
             gem_graph_cluster_top_k_per_query_token
         )
         self.gem_graph_beam_width = gem_graph_beam_width
+        self.gem_graph_frontier_policy_kind = (
+            require_graph_frontier_policy_kind(gem_graph_frontier_policy_kind)
+        )
 
 
 def search_plan_selection_request_with_serving_scope(
@@ -298,6 +311,7 @@ def search_plan_selection_request_with_serving_scope(
         request.debug_mode,
         request.gem_graph_cluster_top_k_per_query_token,
         request.gem_graph_beam_width,
+        request.gem_graph_frontier_policy_kind,
         serving_scope,
     )
 
@@ -396,6 +410,7 @@ def selected_plan_for_kind(
         request.faithfulness_policy,
         request.gem_graph_cluster_top_k_per_query_token,
         request.gem_graph_beam_width,
+        request.gem_graph_frontier_policy_kind,
     )
 
 

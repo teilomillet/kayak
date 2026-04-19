@@ -2,6 +2,7 @@ from kayak.eval import JudgedTask
 from kayak.index import CentroidPostingIndex
 from kayak.index import DocumentProxyIndex
 from kayak.index import GemGraphIndex
+from kayak.index import GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK
 from kayak.index import HybridFlatDim128Index
 from kayak.index import LatentProxyIndex
 from kayak.index import LatentQueryProjection
@@ -177,8 +178,10 @@ struct StoredGemGraphIndex(Copyable):
     var cluster_cutoff: Int
     var adaptive_cluster_cutoff_enabled: Bool
     var adaptive_cluster_cutoff_max: Int
+    var adaptive_label_policy: String
     var construction_neighbor_count: Int
     var degree_limit: Int
+    var shortcut_candidate_k: Int
     var shortcuts_enabled: Bool
     var document_count: Int
     var cluster_count: Int
@@ -199,6 +202,7 @@ struct StoredGemGraphIndex(Copyable):
         adaptive_cluster_cutoff_max: Int,
         construction_neighbor_count: Int,
         degree_limit: Int,
+        shortcut_candidate_k: Int,
         shortcuts_enabled: Bool,
         document_count: Int,
         cluster_count: Int,
@@ -208,6 +212,7 @@ struct StoredGemGraphIndex(Copyable):
         quantization_centroid_count: Int,
         artifact_byte_size: Int,
         var index: GemGraphIndex,
+        var adaptive_label_policy: String = GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
     ) raises:
         if cluster_cutoff < 0:
             raise Error("stored gem graph cluster_cutoff must be non-negative")
@@ -221,6 +226,10 @@ struct StoredGemGraphIndex(Copyable):
             )
         if degree_limit < 0:
             raise Error("stored gem graph degree_limit must be non-negative")
+        if shortcut_candidate_k < 0:
+            raise Error(
+                "stored gem graph shortcut_candidate_k must be non-negative"
+            )
         if document_count < 0:
             raise Error("stored gem graph document_count must be non-negative")
         if cluster_count < 0:
@@ -272,6 +281,10 @@ struct StoredGemGraphIndex(Copyable):
             raise Error(
                 "stored gem graph adaptive_cluster_cutoff_max must match index metadata"
             )
+        if index.adaptive_label_policy != adaptive_label_policy:
+            raise Error(
+                "stored gem graph adaptive_label_policy must match index metadata"
+            )
         if (
             index.construction_neighbor_count
             != construction_neighbor_count
@@ -281,6 +294,10 @@ struct StoredGemGraphIndex(Copyable):
             )
         if index.degree_limit != degree_limit:
             raise Error("stored gem graph degree_limit must match index metadata")
+        if index.shortcut_candidate_k != shortcut_candidate_k:
+            raise Error(
+                "stored gem graph shortcut_candidate_k must match index metadata"
+            )
         if index.shortcuts_enabled != shortcuts_enabled:
             raise Error("stored gem graph shortcuts_enabled must match index metadata")
 
@@ -290,8 +307,10 @@ struct StoredGemGraphIndex(Copyable):
         self.cluster_cutoff = cluster_cutoff
         self.adaptive_cluster_cutoff_enabled = adaptive_cluster_cutoff_enabled
         self.adaptive_cluster_cutoff_max = adaptive_cluster_cutoff_max
+        self.adaptive_label_policy = adaptive_label_policy^
         self.construction_neighbor_count = construction_neighbor_count
         self.degree_limit = degree_limit
+        self.shortcut_candidate_k = shortcut_candidate_k
         self.shortcuts_enabled = shortcuts_enabled
         self.document_count = document_count
         self.cluster_count = cluster_count

@@ -9,7 +9,7 @@ from kayak.benchmarks import (
     TrainingFreeSequenceCompressionSummary,
     build_training_free_sequence_compression_summary,
     standard_training_free_sequence_compression_budget_sizes,
-    supported_token_pooling_policies,
+    supported_training_free_sequence_compression_token_pooling_policies,
     training_free_sequence_compression_summaries_json,
 )
 from kayak.runtime import ExactCpuBackend
@@ -77,7 +77,7 @@ def main() raises:
         )
         summaries.append(pruning_summary.copy())
 
-        for pooling_policy in supported_token_pooling_policies():
+        for pooling_policy in supported_training_free_sequence_compression_token_pooling_policies():
             var pooling_summary = build_training_free_sequence_compression_summary(
                 backend,
                 cache.stored_task,

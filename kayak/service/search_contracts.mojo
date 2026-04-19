@@ -169,6 +169,8 @@ def same_search_plan(read left: SearchPlan, read right: SearchPlan) -> Bool:
         == right.candidate_generator.cluster_top_k_per_query_token
         and left.candidate_generator.beam_width
         == right.candidate_generator.beam_width
+        and left.candidate_generator.graph_frontier_policy_kind
+        == right.candidate_generator.graph_frontier_policy_kind
         and left.candidate_budget.final_k == right.candidate_budget.final_k
         and left.candidate_budget.candidate_k == right.candidate_budget.candidate_k
         and left.reference_scoring_semantics.kind

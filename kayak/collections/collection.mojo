@@ -4,6 +4,10 @@ from .collection_layout import (
     default_collection_layout_family,
     require_collection_layout_family_supported,
 )
+from .document_encoder_compression import (
+    DocumentEncoderCompressionManifest,
+    default_document_encoder_compression_manifest,
+)
 from .ids import CollectionId, NamespaceId, TenantId
 from .search_artifact_builders import (
     require_search_artifact_build_policy_supported_for_segment_sealing,
@@ -28,6 +32,7 @@ struct CollectionManifest(Copyable):
     var active_snapshot_id: String
     var default_keep_latest_inactive_count: Int
     var search_artifact_build_policy: SearchArtifactBuildPolicy
+    var document_encoder_compression: DocumentEncoderCompressionManifest
 
     def __init__(
         out self,
@@ -51,6 +56,7 @@ struct CollectionManifest(Copyable):
             1,
             default_search_artifact_build_policy(),
             default_collection_layout_family(),
+            default_document_encoder_compression_manifest(),
         )
 
     def __init__(
@@ -76,6 +82,7 @@ struct CollectionManifest(Copyable):
             default_keep_latest_inactive_count,
             default_search_artifact_build_policy(),
             default_collection_layout_family(),
+            default_document_encoder_compression_manifest(),
         )
 
     def __init__(
@@ -101,6 +108,7 @@ struct CollectionManifest(Copyable):
             1,
             default_search_artifact_build_policy(),
             default_collection_layout_family(),
+            default_document_encoder_compression_manifest(),
         )
 
     def __init__(
@@ -126,6 +134,7 @@ struct CollectionManifest(Copyable):
             1,
             search_artifact_build_policy,
             default_collection_layout_family(),
+            default_document_encoder_compression_manifest(),
         )
 
     def __init__(
@@ -152,6 +161,7 @@ struct CollectionManifest(Copyable):
             default_keep_latest_inactive_count,
             search_artifact_build_policy,
             default_collection_layout_family(),
+            default_document_encoder_compression_manifest(),
         )
 
     def __init__(
@@ -178,6 +188,7 @@ struct CollectionManifest(Copyable):
             default_keep_latest_inactive_count,
             default_search_artifact_build_policy(),
             default_collection_layout_family(),
+            default_document_encoder_compression_manifest(),
         )
 
     def __init__(
@@ -204,6 +215,7 @@ struct CollectionManifest(Copyable):
             1,
             search_artifact_build_policy,
             default_collection_layout_family(),
+            default_document_encoder_compression_manifest(),
         )
 
     def __init__(
@@ -219,6 +231,7 @@ struct CollectionManifest(Copyable):
         default_keep_latest_inactive_count: Int,
         read search_artifact_build_policy: SearchArtifactBuildPolicy,
         collection_layout_family: String,
+        read document_encoder_compression: DocumentEncoderCompressionManifest,
     ) raises:
         self.collection_id = collection_id.copy()
         self.tenant_id = tenant_id.copy()
@@ -240,6 +253,7 @@ struct CollectionManifest(Copyable):
             "default_keep_latest_inactive_count",
         )
         self.search_artifact_build_policy = search_artifact_build_policy.copy()
+        self.document_encoder_compression = document_encoder_compression.copy()
         require_search_artifact_build_policy_layout_safe(
             self.search_artifact_build_policy
         )
@@ -263,6 +277,35 @@ struct CollectionManifest(Copyable):
         active_snapshot_id: String,
         default_keep_latest_inactive_count: Int,
         read search_artifact_build_policy: SearchArtifactBuildPolicy,
+        collection_layout_family: String,
+    ) raises:
+        self = CollectionManifest(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            latest_generation,
+            active_snapshot_id,
+            default_keep_latest_inactive_count,
+            search_artifact_build_policy,
+            collection_layout_family,
+            default_document_encoder_compression_manifest(),
+        )
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        latest_generation: Int,
+        active_snapshot_id: String,
+        default_keep_latest_inactive_count: Int,
+        read search_artifact_build_policy: SearchArtifactBuildPolicy,
     ) raises:
         self = CollectionManifest(
             collection_id,
@@ -276,6 +319,7 @@ struct CollectionManifest(Copyable):
             default_keep_latest_inactive_count,
             search_artifact_build_policy,
             default_collection_layout_family(),
+            default_document_encoder_compression_manifest(),
         )
 
     def has_active_snapshot(self) -> Bool:

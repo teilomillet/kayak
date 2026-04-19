@@ -9,6 +9,9 @@ from kayak.collections import (
     CollectionStats,
     DocumentMetadataEntry,
     DocumentMetadataMap,
+    DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+    DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    DOCUMENT_ENCODER_COMPRESSION_KIND_NONE,
     gem_graph_build_spec,
     NamespaceId,
     DOCUMENT_REPRESENTATION_TRANSFORM_KIND_PREFIX_PRUNING,
@@ -30,13 +33,16 @@ from kayak.collections import (
     load_sealed_segment_manifest,
     load_snapshot_manifest,
     load_stored_document_text_corpus,
+    document_encoder_compression_config_value,
     save_collection_manifest,
     save_sealed_segment_manifest,
     save_snapshot_manifest,
     save_stored_document_metadata_corpus,
     save_stored_document_text_corpus,
+    same_document_encoder_compression_manifest,
     same_document_representation_transforms,
     same_search_artifact_build_policy,
+    memory_tokens_document_encoder_compression,
     prefix_pruning_document_representation_transform,
     sealed_segment_has_document_representation_transform_kind,
     sealed_segment_has_document_representation_transforms,
@@ -57,6 +63,7 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
     var namespace_id = NamespaceId("search")
     var collection_id = CollectionId("news")
     var segment_id = SegmentId("segment-0001")
+    var document_encoder_compression = memory_tokens_document_encoder_compression(16)
     var build_policy = SearchArtifactBuildPolicy(
         [
             gem_graph_build_spec(2, 3, 1, "gem_sidecar", 4, 5),
@@ -77,6 +84,7 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
             2,
             build_policy,
             COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
+            document_encoder_compression,
         ),
     )
     save_sealed_segment_manifest(
@@ -91,7 +99,9 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
             VECTOR_SCALAR_NAME,
             128,
             "packed_index",
-            "",
+            [],
+            document_encoder_compression,
+            [],
             "text_corpus",
             SegmentStats(2, 11, 10, 4096),
         ),
@@ -140,6 +150,24 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
         True,
     )
     assert_equal(
+        same_document_encoder_compression_manifest(
+            loaded_collection.document_encoder_compression,
+            document_encoder_compression,
+        ),
+        True,
+    )
+    assert_equal(
+        loaded_collection.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            loaded_collection.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "16",
+    )
+    assert_equal(
         loaded_collection.search_artifact_build_policy.stage1_artifacts[0]
             .config[0]
             .key,
@@ -153,6 +181,13 @@ def test_collection_storage_roundtrip_preserves_manifests_and_text() raises:
     )
     assert_equal(loaded_segment.packed_index_root, "packed_index")
     assert_equal(loaded_segment.text_corpus_root, "text_corpus")
+    assert_equal(
+        same_document_encoder_compression_manifest(
+            loaded_segment.document_encoder_compression,
+            document_encoder_compression,
+        ),
+        True,
+    )
     assert_equal(loaded_snapshot.stats.segment_count, 1)
     assert_equal(loaded_snapshot.segment_ids[0].value, "segment-0001")
     assert_equal(loaded_text_corpus.corpus.doc_ids[0], "doc-a")
@@ -267,6 +302,7 @@ def test_segment_manifest_roundtrip_preserves_document_representation_transforms
         token_pooling_document_representation_transform(2),
         prefix_pruning_document_representation_transform(16),
     ]
+    var document_encoder_compression = memory_tokens_document_encoder_compression(12)
 
     save_sealed_segment_manifest(
         root,
@@ -284,6 +320,7 @@ def test_segment_manifest_roundtrip_preserves_document_representation_transforms
             "text_corpus",
             SegmentStats(2, 11, 10, 4096),
             transforms,
+            document_encoder_compression,
         ),
     )
 
@@ -313,6 +350,20 @@ def test_segment_manifest_roundtrip_preserves_document_representation_transforms
             DOCUMENT_REPRESENTATION_TRANSFORM_KIND_PREFIX_PRUNING,
         ),
         True,
+    )
+    assert_equal(
+        same_document_encoder_compression_manifest(
+            loaded_segment.document_encoder_compression,
+            document_encoder_compression,
+        ),
+        True,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            loaded_segment.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "12",
     )
 
 
@@ -376,6 +427,10 @@ def test_segment_manifest_loader_accepts_old_manifest_without_transform_entries(
     assert_equal(
         sealed_segment_has_document_representation_transforms(loaded_segment),
         False,
+    )
+    assert_equal(
+        loaded_segment.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_NONE,
     )
 
 

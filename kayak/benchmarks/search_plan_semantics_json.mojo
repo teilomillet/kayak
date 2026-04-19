@@ -29,7 +29,9 @@ def append_candidate_generator_semantics_json_fields(
     buffer += "\"graph_cluster_top_k_per_query_token\":"
     buffer += String(generator.cluster_top_k_per_query_token) + ","
     buffer += "\"graph_beam_width\":"
-    buffer += String(generator.beam_width)
+    buffer += String(generator.beam_width) + ","
+    buffer += "\"graph_frontier_policy_kind\":\""
+    buffer += json_escape(generator.graph_frontier_policy_kind) + "\""
 
 
 def append_search_plan_semantics_json_fields(

@@ -6,6 +6,7 @@ from kayak.collections.reclaim_json import (
     collection_reclaim_plan_json,
 )
 from kayak.collections import (
+    DocumentEncoderCompressionManifest,
     SearchArtifactBuildPolicy,
     SnapshotExportBundleManifest,
 )
@@ -220,6 +221,9 @@ def append_json_search_plan_only(mut buffer: String, read plan: SearchPlan):
     buffer += String(plan.candidate_generator.cluster_top_k_per_query_token) + ","
     buffer += "\"graph_beam_width\":"
     buffer += String(plan.candidate_generator.beam_width) + ","
+    buffer += "\"graph_frontier_policy_kind\":\""
+    buffer += json_escape(plan.candidate_generator.graph_frontier_policy_kind)
+    buffer += "\","
     buffer += "\"final_k\":"
     buffer += String(plan.candidate_budget.final_k) + ","
     buffer += "\"candidate_k\":"
@@ -330,7 +334,10 @@ def append_json_search_planning_request(
         request.planning.gem_graph_cluster_top_k_per_query_token
     ) + ","
     buffer += "\"graph_beam_width\":"
-    buffer += String(request.planning.gem_graph_beam_width)
+    buffer += String(request.planning.gem_graph_beam_width) + ","
+    buffer += "\"graph_frontier_policy_kind\":\""
+    buffer += json_escape(request.planning.gem_graph_frontier_policy_kind)
+    buffer += "\""
     buffer += "}"
 
 
@@ -397,8 +404,31 @@ def create_collection_request_json(read request: CreateCollectionRequest) -> Str
     append_json_search_artifact_build_policy(
         buffer, request.search_artifact_build_policy
     )
+    buffer += ",\"document_encoder_compression\":"
+    append_json_document_encoder_compression(
+        buffer, request.document_encoder_compression
+    )
     buffer += "}"
     return buffer^
+
+
+def append_json_document_encoder_compression(
+    mut buffer: String, read compression: DocumentEncoderCompressionManifest
+):
+    buffer += "{"
+    buffer += "\"kind\":\""
+    buffer += json_escape(compression.kind) + "\","
+    buffer += "\"config\":["
+    for index in range(len(compression.config)):
+        if index > 0:
+            buffer += ","
+        buffer += "{"
+        buffer += "\"key\":\""
+        buffer += json_escape(compression.config[index].key)
+        buffer += "\",\"value\":\""
+        buffer += json_escape(compression.config[index].value)
+        buffer += "\"}"
+    buffer += "]}"
 
 
 def append_json_policy_override(
@@ -470,6 +500,10 @@ def collection_lifecycle_response_json(
     buffer += "\"search_artifact_build_policy\":"
     append_json_search_artifact_build_policy(
         buffer, response.search_artifact_build_policy
+    )
+    buffer += ",\"document_encoder_compression\":"
+    append_json_document_encoder_compression(
+        buffer, response.document_encoder_compression
     )
     buffer += ","
     buffer += "\"effective_keep_latest_inactive_count\":"

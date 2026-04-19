@@ -13,6 +13,7 @@ from kayak import (
     CollectionReclaimPlan,
     CollectionSearchExplain,
     CreateCollectionRequest,
+    DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
     DebugSearchResponse,
     DeleteDocumentsRequest,
     DeleteDocumentsResponse,
@@ -57,6 +58,7 @@ from kayak import (
     UpsertDocumentsRequest,
     build_reclaim_plan_request_json,
     build_reclaim_plan_response_json,
+    GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
     best_effort_faithfulness_policy,
     collection_lifecycle_request_json,
     collection_lifecycle_response_json,
@@ -77,6 +79,7 @@ from kayak import (
     update_collection_retention_policy_request_json,
     update_collection_retention_policy_response_json,
     layout_rooted_search_serving_scope,
+    memory_tokens_document_encoder_compression,
 )
 from kayak.filters import match_all_filter
 from kayak.planning import CandidateSet, exact_full_scan_search_plan
@@ -191,6 +194,7 @@ def make_planned_search_request() raises -> PlannedSearchRequest:
             True,
             3,
             9,
+            GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
         ),
     )
 
@@ -301,12 +305,15 @@ def test_create_collection_request_json_is_machine_readable() raises:
             CollectionId("news"),
             TenantId("tenant-a"),
             NamespaceId("search"),
+            COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
             "colbertv2",
             VECTOR_SCALAR_NAME,
             128,
+            1,
             SearchArtifactBuildPolicy(
                 [document_proxy_build_spec("proxy_sidecar", 2)]
             ),
+            memory_tokens_document_encoder_compression(8),
         )
     )
 
@@ -326,6 +333,14 @@ def test_create_collection_request_json_is_machine_readable() raises:
     )
     assert_equal(
         json.find("\"search_artifact_build_policy\":[") != -1,
+        True,
+    )
+    assert_equal(
+        json.find(
+            "\"document_encoder_compression\":{\"kind\":\""
+                + DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS
+                + "\""
+        ) != -1,
         True,
     )
     assert_equal(
@@ -369,6 +384,7 @@ def test_lifecycle_and_reclaim_json_are_machine_readable() raises:
                     gem_graph_build_spec(2, 3, 1, "gem_graph", 4, 5),
                 ]
             ),
+            memory_tokens_document_encoder_compression(8),
             0,
             [SnapshotId("snapshot-0001")],
             4,
@@ -424,6 +440,14 @@ def test_lifecycle_and_reclaim_json_are_machine_readable() raises:
     )
     assert_equal(
         lifecycle_response_json.find("\"search_artifact_build_policy\":[") != -1,
+        True,
+    )
+    assert_equal(
+        lifecycle_response_json.find(
+            "\"document_encoder_compression\":{\"kind\":\""
+                + DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS
+                + "\""
+        ) != -1,
         True,
     )
     assert_equal(
@@ -618,6 +642,11 @@ def test_planned_search_json_surfaces_selection_and_planning_contract() raises:
     )
     assert_equal(request_json.find("\"graph_cluster_top_k_per_query_token\":3") != -1, True)
     assert_equal(request_json.find("\"graph_beam_width\":9") != -1, True)
+    assert_equal(
+        request_json.find("\"graph_frontier_policy_kind\":\"global_best_first\"")
+            != -1,
+        True,
+    )
     assert_equal(response_json.find("\"selection\":") != -1, True)
     assert_equal(
         response_json.find("\"available_candidate_generator_kinds\":[\"exact_full_scan\",\"document_proxy\"]")

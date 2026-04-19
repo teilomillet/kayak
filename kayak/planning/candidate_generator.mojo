@@ -13,6 +13,10 @@ from kayak.index import (
     DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
 )
 
+from .graph_frontier_policy import (
+    DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
+    require_graph_frontier_policy_kind,
+)
 from .stage1_capabilities import (
     stage1_capabilities_for_candidate_generator_kind,
 )
@@ -48,6 +52,7 @@ struct CandidateGenerator(Copyable):
     var supports_structured_filter: Bool
     var cluster_top_k_per_query_token: Int
     var beam_width: Int
+    var graph_frontier_policy_kind: String
 
     def __init__(out self):
         self.kind = "exact_full_scan"
@@ -63,12 +68,14 @@ struct CandidateGenerator(Copyable):
         self.supports_structured_filter = True
         self.cluster_top_k_per_query_token = 0
         self.beam_width = 0
+        self.graph_frontier_policy_kind = ""
 
     def __init__(
         out self,
         var kind: String,
         cluster_top_k_per_query_token: Int = 0,
         beam_width: Int = 0,
+        var graph_frontier_policy_kind: String = "",
     ) raises:
         if cluster_top_k_per_query_token < 0:
             raise Error(
@@ -99,10 +106,21 @@ struct CandidateGenerator(Copyable):
                 )
             if beam_width <= 0:
                 raise Error("gem_graph candidate generator requires beam_width > 0")
-        elif cluster_top_k_per_query_token != 0 or beam_width != 0:
+            if graph_frontier_policy_kind.byte_length() == 0:
+                graph_frontier_policy_kind = DEFAULT_GRAPH_FRONTIER_POLICY_KIND
+            self.graph_frontier_policy_kind = require_graph_frontier_policy_kind(
+                graph_frontier_policy_kind
+            )
+        elif (
+            cluster_top_k_per_query_token != 0
+            or beam_width != 0
+            or graph_frontier_policy_kind.byte_length() != 0
+        ):
             raise Error(
                 "only gem_graph candidate generators currently accept graph search parameters"
             )
+        else:
+            self.graph_frontier_policy_kind = ""
         self.cluster_top_k_per_query_token = cluster_top_k_per_query_token
         self.beam_width = beam_width
 
@@ -175,7 +193,11 @@ def centroid_postings_imputed_flat_candidate_generator() raises -> CandidateGene
 def gem_graph_candidate_generator(
     cluster_top_k_per_query_token: Int = DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
     beam_width: Int = DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
+    graph_frontier_policy_kind: String = DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
 ) raises -> CandidateGenerator:
     return CandidateGenerator(
-        "gem_graph", cluster_top_k_per_query_token, beam_width
+        "gem_graph",
+        cluster_top_k_per_query_token,
+        beam_width,
+        graph_frontier_policy_kind,
     )

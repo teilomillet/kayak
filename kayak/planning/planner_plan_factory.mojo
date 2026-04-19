@@ -4,6 +4,7 @@ from .faithfulness import (
     FaithfulnessPolicy,
     exact_stage1_required_faithfulness_policy,
 )
+from .graph_frontier_policy import DEFAULT_GRAPH_FRONTIER_POLICY_KIND
 from .reference_scoring_semantics import (
     exact_late_interaction_reference_scoring_semantics,
 )
@@ -21,12 +22,14 @@ def planner_candidate_generator_for_kind(
     candidate_generator_kind: String,
     gem_graph_cluster_top_k_per_query_token: Int,
     gem_graph_beam_width: Int,
+    gem_graph_frontier_policy_kind: String = DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
 ) raises -> CandidateGenerator:
     if candidate_generator_kind == "gem_graph":
         return CandidateGenerator(
             candidate_generator_kind.copy(),
             gem_graph_cluster_top_k_per_query_token,
             gem_graph_beam_width,
+            gem_graph_frontier_policy_kind,
         )
 
     return CandidateGenerator(candidate_generator_kind.copy())
@@ -63,12 +66,14 @@ def planner_default_search_plan_for_kind(
     read requested_faithfulness_policy: FaithfulnessPolicy,
     gem_graph_cluster_top_k_per_query_token: Int,
     gem_graph_beam_width: Int,
+    gem_graph_frontier_policy_kind: String = DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
 ) raises -> SearchPlan:
     return planner_default_search_plan_for_candidate_generator(
         planner_candidate_generator_for_kind(
             candidate_generator_kind,
             gem_graph_cluster_top_k_per_query_token,
             gem_graph_beam_width,
+            gem_graph_frontier_policy_kind,
         ),
         candidate_budget,
         requested_faithfulness_policy,

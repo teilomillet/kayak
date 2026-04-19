@@ -9,6 +9,8 @@ from kayak import (
     COLLECTION_LAYOUT_FAMILY_SHARED_POOL,
     CreateCollectionRequest,
     CreateSnapshotRequest,
+    DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+    DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
     DeleteDocumentsRequest,
     DocumentFilterPosting,
     DocumentMetadataUpdate,
@@ -50,6 +52,7 @@ from kayak import (
     exact_full_scan_clause_text_search_plan,
     exact_full_scan_search_plan,
     clause_text_stage3_verifier_operator,
+    document_encoder_compression_config_value,
     exact_late_interaction_stage2_reference_operator,
     export_snapshot,
     gem_graph_build_spec,
@@ -57,6 +60,7 @@ from kayak import (
     import_snapshot,
     load_collection_manifest,
     match_all_filter,
+    memory_tokens_document_encoder_compression,
     one_of_filter,
     save_stored_document_filter_index,
     SearchRequest,
@@ -77,6 +81,37 @@ def unique_service_root(prefix: String) -> Path:
 
 def make_query() raises -> EncodedQuery:
     return EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+
+
+def test_create_collection_persists_document_encoder_compression() raises:
+    var service_root = unique_service_root("kayak-service-runtime-compression")
+    var collection_root = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            1,
+            SearchArtifactBuildPolicy([]),
+            memory_tokens_document_encoder_compression(8),
+        ),
+    )
+    var manifest = load_collection_manifest(collection_root)
+
+    assert_equal(
+        manifest.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            manifest.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "8",
+    )
 
 
 def make_document(
@@ -2142,6 +2177,68 @@ def test_retention_policy_update_persists_into_lifecycle_operations() raises:
     assert_equal(report.default_keep_latest_inactive_count, 2)
     assert_equal(report.effective_keep_latest_inactive_count, 2)
     assert_equal(report.reclaim_plan.reclaimable_snapshot_count, 0)
+
+
+def test_retention_policy_update_preserves_document_encoder_compression() raises:
+    var service_root = unique_service_root(
+        "kayak-service-runtime-retention-compression"
+    )
+    var collection_root = create_collection(
+        service_root,
+        CreateCollectionRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            1,
+            SearchArtifactBuildPolicy([]),
+            memory_tokens_document_encoder_compression(8),
+        ),
+    )
+
+    _ = update_collection_retention_policy(
+        service_root,
+        UpdateCollectionRetentionPolicyRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            2,
+        ),
+    )
+    var manifest = load_collection_manifest(collection_root)
+    var report = build_collection_lifecycle_report(
+        service_root,
+        CollectionLifecycleRequest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+        ),
+    )
+
+    assert_equal(
+        manifest.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            manifest.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "8",
+    )
+    assert_equal(
+        report.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            report.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "8",
+    )
 
 
 def main() raises:

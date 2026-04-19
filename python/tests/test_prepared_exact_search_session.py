@@ -12,6 +12,7 @@ from kayak_engine.payloads import (
     PayloadError,
     document_payload_parts,
     exact_search_request_payload,
+    lifecycle_request_payload,
 )
 
 
@@ -148,6 +149,58 @@ class PreparedExactSearchSessionTests(unittest.TestCase):
 
         self.assertEqual(actual, expected)
         self.assertFalse(session.load_text_corpus)
+
+    def test_create_collection_persists_document_encoder_compression(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory(prefix="kayak-prepared-exact-")
+        self.addCleanup(temp_dir.cleanup)
+        service_root = Path(temp_dir.name) / "service-root"
+        module = load_module()
+
+        json.loads(
+            module.create_collection_json(
+                str(service_root),
+                {
+                    "collection_id": "news",
+                    "tenant_id": "tenant-a",
+                    "namespace_id": "search",
+                    "collection_layout_family": "",
+                    "model_name": "colbertv2",
+                    "vector_scalar_name": "",
+                    "vector_dim": 2,
+                    "default_keep_latest_inactive_count": 1,
+                    "document_encoder_compression": {
+                        "kind": "memory_tokens",
+                        "config": [
+                            {
+                                "key": "document_vector_budget",
+                                "value": "8",
+                            }
+                        ],
+                    },
+                },
+            )
+        )
+
+        lifecycle = json.loads(
+            module.collection_lifecycle_json(
+                str(service_root),
+                lifecycle_request_payload(
+                    {
+                        "collection_id": "news",
+                        "tenant_id": "tenant-a",
+                        "namespace_id": "search",
+                    }
+                ),
+            )
+        )
+        self.assertEqual(
+            lifecycle["document_encoder_compression"]["kind"],
+            "memory_tokens",
+        )
+        self.assertEqual(
+            lifecycle["document_encoder_compression"]["config"],
+            [{"key": "document_vector_budget", "value": "8"}],
+        )
 
     def test_prepared_batch_matches_repeated_prepared_search(self) -> None:
         module, temp_dir, service_root = self._build_service_root()

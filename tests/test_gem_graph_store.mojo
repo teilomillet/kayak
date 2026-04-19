@@ -4,6 +4,8 @@ from std.testing import TestSuite, assert_equal
 from kayak import (
     EncodedDocument,
     EncodedQuery,
+    GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
+    GEM_GRAPH_ADAPTIVE_LABEL_POLICY_RELEVANT_CLUSTER_COVERAGE,
     GemGraphBuildConfig,
     GemGraphTrainingPair,
     VECTOR_SCALAR_NAME,
@@ -61,6 +63,11 @@ def test_gem_graph_store_roundtrip_preserves_metadata() raises:
     assert_equal(loaded.index.document_count, 3)
     assert_equal(loaded.adaptive_cluster_cutoff_enabled, False)
     assert_equal(loaded.adaptive_cluster_cutoff_max, 0)
+    assert_equal(
+        loaded.adaptive_label_policy,
+        GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
+    )
+    assert_equal(loaded.shortcut_candidate_k, 2)
     assert_equal(loaded.shortcuts_enabled, False)
     assert_equal(loaded.artifact_byte_size > 0, True)
 
@@ -98,6 +105,7 @@ def test_gem_graph_store_roundtrip_preserves_adaptive_metadata() raises:
                 GemGraphTrainingPair(EncodedQuery([[1.0, 0.0]]), "doc-a"),
                 GemGraphTrainingPair(EncodedQuery([[0.0, 1.0]]), "doc-b"),
             ],
+            GEM_GRAPH_ADAPTIVE_LABEL_POLICY_RELEVANT_CLUSTER_COVERAGE,
         ),
     )
 
@@ -106,9 +114,19 @@ def test_gem_graph_store_roundtrip_preserves_adaptive_metadata() raises:
 
     assert_equal(loaded.adaptive_cluster_cutoff_enabled, True)
     assert_equal(loaded.adaptive_cluster_cutoff_max, 2)
+    assert_equal(
+        loaded.adaptive_label_policy,
+        GEM_GRAPH_ADAPTIVE_LABEL_POLICY_RELEVANT_CLUSTER_COVERAGE,
+    )
+    assert_equal(loaded.shortcut_candidate_k, 2)
     assert_equal(loaded.shortcuts_enabled, False)
     assert_equal(loaded.index.adaptive_cluster_cutoff_enabled, True)
     assert_equal(loaded.index.adaptive_cluster_cutoff_max, 2)
+    assert_equal(
+        loaded.index.adaptive_label_policy,
+        GEM_GRAPH_ADAPTIVE_LABEL_POLICY_RELEVANT_CLUSTER_COVERAGE,
+    )
+    assert_equal(loaded.index.shortcut_candidate_k, 2)
     assert_equal(loaded.index.shortcuts_enabled, False)
     assert_equal(loaded.index.doc_profile_offsets[2] - loaded.index.doc_profile_offsets[1], 2)
 

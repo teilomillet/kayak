@@ -4,8 +4,11 @@ import std.benchmark.compiler as bench_compiler
 from std.collections import List
 from std.os import makedirs
 from std.pathlib import Path
-from std.sys.info import simd_width_of
 
+from kayak.benchmarks.latent_proxy_linear_profile_support import (
+    flatten_linear_rows,
+    linear_block_output_flat_rows,
+)
 from kayak.benchmarks.latent_proxy_profile_fixtures import (
     LatentProxyPrimitiveSweepProfile,
     make_projection,
@@ -14,10 +17,10 @@ from kayak.benchmarks.latent_proxy_profile_fixtures import (
 )
 from kayak.index import LatentQueryProjectionBlock
 from kayak.index.latent_proxy import (
-    linear_block_output,
+    linear_block_output_reference,
     projected_query_token_for_block,
 )
-from kayak.numeric import VECTOR_SCALAR_NAME, VectorScalar, zero_vector_scalar
+from kayak.numeric import VectorScalar
 
 
 comptime LATENT_PROXY_PROFILE_MIN_RUNTIME_SECS = 0.05
@@ -74,72 +77,6 @@ def write_measurements_tsv(
     path.write_text(lines)
 
 
-def flatten_linear_rows(
-    read rows: List[List[VectorScalar]], input_dim: Int
-) raises -> List[VectorScalar]:
-    var flat = List[VectorScalar]()
-    for row in rows:
-        if len(row) != input_dim:
-            raise Error("flat latent proxy row width mismatch")
-        for value in row:
-            flat.append(value)
-    return flat^
-
-
-def dot_product_flat_segment(
-    read lhs: List[VectorScalar],
-    read flat_rhs: List[VectorScalar],
-    rhs_offset: Int,
-    vector_dim: Int,
-) -> VectorScalar:
-    if VECTOR_SCALAR_NAME != "Float32":
-        var total = zero_vector_scalar()
-        for index in range(vector_dim):
-            total += lhs[index] * flat_rhs[rhs_offset + index]
-        return total
-
-    comptime width = simd_width_of[VectorScalar]()
-    var simd_limit = (vector_dim // width) * width
-    var lhs_ptr = lhs.unsafe_ptr()
-    var rhs_ptr = flat_rhs.unsafe_ptr() + rhs_offset
-    var accum = SIMD[DType.float32, width](0.0)
-
-    for index in range(0, simd_limit, width):
-        accum += (
-            (lhs_ptr + index).load[width=width]()
-            * (rhs_ptr + index).load[width=width]()
-        )
-
-    var total = VectorScalar(accum.reduce_add()[0])
-    for index in range(simd_limit, vector_dim):
-        total += lhs.unsafe_get(index) * flat_rhs.unsafe_get(rhs_offset + index)
-    return total
-
-
-def linear_block_output_flat_rows(
-    read input_vector: List[VectorScalar],
-    read block: LatentQueryProjectionBlock,
-    read flat_rows: List[VectorScalar],
-) raises -> List[VectorScalar]:
-    if len(input_vector) != block.input_dim:
-        raise Error("latent proxy linear block input dimension mismatch")
-    if len(flat_rows) != block.input_dim * block.output_dim:
-        raise Error("latent proxy flat row storage size mismatch")
-    var output = List[VectorScalar]()
-    for row_index in range(block.output_dim):
-        var row_offset = row_index * block.input_dim
-        output.append(
-            dot_product_flat_segment(
-                input_vector,
-                flat_rows,
-                row_offset,
-                block.input_dim,
-            )
-            + block.linear_bias[row_index]
-        )
-    return output^
-
-
 def append_measurement(
     mut measurements: List[LatentProxyLinearStorageMeasurement],
     read profile: LatentProxyPrimitiveSweepProfile,
@@ -194,7 +131,7 @@ def main() raises:
 
     def block0_row_list_once() capturing raises:
         for token_vector in block0_inputs:
-            bench_compiler.keep(linear_block_output(token_vector, block0))
+            bench_compiler.keep(linear_block_output_reference(token_vector, block0))
 
     var block0_row_list_report = benchmark.run[block0_row_list_once](
         num_warmup_iters=LATENT_PROXY_PROFILE_WARMUP_ITERS,
@@ -226,7 +163,7 @@ def main() raises:
 
     def block1_row_list_once() capturing raises:
         for token_vector in block1_inputs:
-            bench_compiler.keep(linear_block_output(token_vector, block1))
+            bench_compiler.keep(linear_block_output_reference(token_vector, block1))
 
     var block1_row_list_report = benchmark.run[block1_row_list_once](
         num_warmup_iters=LATENT_PROXY_PROFILE_WARMUP_ITERS,
@@ -270,6 +207,10 @@ def main() raises:
             " flat_rows=",
             measurement.mean_flat_rows_seconds,
         )
+        print("== block ", measurement.block_index, " row_list ==")
+        print("Mean: ", measurement.mean_row_list_seconds)
+        print("== block ", measurement.block_index, " flat_rows ==")
+        print("Mean: ", measurement.mean_flat_rows_seconds)
 
     print("")
     print("wrote ", output_path)

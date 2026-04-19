@@ -15,6 +15,7 @@ from .collection_store import (
     load_collection_manifest,
     save_collection_manifest,
 )
+from .document_encoder_compression import same_document_encoder_compression_manifest
 from .document_filter_index_store import save_stored_document_filter_index
 from .document_metadata_store import save_stored_document_metadata_corpus
 from .paths import collection_segment_root, collection_snapshot_root
@@ -113,6 +114,13 @@ def require_collection_manifest_compatible(
         raise Error(
             "collection manifest collection_layout_family mismatch during import"
         )
+    if not same_document_encoder_compression_manifest(
+        existing.document_encoder_compression,
+        imported.document_encoder_compression,
+    ):
+        raise Error(
+            "collection manifest document_encoder_compression mismatch during import"
+        )
 
     if not same_search_artifact_build_policy(
         existing.search_artifact_build_policy,
@@ -151,6 +159,7 @@ def merged_collection_manifest_for_import(
         existing.default_keep_latest_inactive_count,
         existing.search_artifact_build_policy,
         existing.collection_layout_family,
+        existing.document_encoder_compression,
     )
 
 
@@ -213,6 +222,14 @@ def require_segment_manifest_compatible(
     if existing.packed_index_root != imported.packed_index_root:
         raise Error("segment manifest packed_index_root mismatch during import")
 
+    if not same_document_encoder_compression_manifest(
+        existing.document_encoder_compression,
+        imported.document_encoder_compression,
+    ):
+        raise Error(
+            "segment manifest document_encoder_compression mismatch during import"
+        )
+
     if not same_search_artifacts(
         existing.search_artifacts, imported.search_artifacts
     ):
@@ -240,6 +257,7 @@ def collection_manifest_for_snapshot_bundle(
         resolved.collection.default_keep_latest_inactive_count,
         resolved.collection.search_artifact_build_policy,
         resolved.collection.collection_layout_family,
+        resolved.collection.document_encoder_compression,
     )
 
 

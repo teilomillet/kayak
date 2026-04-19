@@ -1,9 +1,11 @@
 from std.collections import List
 from std.pathlib import Path
 
+from kayak.index import GemGraphBuildConfig
 from kayak.storage import (
     StoredPackedIndex,
     build_stored_gem_graph_index,
+    build_stored_gem_graph_index_with_config,
     centroid_heads_storage_byte_size,
     centroid_postings_storage_byte_size,
     ensure_stored_centroid_heads_index,
@@ -16,9 +18,15 @@ from kayak.storage import (
 )
 from kayak.text import DocumentTextCorpus
 
+from .collection_layout import default_collection_layout_family
 from .collection import CollectionManifest
 from .collection_store import save_collection_manifest
+from .document_encoder_compression import (
+    DocumentEncoderCompressionManifest,
+    default_document_encoder_compression_manifest,
+)
 from .ids import CollectionId, NamespaceId, SegmentId, SnapshotId, TenantId
+from .search_artifact_policy import default_search_artifact_build_policy
 from .search_artifact import (
     SearchArtifactManifest,
     centroid_heads_search_artifact,
@@ -86,7 +94,27 @@ def mirror_has_any_text(read document_text_corpus: DocumentTextCorpus) -> Bool:
     return False
 
 
-def ensure_one_segment_collection_mirror(
+def gem_graph_build_config_enabled(read config: GemGraphBuildConfig) raises -> Bool:
+    if (
+        config.fine_cluster_count == 0
+        and config.coarse_cluster_count == 0
+        and config.cluster_cutoff == 0
+    ):
+        return False
+
+    if (
+        config.fine_cluster_count <= 0
+        or config.coarse_cluster_count <= 0
+        or config.cluster_cutoff <= 0
+    ):
+        raise Error(
+            "gem graph build config must either disable fine/coarse/cutoff together or define them all as positive"
+        )
+
+    return True
+
+
+def ensure_one_segment_collection_mirror_internal(
     collection_root: Path,
     collection_id: CollectionId,
     tenant_id: TenantId,
@@ -95,6 +123,9 @@ def ensure_one_segment_collection_mirror(
     generation: Int,
     read stored_index: StoredPackedIndex,
     read document_text_corpus: DocumentTextCorpus,
+    read document_encoder_compression: DocumentEncoderCompressionManifest,
+    read gem_graph_build_config: GemGraphBuildConfig,
+    use_gem_graph_build_config: Bool,
     document_proxy_vector_budget: Int = 0,
     centroid_postings_vector_budget: Int = 0,
     centroid_head_posting_cap: Int = 0,
@@ -119,6 +150,11 @@ def ensure_one_segment_collection_mirror(
             stored_index.vector_scalar_name.copy(),
             stored_index.index.vector_dim,
             generation,
+            "",
+            1,
+            default_search_artifact_build_policy(),
+            default_collection_layout_family(),
+            document_encoder_compression,
         ),
     )
     save_stored_packed_index(segment_root / "packed_index", stored_index.copy())
@@ -140,7 +176,30 @@ def ensure_one_segment_collection_mirror(
             centroid_head_posting_cap,
         )
     var gem_graph_byte_size = 0
-    if (
+    var gem_graph_config_requested = False
+    if use_gem_graph_build_config:
+        gem_graph_config_requested = gem_graph_build_config_enabled(
+            gem_graph_build_config
+        )
+        if gem_graph_config_requested and (
+            gem_graph_fine_cluster_count > 0
+            or gem_graph_coarse_cluster_count > 0
+            or gem_graph_cluster_cutoff > 0
+        ):
+            raise Error(
+                "collection mirror must choose either tuple gem graph parameters or a gem graph build config, not both"
+            )
+
+    if gem_graph_config_requested:
+        save_stored_gem_graph_index(
+            segment_root / "gem_graph",
+            build_stored_gem_graph_index_with_config(
+                stored_index,
+                gem_graph_build_config,
+            ),
+        )
+        gem_graph_byte_size = gem_graph_storage_byte_size(segment_root / "gem_graph")
+    elif (
         gem_graph_fine_cluster_count > 0
         and gem_graph_coarse_cluster_count > 0
         and gem_graph_cluster_cutoff > 0
@@ -217,6 +276,8 @@ def ensure_one_segment_collection_mirror(
             search_artifacts^,
             text_corpus_root_name,
             segment_stats.copy(),
+            [],
+            document_encoder_compression,
         ),
     )
     save_snapshot_manifest(
@@ -248,6 +309,8 @@ def ensure_one_segment_collection_mirror(
     snapshot_id: SnapshotId,
     generation: Int,
     read stored_index: StoredPackedIndex,
+    read document_text_corpus: DocumentTextCorpus,
+    read document_encoder_compression: DocumentEncoderCompressionManifest,
     document_proxy_vector_budget: Int = 0,
     centroid_postings_vector_budget: Int = 0,
     centroid_head_posting_cap: Int = 0,
@@ -255,7 +318,114 @@ def ensure_one_segment_collection_mirror(
     gem_graph_coarse_cluster_count: Int = 0,
     gem_graph_cluster_cutoff: Int = 0,
 ) raises -> Path:
-    return ensure_one_segment_collection_mirror(
+    return ensure_one_segment_collection_mirror_internal(
+        collection_root,
+        collection_id,
+        tenant_id,
+        namespace_id,
+        snapshot_id,
+        generation,
+        stored_index,
+        document_text_corpus,
+        document_encoder_compression,
+        GemGraphBuildConfig(0, 0, 0),
+        False,
+        document_proxy_vector_budget,
+        centroid_postings_vector_budget,
+        centroid_head_posting_cap,
+        gem_graph_fine_cluster_count,
+        gem_graph_coarse_cluster_count,
+        gem_graph_cluster_cutoff,
+    )
+
+
+def ensure_one_segment_collection_mirror(
+    collection_root: Path,
+    collection_id: CollectionId,
+    tenant_id: TenantId,
+    namespace_id: NamespaceId,
+    snapshot_id: SnapshotId,
+    generation: Int,
+    read stored_index: StoredPackedIndex,
+    read document_text_corpus: DocumentTextCorpus,
+    read document_encoder_compression: DocumentEncoderCompressionManifest,
+    read gem_graph_build_config: GemGraphBuildConfig,
+    document_proxy_vector_budget: Int = 0,
+    centroid_postings_vector_budget: Int = 0,
+    centroid_head_posting_cap: Int = 0,
+) raises -> Path:
+    return ensure_one_segment_collection_mirror_internal(
+        collection_root,
+        collection_id,
+        tenant_id,
+        namespace_id,
+        snapshot_id,
+        generation,
+        stored_index,
+        document_text_corpus,
+        document_encoder_compression,
+        gem_graph_build_config,
+        True,
+        document_proxy_vector_budget,
+        centroid_postings_vector_budget,
+        centroid_head_posting_cap,
+        0,
+        0,
+        0,
+    )
+
+
+def ensure_one_segment_collection_mirror(
+    collection_root: Path,
+    collection_id: CollectionId,
+    tenant_id: TenantId,
+    namespace_id: NamespaceId,
+    snapshot_id: SnapshotId,
+    generation: Int,
+    read stored_index: StoredPackedIndex,
+    read document_text_corpus: DocumentTextCorpus,
+    document_proxy_vector_budget: Int = 0,
+    centroid_postings_vector_budget: Int = 0,
+    centroid_head_posting_cap: Int = 0,
+    gem_graph_fine_cluster_count: Int = 0,
+    gem_graph_coarse_cluster_count: Int = 0,
+    gem_graph_cluster_cutoff: Int = 0,
+) raises -> Path:
+    return ensure_one_segment_collection_mirror_internal(
+        collection_root,
+        collection_id,
+        tenant_id,
+        namespace_id,
+        snapshot_id,
+        generation,
+        stored_index,
+        document_text_corpus,
+        default_document_encoder_compression_manifest(),
+        GemGraphBuildConfig(0, 0, 0),
+        False,
+        document_proxy_vector_budget,
+        centroid_postings_vector_budget,
+        centroid_head_posting_cap,
+        gem_graph_fine_cluster_count,
+        gem_graph_coarse_cluster_count,
+        gem_graph_cluster_cutoff,
+    )
+
+
+def ensure_one_segment_collection_mirror(
+    collection_root: Path,
+    collection_id: CollectionId,
+    tenant_id: TenantId,
+    namespace_id: NamespaceId,
+    snapshot_id: SnapshotId,
+    generation: Int,
+    read stored_index: StoredPackedIndex,
+    read gem_graph_build_config: GemGraphBuildConfig,
+    document_proxy_vector_budget: Int = 0,
+    centroid_postings_vector_budget: Int = 0,
+    centroid_head_posting_cap: Int = 0,
+) raises -> Path:
+    return ensure_one_segment_collection_mirror_internal(
         collection_root,
         collection_id,
         tenant_id,
@@ -264,6 +434,80 @@ def ensure_one_segment_collection_mirror(
         generation,
         stored_index,
         DocumentTextCorpus(List[String](), List[String]()),
+        default_document_encoder_compression_manifest(),
+        gem_graph_build_config,
+        True,
+        document_proxy_vector_budget,
+        centroid_postings_vector_budget,
+        centroid_head_posting_cap,
+        0,
+        0,
+        0,
+    )
+
+
+def ensure_one_segment_collection_mirror(
+    collection_root: Path,
+    collection_id: CollectionId,
+    tenant_id: TenantId,
+    namespace_id: NamespaceId,
+    snapshot_id: SnapshotId,
+    generation: Int,
+    read stored_index: StoredPackedIndex,
+    read document_text_corpus: DocumentTextCorpus,
+    read gem_graph_build_config: GemGraphBuildConfig,
+    document_proxy_vector_budget: Int = 0,
+    centroid_postings_vector_budget: Int = 0,
+    centroid_head_posting_cap: Int = 0,
+) raises -> Path:
+    return ensure_one_segment_collection_mirror_internal(
+        collection_root,
+        collection_id,
+        tenant_id,
+        namespace_id,
+        snapshot_id,
+        generation,
+        stored_index,
+        document_text_corpus,
+        default_document_encoder_compression_manifest(),
+        gem_graph_build_config,
+        True,
+        document_proxy_vector_budget,
+        centroid_postings_vector_budget,
+        centroid_head_posting_cap,
+        0,
+        0,
+        0,
+    )
+
+
+def ensure_one_segment_collection_mirror(
+    collection_root: Path,
+    collection_id: CollectionId,
+    tenant_id: TenantId,
+    namespace_id: NamespaceId,
+    snapshot_id: SnapshotId,
+    generation: Int,
+    read stored_index: StoredPackedIndex,
+    document_proxy_vector_budget: Int = 0,
+    centroid_postings_vector_budget: Int = 0,
+    centroid_head_posting_cap: Int = 0,
+    gem_graph_fine_cluster_count: Int = 0,
+    gem_graph_coarse_cluster_count: Int = 0,
+    gem_graph_cluster_cutoff: Int = 0,
+) raises -> Path:
+    return ensure_one_segment_collection_mirror_internal(
+        collection_root,
+        collection_id,
+        tenant_id,
+        namespace_id,
+        snapshot_id,
+        generation,
+        stored_index,
+        DocumentTextCorpus(List[String](), List[String]()),
+        default_document_encoder_compression_manifest(),
+        GemGraphBuildConfig(0, 0, 0),
+        False,
         document_proxy_vector_budget,
         centroid_postings_vector_budget,
         centroid_head_posting_cap,

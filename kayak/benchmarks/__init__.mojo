@@ -25,6 +25,81 @@ from .faithfulness_frontier_json import (
     faithfulness_frontier_summaries_json,
     faithfulness_frontier_summary_json,
 )
+from .gem_heldout_ablation_json import (
+    GEM_HELDOUT_POSITIVE_SELECTION_POLICY,
+    GEM_HELDOUT_TRAINING_SELECTION_POLICY,
+    GEM_HELDOUT_VARIANT_ADAPTIVE_CUTOFF,
+    GEM_HELDOUT_VARIANT_ADAPTIVE_CUTOFF_RELEVANT_COVERAGE,
+    GEM_HELDOUT_VARIANT_ADAPTIVE_CUTOFF_SHORTCUTS,
+    GEM_HELDOUT_VARIANT_BASELINE,
+    GEM_HELDOUT_VARIANT_SHORTCUTS,
+    GemHeldoutAblationSummary,
+    GemHeldoutAblationVariantSpec,
+    GemHeldoutQuerySplit,
+    build_gem_heldout_ablation_summary,
+    build_gem_heldout_query_split,
+    default_gem_heldout_training_query_count,
+    gem_heldout_ablation_summaries_json,
+    gem_heldout_ablation_summary_json,
+    standard_gem_heldout_ablation_variant_specs,
+)
+from .gem_heldout_adaptive_diagnostics import (
+    GemHeldoutAdaptiveDiagnostics,
+    build_gem_heldout_adaptive_diagnostics,
+)
+from .gem_heldout_beam_probe import (
+    synthetic_hard_recall_gem_heldout_beam_probe_summaries,
+    write_synthetic_hard_recall_gem_heldout_beam_probe,
+)
+from .gem_heldout_candidate_probe import (
+    synthetic_hard_recall_gem_heldout_candidate_probe_summaries,
+    write_synthetic_hard_recall_gem_heldout_candidate_probe,
+)
+from .gem_heldout_cluster_topk_probe import (
+    synthetic_hard_recall_gem_heldout_cluster_topk_probe_summaries,
+    write_synthetic_hard_recall_gem_heldout_cluster_topk_probe,
+)
+from .gem_heldout_construction_probe import (
+    synthetic_hard_recall_gem_heldout_construction_probe_summaries,
+    write_synthetic_hard_recall_gem_heldout_construction_probe,
+)
+from .gem_heldout_representative_depth_probe import (
+    synthetic_hard_recall_gem_heldout_representative_depth_probe_summaries,
+    write_synthetic_hard_recall_gem_heldout_representative_depth_probe,
+)
+from .gem_heldout_entry_hop_probe import (
+    synthetic_hard_recall_gem_heldout_entry_hop_probe_summaries,
+    write_synthetic_hard_recall_gem_heldout_entry_hop_probe,
+)
+from .gem_heldout_frontier_policy_probe import (
+    synthetic_hard_recall_gem_heldout_frontier_policy_probe_summaries,
+    write_synthetic_hard_recall_gem_heldout_frontier_policy_probe,
+)
+from .gem_heldout_shortcut_probe import (
+    synthetic_hard_recall_gem_heldout_shortcut_probe_summaries,
+    write_synthetic_hard_recall_gem_heldout_shortcut_probe,
+)
+from .gem_heldout_shortcut_budget_probe import (
+    synthetic_hard_recall_gem_heldout_shortcut_budget_probe_summaries,
+    write_synthetic_hard_recall_gem_heldout_shortcut_budget_probe,
+)
+from .gem_heldout_querytime_probe import (
+    GemHeldoutQuerytimeProbeSummary,
+    build_gem_heldout_querytime_probe_summary,
+    gem_heldout_querytime_probe_summaries_json,
+    write_synthetic_hard_recall_gem_heldout_querytime_probe,
+)
+from .gem_heldout_ablation_runner import (
+    GemHeldoutAblationRunOptions,
+    adaptive_probe_gem_heldout_ablation_run_options,
+    default_gem_heldout_ablation_run_options,
+    focused_gem_heldout_ablation_run_options,
+    gem_heldout_candidate_window_sizes,
+    smoke_adaptive_probe_gem_heldout_ablation_run_options,
+    smoke_gem_heldout_ablation_run_options,
+    synthetic_hard_recall_gem_heldout_ablation_summaries_for_options,
+    write_synthetic_hard_recall_gem_heldout_ablation,
+)
 from .planner_benchmark_json import (
     PlannerBenchmarkSummary,
     build_planner_benchmark_summary,
@@ -79,6 +154,7 @@ from .synthetic_hard_recall_fixture import (
     default_synthetic_hard_recall_profiles,
     high_centroid_synthetic_hard_recall_profile,
     make_synthetic_hard_recall_fixture,
+    smoke_synthetic_hard_recall_profile,
 )
 from .contradiction_hard_recall_fixture import (
     ContradictionHardRecallFixture,
@@ -117,6 +193,22 @@ from .query_bucket_stage_aware_json import (
     query_bucket_stage_aware_search_summaries_json,
     query_bucket_stage_aware_search_summary_json,
 )
+from kayak.collections import (
+    MULTI_VECTOR_INDEX_COMPRESSION_METHOD_FULL_EXACT,
+    MULTI_VECTOR_INDEX_COMPRESSION_METHOD_HIERARCHICAL_POOLING,
+    MULTI_VECTOR_INDEX_COMPRESSION_METHOD_MEMORY_TOKENS,
+    MULTI_VECTOR_INDEX_COMPRESSION_METHOD_SEQUENCE_RESIZING,
+    MULTI_VECTOR_INDEX_COMPRESSION_METHOD_ATTENTION_GUIDED_CLUSTERING,
+    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_FULL_EXACT,
+    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_PREFIX_PRUNING,
+    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING,
+    require_multi_vector_index_compression_method_stored_representation_executable,
+    stored_representation_multi_vector_index_compression_methods,
+    pool_factor_for_target_document_vector_budget,
+    pool_factor_for_multi_vector_index_compression_budget,
+    supported_training_free_sequence_compression_token_pooling_policies,
+    supported_multi_vector_index_compression_methods,
+)
 from .query_vector_bucket import (
     QueryVectorBucket,
     make_query_vector_bucket,
@@ -129,15 +221,18 @@ from .query_vector_bucket import (
     subset_stored_judged_task_queries_to_query_vector_bucket,
 )
 from .training_free_sequence_compression_json import (
-    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_FULL_EXACT,
-    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_PREFIX_PRUNING,
-    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING,
     TrainingFreeSequenceCompressionSummary,
     build_training_free_sequence_compression_summary,
     standard_training_free_sequence_compression_budget_sizes,
     training_free_sequence_compression_summaries_json,
     training_free_sequence_compression_summary_json,
-    pool_factor_for_target_document_vector_budget,
+)
+from .multi_vector_index_compression_json import (
+    MultiVectorIndexCompressionSummary,
+    build_multi_vector_index_compression_summary,
+    multi_vector_index_compression_summaries_json,
+    multi_vector_index_compression_summary_json,
+    standard_multi_vector_index_compression_budget_sizes,
 )
 from .vector_pruning_json import (
     VectorPruningSummary,

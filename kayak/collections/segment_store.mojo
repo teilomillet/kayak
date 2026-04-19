@@ -10,6 +10,11 @@ from .artifact_manifest import (
     require_current_vector_scalar_name,
     write_collection_artifact_manifest,
 )
+from .document_encoder_compression import (
+    DocumentEncoderCompressionConfigEntry,
+    DocumentEncoderCompressionManifest,
+    default_document_encoder_compression_manifest,
+)
 from .document_representation_transform import (
     DocumentRepresentationTransformConfigEntry,
     DocumentRepresentationTransformManifest,
@@ -98,6 +103,32 @@ def save_sealed_segment_manifest(
     )
     entries.append(ManifestEntry("vector_dim", String(manifest.vector_dim)))
     entries.append(ManifestEntry("packed_index_root", packed_index_root))
+    entries.append(
+        ManifestEntry(
+            "document_encoder_compression_kind",
+            manifest.document_encoder_compression.kind,
+        )
+    )
+    entries.append(
+        ManifestEntry(
+            "document_encoder_compression_config_count",
+            String(len(manifest.document_encoder_compression.config)),
+        )
+    )
+    for index in range(len(manifest.document_encoder_compression.config)):
+        var entry = manifest.document_encoder_compression.config[index].copy()
+        entries.append(
+            ManifestEntry(
+                "document_encoder_compression_config_" + String(index) + "_key",
+                entry.key,
+            )
+        )
+        entries.append(
+            ManifestEntry(
+                "document_encoder_compression_config_" + String(index) + "_value",
+                entry.value,
+            )
+        )
     entries.append(
         ManifestEntry(
             "document_representation_transform_count",
@@ -189,6 +220,45 @@ def load_sealed_segment_manifest(root: Path) raises -> SealedSegmentManifest:
     var entries = read_collection_artifact_manifest(
         segment_manifest_path(root), "sealed_segment_manifest"
     )
+    var document_encoder_compression = (
+        default_document_encoder_compression_manifest()
+    )
+    var document_encoder_compression_kind = load_optional_manifest_value(
+        entries, "document_encoder_compression_kind"
+    )
+    if document_encoder_compression_kind.byte_length() != 0:
+        var config_entries = List[DocumentEncoderCompressionConfigEntry]()
+        var config_count = load_optional_manifest_value(
+            entries,
+            "document_encoder_compression_config_count",
+        )
+        if config_count.byte_length() != 0:
+            for index in range(
+                parse_int(
+                    config_count,
+                    "document_encoder_compression_config_count",
+                )
+            ):
+                config_entries.append(
+                    DocumentEncoderCompressionConfigEntry(
+                        require_manifest_value(
+                            entries,
+                            "document_encoder_compression_config_"
+                                + String(index)
+                                + "_key",
+                        ),
+                        require_manifest_value(
+                            entries,
+                            "document_encoder_compression_config_"
+                                + String(index)
+                                + "_value",
+                        ),
+                    )
+                )
+        document_encoder_compression = DocumentEncoderCompressionManifest(
+            document_encoder_compression_kind,
+            config_entries,
+        )
     var document_representation_transforms = List[
         DocumentRepresentationTransformManifest
     ]()
@@ -294,6 +364,7 @@ def load_sealed_segment_manifest(root: Path) raises -> SealedSegmentManifest:
         parse_int(require_manifest_value(entries, "vector_dim"), "vector_dim"),
         require_manifest_value(entries, "packed_index_root"),
         document_representation_transforms^,
+        document_encoder_compression,
         search_artifacts^,
         decode_optional_root(load_optional_manifest_value(entries, "text_corpus_root")),
         load_segment_stats_from_manifest(entries),

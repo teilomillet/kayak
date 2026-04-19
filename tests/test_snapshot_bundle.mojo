@@ -3,9 +3,12 @@ from std.testing import TestSuite, assert_equal
 
 from kayak import EncodedDocument, VECTOR_SCALAR_NAME, pack_documents
 from kayak.collections import (
+    COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     CollectionId,
     CollectionManifest,
     CollectionStats,
+    DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+    DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
     DocumentMetadataEntry,
     DocumentMetadataMap,
     NamespaceId,
@@ -17,11 +20,14 @@ from kayak.collections import (
     StoredDocumentMetadataCorpus,
     StoredDocumentTextCorpus,
     TenantId,
+    default_search_artifact_build_policy,
     document_metadata_search_artifact,
+    document_encoder_compression_config_value,
     export_snapshot_bundle,
     import_snapshot_bundle,
     load_collection_manifest,
     load_resolved_collection_snapshot,
+    memory_tokens_document_encoder_compression,
     save_collection_manifest,
     save_sealed_segment_manifest,
     save_snapshot_manifest,
@@ -137,6 +143,78 @@ def build_source_collection(root: Path) raises:
     )
 
 
+def build_source_collection_with_memory_tokens_compression(
+    root: Path, document_vector_budget: Int
+) raises:
+    var document_encoder_compression = memory_tokens_document_encoder_compression(
+        document_vector_budget
+    )
+    save_collection_manifest(
+        root,
+        CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            7,
+            "",
+            2,
+            default_search_artifact_build_policy(),
+            COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
+            document_encoder_compression,
+        ),
+    )
+
+    var segment_root = root / "segments" / "segment-0001"
+    write_segment_payload(
+        segment_root,
+        "collection://news",
+        "colbertv2",
+        [EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]])],
+    )
+    save_stored_document_text_corpus(
+        segment_root / "text_corpus",
+        StoredDocumentTextCorpus(
+            CollectionId("news"),
+            SegmentId("segment-0001"),
+            DocumentTextCorpus(["doc-a"], ["alpha"]),
+        ),
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            4,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            "packed_index",
+            [],
+            document_encoder_compression,
+            [],
+            "text_corpus",
+            SegmentStats(1, 2, 2, 512),
+        ),
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0004",
+        SnapshotManifest(
+            SnapshotId("snapshot-0004"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            4,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 1, 2, 2, 512),
+        ),
+    )
+
+
 def test_snapshot_bundle_export_import_roundtrip() raises:
     var source_root = unique_root("kayak-snapshot-bundle-source")
     var bundle_root = unique_root("kayak-snapshot-bundle-export")
@@ -183,6 +261,59 @@ def test_snapshot_bundle_export_import_roundtrip() raises:
             .entries[0]
             .value,
         "wire",
+    )
+
+
+def test_snapshot_bundle_export_import_preserves_document_encoder_compression() raises:
+    var source_root = unique_root("kayak-snapshot-bundle-compression-source")
+    var bundle_root = unique_root("kayak-snapshot-bundle-compression-export")
+    var target_root = unique_root("kayak-snapshot-bundle-compression-import")
+
+    build_source_collection_with_memory_tokens_compression(source_root, 8)
+
+    _ = export_snapshot_bundle(source_root, SnapshotId("snapshot-0004"), bundle_root)
+
+    var exported_collection = load_collection_manifest(bundle_root)
+    assert_equal(
+        exported_collection.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            exported_collection.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "8",
+    )
+
+    _ = import_snapshot_bundle(bundle_root, target_root)
+
+    var imported_collection = load_collection_manifest(target_root)
+    var resolved = load_resolved_collection_snapshot(
+        target_root, SnapshotId("snapshot-0004")
+    )
+
+    assert_equal(
+        imported_collection.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            imported_collection.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "8",
+    )
+    assert_equal(
+        resolved.segments[0].manifest.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            resolved.segments[0].manifest.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "8",
     )
 
 
@@ -310,6 +441,36 @@ def test_snapshot_bundle_import_preserves_existing_collection_retention_default(
         len(imported_collection.search_artifact_build_policy.stage1_artifacts),
         2,
     )
+
+
+def test_snapshot_bundle_import_rejects_segment_document_encoder_compression_mismatch() raises:
+    var source_root = unique_root("kayak-snapshot-bundle-segment-compression-source")
+    var bundle_root = unique_root("kayak-snapshot-bundle-segment-compression-export")
+    var target_root = unique_root("kayak-snapshot-bundle-segment-compression-target")
+
+    build_source_collection_with_memory_tokens_compression(source_root, 8)
+    _ = export_snapshot_bundle(source_root, SnapshotId("snapshot-0004"), bundle_root)
+    _ = import_snapshot_bundle(bundle_root, target_root)
+
+    var segment_manifest_path = (
+        bundle_root / "segments" / "segment-0001" / "manifest.tsv"
+    )
+    segment_manifest_path.write_text(
+        segment_manifest_path
+            .read_text()
+            .replace(
+                "document_encoder_compression_kind\tmemory_tokens",
+                "document_encoder_compression_kind\tsequence_resizing",
+            )
+    )
+
+    var raised = False
+    try:
+        _ = import_snapshot_bundle(bundle_root, target_root)
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def main() raises:

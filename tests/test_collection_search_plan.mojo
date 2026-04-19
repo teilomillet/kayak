@@ -58,6 +58,7 @@ from kayak import (
     explain_collection_search,
     gem_graph_search_artifact,
     gem_graph_search_plan,
+    GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
     loaded_segment_stored_centroid_postings_index,
     load_resolved_collection_snapshot,
     none_stage3_verifier_operator,
@@ -1977,6 +1978,44 @@ def test_gem_graph_search_plan_executes_with_exact_rerank() raises:
     assert_equal(json.find("\"tracks_graph_search\":true") != -1, True)
     assert_equal(json.find("\"graph_search_counters\":") != -1, True)
     assert_equal(json.find("\"family\":\"late_interaction\"") != -1, True)
+    assert_equal(
+        json.find("\"graph_frontier_policy_kind\":\"local_per_entry\"") != -1,
+        True,
+    )
+
+
+def test_gem_graph_search_plan_executes_with_configured_frontier_policy() raises:
+    var root = make_gem_graph_collection_root()
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0001"))
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var explain = explain_collection_search(
+        ExactCpuBackend(),
+        query,
+        resolved,
+        gem_graph_search_plan(
+            1,
+            2,
+            oracle_full_recall_required_faithfulness_policy(),
+            1,
+            4,
+            GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
+        ),
+    )
+    var json = collection_search_explain_json(explain)
+
+    assert_equal(len(explain.candidate_set.hits) > 0, True)
+    assert_equal(
+        explain.plan.candidate_generator.graph_frontier_policy_kind,
+        GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
+    )
+    assert_equal(
+        explain.candidate_set.graph_search_counters.visited_vertex_count > 0,
+        True,
+    )
+    assert_equal(
+        json.find("\"graph_frontier_policy_kind\":\"global_best_first\"") != -1,
+        True,
+    )
 
 
 def main() raises:

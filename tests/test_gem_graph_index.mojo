@@ -10,6 +10,7 @@ from kayak import (
     quantize_query_codes,
     quantized_chamfer_distance_for_document,
     query_entry_doc_indices,
+    query_representative_doc_indices,
     query_relevant_cluster_ids,
 )
 
@@ -93,6 +94,49 @@ def test_gem_graph_query_helpers_follow_cluster_filtered_path() raises:
         >= 0.0,
         True,
     )
+
+
+def test_gem_graph_representative_doc_indices_extend_entry_docs() raises:
+    var index = build_gem_graph_index(
+        pack_documents(
+            [
+                EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]]),
+                EncodedDocument("doc-b", [[1.0, 0.0], [1.0, 0.0]]),
+                EncodedDocument("doc-c", [[0.0, 1.0], [0.0, 1.0]]),
+                EncodedDocument("doc-d", [[1.0, 0.0], [0.5, 0.5]]),
+            ]
+        ),
+        2,
+        2,
+        2,
+        2,
+        2,
+    )
+    var query = EncodedQuery([[1.0, 0.0], [0.0, 1.0]])
+    var relevant_clusters = query_relevant_cluster_ids(query, index, 2)
+    var entry_docs = query_entry_doc_indices(index, relevant_clusters)
+    var representative_docs = query_representative_doc_indices(
+        index,
+        relevant_clusters,
+        2,
+    )
+
+    assert_equal(len(representative_docs) >= len(entry_docs), True)
+    for entry_doc in entry_docs:
+        var seen = False
+        for representative_doc in representative_docs:
+            if representative_doc == entry_doc:
+                seen = True
+                break
+        assert_equal(
+            document_profile_intersects_clusters(
+                index,
+                entry_doc,
+                relevant_clusters,
+            ),
+            True,
+        )
+        assert_equal(seen, True)
 
 
 def main() raises:

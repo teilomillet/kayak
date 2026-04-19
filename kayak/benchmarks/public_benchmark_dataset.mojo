@@ -8,6 +8,7 @@ from kayak.collections import (
     TenantId,
     ensure_one_segment_collection_mirror,
 )
+from kayak.index import GemGraphBuildConfig
 from kayak.interop import (
     load_browsecomp_plus_gold_real_subset_document_text_corpus,
     load_browsecomp_plus_real_subset_document_text_corpus,
@@ -144,6 +145,30 @@ def max_query_vector_budget_for_public_benchmark_dataset(
     if max_budget <= 0:
         return 1
     return max_budget
+
+
+def ensure_public_benchmark_dataset_collection_mirror(
+    read dataset: PublicBenchmarkDataset,
+    collection_suffix: String,
+    read gem_graph_build_config: GemGraphBuildConfig,
+    document_proxy_vector_budget: Int = 0,
+    centroid_postings_vector_budget: Int = 0,
+    centroid_head_posting_cap: Int = 0,
+) raises -> Path:
+    return ensure_one_segment_collection_mirror(
+        public_benchmark_dataset_collection_root(dataset, collection_suffix),
+        CollectionId(dataset.stored_task.dataset_id),
+        TenantId("public"),
+        NamespaceId("benchmark"),
+        SnapshotId("snapshot-0001"),
+        1,
+        dataset.stored_index,
+        dataset.document_text_corpus,
+        gem_graph_build_config,
+        document_proxy_vector_budget,
+        centroid_postings_vector_budget,
+        centroid_head_posting_cap,
+    )
 
 
 def ensure_public_benchmark_dataset_collection_mirror(

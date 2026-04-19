@@ -36,6 +36,8 @@ from kayak import (
     SearchPlanSelectionDecision,
     SearchPlanSelectionRequest,
     SearchArtifactBuildPolicy,
+    DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+    DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
     document_proxy_build_spec,
     SearchResponse,
     ScoreHistogram,
@@ -64,6 +66,7 @@ from kayak import (
     exact_late_interaction_reference_scoring_semantics,
     exact_late_interaction_stage2_reference_operator,
     layout_rooted_search_serving_scope,
+    memory_tokens_document_encoder_compression,
     none_stage3_verifier_operator,
     noop_topk_stage2_reference_operator,
     oracle_full_recall_required_faithfulness_policy,
@@ -217,16 +220,20 @@ def sample_reclaim_execution_result() raises -> CollectionReclaimExecutionResult
 
 
 def test_create_collection_request_materializes_manifest() raises:
+    var document_encoder_compression = memory_tokens_document_encoder_compression(8)
     var request = CreateCollectionRequest(
         CollectionId("news"),
         TenantId("tenant-a"),
         NamespaceId("search"),
+        COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
         "colbertv2",
         VECTOR_SCALAR_NAME,
         128,
+        1,
         SearchArtifactBuildPolicy(
             [document_proxy_build_spec("proxy_sidecar", 2)]
         ),
+        document_encoder_compression,
     )
     var manifest = request.to_manifest()
 
@@ -239,6 +246,10 @@ def test_create_collection_request_materializes_manifest() raises:
         COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     )
     assert_equal(manifest.default_keep_latest_inactive_count, 1)
+    assert_equal(
+        manifest.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
     assert_equal(len(manifest.search_artifact_build_policy.stage1_artifacts), 1)
     assert_equal(
         manifest.search_artifact_build_policy.stage1_artifacts[0].root,
@@ -271,6 +282,7 @@ def test_lifecycle_and_reclaim_contracts_keep_policy_explicit() raises:
         SearchArtifactBuildPolicy(
             [document_proxy_build_spec("document_proxy", 2)]
         ),
+        memory_tokens_document_encoder_compression(8),
         0,
         [SnapshotId("snapshot-0001")],
         4,
@@ -317,6 +329,14 @@ def test_lifecycle_and_reclaim_contracts_keep_policy_explicit() raises:
     assert_equal(
         lifecycle_request.policy_override.keep_latest_inactive_count,
         0,
+    )
+    assert_equal(
+        lifecycle_response.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        lifecycle_response.document_encoder_compression.config[0].key,
+        DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
     )
     assert_equal(
         lifecycle_request.policy_override.pinned_snapshot_ids[0].value,

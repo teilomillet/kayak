@@ -24,6 +24,7 @@ from kayak.text import DocumentTextCorpus
 
 from .collection import CollectionManifest
 from .collection_store import load_collection_manifest
+from .document_encoder_compression import same_document_encoder_compression_manifest
 from .document_filter_index import StoredDocumentFilterIndex
 from .document_filter_index import (
     stored_document_filter_index_has_uniform_logical_scope,
@@ -143,6 +144,7 @@ def empty_stored_gem_graph_index(
         0,
         0,
         0,
+        0,
         False,
         0,
         0,
@@ -207,6 +209,13 @@ def require_segment_matches_collection(
 
     if segment.vector_dim != collection.vector_dim:
         raise Error("segment vector_dim does not match collection manifest")
+    if not same_document_encoder_compression_manifest(
+        segment.document_encoder_compression,
+        collection.document_encoder_compression,
+    ):
+        raise Error(
+            "segment document_encoder_compression does not match collection manifest"
+        )
 
     if segment.generation > snapshot.generation:
         raise Error("segment generation exceeds snapshot generation")

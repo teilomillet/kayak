@@ -3,6 +3,7 @@ from std.os import makedirs
 from std.pathlib import Path
 
 from kayak.index import (
+    GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
     GemGraphBuildConfig,
     GemGraphIndex,
     build_gem_graph_index_with_config,
@@ -140,15 +141,19 @@ def build_stored_gem_graph_index(
     construction_neighbor_count: Int = DEFAULT_GEM_GRAPH_CONSTRUCTION_NEIGHBOR_COUNT,
     degree_limit: Int = DEFAULT_GEM_GRAPH_DEGREE_LIMIT,
 ) raises -> StoredGemGraphIndex:
+    var config = GemGraphBuildConfig(
+        fine_cluster_count,
+        coarse_cluster_count,
+        cluster_cutoff,
+        construction_neighbor_count,
+        degree_limit,
+    )
+    # This convenience builder only exposes graph-density knobs, so keep the
+    # latent shortcut candidate budget aligned with that explicit request.
+    config.shortcut_candidate_k = construction_neighbor_count
     return build_stored_gem_graph_index_with_config(
         stored_packed_index,
-        GemGraphBuildConfig(
-            fine_cluster_count,
-            coarse_cluster_count,
-            cluster_cutoff,
-            construction_neighbor_count,
-            degree_limit,
-        ),
+        config,
     )
 
 
@@ -159,6 +164,7 @@ def build_stored_gem_graph_index_with_config(
         stored_packed_index.index,
         config,
     )
+    var adaptive_label_policy = index.adaptive_label_policy.copy()
     return StoredGemGraphIndex(
         stored_packed_index.dataset_id.copy(),
         stored_packed_index.model_name.copy(),
@@ -168,6 +174,7 @@ def build_stored_gem_graph_index_with_config(
         index.adaptive_cluster_cutoff_max,
         index.construction_neighbor_count,
         index.degree_limit,
+        index.shortcut_candidate_k,
         index.shortcuts_enabled,
         index.document_count,
         index.cluster_count,
@@ -177,6 +184,7 @@ def build_stored_gem_graph_index_with_config(
         index.quantization_centroid_count,
         0,
         index^,
+        adaptive_label_policy^,
     )
 
 
@@ -206,10 +214,18 @@ def write_gem_graph_manifest(
                 String(stored.adaptive_cluster_cutoff_max),
             ),
             ManifestEntry(
+                "adaptive_label_policy",
+                stored.adaptive_label_policy,
+            ),
+            ManifestEntry(
                 "construction_neighbor_count",
                 String(stored.construction_neighbor_count),
             ),
             ManifestEntry("degree_limit", String(stored.degree_limit)),
+            ManifestEntry(
+                "shortcut_candidate_k",
+                String(stored.shortcut_candidate_k),
+            ),
             ManifestEntry("shortcuts_enabled", bool_text(stored.shortcuts_enabled)),
             ManifestEntry("document_count", String(stored.document_count)),
             ManifestEntry("cluster_count", String(stored.cluster_count)),
@@ -337,6 +353,30 @@ def load_stored_gem_graph_index(root: Path) raises -> StoredGemGraphIndex:
     var adaptive_cluster_cutoff_max = parse_int(
         adaptive_cluster_cutoff_max_text, "adaptive_cluster_cutoff_max"
     )
+    var adaptive_label_policy = load_optional_manifest_value(
+        manifest, "adaptive_label_policy"
+    )
+    if adaptive_label_policy == "":
+        adaptive_label_policy = (
+            GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK
+        )
+    var construction_neighbor_count = parse_int(
+        require_manifest_value(manifest, "construction_neighbor_count"),
+        "construction_neighbor_count",
+    )
+    var degree_limit = parse_int(
+        require_manifest_value(manifest, "degree_limit"), "degree_limit"
+    )
+    var shortcut_candidate_k_text = load_optional_manifest_value(
+        manifest, "shortcut_candidate_k"
+    )
+    if shortcut_candidate_k_text == "":
+        # Older artifacts did not persist this scalar. Fallback to the
+        # construction neighbor count, which was also the historical default.
+        shortcut_candidate_k_text = String(construction_neighbor_count)
+    var shortcut_candidate_k = parse_int(
+        shortcut_candidate_k_text, "shortcut_candidate_k"
+    )
 
     var index = GemGraphIndex(
         doc_ids^,
@@ -364,12 +404,11 @@ def load_stored_gem_graph_index(root: Path) raises -> StoredGemGraphIndex:
             manifest, "adaptive_cluster_cutoff_enabled"
         ),
         adaptive_cluster_cutoff_max,
-        parse_int(
-            require_manifest_value(manifest, "construction_neighbor_count"),
-            "construction_neighbor_count",
-        ),
-        parse_int(require_manifest_value(manifest, "degree_limit"), "degree_limit"),
+        construction_neighbor_count,
+        degree_limit,
         parse_optional_bool_manifest_value(manifest, "shortcuts_enabled"),
+        shortcut_candidate_k,
+        adaptive_label_policy.copy(),
     )
 
     return StoredGemGraphIndex(
@@ -381,11 +420,9 @@ def load_stored_gem_graph_index(root: Path) raises -> StoredGemGraphIndex:
             manifest, "adaptive_cluster_cutoff_enabled"
         ),
         adaptive_cluster_cutoff_max,
-        parse_int(
-            require_manifest_value(manifest, "construction_neighbor_count"),
-            "construction_neighbor_count",
-        ),
-        parse_int(require_manifest_value(manifest, "degree_limit"), "degree_limit"),
+        construction_neighbor_count,
+        degree_limit,
+        shortcut_candidate_k,
         parse_optional_bool_manifest_value(manifest, "shortcuts_enabled"),
         parse_int(require_manifest_value(manifest, "document_count"), "document_count"),
         parse_int(require_manifest_value(manifest, "cluster_count"), "cluster_count"),
@@ -410,4 +447,5 @@ def load_stored_gem_graph_index(root: Path) raises -> StoredGemGraphIndex:
             "artifact_byte_size",
         ),
         index^,
+        adaptive_label_policy^,
     )

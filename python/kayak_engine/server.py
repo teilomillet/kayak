@@ -19,6 +19,7 @@ from .hosted_prepared_exact_runtime_registry import (
 from .mojo_service import load_module
 from .payloads import (
     PayloadError,
+    create_collection_request_payload,
     delete_documents_request_payload,
     document_payload_parts,
     exact_search_request_payload,
@@ -267,22 +268,7 @@ class KayakEngineHandler(BaseHTTPRequestHandler):
     def _create_collection(self, payload: dict[str, Any]) -> str:
         return self.server.engine_module.create_collection_json(
             str(self.server.service_root),
-            {
-                "collection_id": require_string(payload, "collection_id"),
-                "tenant_id": require_string(payload, "tenant_id"),
-                "namespace_id": require_string(payload, "namespace_id"),
-                "collection_layout_family": require_string(
-                    payload, "collection_layout_family", default=""
-                ),
-                "model_name": require_string(payload, "model_name"),
-                "vector_scalar_name": require_string(
-                    payload, "vector_scalar_name", default=""
-                ),
-                "vector_dim": require_int(payload, "vector_dim"),
-                "default_keep_latest_inactive_count": require_int(
-                    payload, "default_keep_latest_inactive_count", default=1
-                ),
-            },
+            create_collection_request_payload(payload),
         )
 
     def _upsert_documents(self, payload: dict[str, Any]) -> str:

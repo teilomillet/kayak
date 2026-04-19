@@ -4,14 +4,15 @@ from std.collections import List
 from std.pathlib import Path
 
 from kayak.collections import (
-    DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_FIRST,
-    DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_HIERARCHICAL,
-    DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX,
-    apply_document_representation_transforms_to_documents,
-    budgeted_token_pooling_document_representation_transform,
-    prefix_pruning_document_representation_transform,
+    TRAINING_FREE_SEQUENCE_COMPRESSION_DEFAULT_PROTECTED_TOKEN_COUNT,
+    TRAINING_FREE_SEQUENCE_COMPRESSION_DEFAULT_PROTECTED_TOKEN_POSITION,
+    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_FULL_EXACT,
+    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_PREFIX_PRUNING,
+    TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING,
+    TrainingFreeSequenceCompressionSpec,
+    apply_training_free_sequence_compression_to_packed_index,
+    training_free_sequence_compression_spec,
 )
-from kayak.index import pack_documents
 from kayak.runtime import ExactCpuBackend
 from kayak.search import search_exact
 from kayak.storage import StoredJudgedTask, StoredPackedIndex, save_stored_packed_index
@@ -21,24 +22,12 @@ from .token_pooling_common import (
     evaluate_task_on_index,
     packed_index_storage_byte_size,
     reference_recall_at_k,
-    supported_token_pooling_policies,
 )
 from .vector_pruning_json import standard_vector_pruning_budget_sizes
-
-
-comptime TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_FULL_EXACT = "full_exact"
-comptime TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_PREFIX_PRUNING = (
-    "prefix_pruning"
-)
-comptime TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING = "token_pooling"
 
 comptime TRAINING_FREE_SEQUENCE_COMPRESSION_SEARCH_MIN_SECONDS = 0.05
 comptime TRAINING_FREE_SEQUENCE_COMPRESSION_SEARCH_MAX_SECONDS = 0.25
 comptime TRAINING_FREE_SEQUENCE_COMPRESSION_SEARCH_MAX_ITERS = 200
-comptime TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_COUNT = 1
-comptime TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_POSITION = (
-    DOCUMENT_REPRESENTATION_TRANSFORM_PROTECTED_TOKEN_POSITION_FIRST
-)
 
 
 struct TrainingFreeSequenceCompressionSummary(Copyable):
@@ -132,73 +121,20 @@ def standard_training_free_sequence_compression_budget_sizes(
     return standard_vector_pruning_budget_sizes(max_budget)
 
 
-def pool_factor_for_target_document_vector_budget(
-    available_count: Int, requested_budget: Int
-) raises -> Int:
-    if available_count <= 0:
-        raise Error("sequence compression requires a positive available vector count")
-    if requested_budget <= 0:
-        raise Error("sequence compression requested budget must be positive")
-    if requested_budget >= available_count:
-        return 1
-
-    var factor = available_count // requested_budget
-    if available_count % requested_budget != 0:
-        factor += 1
-    if factor <= 0:
-        return 1
-    return factor
-
-
 def build_transformed_stored_index_for_sequence_compression(
     read stored_task: StoredJudgedTask,
     read full_index: StoredPackedIndex,
-    method_kind: String,
-    requested_document_vector_budget: Int,
-    transform_policy: String,
+    read spec: TrainingFreeSequenceCompressionSpec,
 ) raises -> StoredPackedIndex:
-    if method_kind == TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_FULL_EXACT:
-        return full_index.copy()
-
-    if method_kind == TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_PREFIX_PRUNING:
-        return StoredPackedIndex(
-            stored_task.dataset_id.copy(),
-            stored_task.model_name.copy(),
-            stored_task.vector_scalar_name.copy(),
-            pack_documents(
-                apply_document_representation_transforms_to_documents(
-                    stored_task.task.documents,
-                    [
-                        prefix_pruning_document_representation_transform(
-                            requested_document_vector_budget,
-                            DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX,
-                        )
-                    ],
-                )
-            ),
-        )
-
-    if method_kind == TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING:
-        return StoredPackedIndex(
-            stored_task.dataset_id.copy(),
-            stored_task.model_name.copy(),
-            stored_task.vector_scalar_name.copy(),
-            pack_documents(
-                apply_document_representation_transforms_to_documents(
-                    stored_task.task.documents,
-                    [
-                        budgeted_token_pooling_document_representation_transform(
-                            requested_document_vector_budget,
-                            transform_policy,
-                            TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_COUNT,
-                            TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_POSITION,
-                        )
-                    ],
-                )
-            ),
-        )
-
-    raise Error("unsupported sequence compression method kind: " + method_kind)
+    return StoredPackedIndex(
+        stored_task.dataset_id.copy(),
+        stored_task.model_name.copy(),
+        stored_task.vector_scalar_name.copy(),
+        apply_training_free_sequence_compression_to_packed_index(
+            full_index.index,
+            spec,
+        ),
+    )
 
 
 def build_training_free_sequence_compression_summary(
@@ -210,12 +146,19 @@ def build_training_free_sequence_compression_summary(
     requested_document_vector_budget: Int,
     transform_policy: String = "",
 ) raises -> TrainingFreeSequenceCompressionSummary:
-    var transformed_index = build_transformed_stored_index_for_sequence_compression(
-        stored_task,
-        full_index,
+    var spec = training_free_sequence_compression_spec(
+        stored_task.task.nominal_document_vector_count,
         method_kind,
         requested_document_vector_budget,
         transform_policy,
+        TRAINING_FREE_SEQUENCE_COMPRESSION_DEFAULT_PROTECTED_TOKEN_COUNT,
+        TRAINING_FREE_SEQUENCE_COMPRESSION_DEFAULT_PROTECTED_TOKEN_POSITION,
+    )
+
+    var transformed_index = build_transformed_stored_index_for_sequence_compression(
+        stored_task,
+        full_index,
+        spec,
     )
 
     save_stored_packed_index(root, transformed_index.copy())
@@ -256,23 +199,6 @@ def build_training_free_sequence_compression_summary(
         max_runtime_secs=TRAINING_FREE_SEQUENCE_COMPRESSION_SEARCH_MAX_SECONDS,
     )
 
-    var summary_budget = requested_document_vector_budget
-    var summary_derived_pool_factor = 0
-    var summary_protected_token_count = 0
-    var summary_protected_token_position = String()
-    if method_kind == TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_FULL_EXACT:
-        summary_budget = task.nominal_document_vector_count
-    if method_kind == TRAINING_FREE_SEQUENCE_COMPRESSION_METHOD_TOKEN_POOLING:
-        summary_derived_pool_factor = pool_factor_for_target_document_vector_budget(
-            task.nominal_document_vector_count, requested_document_vector_budget
-        )
-        summary_protected_token_count = (
-            TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_COUNT
-        )
-        summary_protected_token_position = (
-            TRAINING_FREE_SEQUENCE_COMPRESSION_PROTECTED_TOKEN_POSITION
-        )
-
     return TrainingFreeSequenceCompressionSummary(
         stored_task.dataset_id.copy(),
         stored_task.model_name.copy(),
@@ -280,12 +206,12 @@ def build_training_free_sequence_compression_summary(
         task.slice_name.copy(),
         evaluation.primary_metric.copy(),
         Float64(evaluation.primary_value),
-        method_kind.copy(),
-        transform_policy.copy(),
-        summary_budget,
-        summary_derived_pool_factor,
-        summary_protected_token_count,
-        summary_protected_token_position,
+        spec.method_kind.copy(),
+        spec.transform_policy.copy(),
+        spec.requested_document_vector_budget,
+        spec.derived_pool_factor,
+        spec.protected_token_count,
+        spec.protected_token_position.copy(),
         len(task.queries),
         len(task.documents),
         full_index.index.total_vector_count,
@@ -369,11 +295,3 @@ def training_free_sequence_compression_summaries_json(
 
     buffer += "]"
     return buffer^
-
-
-def default_training_free_sequence_compression_policies() -> List[String]:
-    var policies = List[String]()
-    policies.append(DOCUMENT_REPRESENTATION_TRANSFORM_POLICY_PREFIX)
-    for policy in supported_token_pooling_policies():
-        policies.append(policy.copy())
-    return policies^

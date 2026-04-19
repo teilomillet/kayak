@@ -15,6 +15,8 @@ from .gem_graph import (
     DEFAULT_GEM_GRAPH_DEGREE_LIMIT,
     DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
     DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K,
+    GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
+    GEM_GRAPH_ADAPTIVE_LABEL_POLICY_RELEVANT_CLUSTER_COVERAGE,
     GemGraphBuildConfig,
     GemGraphIndex,
     GemGraphTrainingPair,
@@ -25,6 +27,7 @@ from .gem_graph import (
     quantize_query_codes,
     quantized_chamfer_distance_for_document,
     query_entry_doc_indices,
+    query_representative_doc_indices,
     query_relevant_cluster_ids,
 )
 from .hybrid_flat_dim128 import (

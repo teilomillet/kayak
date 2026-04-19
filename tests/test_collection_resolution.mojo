@@ -3,6 +3,7 @@ from std.testing import TestSuite, assert_equal
 
 from kayak import EncodedDocument, VECTOR_SCALAR_NAME, pack_documents
 from kayak.collections import (
+    COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     CollectionId,
     CollectionManifest,
     CollectionStats,
@@ -10,6 +11,7 @@ from kayak.collections import (
     DocumentMetadataEntry,
     DocumentMetadataMap,
     NamespaceId,
+    SearchArtifactBuildPolicy,
     SegmentId,
     SegmentStats,
     SealedSegmentManifest,
@@ -38,6 +40,7 @@ from kayak.collections import (
     loaded_segment_stored_gem_graph_index,
     load_collection_storage_report,
     load_resolved_collection_snapshot,
+    memory_tokens_document_encoder_compression,
     save_collection_manifest,
     save_sealed_segment_manifest,
     save_snapshot_manifest,
@@ -387,6 +390,76 @@ def test_resolved_snapshot_rejects_segment_generation_ahead_of_snapshot() raises
             TenantId("tenant-a"),
             NamespaceId("search"),
             5,
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            "packed_index",
+            "",
+            "",
+            SegmentStats(1, 2, 2, 512),
+        ),
+    )
+    save_snapshot_manifest(
+        collection_root / "snapshots" / "snapshot-0004",
+        SnapshotManifest(
+            SnapshotId("snapshot-0004"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            4,
+            [SegmentId("segment-0001")],
+            CollectionStats(1, 1, 2, 2, 512),
+        ),
+    )
+
+    var raised = False
+    try:
+        _ = load_resolved_collection_snapshot(
+            collection_root, SnapshotId("snapshot-0004")
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+
+def test_resolved_snapshot_rejects_segment_document_encoder_compression_mismatch() raises:
+    var collection_root = Path(
+        "/tmp/kayak-resolved-collection-encoder-compression-mismatch"
+    )
+    save_collection_manifest(
+        collection_root,
+        CollectionManifest(
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            "colbertv2",
+            VECTOR_SCALAR_NAME,
+            2,
+            4,
+            "",
+            1,
+            SearchArtifactBuildPolicy([]),
+            COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
+            memory_tokens_document_encoder_compression(8),
+        ),
+    )
+
+    var segment_root = collection_root / "segments" / "segment-0001"
+    write_segment_payload(
+        segment_root,
+        "collection://news",
+        "colbertv2",
+        [EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]])],
+    )
+    save_sealed_segment_manifest(
+        segment_root,
+        SealedSegmentManifest(
+            SegmentId("segment-0001"),
+            CollectionId("news"),
+            TenantId("tenant-a"),
+            NamespaceId("search"),
+            4,
             "colbertv2",
             VECTOR_SCALAR_NAME,
             2,

@@ -42,6 +42,21 @@ comptime DEFAULT_GEM_GRAPH_QUERY_CLUSTER_TOP_K = 2
 comptime DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH = 32
 comptime DEFAULT_GEM_GRAPH_ADAPTIVE_CUTOFF_MAX = 10
 comptime DEFAULT_GEM_GRAPH_ADAPTIVE_TREE_MAX_DEPTH = 3
+comptime GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK = (
+    "first_relevant_cluster_rank"
+)
+comptime GEM_GRAPH_ADAPTIVE_LABEL_POLICY_RELEVANT_CLUSTER_COVERAGE = (
+    "relevant_cluster_coverage"
+)
+
+
+def require_valid_adaptive_label_policy(policy: String) raises:
+    if (
+        policy
+        != GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK
+        and policy != GEM_GRAPH_ADAPTIVE_LABEL_POLICY_RELEVANT_CLUSTER_COVERAGE
+    ):
+        raise Error("gem graph adaptive_label_policy is not supported")
 
 
 struct GemGraphTrainingPair(Copyable):
@@ -71,6 +86,7 @@ struct GemGraphBuildConfig(Copyable):
     var shortcut_candidate_k: Int
     var shortcut_beam_width: Int
     var training_pairs: List[GemGraphTrainingPair]
+    var adaptive_label_policy: String
 
     def __init__(
         out self,
@@ -87,6 +103,7 @@ struct GemGraphBuildConfig(Copyable):
         shortcut_candidate_k: Int = DEFAULT_GEM_GRAPH_CONSTRUCTION_NEIGHBOR_COUNT,
         shortcut_beam_width: Int = DEFAULT_GEM_GRAPH_QUERY_BEAM_WIDTH,
         var training_pairs: List[GemGraphTrainingPair] = List[GemGraphTrainingPair](),
+        var adaptive_label_policy: String = GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
     ) raises:
         if fine_cluster_count < 0:
             raise Error("gem graph fine_cluster_count must be non-negative")
@@ -114,6 +131,7 @@ struct GemGraphBuildConfig(Copyable):
             raise Error("gem graph shortcut_candidate_k must be positive")
         if shortcut_beam_width <= 0:
             raise Error("gem graph shortcut_beam_width must be positive")
+        require_valid_adaptive_label_policy(adaptive_label_policy)
 
         self.fine_cluster_count = fine_cluster_count
         self.coarse_cluster_count = coarse_cluster_count
@@ -128,6 +146,7 @@ struct GemGraphBuildConfig(Copyable):
         self.shortcut_candidate_k = shortcut_candidate_k
         self.shortcut_beam_width = shortcut_beam_width
         self.training_pairs = training_pairs^
+        self.adaptive_label_policy = adaptive_label_policy^
 
 
 struct GemGraphIndex(Copyable):
@@ -159,6 +178,8 @@ struct GemGraphIndex(Copyable):
     var construction_neighbor_count: Int
     var degree_limit: Int
     var shortcuts_enabled: Bool
+    var shortcut_candidate_k: Int
+    var adaptive_label_policy: String
 
     def __init__(out self):
         self.doc_ids = List[String]()
@@ -189,6 +210,10 @@ struct GemGraphIndex(Copyable):
         self.construction_neighbor_count = 0
         self.degree_limit = 0
         self.shortcuts_enabled = False
+        self.shortcut_candidate_k = 0
+        self.adaptive_label_policy = (
+            GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK
+        )
 
     def __init__(
         out self,
@@ -215,6 +240,8 @@ struct GemGraphIndex(Copyable):
         construction_neighbor_count: Int,
         degree_limit: Int,
         shortcuts_enabled: Bool,
+        shortcut_candidate_k: Int,
+        var adaptive_label_policy: String = GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
     ) raises:
         require_valid_gem_graph_index(
             doc_ids,
@@ -240,6 +267,8 @@ struct GemGraphIndex(Copyable):
             construction_neighbor_count,
             degree_limit,
             shortcuts_enabled,
+            shortcut_candidate_k,
+            adaptive_label_policy,
         )
 
         self.doc_ids = doc_ids^
@@ -270,6 +299,8 @@ struct GemGraphIndex(Copyable):
         self.construction_neighbor_count = construction_neighbor_count
         self.degree_limit = degree_limit
         self.shortcuts_enabled = shortcuts_enabled
+        self.shortcut_candidate_k = shortcut_candidate_k
+        self.adaptive_label_policy = adaptive_label_policy^
 
 
 def sum_ints(read values: List[Int]) -> Int:
@@ -317,6 +348,8 @@ def require_valid_gem_graph_index(
     construction_neighbor_count: Int,
     degree_limit: Int,
     shortcuts_enabled: Bool,
+    shortcut_candidate_k: Int,
+    adaptive_label_policy: String,
 ) raises:
     if shortcut_edge_count < 0:
         raise Error("gem graph shortcut_edge_count must be non-negative")
@@ -332,6 +365,13 @@ def require_valid_gem_graph_index(
         raise Error("gem graph construction_neighbor_count must be non-negative")
     if degree_limit < 0:
         raise Error("gem graph degree_limit must be non-negative")
+    if shortcut_candidate_k < 0:
+        raise Error("gem graph shortcut_candidate_k must be non-negative")
+    if shortcuts_enabled and shortcut_candidate_k <= 0:
+        raise Error(
+            "gem graph shortcut_candidate_k must be positive when shortcuts are enabled"
+        )
+    require_valid_adaptive_label_policy(adaptive_label_policy)
 
     if len(doc_ids) == 0:
         if vector_dim != 0:
@@ -898,22 +938,46 @@ def query_relevant_cluster_ids(
     return cluster_ids^
 
 
+def query_representative_doc_indices(
+    read index: GemGraphIndex,
+    read relevant_clusters: List[Int],
+    representative_depth: Int,
+) raises -> List[Int]:
+    if representative_depth <= 0:
+        raise Error("gem graph representative_depth must be positive")
+
+    var doc_indices = List[Int]()
+    for cluster_index in relevant_clusters:
+        var top_doc_indices = List[Int]()
+        var top_scores = List[ScoreScalar]()
+        for cluster_offset in range(
+            index.cluster_offsets[cluster_index],
+            index.cluster_offsets[cluster_index + 1],
+        ):
+            var document_index = index.cluster_doc_indices[cluster_offset]
+            insert_descending_score(
+                top_doc_indices,
+                top_scores,
+                document_index,
+                profile_score_for_cluster_arrays(
+                    index.doc_profile_offsets,
+                    index.doc_profile_cluster_ids,
+                    index.doc_profile_scores,
+                    document_index,
+                    cluster_index,
+                ),
+                representative_depth,
+            )
+        for document_index in top_doc_indices:
+            if not list_contains_int(doc_indices, document_index):
+                doc_indices.append(document_index)
+    return doc_indices^
+
+
 def query_entry_doc_indices(
     read index: GemGraphIndex, read relevant_clusters: List[Int]
 ) raises -> List[Int]:
-    var doc_indices = List[Int]()
-    for cluster_index in relevant_clusters:
-        var entry_doc = index.entry_doc_indices[cluster_index]
-        if entry_doc == -1:
-            continue
-        var seen = False
-        for existing in doc_indices:
-            if existing == entry_doc:
-                seen = True
-                break
-        if not seen:
-            doc_indices.append(entry_doc)
-    return doc_indices^
+    return query_representative_doc_indices(index, relevant_clusters, 1)
 
 
 def profile_score_for_cluster(
@@ -1211,6 +1275,7 @@ def build_gem_graph_index_legacy(
         construction_neighbor_count,
         degree_limit,
         False,
+        construction_neighbor_count,
     )
 
 
@@ -1338,7 +1403,7 @@ def adaptive_profile_feature_row(
     return features^
 
 
-def adaptive_profile_label(
+def first_relevant_cluster_rank_label(
     read query: EncodedQuery,
     read index_centroids: List[List[VectorScalar]],
     read document_profile_cluster_ids: List[Int],
@@ -1355,6 +1420,68 @@ def adaptive_profile_label(
         if list_contains_int(relevant_clusters, document_profile_cluster_ids[rank]):
             return rank + 1
     return max_profile_limit
+
+
+def relevant_cluster_coverage_label(
+    read query: EncodedQuery,
+    read index_centroids: List[List[VectorScalar]],
+    read document_profile_cluster_ids: List[Int],
+    cluster_top_k_per_query_token: Int,
+    max_profile_limit: Int,
+) raises -> Int:
+    var relevant_clusters = query_relevant_cluster_ids_for_centroids(
+        query, index_centroids, cluster_top_k_per_query_token
+    )
+    var stop = len(document_profile_cluster_ids)
+    if stop > max_profile_limit:
+        stop = max_profile_limit
+
+    var target_clusters = List[Int]()
+    for rank in range(stop):
+        var cluster_id = document_profile_cluster_ids[rank]
+        if list_contains_int(relevant_clusters, cluster_id):
+            insert_unique_int(target_clusters, cluster_id)
+    if len(target_clusters) == 0:
+        return max_profile_limit
+
+    var covered_clusters = List[Int]()
+    for rank in range(stop):
+        var cluster_id = document_profile_cluster_ids[rank]
+        if not list_contains_int(target_clusters, cluster_id):
+            continue
+        insert_unique_int(covered_clusters, cluster_id)
+        if len(covered_clusters) == len(target_clusters):
+            return rank + 1
+    return max_profile_limit
+
+
+def adaptive_profile_label(
+    read query: EncodedQuery,
+    read index_centroids: List[List[VectorScalar]],
+    read document_profile_cluster_ids: List[Int],
+    cluster_top_k_per_query_token: Int,
+    max_profile_limit: Int,
+    adaptive_label_policy: String = GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
+) raises -> Int:
+    require_valid_adaptive_label_policy(adaptive_label_policy)
+    if (
+        adaptive_label_policy
+        == GEM_GRAPH_ADAPTIVE_LABEL_POLICY_RELEVANT_CLUSTER_COVERAGE
+    ):
+        return relevant_cluster_coverage_label(
+            query,
+            index_centroids,
+            document_profile_cluster_ids,
+            cluster_top_k_per_query_token,
+            max_profile_limit,
+        )
+    return first_relevant_cluster_rank_label(
+        query,
+        index_centroids,
+        document_profile_cluster_ids,
+        cluster_top_k_per_query_token,
+        max_profile_limit,
+    )
 
 
 def find_document_index_by_id(read doc_ids: List[String], doc_id: String) raises -> Int:
@@ -1405,6 +1532,7 @@ def build_adaptive_profile_limits(
                 raw_profile_ids_by_doc[document_index],
                 config.cluster_top_k_per_query_token,
                 config.adaptive_cluster_cutoff_max,
+                config.adaptive_label_policy,
             )
         )
 
@@ -1865,6 +1993,10 @@ def graph_candidate_doc_indices_for_query(
 def inject_shortcuts(
     read index: GemGraphIndex,
     mut neighbor_ids_by_doc: List[List[Int]],
+    read histograms_by_doc: List[QuantizedCodeHistogram],
+    read histogram_totals_by_doc: List[Int],
+    read distance_matrix: List[MetricScalar],
+    centroid_count: Int,
     read config: GemGraphBuildConfig,
 ) raises -> Int:
     var injected_shortcut_count = 0
@@ -1888,16 +2020,34 @@ def inject_shortcuts(
         var top_doc = candidate_doc_indices[0]
         if top_doc == positive_doc:
             continue
-        if len(neighbor_ids_by_doc[top_doc]) >= config.degree_limit:
-            continue
-        if len(neighbor_ids_by_doc[positive_doc]) >= config.degree_limit:
-            continue
-        if list_contains_int(neighbor_ids_by_doc[top_doc], positive_doc):
+        var had_top_to_positive = list_contains_int(
+            neighbor_ids_by_doc[top_doc], positive_doc
+        )
+        var had_positive_to_top = list_contains_int(
+            neighbor_ids_by_doc[positive_doc], top_doc
+        )
+        if had_top_to_positive and had_positive_to_top:
             continue
 
-        neighbor_ids_by_doc[top_doc].append(positive_doc)
-        neighbor_ids_by_doc[positive_doc].append(top_doc)
-        injected_shortcut_count += 1
+        # Route shortcut insertion through the same degree-limited heuristic as
+        # normal graph construction so saturated vertices can still trade out a
+        # weaker edge for a useful supervised bridge.
+        add_mutual_connection(
+            neighbor_ids_by_doc,
+            top_doc,
+            positive_doc,
+            config.degree_limit,
+            histograms_by_doc,
+            histogram_totals_by_doc,
+            distance_matrix,
+            centroid_count,
+        )
+        if (
+            list_contains_int(neighbor_ids_by_doc[top_doc], positive_doc)
+            and list_contains_int(neighbor_ids_by_doc[positive_doc], top_doc)
+            and not (had_top_to_positive and had_positive_to_top)
+        ):
+            injected_shortcut_count += 1
     return injected_shortcut_count
 
 
@@ -2169,12 +2319,18 @@ def build_gem_graph_index_with_config(
         config.construction_neighbor_count,
         config.degree_limit,
         config.enable_shortcuts,
+        config.shortcut_candidate_k,
+        config.adaptive_label_policy,
     )
     var shortcut_edge_count = 0
     if config.enable_shortcuts:
         shortcut_edge_count = inject_shortcuts(
             provisional_index,
             neighbor_ids_by_doc,
+            histograms_by_doc,
+            histogram_totals_by_doc,
+            distance_matrix,
+            len(quantization_centroids),
             config,
         )
     var flattened_neighbors = flatten_neighbor_lists(neighbor_ids_by_doc)
@@ -2204,6 +2360,8 @@ def build_gem_graph_index_with_config(
         config.construction_neighbor_count,
         config.degree_limit,
         config.enable_shortcuts,
+        config.shortcut_candidate_k,
+        config.adaptive_label_policy,
     )
 
 
@@ -2215,13 +2373,17 @@ def build_gem_graph_index(
     construction_neighbor_count: Int = DEFAULT_GEM_GRAPH_CONSTRUCTION_NEIGHBOR_COUNT,
     degree_limit: Int = DEFAULT_GEM_GRAPH_DEGREE_LIMIT,
 ) raises -> GemGraphIndex:
+    var config = GemGraphBuildConfig(
+        fine_cluster_count,
+        coarse_cluster_count,
+        cluster_cutoff,
+        construction_neighbor_count,
+        degree_limit,
+    )
+    # This convenience builder does not expose separate shortcut knobs, so keep
+    # the latent shortcut budget aligned with the requested construction budget.
+    config.shortcut_candidate_k = construction_neighbor_count
     return build_gem_graph_index_with_config(
         packed_index,
-        GemGraphBuildConfig(
-            fine_cluster_count,
-            coarse_cluster_count,
-            cluster_cutoff,
-            construction_neighbor_count,
-            degree_limit,
-        ),
+        config,
     )

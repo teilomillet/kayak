@@ -296,6 +296,10 @@ def collection_search_explain_json(
     ) + ","
     buffer += "\"graph_beam_width\":"
     buffer += String(explain.plan.candidate_generator.beam_width) + ","
+    buffer += "\"graph_frontier_policy_kind\":\""
+    buffer += json_escape(
+        explain.plan.candidate_generator.graph_frontier_policy_kind
+    ) + "\","
     buffer += "\"candidate_k\":" + String(explain.plan.candidate_budget.candidate_k) + ","
     buffer += "\"final_k\":" + String(explain.plan.candidate_budget.final_k) + ","
     buffer += "\"reference_scoring_semantics_kind\":\""

@@ -5,6 +5,8 @@ from kayak import (
     CandidateBudget,
     CandidateGenerator,
     CollectionId,
+    DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+    DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
     EncodedDocument,
     EncodedQuery,
     ExactCpuBackend,
@@ -14,12 +16,14 @@ from kayak import (
     SnapshotId,
     TenantId,
     VECTOR_SCALAR_NAME,
+    document_encoder_compression_config_value,
     ensure_one_segment_collection_mirror_with_latent_proxy,
     exact_late_interaction_reference_scoring_semantics,
     exact_late_interaction_stage2_reference_operator,
     explain_collection_search,
     load_resolved_collection_snapshot,
     loaded_segment_has_latent_proxy_index,
+    memory_tokens_document_encoder_compression,
     none_stage3_verifier_operator,
     oracle_full_recall_required_faithfulness_policy,
     pack_documents,
@@ -95,6 +99,7 @@ def mirror_fixture_latent_proxy() raises -> StoredLatentProxyIndex:
 
 
 def test_collection_mirror_with_latent_proxy_supports_native_stage1_search() raises:
+    var document_encoder_compression = memory_tokens_document_encoder_compression(8)
     var collection_root = ensure_one_segment_collection_mirror_with_latent_proxy(
         unique_collection_root("kayak-collection-mirror-latent-proxy"),
         CollectionId("latent-proxy"),
@@ -108,6 +113,7 @@ def test_collection_mirror_with_latent_proxy_supports_native_stage1_search() rai
             ["doc-a", "doc-b"],
             ["alpha evidence", "beta evidence"],
         ),
+        document_encoder_compression,
     )
     var snapshot = load_resolved_collection_snapshot(
         collection_root,
@@ -129,6 +135,21 @@ def test_collection_mirror_with_latent_proxy_supports_native_stage1_search() rai
 
     assert_equal(loaded_segment_has_latent_proxy_index(snapshot.segments[0]), True)
     assert_equal(snapshot.segments[0].has_text_corpus, True)
+    assert_equal(
+        snapshot.collection.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            snapshot.collection.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "8",
+    )
+    assert_equal(
+        snapshot.segments[0].manifest.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
     assert_equal(explain.final_hits[0].doc_id, "doc-a")
     assert_equal(explain.candidate_recall_at_final_k, MetricScalar(1.0))
 

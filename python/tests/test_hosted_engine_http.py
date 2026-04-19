@@ -225,6 +225,53 @@ class HostedEngineHttpTest(unittest.TestCase):
                 self.assertEqual(status, 400)
                 self.assertIn("query_model_name", payload["error"])
 
+    def test_network_collection_creation_accepts_document_encoder_compression(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="kayak-http-service-") as temp_dir:
+            with HostedEngineServer(Path(temp_dir) / "service-root") as server:
+                status, payload = http_json(
+                    "POST",
+                    f"{server.base_url}/v1/collections",
+                    {
+                        "collection_id": "news",
+                        "tenant_id": "tenant-a",
+                        "namespace_id": "search",
+                        "model_name": "colbertv2",
+                        "vector_dim": 2,
+                        "document_encoder_compression": {
+                            "kind": "memory_tokens",
+                            "config": [
+                                {
+                                    "key": "document_vector_budget",
+                                    "value": "8",
+                                }
+                            ],
+                        },
+                    },
+                )
+                self.assertEqual(status, 200)
+                self.assertEqual(payload["collection_id"], "news")
+
+                status, payload = http_json(
+                    "POST",
+                    f"{server.base_url}/v1/collections:lifecycle",
+                    {
+                        "collection_id": "news",
+                        "tenant_id": "tenant-a",
+                        "namespace_id": "search",
+                    },
+                )
+                self.assertEqual(status, 200)
+                self.assertEqual(
+                    payload["document_encoder_compression"]["kind"],
+                    "memory_tokens",
+                )
+                self.assertEqual(
+                    payload["document_encoder_compression"]["config"],
+                    [{"key": "document_vector_budget", "value": "8"}],
+                )
+
     def test_network_lifecycle_reclaim_and_snapshot_transfer(self) -> None:
         with tempfile.TemporaryDirectory(prefix="kayak-http-ops-") as temp_dir:
             service_root = Path(temp_dir) / "source-root"

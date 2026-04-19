@@ -6,6 +6,11 @@ from kayak.index import unpack_documents
 
 from .collection_store import load_collection_manifest
 from .compaction import CompactionPlan
+from .document_encoder_compression import (
+    DocumentEncoderCompressionManifest,
+    default_document_encoder_compression_manifest,
+    same_document_encoder_compression_manifest,
+)
 from .document_representation_transform import (
     DocumentRepresentationTransformManifest,
     same_document_representation_transforms,
@@ -170,6 +175,27 @@ def require_consistent_source_segment_transforms(
     return expected.copy()
 
 
+def require_consistent_source_segment_document_encoder_compression(
+    read source_segments: List[LoadedSealedSegment]
+) raises -> DocumentEncoderCompressionManifest:
+    if len(source_segments) == 0:
+        return default_document_encoder_compression_manifest()
+
+    var expected = source_segments[0].manifest.document_encoder_compression.copy()
+    for segment_index in range(1, len(source_segments)):
+        if not same_document_encoder_compression_manifest(
+            expected,
+            source_segments[segment_index]
+                .manifest
+                .document_encoder_compression,
+        ):
+            raise Error(
+                "compaction currently requires source segments to share the same document encoder compression"
+            )
+
+    return expected^
+
+
 def execute_compaction_plan(
     collection_root: Path,
     source_snapshot_id: SnapshotId,
@@ -224,6 +250,18 @@ def execute_compaction_plan(
     var document_representation_transforms = (
         require_consistent_source_segment_transforms(source_segments)
     )
+    var document_encoder_compression = (
+        require_consistent_source_segment_document_encoder_compression(
+            source_segments
+        )
+    )
+    if not same_document_encoder_compression_manifest(
+        document_encoder_compression,
+        resolved.collection.document_encoder_compression,
+    ):
+        raise Error(
+            "compaction source segments document encoder compression does not match the collection manifest"
+        )
 
     var next_generation = resolved.collection.latest_generation + 1
     var compacted_segment = seal_single_segment_from_stored_documents(

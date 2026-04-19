@@ -4,13 +4,23 @@ from std.testing import TestSuite, assert_equal
 
 from kayak import (
     CollectionId,
+    DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+    DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
     EncodedDocument,
+    EncodedQuery,
+    GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
+    GemGraphBuildConfig,
+    GemGraphTrainingPair,
     NamespaceId,
     SnapshotId,
     StoredPackedIndex,
     TenantId,
+    document_encoder_compression_config_value,
     ensure_one_segment_collection_mirror,
+    loaded_segment_has_gem_graph_index,
+    loaded_segment_stored_gem_graph_index,
     load_resolved_collection_snapshot,
+    memory_tokens_document_encoder_compression,
     pack_documents,
 )
 from kayak.numeric import VECTOR_SCALAR_NAME
@@ -93,6 +103,106 @@ def test_collection_mirror_rejects_misaligned_text_corpus_doc_order() raises:
         raised = True
 
     assert_equal(raised, True)
+
+
+def test_collection_mirror_preserves_document_encoder_compression_provenance() raises:
+    var document_encoder_compression = memory_tokens_document_encoder_compression(8)
+    var collection_root = ensure_one_segment_collection_mirror(
+        unique_collection_root("kayak-collection-mirror-encoder-compression"),
+        CollectionId("mirror-compression"),
+        TenantId("public"),
+        NamespaceId("benchmark"),
+        SnapshotId("snapshot-0001"),
+        1,
+        mirror_fixture_index(),
+        DocumentTextCorpus(
+            ["doc-a", "doc-b"],
+            ["alpha clause evidence", "beta supporting passage"],
+        ),
+        document_encoder_compression,
+    )
+    var snapshot = load_resolved_collection_snapshot(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+    )
+
+    assert_equal(
+        snapshot.collection.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            snapshot.collection.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "8",
+    )
+    assert_equal(
+        snapshot.segments[0].manifest.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            snapshot.segments[0].manifest.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "8",
+    )
+
+
+def test_collection_mirror_can_build_configured_gem_graph_sidecar() raises:
+    var collection_root = ensure_one_segment_collection_mirror(
+        unique_collection_root("kayak-collection-mirror-gem-config"),
+        CollectionId("mirror-gem-config"),
+        TenantId("public"),
+        NamespaceId("benchmark"),
+        SnapshotId("snapshot-0001"),
+        1,
+        mirror_fixture_index(),
+        DocumentTextCorpus(
+            ["doc-a", "doc-b"],
+            ["alpha clause evidence", "beta supporting passage"],
+        ),
+        GemGraphBuildConfig(
+            2,
+            2,
+            1,
+            2,
+            2,
+            True,
+            2,
+            2,
+            1,
+            True,
+            1,
+            1,
+            [GemGraphTrainingPair(EncodedQuery([[1.0, 0.0]]), "doc-a")],
+        ),
+    )
+    var snapshot = load_resolved_collection_snapshot(
+        collection_root,
+        SnapshotId("snapshot-0001"),
+    )
+
+    assert_equal(loaded_segment_has_gem_graph_index(snapshot.segments[0]), True)
+    var stored_gem_graph = loaded_segment_stored_gem_graph_index(
+        snapshot.segments[0]
+    )
+    assert_equal(stored_gem_graph.adaptive_cluster_cutoff_enabled, True)
+    assert_equal(stored_gem_graph.adaptive_cluster_cutoff_max, 2)
+    assert_equal(
+        stored_gem_graph.adaptive_label_policy,
+        GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
+    )
+    assert_equal(stored_gem_graph.shortcut_candidate_k, 1)
+    assert_equal(stored_gem_graph.shortcuts_enabled, True)
+    assert_equal(stored_gem_graph.index.adaptive_cluster_cutoff_enabled, True)
+    assert_equal(
+        stored_gem_graph.index.adaptive_label_policy,
+        GEM_GRAPH_ADAPTIVE_LABEL_POLICY_FIRST_RELEVANT_CLUSTER_RANK,
+    )
+    assert_equal(stored_gem_graph.index.shortcut_candidate_k, 1)
+    assert_equal(stored_gem_graph.index.shortcuts_enabled, True)
 
 
 def main() raises:

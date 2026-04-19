@@ -2,12 +2,16 @@ from std.testing import TestSuite, assert_equal
 from std.pathlib import Path
 
 from kayak import (
+    COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     CollectionId,
     CollectionManifest,
     CollectionStats,
+    DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+    DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
     DocumentMetadataEntry,
     DocumentMetadataMap,
     NamespaceId,
+    SearchArtifactBuildPolicy,
     SealedSegmentManifest,
     SegmentId,
     SnapshotId,
@@ -15,11 +19,13 @@ from kayak import (
     TenantId,
     VECTOR_SCALAR_NAME,
     build_compaction_plan_for_snapshot,
+    document_encoder_compression_config_value,
     execute_compaction_plan,
     load_collection_manifest,
     load_resolved_collection_snapshot,
     loaded_segment_stored_document_metadata,
     load_snapshot_manifest,
+    memory_tokens_document_encoder_compression,
     same_document_representation_transforms,
     save_collection_manifest,
     save_snapshot_manifest,
@@ -282,6 +288,81 @@ def test_execute_compaction_plan_preserves_token_pooling_provenance_without_reap
         True,
     )
     assert_equal(resolved.segments[0].stored_index.index.total_vector_count, 4)
+
+
+def test_execute_compaction_plan_preserves_document_encoder_compression_provenance() raises:
+    var root = unique_root("kayak-collection-compaction-encoder-compression")
+    var collection = CollectionManifest(
+        CollectionId("news"),
+        TenantId("tenant-a"),
+        NamespaceId("search"),
+        "colbertv2",
+        VECTOR_SCALAR_NAME,
+        2,
+        2,
+        "",
+        1,
+        SearchArtifactBuildPolicy([]),
+        COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
+        memory_tokens_document_encoder_compression(8),
+    )
+    save_collection_manifest(root, collection)
+
+    var segment_one = seal_single_segment(
+        root,
+        collection,
+        SegmentId("segment-1"),
+        1,
+        [EncodedDocument("doc-a", [[1.0, 0.0], [0.0, 1.0]])],
+        ["alpha"],
+    )
+    var segment_two = seal_single_segment(
+        root,
+        collection,
+        SegmentId("segment-2"),
+        2,
+        [EncodedDocument("doc-b", [[0.0, 1.0], [1.0, 0.0]])],
+        ["beta"],
+    )
+    save_snapshot_manifest(
+        root / "snapshots" / "snapshot-0002",
+        SnapshotManifest(
+            SnapshotId("snapshot-0002"),
+            collection.collection_id,
+            collection.tenant_id,
+            collection.namespace_id,
+            2,
+            [segment_one.segment_id.copy(), segment_two.segment_id.copy()],
+            aggregate_stats(segment_one, segment_two),
+        ),
+    )
+
+    var plan = build_compaction_plan_for_snapshot(
+        root,
+        SnapshotId("snapshot-0002"),
+        [SegmentId("segment-1"), SegmentId("segment-2")],
+        SegmentId("segment-3"),
+        "merge segments with encoder compression provenance",
+    )
+    _ = execute_compaction_plan(
+        root,
+        SnapshotId("snapshot-0002"),
+        SnapshotId("snapshot-0003"),
+        plan,
+    )
+    var resolved = load_resolved_collection_snapshot(root, SnapshotId("snapshot-0003"))
+
+    assert_equal(
+        resolved.segments[0].manifest.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
+    assert_equal(
+        document_encoder_compression_config_value(
+            resolved.segments[0].manifest.document_encoder_compression,
+            DOCUMENT_ENCODER_COMPRESSION_CONFIG_DOCUMENT_VECTOR_BUDGET,
+        ),
+        "8",
+    )
 
 
 def test_execute_compaction_plan_rejects_mismatched_transform_chains() raises:

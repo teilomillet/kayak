@@ -240,6 +240,65 @@ def collection_identity_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def default_document_encoder_compression_payload() -> dict[str, Any]:
+    return {
+        "kind": "none",
+        "config": [],
+    }
+
+
+def document_encoder_compression_payload(
+    payload: dict[str, Any],
+    key: str = "document_encoder_compression",
+) -> dict[str, Any]:
+    if key not in payload:
+        return default_document_encoder_compression_payload()
+
+    compression = require_object(payload, key)
+    config = require_list(compression, "config", default=[])
+    normalized_config: list[dict[str, str]] = []
+    for entry in config:
+        if not isinstance(entry, dict):
+            raise PayloadError(
+                "document_encoder_compression.config entries must be objects"
+            )
+        normalized_config.append(
+            {
+                "key": require_string(entry, "key"),
+                "value": require_string(entry, "value"),
+            }
+        )
+
+    return {
+        "kind": require_string(compression, "kind"),
+        "config": normalized_config,
+    }
+
+
+def create_collection_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **collection_identity_payload(payload),
+        "collection_layout_family": require_string(
+            payload,
+            "collection_layout_family",
+            default="",
+        ),
+        "model_name": require_string(payload, "model_name"),
+        "vector_scalar_name": require_string(
+            payload,
+            "vector_scalar_name",
+            default="",
+        ),
+        "vector_dim": require_int(payload, "vector_dim"),
+        "default_keep_latest_inactive_count": require_int(
+            payload,
+            "default_keep_latest_inactive_count",
+            default=1,
+        ),
+        "document_encoder_compression": document_encoder_compression_payload(payload),
+    }
+
+
 def policy_override_payload(
     payload: dict[str, Any],
 ) -> tuple[bool, int, list[str]]:

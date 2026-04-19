@@ -2,6 +2,17 @@
 
 Date: 2026-04-13
 
+Update checked on `2026-04-19`:
+
+- this roadmap records the intended sequencing from April 13
+- several gaps listed below are now closed in the current worktree:
+  - exact min-cost transport
+  - adaptive cluster cutoff
+  - semantic shortcut injection
+- use
+  [`docs/traces/2026-04-19_gem_status_reconciliation.md`](2026-04-19_gem_status_reconciliation.md)
+  for the current verified status before choosing new GEM work
+
 ## Goal
 
 Bring Kayak's current `gem_graph` path from a paper-shaped approximation to a

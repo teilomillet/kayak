@@ -10,14 +10,20 @@ from kayak.storage import (
 )
 from kayak.text import DocumentTextCorpus
 
+from .collection_layout import default_collection_layout_family
 from .collection import CollectionManifest
 from .collection_store import save_collection_manifest
+from .document_encoder_compression import (
+    DocumentEncoderCompressionManifest,
+    default_document_encoder_compression_manifest,
+)
 from .ids import CollectionId, NamespaceId, SegmentId, SnapshotId, TenantId
 from .mirror import (
     mirror_has_any_text,
     packed_index_storage_byte_size,
     require_document_text_corpus_matches_packed_index,
 )
+from .search_artifact_policy import default_search_artifact_build_policy
 from .search_artifact import SearchArtifactManifest, latent_proxy_search_artifact
 from .segment import SealedSegmentManifest
 from .segment_builder import text_corpus_storage_byte_size
@@ -80,6 +86,7 @@ def ensure_one_segment_collection_mirror_with_latent_proxy(
     read stored_index: StoredPackedIndex,
     read stored_latent_proxy_index: StoredLatentProxyIndex,
     read document_text_corpus: DocumentTextCorpus,
+    read document_encoder_compression: DocumentEncoderCompressionManifest,
 ) raises -> Path:
     require_document_text_corpus_matches_packed_index(
         stored_index,
@@ -102,6 +109,11 @@ def ensure_one_segment_collection_mirror_with_latent_proxy(
             stored_index.vector_scalar_name.copy(),
             stored_index.index.vector_dim,
             generation,
+            "",
+            1,
+            default_search_artifact_build_policy(),
+            default_collection_layout_family(),
+            document_encoder_compression,
         ),
     )
     save_stored_packed_index(segment_root / "packed_index", stored_index.copy())
@@ -155,6 +167,8 @@ def ensure_one_segment_collection_mirror_with_latent_proxy(
             search_artifacts^,
             text_corpus_root_name,
             segment_stats.copy(),
+            [],
+            document_encoder_compression,
         ),
     )
     save_snapshot_manifest(
@@ -187,6 +201,31 @@ def ensure_one_segment_collection_mirror_with_latent_proxy(
     generation: Int,
     read stored_index: StoredPackedIndex,
     read stored_latent_proxy_index: StoredLatentProxyIndex,
+    read document_text_corpus: DocumentTextCorpus,
+) raises -> Path:
+    return ensure_one_segment_collection_mirror_with_latent_proxy(
+        collection_root,
+        collection_id,
+        tenant_id,
+        namespace_id,
+        snapshot_id,
+        generation,
+        stored_index,
+        stored_latent_proxy_index,
+        document_text_corpus,
+        default_document_encoder_compression_manifest(),
+    )
+
+
+def ensure_one_segment_collection_mirror_with_latent_proxy(
+    collection_root: Path,
+    collection_id: CollectionId,
+    tenant_id: TenantId,
+    namespace_id: NamespaceId,
+    snapshot_id: SnapshotId,
+    generation: Int,
+    read stored_index: StoredPackedIndex,
+    read stored_latent_proxy_index: StoredLatentProxyIndex,
 ) raises -> Path:
     return ensure_one_segment_collection_mirror_with_latent_proxy(
         collection_root,
@@ -198,4 +237,5 @@ def ensure_one_segment_collection_mirror_with_latent_proxy(
         stored_index,
         stored_latent_proxy_index,
         DocumentTextCorpus([], []),
+        default_document_encoder_compression_manifest(),
     )

@@ -17,12 +17,15 @@ from kayak.collections import (
     COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     CollectionReclaimPlan,
     CollectionId,
+    DocumentEncoderCompressionConfigEntry,
+    DocumentEncoderCompressionManifest,
     NamespaceId,
     SegmentId,
     SnapshotId,
     SnapshotRetentionDecision,
     SnapshotRetentionPolicy,
     TenantId,
+    default_search_artifact_build_policy,
 )
 from kayak.collections.document_metadata import DocumentMetadataUpdate
 from kayak.contracts import EncodedDocument, EncodedQuery
@@ -239,6 +242,31 @@ def decode_metadata_updates(
     return rows^
 
 
+def decode_document_encoder_compression_config_entries(
+    py_values: PythonObject
+) raises -> List[DocumentEncoderCompressionConfigEntry]:
+    var entries = List[DocumentEncoderCompressionConfigEntry]()
+    for index in range(len(py_values)):
+        entries.append(
+            DocumentEncoderCompressionConfigEntry(
+                String(py=py_values[index]["key"]),
+                String(py=py_values[index]["value"]),
+            )
+        )
+    return entries^
+
+
+def decode_document_encoder_compression(
+    py_value: PythonObject
+) raises -> DocumentEncoderCompressionManifest:
+    return DocumentEncoderCompressionManifest(
+        String(py=py_value["kind"]),
+        decode_document_encoder_compression_config_entries(
+            py_value["config"]
+        ),
+    )
+
+
 def snapshot_retention_policy_from_python(
     has_policy_override: Bool,
     keep_latest_inactive_count: Int,
@@ -438,6 +466,7 @@ def create_collection_json(
     py_vector_scalar_name: PythonObject,
     py_vector_dim: PythonObject,
     py_default_keep_latest_inactive_count: PythonObject,
+    py_document_encoder_compression: PythonObject,
 ) raises -> PythonObject:
     var collection_id = String(py=py_collection_id)
     var tenant_id = String(py=py_tenant_id)
@@ -458,6 +487,10 @@ def create_collection_json(
         vector_scalar_name,
         Int(py=py_vector_dim),
         Int(py=py_default_keep_latest_inactive_count),
+        default_search_artifact_build_policy(),
+        decode_document_encoder_compression(
+            py_document_encoder_compression
+        ),
     )
     var collection_root = create_collection(
         Path(String(py=py_service_root)),
@@ -1308,6 +1341,7 @@ def create_collection_json_bridge(
         py_request["vector_scalar_name"],
         py_request["vector_dim"],
         py_request["default_keep_latest_inactive_count"],
+        py_request["document_encoder_compression"],
     )
 
 

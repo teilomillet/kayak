@@ -7,6 +7,10 @@ from .document_representation_transform import (
     copy_document_representation_transforms,
     document_representation_transforms_have_kind,
 )
+from .document_encoder_compression import (
+    DocumentEncoderCompressionManifest,
+    default_document_encoder_compression_manifest,
+)
 from .ids import CollectionId, NamespaceId, SegmentId, TenantId
 from .search_artifact import (
     SEARCH_ARTIFACT_FAMILY_CENTROID_HEADS,
@@ -38,6 +42,7 @@ struct SealedSegmentManifest(Copyable):
     var document_representation_transforms: List[
         DocumentRepresentationTransformManifest
     ]
+    var document_encoder_compression: DocumentEncoderCompressionManifest
     var search_artifacts: List[SearchArtifactManifest]
     var text_corpus_root: String
     var stats: SegmentStats
@@ -56,6 +61,7 @@ struct SealedSegmentManifest(Copyable):
         read document_representation_transforms: List[
             DocumentRepresentationTransformManifest
         ],
+        read document_encoder_compression: DocumentEncoderCompressionManifest,
         search_artifacts: List[SearchArtifactManifest],
         text_corpus_root: String,
         stats: SegmentStats,
@@ -78,9 +84,46 @@ struct SealedSegmentManifest(Copyable):
                 document_representation_transforms
             )
         )
+        self.document_encoder_compression = document_encoder_compression.copy()
         self.search_artifacts = copy_search_artifacts(search_artifacts)
         self.text_corpus_root = text_corpus_root.copy()
         self.stats = stats.copy()
+
+    def __init__(
+        out self,
+        segment_id: SegmentId,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        generation: Int,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        packed_index_root: String,
+        search_artifacts: List[SearchArtifactManifest],
+        text_corpus_root: String,
+        stats: SegmentStats,
+        read document_representation_transforms: List[
+            DocumentRepresentationTransformManifest
+        ],
+        read document_encoder_compression: DocumentEncoderCompressionManifest,
+    ) raises:
+        self = SealedSegmentManifest(
+            segment_id,
+            collection_id,
+            tenant_id,
+            namespace_id,
+            generation,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            packed_index_root,
+            document_representation_transforms,
+            document_encoder_compression,
+            search_artifacts,
+            text_corpus_root,
+            stats,
+        )
 
     def __init__(
         out self,
@@ -111,6 +154,7 @@ struct SealedSegmentManifest(Copyable):
             vector_dim,
             packed_index_root,
             document_representation_transforms,
+            default_document_encoder_compression_manifest(),
             search_artifacts,
             text_corpus_root,
             stats,
@@ -142,6 +186,7 @@ struct SealedSegmentManifest(Copyable):
             vector_dim,
             packed_index_root,
             [],
+            default_document_encoder_compression_manifest(),
             search_artifacts,
             text_corpus_root,
             stats,
@@ -185,6 +230,7 @@ struct SealedSegmentManifest(Copyable):
             vector_dim,
             packed_index_root,
             [],
+            default_document_encoder_compression_manifest(),
             search_artifacts^,
             text_corpus_root,
             stats,

@@ -3,9 +3,11 @@ from std.testing import TestSuite, assert_equal
 
 from kayak import (
     CandidateGenerator,
+    DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
     SearchPlan,
     best_effort_faithfulness_policy,
     exact_full_scan_search_plan,
+    GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
     gem_graph_search_plan,
     registered_search_planner_candidate_generator_kinds,
     stage1_capabilities_for_candidate_generator_kind,
@@ -83,6 +85,13 @@ def assert_stage1_contract(
         generator.supports_structured_filter,
         supports_structured_filter,
     )
+    if kind == "gem_graph":
+        assert_equal(
+            generator.graph_frontier_policy_kind,
+            DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
+        )
+    else:
+        assert_equal(generator.graph_frontier_policy_kind, "")
 
 
 def search_plan_semantics_json(read plan: SearchPlan) -> String:
@@ -280,6 +289,10 @@ def test_search_plan_semantics_json_keeps_stage1_fields_without_compatibility() 
         True,
     )
     assert_equal(exact_json.find("\"graph_beam_width\":0") != -1, True)
+    assert_equal(
+        exact_json.find("\"graph_frontier_policy_kind\":\"\"") != -1,
+        True,
+    )
     assert_equal(exact_json.find("\"compatibility_stage2_kind\"") == -1, True)
 
     var graph_json = search_plan_semantics_json(
@@ -289,6 +302,7 @@ def test_search_plan_semantics_json_keeps_stage1_fields_without_compatibility() 
             best_effort_faithfulness_policy(),
             4,
             17,
+            GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
         ),
     )
     assert_equal(
@@ -325,7 +339,37 @@ def test_search_plan_semantics_json_keeps_stage1_fields_without_compatibility() 
         True,
     )
     assert_equal(graph_json.find("\"graph_beam_width\":17") != -1, True)
+    assert_equal(
+        graph_json.find(
+            "\"graph_frontier_policy_kind\":\"global_best_first\""
+        ) != -1,
+        True,
+    )
     assert_equal(graph_json.find("\"compatibility_stage2_kind\"") == -1, True)
+
+
+def test_candidate_generator_rejects_invalid_graph_frontier_policy_inputs() raises:
+    var raised = False
+
+    try:
+        _ = CandidateGenerator("gem_graph", 4, 17, "not_a_real_policy")
+    except:
+        raised = True
+
+    assert_equal(raised, True)
+
+    raised = False
+    try:
+        _ = CandidateGenerator(
+            "document_proxy",
+            0,
+            0,
+            GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
+        )
+    except:
+        raised = True
+
+    assert_equal(raised, True)
 
 
 def main() raises:

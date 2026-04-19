@@ -337,6 +337,23 @@ def default_synthetic_hard_recall_profiles(
     return profiles^
 
 
+def smoke_synthetic_hard_recall_profile(
+) raises -> SyntheticHardRecallProfile:
+    return SyntheticHardRecallProfile(
+        "synthetic_hard_recall",
+        "slots3_values2_docs28",
+        "Small shared-slot conjunction workload for benchmark smoke coverage.",
+        3,
+        2,
+        4,
+        8,
+        2,
+        4,
+        1,
+        8,
+    )
+
+
 def high_centroid_synthetic_hard_recall_profile(
 ) raises -> SyntheticHardRecallProfile:
     return SyntheticHardRecallProfile(

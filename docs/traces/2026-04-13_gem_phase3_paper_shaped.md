@@ -3,6 +3,15 @@
 Date: `2026-04-13`
 Status: `implemented and locally validated in worktree`
 
+Update checked on `2026-04-19`:
+
+- this note is now a historical phase snapshot
+- later in-tree work added exact transport, adaptive cutoff, and shortcut
+  injection on the active GEM builder path
+- see
+  [`docs/traces/2026-04-19_gem_status_reconciliation.md`](2026-04-19_gem_status_reconciliation.md)
+  for the current verified status
+
 ## Goal
 
 Move `gem_graph` from a metadata-only scaffold to a paper-shaped native stage-1

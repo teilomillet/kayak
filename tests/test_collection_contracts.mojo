@@ -7,6 +7,7 @@ from kayak.collections import (
     CollectionManifest,
     CollectionStats,
     CompactionPlan,
+    DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
     gem_graph_build_spec,
     NamespaceId,
     SearchArtifactBuildPolicy,
@@ -18,6 +19,7 @@ from kayak.collections import (
     SnapshotManifest,
     StoredDocumentTextCorpus,
     TenantId,
+    memory_tokens_document_encoder_compression,
     sealed_segment_has_text_corpus,
 )
 from kayak.numeric import MetricScalar, VECTOR_SCALAR_NAME
@@ -40,6 +42,7 @@ def test_collection_contracts_hold_serving_metadata() raises:
     var collection_id = CollectionId("news")
     var segment_id = SegmentId("segment-0001")
     var snapshot_id = SnapshotId("snapshot-0001")
+    var document_encoder_compression = memory_tokens_document_encoder_compression(12)
 
     var collection = CollectionManifest(
         collection_id.copy(),
@@ -57,6 +60,8 @@ def test_collection_contracts_hold_serving_metadata() raises:
                 SearchArtifactBuildSpec("centroid_postings", "postings_sidecar"),
             ]
         ),
+        COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
+        document_encoder_compression,
     )
     var segment_stats = SegmentStats(2, 12, 10, 2048)
     var segment = SealedSegmentManifest(
@@ -105,6 +110,10 @@ def test_collection_contracts_hold_serving_metadata() raises:
         COLLECTION_LAYOUT_FAMILY_TENANT_ISOLATED,
     )
     assert_equal(collection.default_keep_latest_inactive_count, 2)
+    assert_equal(
+        collection.document_encoder_compression.kind,
+        DOCUMENT_ENCODER_COMPRESSION_KIND_MEMORY_TOKENS,
+    )
     assert_equal(
         collection.search_artifact_build_policy.stage1_artifacts[0].root,
         "proxy_sidecar",

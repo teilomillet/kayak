@@ -15,6 +15,7 @@ from .candidate_generator import (
     exact_full_scan_candidate_generator,
     gem_graph_candidate_generator,
 )
+from .graph_frontier_policy import DEFAULT_GRAPH_FRONTIER_POLICY_KIND
 from .faithfulness import (
     FaithfulnessPolicy,
     exact_stage1_required_faithfulness_policy,
@@ -371,10 +372,13 @@ def gem_graph_search_plan(
     faithfulness_policy: FaithfulnessPolicy,
     cluster_top_k_per_query_token: Int = 2,
     beam_width: Int = 32,
+    graph_frontier_policy_kind: String = DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
 ) raises -> SearchPlan:
     return SearchPlan(
         gem_graph_candidate_generator(
-            cluster_top_k_per_query_token, beam_width
+            cluster_top_k_per_query_token,
+            beam_width,
+            graph_frontier_policy_kind,
         ),
         CandidateBudget(final_k, candidate_k),
         faithfulness_policy,
@@ -392,10 +396,13 @@ def gem_graph_search_plan(
     stage3_verifier: Stage3VerifierOperator,
     cluster_top_k_per_query_token: Int = 2,
     beam_width: Int = 32,
+    graph_frontier_policy_kind: String = DEFAULT_GRAPH_FRONTIER_POLICY_KIND,
 ) raises -> SearchPlan:
     return SearchPlan(
         gem_graph_candidate_generator(
-            cluster_top_k_per_query_token, beam_width
+            cluster_top_k_per_query_token,
+            beam_width,
+            graph_frontier_policy_kind,
         ),
         CandidateBudget(final_k, candidate_k),
         faithfulness_policy,

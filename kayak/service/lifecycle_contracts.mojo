@@ -2,6 +2,7 @@ from std.collections import List
 
 from kayak.collections import (
     CollectionId,
+    DocumentEncoderCompressionManifest,
     CollectionReclaimExecutionResult,
     CollectionReclaimPlan,
     NamespaceId,
@@ -9,6 +10,7 @@ from kayak.collections import (
     SnapshotId,
     SnapshotRetentionPolicy,
     TenantId,
+    default_document_encoder_compression_manifest,
     require_collection_layout_family_supported,
 )
 from kayak.collections.validation import (
@@ -80,6 +82,7 @@ struct CollectionLifecycleResponse(Copyable):
     var active_snapshot_id: String
     var default_keep_latest_inactive_count: Int
     var search_artifact_build_policy: SearchArtifactBuildPolicy
+    var document_encoder_compression: DocumentEncoderCompressionManifest
     var effective_keep_latest_inactive_count: Int
     var effective_pinned_snapshot_ids: List[SnapshotId]
     var draft_document_count: Int
@@ -99,6 +102,7 @@ struct CollectionLifecycleResponse(Copyable):
         active_snapshot_id: String,
         default_keep_latest_inactive_count: Int,
         read search_artifact_build_policy: SearchArtifactBuildPolicy,
+        read document_encoder_compression: DocumentEncoderCompressionManifest,
         effective_keep_latest_inactive_count: Int,
         read effective_pinned_snapshot_ids: List[SnapshotId],
         draft_document_count: Int,
@@ -125,6 +129,7 @@ struct CollectionLifecycleResponse(Copyable):
             "default_keep_latest_inactive_count",
         )
         self.search_artifact_build_policy = search_artifact_build_policy.copy()
+        self.document_encoder_compression = document_encoder_compression.copy()
         self.effective_keep_latest_inactive_count = require_non_negative_int(
             effective_keep_latest_inactive_count,
             "effective_keep_latest_inactive_count",
@@ -137,6 +142,45 @@ struct CollectionLifecycleResponse(Copyable):
             pending_draft_mutation_count, "pending_draft_mutation_count"
         )
         self.reclaim_plan = reclaim_plan.copy()
+
+    def __init__(
+        out self,
+        collection_id: CollectionId,
+        tenant_id: TenantId,
+        namespace_id: NamespaceId,
+        collection_layout_family: String,
+        model_name: String,
+        vector_scalar_name: String,
+        vector_dim: Int,
+        latest_generation: Int,
+        active_snapshot_id: String,
+        default_keep_latest_inactive_count: Int,
+        read search_artifact_build_policy: SearchArtifactBuildPolicy,
+        effective_keep_latest_inactive_count: Int,
+        read effective_pinned_snapshot_ids: List[SnapshotId],
+        draft_document_count: Int,
+        pending_draft_mutation_count: Int,
+        read reclaim_plan: CollectionReclaimPlan,
+    ) raises:
+        self = CollectionLifecycleResponse(
+            collection_id,
+            tenant_id,
+            namespace_id,
+            collection_layout_family,
+            model_name,
+            vector_scalar_name,
+            vector_dim,
+            latest_generation,
+            active_snapshot_id,
+            default_keep_latest_inactive_count,
+            search_artifact_build_policy,
+            default_document_encoder_compression_manifest(),
+            effective_keep_latest_inactive_count,
+            effective_pinned_snapshot_ids,
+            draft_document_count,
+            pending_draft_mutation_count,
+            reclaim_plan,
+        )
 
 
 struct BuildReclaimPlanRequest(Copyable):

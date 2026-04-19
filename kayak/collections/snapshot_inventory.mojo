@@ -2,6 +2,10 @@ from std.collections import List
 from std.pathlib import Path
 
 from .collection_store import load_collection_manifest
+from .document_encoder_compression import (
+    DocumentEncoderCompressionManifest,
+    same_document_encoder_compression_manifest,
+)
 from .ids import SnapshotId
 from .paths import collection_segment_root, collection_snapshot_root
 from .search_artifact import SearchArtifactManifest
@@ -45,6 +49,7 @@ def require_segment_matches_collection(
     model_name: String,
     vector_scalar_name: String,
     vector_dim: Int,
+    read document_encoder_compression: DocumentEncoderCompressionManifest,
     read segment: SealedSegmentManifest,
 ) raises:
     if collection_id != segment.collection_id.value:
@@ -64,6 +69,13 @@ def require_segment_matches_collection(
 
     if vector_dim != segment.vector_dim:
         raise Error("segment vector_dim does not match collection manifest")
+    if not same_document_encoder_compression_manifest(
+        segment.document_encoder_compression,
+        document_encoder_compression,
+    ):
+        raise Error(
+            "segment document_encoder_compression does not match collection manifest"
+        )
 
 
 def search_artifact_family_on_segment(
@@ -166,6 +178,7 @@ def load_snapshot_search_artifact_availability(
             collection.model_name,
             collection.vector_scalar_name,
             collection.vector_dim,
+            collection.document_encoder_compression,
             segment,
         )
         for artifact in segment.search_artifacts:

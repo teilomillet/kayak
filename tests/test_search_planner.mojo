@@ -1,6 +1,7 @@
 from std.testing import TestSuite, assert_equal
 
 from kayak import (
+    GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
     FILTER_FIELD_INTERNAL_TENANT_ID,
     SEARCH_PLANNING_GOAL_BALANCED,
     SEARCH_PLANNING_GOAL_NATIVE_MULTI_VECTOR,
@@ -344,6 +345,7 @@ def test_search_plan_for_candidate_generator_kind_uses_default_contracts() raise
             False,
             7,
             9,
+            GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
         ),
     )
 
@@ -357,6 +359,10 @@ def test_search_plan_for_candidate_generator_kind_uses_default_contracts() raise
         7,
     )
     assert_equal(gem_plan.candidate_generator.beam_width, 9)
+    assert_equal(
+        gem_plan.candidate_generator.graph_frontier_policy_kind,
+        GRAPH_FRONTIER_POLICY_KIND_GLOBAL_BEST_FIRST,
+    )
     assert_equal(gem_plan.stage2_reference_operator.kind, "exact_late_interaction")
     assert_equal(gem_plan.stage3_verifier.kind, "none")
     assert_equal(gem_plan.faithfulness_policy.kind, "best_effort")

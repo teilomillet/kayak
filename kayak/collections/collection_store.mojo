@@ -12,6 +12,11 @@ from .artifact_manifest import (
 )
 from .collection_layout import default_collection_layout_family
 from .collection import CollectionManifest
+from .document_encoder_compression import (
+    DocumentEncoderCompressionConfigEntry,
+    DocumentEncoderCompressionManifest,
+    default_document_encoder_compression_manifest,
+)
 from .ids import CollectionId, NamespaceId, TenantId
 from .manifest_util import load_optional_manifest_value
 from .paths import collection_manifest_path
@@ -54,6 +59,32 @@ def save_collection_manifest(root: Path, read manifest: CollectionManifest) rais
             String(manifest.default_keep_latest_inactive_count),
         )
     )
+    entries.append(
+        ManifestEntry(
+            "document_encoder_compression_kind",
+            manifest.document_encoder_compression.kind,
+        )
+    )
+    entries.append(
+        ManifestEntry(
+            "document_encoder_compression_config_count",
+            String(len(manifest.document_encoder_compression.config)),
+        )
+    )
+    for index in range(len(manifest.document_encoder_compression.config)):
+        var entry = manifest.document_encoder_compression.config[index].copy()
+        entries.append(
+            ManifestEntry(
+                "document_encoder_compression_config_" + String(index) + "_key",
+                entry.key,
+            )
+        )
+        entries.append(
+            ManifestEntry(
+                "document_encoder_compression_config_" + String(index) + "_value",
+                entry.value,
+            )
+        )
     entries.append(
         ManifestEntry(
             "search_artifact_build_count",
@@ -128,6 +159,45 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
     )
     if collection_layout_family.byte_length() == 0:
         collection_layout_family = default_collection_layout_family()
+    var document_encoder_compression = (
+        default_document_encoder_compression_manifest()
+    )
+    var document_encoder_compression_kind = load_optional_manifest_value(
+        entries, "document_encoder_compression_kind"
+    )
+    if document_encoder_compression_kind.byte_length() != 0:
+        var config_entries = List[DocumentEncoderCompressionConfigEntry]()
+        var config_count = load_optional_manifest_value(
+            entries,
+            "document_encoder_compression_config_count",
+        )
+        if config_count.byte_length() != 0:
+            for index in range(
+                parse_int(
+                    config_count,
+                    "document_encoder_compression_config_count",
+                )
+            ):
+                config_entries.append(
+                    DocumentEncoderCompressionConfigEntry(
+                        require_manifest_value(
+                            entries,
+                            "document_encoder_compression_config_"
+                                + String(index)
+                                + "_key",
+                        ),
+                        require_manifest_value(
+                            entries,
+                            "document_encoder_compression_config_"
+                                + String(index)
+                                + "_value",
+                        ),
+                    )
+                )
+        document_encoder_compression = DocumentEncoderCompressionManifest(
+            document_encoder_compression_kind,
+            config_entries,
+        )
     var search_artifact_build_policy = default_search_artifact_build_policy()
     var search_artifact_build_count = load_optional_manifest_value(
         entries, "search_artifact_build_count"
@@ -202,4 +272,5 @@ def load_collection_manifest(root: Path) raises -> CollectionManifest:
         ),
         search_artifact_build_policy,
         collection_layout_family,
+        document_encoder_compression,
     )

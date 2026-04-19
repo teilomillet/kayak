@@ -219,6 +219,7 @@ def seal_single_segment_from_stored_documents(
             byte_size,
         ),
         document_representation_transforms,
+        collection.document_encoder_compression,
     )
     save_sealed_segment_manifest(segment_root, manifest)
     return manifest^

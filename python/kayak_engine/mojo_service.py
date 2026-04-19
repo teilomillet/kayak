@@ -13,6 +13,8 @@ import subprocess
 import sys
 from types import ModuleType
 
+from .payloads import create_collection_request_payload
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CACHE_ROOT = REPO_ROOT / ".cache"
 HF_HOME = CACHE_ROOT / "huggingface"
@@ -265,10 +267,23 @@ def _load_extension(extension_path: Path) -> ModuleType:
     return module
 
 
+def _wrap_module(module: ModuleType) -> ModuleType:
+    raw_create_collection_json = module.create_collection_json
+
+    def create_collection_json(service_root: str, request: dict[str, object]) -> str:
+        return raw_create_collection_json(
+            service_root,
+            create_collection_request_payload(request),
+        )
+
+    module.create_collection_json = create_collection_json
+    return module
+
+
 @lru_cache(maxsize=1)
 def load_module() -> ModuleType:
     mojo_sources = _mojo_sources()
     cache_key = _hash_inputs([BINDING_SOURCE, *mojo_sources])
     mojopkg_path = _build_mojopkg(cache_key)
     extension_path = _build_extension(cache_key, mojopkg_path)
-    return _load_extension(extension_path)
+    return _wrap_module(_load_extension(extension_path))

@@ -33,6 +33,7 @@ def publish_collection_snapshot(
         collection.default_keep_latest_inactive_count,
         collection.search_artifact_build_policy,
         collection.collection_layout_family,
+        collection.document_encoder_compression,
     )
     save_collection_manifest(collection_root, published)
     return published^
@@ -53,6 +54,7 @@ def promote_collection_generation(
         collection.default_keep_latest_inactive_count,
         collection.search_artifact_build_policy,
         collection.collection_layout_family,
+        collection.document_encoder_compression,
     )
     save_collection_manifest(collection_root, published)
     return published^

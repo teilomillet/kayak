@@ -1,8 +1,9 @@
 from std.collections import List
 from std.math import erf, exp, log, sqrt, tanh
+from std.sys.info import simd_width_of
 
 from kayak.contracts import EncodedQuery
-from kayak.numeric import VectorScalar, zero_vector_scalar
+from kayak.numeric import VECTOR_SCALAR_NAME, VectorScalar, zero_vector_scalar
 from kayak.scoring.dot import dot_product
 
 
@@ -241,7 +242,7 @@ def apply_latent_proxy_activation(
     raise Error("unsupported latent proxy activation: " + activation_kind)
 
 
-def linear_block_output(
+def linear_block_output_reference(
     read input_vector: List[VectorScalar],
     read block: LatentQueryProjectionBlock,
 ) raises -> List[VectorScalar]:
@@ -256,7 +257,83 @@ def linear_block_output(
     return output^
 
 
-def linear_block_output_into(
+def linear_block_output_tiled4(
+    read input_vector: List[VectorScalar],
+    read block: LatentQueryProjectionBlock,
+) raises -> List[VectorScalar]:
+    if len(input_vector) != block.input_dim:
+        raise Error("latent proxy linear block input dimension mismatch")
+    if VECTOR_SCALAR_NAME != "Float32" or block.output_dim < 4:
+        return linear_block_output_reference(input_vector, block)
+
+    comptime width = simd_width_of[VectorScalar]()
+    var simd_limit = (block.input_dim // width) * width
+    var input_ptr = input_vector.unsafe_ptr()
+    var output = List[VectorScalar]()
+    var row_index = 0
+
+    # The tiled kernel keeps one input chunk live while accumulating four
+    # output rows, which is the reuse pattern that the hotspot benchmark showed
+    # was missing from the reference row-wise loop.
+    while row_index + 3 < block.output_dim:
+        var row0_ptr = block.linear_rows[row_index].unsafe_ptr()
+        var row1_ptr = block.linear_rows[row_index + 1].unsafe_ptr()
+        var row2_ptr = block.linear_rows[row_index + 2].unsafe_ptr()
+        var row3_ptr = block.linear_rows[row_index + 3].unsafe_ptr()
+        var accum0 = SIMD[DType.float32, width](0.0)
+        var accum1 = SIMD[DType.float32, width](0.0)
+        var accum2 = SIMD[DType.float32, width](0.0)
+        var accum3 = SIMD[DType.float32, width](0.0)
+
+        for dim in range(0, simd_limit, width):
+            var input_chunk = (input_ptr + dim).load[width=width]()
+            accum0 += input_chunk * (row0_ptr + dim).load[width=width]()
+            accum1 += input_chunk * (row1_ptr + dim).load[width=width]()
+            accum2 += input_chunk * (row2_ptr + dim).load[width=width]()
+            accum3 += input_chunk * (row3_ptr + dim).load[width=width]()
+
+        var total0 = VectorScalar(accum0.reduce_add()[0]) + block.linear_bias[row_index]
+        var total1 = (
+            VectorScalar(accum1.reduce_add()[0]) + block.linear_bias[row_index + 1]
+        )
+        var total2 = (
+            VectorScalar(accum2.reduce_add()[0]) + block.linear_bias[row_index + 2]
+        )
+        var total3 = (
+            VectorScalar(accum3.reduce_add()[0]) + block.linear_bias[row_index + 3]
+        )
+
+        for dim in range(simd_limit, block.input_dim):
+            var input_value = input_vector.unsafe_get(dim)
+            total0 += input_value * block.linear_rows[row_index].unsafe_get(dim)
+            total1 += input_value * block.linear_rows[row_index + 1].unsafe_get(dim)
+            total2 += input_value * block.linear_rows[row_index + 2].unsafe_get(dim)
+            total3 += input_value * block.linear_rows[row_index + 3].unsafe_get(dim)
+
+        output.append(total0)
+        output.append(total1)
+        output.append(total2)
+        output.append(total3)
+        row_index += 4
+
+    while row_index < block.output_dim:
+        output.append(
+            VectorScalar(dot_product(block.linear_rows[row_index], input_vector))
+            + block.linear_bias[row_index]
+        )
+        row_index += 1
+
+    return output^
+
+
+def linear_block_output(
+    read input_vector: List[VectorScalar],
+    read block: LatentQueryProjectionBlock,
+) raises -> List[VectorScalar]:
+    return linear_block_output_tiled4(input_vector, block)
+
+
+def linear_block_output_into_reference(
     read input_vector: List[VectorScalar],
     read block: LatentQueryProjectionBlock,
     mut output: List[VectorScalar],
@@ -270,6 +347,14 @@ def linear_block_output_into(
             VectorScalar(dot_product(block.linear_rows[row_index], input_vector))
             + block.linear_bias[row_index]
         )
+
+
+def linear_block_output_into(
+    read input_vector: List[VectorScalar],
+    read block: LatentQueryProjectionBlock,
+    mut output: List[VectorScalar],
+) raises:
+    linear_block_output_into_reference(input_vector, block, output)
 
 
 def layer_normalized_output(
