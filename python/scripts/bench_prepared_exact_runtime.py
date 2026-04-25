@@ -333,18 +333,22 @@ def _rss_kib_for_pids(pids: list[int]) -> int:
     if len(live_pids) == 0:
         return 0
 
-    result = subprocess.run(
-        [
-            "ps",
-            "-o",
-            "rss=",
-            "-p",
-            ",".join(str(pid) for pid in live_pids),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "ps",
+                "-o",
+                "rss=",
+                "-p",
+                ",".join(str(pid) for pid in live_pids),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return -1
+
     total_rss_kib = 0
     for line in result.stdout.splitlines():
         stripped = line.strip()
@@ -491,6 +495,15 @@ def main() -> None:
                             ready_parent_rss_kib = _rss_kib_for_pids([os.getpid()])
                             ready_worker_pids = list(runtime.worker_pids())
                             ready_worker_rss_kib = _rss_kib_for_pids(ready_worker_pids)
+                            if (
+                                ready_parent_rss_kib < 0
+                                or ready_worker_rss_kib < 0
+                            ):
+                                ready_total_rss_kib = -1
+                            else:
+                                ready_total_rss_kib = (
+                                    ready_parent_rss_kib + ready_worker_rss_kib
+                                )
                             _assert_runtime_matches_session(
                                 session=session,
                                 runtime=runtime,
@@ -529,9 +542,7 @@ def main() -> None:
                             average_batch_execution_ms=average_batch_execution_ms,
                             ready_parent_rss_kib=ready_parent_rss_kib,
                             ready_worker_rss_kib=ready_worker_rss_kib,
-                            ready_total_rss_kib=(
-                                ready_parent_rss_kib + ready_worker_rss_kib
-                            ),
+                            ready_total_rss_kib=ready_total_rss_kib,
                             ready_worker_pid_count=len(ready_worker_pids),
                             enable_parallel_scoring=scoring.enable_parallel_scoring,
                             enable_parallel_work_item_oversubscription=(

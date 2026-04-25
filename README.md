@@ -6,6 +6,11 @@ For developers using the Python SDK, the supported entrypoint is `import kayak`.
 The current monorepo keeps the Python SDK and Mojo engine together on purpose.
 The documented public SDK boundary is narrower than the full repo surface.
 
+Kayak's narrowed product direction is the late-interaction search layer. It
+does not try to own OCR, document parsing, structured extraction, or answer
+generation as core responsibilities. That boundary is recorded in
+[docs/product_direction.md](docs/product_direction.md).
+
 The current scaffold is intentionally narrow:
 - encoder output is treated as an external boundary
 - indexing and exact MaxSim scoring live in Mojo

@@ -151,13 +151,6 @@ def _prepared_exact_search_runtime_worker(
         except Exception as exc:
             batch_execution_seconds = time.perf_counter() - batch_start
             message = f"{type(exc).__name__}: {exc}"
-            for entry in batch:
-                response_queue.put(
-                    _RuntimeErrorEnvelope(
-                        request_id=entry.request_id,
-                        error_message=message,
-                    )
-                )
             response_queue.put(
                 _RuntimeBatchMetricsEnvelope(
                     batch_size=len(batch),
@@ -166,19 +159,19 @@ def _prepared_exact_search_runtime_worker(
                     failed_request_count=len(batch),
                 )
             )
+            for entry in batch:
+                response_queue.put(
+                    _RuntimeErrorEnvelope(
+                        request_id=entry.request_id,
+                        error_message=message,
+                    )
+                )
             if stop_after_batch:
                 response_queue.put(_RuntimeStopEnvelope(worker_index=worker_index))
                 return
             continue
 
         batch_execution_seconds = time.perf_counter() - batch_start
-        for entry, response in zip(batch, responses, strict=True):
-            response_queue.put(
-                _RuntimeSuccessEnvelope(
-                    request_id=entry.request_id,
-                    response=response,
-                )
-            )
         response_queue.put(
             _RuntimeBatchMetricsEnvelope(
                 batch_size=len(batch),
@@ -187,6 +180,13 @@ def _prepared_exact_search_runtime_worker(
                 failed_request_count=0,
             )
         )
+        for entry, response in zip(batch, responses, strict=True):
+            response_queue.put(
+                _RuntimeSuccessEnvelope(
+                    request_id=entry.request_id,
+                    response=response,
+                )
+            )
         if stop_after_batch:
             response_queue.put(_RuntimeStopEnvelope(worker_index=worker_index))
             return

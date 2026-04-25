@@ -37,6 +37,22 @@ Reason:
 - if the canonical boundary becomes "whatever LanceDB or another vector store
   happens to store", Kayak loses the strongest part of its own architecture
 
+Product-boundary consequence:
+
+- Kayak starts at encoded late-interaction representations, or at plain text
+  passed through an explicit caller-selected encoder
+- Kayak does not own OCR, PDF parsing, table extraction, handwriting recovery,
+  or application answer generation as canonical responsibilities
+
+Reason:
+
+- those document-intelligence steps are real production systems in their own
+  right
+- the current repo verifies retrieval contracts, storage, planning, scoring,
+  and search-service behavior, not raw-document understanding
+- keeping this boundary explicit lets performance and correctness work optimize
+  the search layer without inheriting unrelated ingestion claims
+
 ## Two Interaction Modes
 
 Kayak has two main interaction modes.
