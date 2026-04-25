@@ -4,6 +4,7 @@ import argparse
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
+import math
 from pathlib import Path
 import sys
 from typing import Any, Sequence
@@ -43,7 +44,47 @@ class ShapePreset:
 @dataclass(frozen=True, slots=True)
 class KayakPlaidConfigPreset:
     name: str
-    config: KayakPlaidApproxConfig
+    centroid_count: int
+    centroids_per_query_vector: int
+    candidate_k: int | None = None
+    candidate_ratio: float | None = None
+    full_window: bool = False
+
+    @property
+    def config(self) -> KayakPlaidApproxConfig:
+        if self.candidate_k is None:
+            raise ValueError("shape-aware config requires config_for_shape")
+        return KayakPlaidApproxConfig(
+            centroid_count=self.centroid_count,
+            centroids_per_query_vector=self.centroids_per_query_vector,
+            candidate_k=self.candidate_k,
+        )
+
+    def config_for_shape(self, shape: SpeedTrackShape) -> KayakPlaidApproxConfig:
+        if self.full_window:
+            candidate_k = shape.document_count
+        elif self.candidate_ratio is not None:
+            candidate_k = int(math.ceil(shape.document_count * self.candidate_ratio))
+        elif self.candidate_k is not None:
+            candidate_k = self.candidate_k
+        else:
+            raise ValueError("Kayak PLAID preset must define a candidate budget")
+
+        return KayakPlaidApproxConfig(
+            centroid_count=self.centroid_count,
+            centroids_per_query_vector=self.centroids_per_query_vector,
+            candidate_k=max(shape.top_k, candidate_k),
+        )
+
+    def metadata_for_shape(self, shape: SpeedTrackShape) -> dict[str, object]:
+        metadata: dict[str, object] = {"candidate_k_policy": "fixed"}
+        if self.full_window:
+            metadata["candidate_k_policy"] = "full_window"
+        elif self.candidate_ratio is not None:
+            metadata["candidate_k_policy"] = "ratio"
+            metadata["candidate_k_ratio"] = self.candidate_ratio
+        metadata["candidate_k_effective"] = self.config_for_shape(shape).candidate_k
+        return metadata
 
 
 def _require_positive(name: str, value: int) -> None:
@@ -67,8 +108,27 @@ def shape_presets(name: str) -> tuple[ShapePreset, ...]:
         return (
             ShapePreset("token_128d_300dv_4q_50qv", _shape(128, 300, 4, 50)),
         )
+    if name == "cpu_matrix_v2_smoke":
+        return (
+            ShapePreset("small_128d_32dv_4q_16qv", _shape(128, 32, 4, 16)),
+            ShapePreset("medium_512d_128dv_4q_50qv", _shape(512, 128, 4, 50)),
+            ShapePreset("large_2048d_32dv_4q_96qv", _shape(2048, 32, 4, 96)),
+        )
+    if name == "cpu_matrix_v2":
+        return (
+            ShapePreset("small_128d_32dv_4q_16qv", _shape(128, 32, 4, 16)),
+            ShapePreset("small_128d_128dv_4q_50qv", _shape(128, 128, 4, 50)),
+            ShapePreset("small_128d_300dv_4q_96qv", _shape(128, 300, 4, 96)),
+            ShapePreset("medium_512d_32dv_4q_50qv", _shape(512, 32, 4, 50)),
+            ShapePreset("medium_512d_128dv_4q_96qv", _shape(512, 128, 4, 96)),
+            ShapePreset("medium_512d_300dv_4q_16qv", _shape(512, 300, 4, 16)),
+            ShapePreset("large_2048d_32dv_4q_16qv", _shape(2048, 32, 4, 16)),
+            ShapePreset("large_2048d_128dv_4q_50qv", _shape(2048, 128, 4, 50)),
+            ShapePreset("large_2048d_300dv_2q_16qv", _shape(2048, 300, 2, 16)),
+        )
     raise argparse.ArgumentTypeError(
-        "shape set must be one of: smoke, scorecard, long_token"
+        "shape set must be one of: smoke, scorecard, long_token, "
+        "cpu_matrix_v2_smoke, cpu_matrix_v2"
     )
 
 
@@ -92,38 +152,68 @@ def _shape(
 def kayak_plaid_config_presets(name: str) -> tuple[KayakPlaidConfigPreset, ...]:
     if name == "smoke":
         return (
-            KayakPlaidConfigPreset("light", _plaid_config(64, 8, 32)),
-            KayakPlaidConfigPreset("balanced", _plaid_config(128, 16, 80)),
-            KayakPlaidConfigPreset("recall", _plaid_config(128, 32, 160)),
+            _fixed_preset("light", 64, 8, 32),
+            _fixed_preset("balanced", 128, 16, 80),
+            _fixed_preset("recall", 128, 32, 160),
         )
     if name == "scorecard":
         return (
-            KayakPlaidConfigPreset("light", _plaid_config(64, 8, 32)),
-            KayakPlaidConfigPreset("balanced", _plaid_config(128, 16, 80)),
-            KayakPlaidConfigPreset("recall", _plaid_config(128, 32, 160)),
-            KayakPlaidConfigPreset("wide_recall", _plaid_config(256, 32, 192)),
+            _fixed_preset("light", 64, 8, 32),
+            _fixed_preset("balanced", 128, 16, 80),
+            _fixed_preset("recall", 128, 32, 160),
+            _fixed_preset("wide_recall", 256, 32, 192),
         )
     if name == "long_token":
         return (
-            KayakPlaidConfigPreset("candidate_96", _plaid_config(128, 32, 96)),
-            KayakPlaidConfigPreset("candidate_128", _plaid_config(128, 32, 128)),
-            KayakPlaidConfigPreset("candidate_160", _plaid_config(128, 32, 160)),
-            KayakPlaidConfigPreset("candidate_192", _plaid_config(128, 32, 192)),
+            _fixed_preset("candidate_96", 128, 32, 96),
+            _fixed_preset("candidate_128", 128, 32, 128),
+            _fixed_preset("candidate_160", 128, 32, 160),
+            _fixed_preset("candidate_192", 128, 32, 192),
+        )
+    if name == "cpu_matrix_v2":
+        return (
+            _fixed_preset("fixed_64", 128, 24, 64),
+            _fixed_preset("fixed_128", 128, 32, 128),
+            _ratio_preset("ratio_10pct", 128, 24, 0.10),
+            _ratio_preset("ratio_25pct", 128, 32, 0.25),
+            KayakPlaidConfigPreset(
+                "full_window",
+                centroid_count=128,
+                centroids_per_query_vector=32,
+                full_window=True,
+            ),
         )
     raise argparse.ArgumentTypeError(
-        "Kayak PLAID config set must be one of: smoke, scorecard, long_token"
+        "Kayak PLAID config set must be one of: smoke, scorecard, long_token, "
+        "cpu_matrix_v2"
     )
 
 
-def _plaid_config(
+def _fixed_preset(
+    name: str,
     centroid_count: int,
     centroids_per_query_vector: int,
     candidate_k: int,
-) -> KayakPlaidApproxConfig:
-    return KayakPlaidApproxConfig(
+) -> KayakPlaidConfigPreset:
+    return KayakPlaidConfigPreset(
+        name,
         centroid_count=centroid_count,
         centroids_per_query_vector=centroids_per_query_vector,
         candidate_k=candidate_k,
+    )
+
+
+def _ratio_preset(
+    name: str,
+    centroid_count: int,
+    centroids_per_query_vector: int,
+    candidate_ratio: float,
+) -> KayakPlaidConfigPreset:
+    return KayakPlaidConfigPreset(
+        name,
+        centroid_count=centroid_count,
+        centroids_per_query_vector=centroids_per_query_vector,
+        candidate_ratio=candidate_ratio,
     )
 
 
@@ -141,12 +231,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--shape-set",
-        choices=("smoke", "scorecard", "long_token"),
+        choices=(
+            "smoke",
+            "scorecard",
+            "long_token",
+            "cpu_matrix_v2_smoke",
+            "cpu_matrix_v2",
+        ),
         default="smoke",
     )
     parser.add_argument(
         "--kayak-plaid-config-set",
-        choices=("smoke", "scorecard", "long_token"),
+        choices=("smoke", "scorecard", "long_token", "cpu_matrix_v2"),
         default="smoke",
     )
     parser.add_argument("--seed", type=int, default=7)
@@ -154,6 +250,12 @@ def parse_args() -> argparse.Namespace:
         "--normalize-vectors",
         action=argparse.BooleanOptionalAction,
         default=False,
+    )
+    parser.add_argument(
+        "--normalization-set",
+        choices=("single", "both"),
+        default="single",
+        help="Use --normalize-vectors for single, or run raw and normalized cases.",
     )
     parser.add_argument("--warmup-iterations", type=int, default=0)
     parser.add_argument("--measurement-iterations", type=int, default=1)
@@ -250,14 +352,17 @@ def benchmark_shape(
     *,
     shape_preset: ShapePreset,
     config_presets: Sequence[KayakPlaidConfigPreset],
+    normalize_vectors: bool,
+    shape_name_suffix: str,
     args: argparse.Namespace,
 ) -> dict[str, Any]:
     shape = shape_preset.shape
+    shape_name = shape_preset.name + shape_name_suffix
     shape.validate()
     inputs = build_synthetic_inputs(
         shape,
         seed=args.seed,
-        normalize_vectors=args.normalize_vectors,
+        normalize_vectors=normalize_vectors,
     )
     systems: list[dict[str, Any]] = []
     kayak_exact, reference_positions = benchmark_kayak_exact(
@@ -267,7 +372,7 @@ def benchmark_shape(
         warmup_iterations=args.warmup_iterations,
         measurement_iterations=args.measurement_iterations,
     )
-    systems.append(_annotate_row(kayak_exact, shape_name=shape_preset.name))
+    systems.append(_annotate_row(kayak_exact, shape_name=shape_name))
 
     if "kayak_plaid" in args.engines:
         for config_preset in config_presets:
@@ -275,20 +380,21 @@ def benchmark_shape(
                 shape=shape,
                 inputs=inputs,
                 reference_positions_by_query=reference_positions,
-                config=config_preset.config,
+                config=config_preset.config_for_shape(shape),
                 warmup_iterations=args.warmup_iterations,
                 measurement_iterations=args.measurement_iterations,
             )
             row["system_name"] = "kayak_plaid_mojo_" + config_preset.name
             row["config_name"] = config_preset.name
-            systems.append(_annotate_row(row, shape_name=shape_preset.name))
+            row.update(config_preset.metadata_for_shape(shape))
+            systems.append(_annotate_row(row, shape_name=shape_name))
 
     if "fastplaid" in args.engines:
         row = benchmark_fastplaid(
             shape=shape,
             inputs=inputs,
             reference_positions_by_query=reference_positions,
-            index_root=args.index_root / shape_preset.name,
+            index_root=args.index_root / shape_name,
             overwrite_index_root=True,
             device=args.fastplaid_device,
             low_memory=args.fastplaid_low_memory,
@@ -304,7 +410,7 @@ def benchmark_shape(
             require_fastplaid=args.require_fastplaid,
         )
         row["config_name"] = "fastplaid"
-        systems.append(_annotate_row(row, shape_name=shape_preset.name))
+        systems.append(_annotate_row(row, shape_name=shape_name))
 
     _add_ratios(systems)
     approximate_rows = [
@@ -320,8 +426,9 @@ def benchmark_shape(
         minimize=("index_bytes",),
     )
     return {
-        "shape_name": shape_preset.name,
+        "shape_name": shape_name,
         "shape": shape.to_json_ready(),
+        "normalize_vectors": normalize_vectors,
         "input_bytes": {
             "documents": int(inputs.documents.nbytes),
             "queries": int(inputs.queries.nbytes),
@@ -397,12 +504,20 @@ def _front_row(row: dict[str, Any]) -> dict[str, Any]:
         "config_name",
         "query_batch_mean_seconds",
         "query_qps",
+        "query_qps_ratio_vs_exact",
+        "query_batch_seconds_ratio_vs_exact",
+        "query_qps_ratio_vs_fastplaid",
+        "query_batch_seconds_ratio_vs_fastplaid",
         "recall_at_k_vs_kayak_exact",
         "index_bytes",
+        "index_bytes_ratio_vs_exact",
         "build_seconds",
         "candidate_k",
         "centroid_count",
         "centroids_per_query_vector",
+        "candidate_k_policy",
+        "candidate_k_ratio",
+        "candidate_k_effective",
     )
     return {key: row[key] for key in keys if key in row}
 
@@ -459,6 +574,7 @@ def build_report(
             "kayak_plaid_config_set": args.kayak_plaid_config_set,
             "seed": args.seed,
             "normalize_vectors": args.normalize_vectors,
+            "normalization_set": args.normalization_set,
             "warmup_iterations": args.warmup_iterations,
             "measurement_iterations": args.measurement_iterations,
             "kayak_backend": args.kayak_backend,
@@ -498,22 +614,32 @@ def main() -> None:
         raise ValueError("warmup_iterations must be non-negative")
     _require_positive("measurement_iterations", args.measurement_iterations)
 
-    shape_results = [
-        benchmark_shape(
-            shape_preset=shape_preset,
-            config_presets=kayak_plaid_config_presets(
-                args.kayak_plaid_config_set
-            ),
-            args=args,
-        )
-        for shape_preset in shape_presets(args.shape_set)
-    ]
+    shape_results = []
+    for normalize_vectors, suffix in _normalization_cases(args):
+        for shape_preset in shape_presets(args.shape_set):
+            shape_results.append(
+                benchmark_shape(
+                    shape_preset=shape_preset,
+                    config_presets=kayak_plaid_config_presets(
+                        args.kayak_plaid_config_set
+                    ),
+                    normalize_vectors=normalize_vectors,
+                    shape_name_suffix=suffix,
+                    args=args,
+                )
+            )
     report = build_report(shape_results=shape_results, args=args)
     write_report(args.output, report)
     print(json.dumps(report, indent=2, sort_keys=True))
     first_exact = shape_results[0]["systems"][0]
     print(f"Mean: {first_exact['query_batch_mean_seconds']}")
     print(f"wrote {args.output}")
+
+
+def _normalization_cases(args: argparse.Namespace) -> tuple[tuple[bool, str], ...]:
+    if args.normalization_set == "both":
+        return ((False, "_raw"), (True, "_normalized"))
+    return ((args.normalize_vectors, ""),)
 
 
 if __name__ == "__main__":

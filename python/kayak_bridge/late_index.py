@@ -324,10 +324,18 @@ class LateIndex:
         *,
         k: int,
         backend: str = NUMPY_REFERENCE_BACKEND,
+        approximation: object | None = None,
     ) -> tuple["SearchHit", ...]:
+        """Return top-k hits, optionally through an explicit approximation."""
         from .late_ops import search
 
-        return search(query, self, k=k, backend=backend)
+        return search(
+            query,
+            self,
+            k=k,
+            backend=backend,
+            approximation=approximation,
+        )
 
     def search_with_plan(
         self,

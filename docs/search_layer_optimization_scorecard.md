@@ -55,6 +55,10 @@ Harness:
 - `pixi run bench_fastplaid_cpu_pareto_raw`
 - `pixi run bench_fastplaid_cpu_pareto`
 - `pixi run bench_fastplaid_cpu_long_token`
+- `pixi run bench_fastplaid_cpu_matrix_v2_smoke_raw`
+- `pixi run bench_fastplaid_cpu_matrix_v2_smoke`
+- `pixi run bench_fastplaid_cpu_matrix_v2_raw`
+- `pixi run bench_fastplaid_cpu_matrix_v2`
 
 Kayak approximation status:
 
@@ -62,8 +66,12 @@ Kayak approximation status:
 - current implementation is Mojo-backed: Python only prepares API inputs, while
   sampled centroid assignment, candidate scoring, and exact MaxSim rerank run
   inside the Mojo bridge
-- the production target is still to graduate this explicit parameter from a
-  benchmark lane into the public search API after larger recall/latency checks
+- the explicit public API is `PlaidApproxConfig`, `search(...,
+  approximation=...)`, `search_batch(..., approximation=...)`, and
+  `prepare_plaid_approx_index(...)`
+- exact search remains the default; approximation is a caller-selected speed,
+  recall, and storage tradeoff, and every benchmark must report candidate
+  budget plus exact-reference recall
 
 Source references:
 
@@ -102,6 +110,54 @@ Interpretation:
   point on all three Pareto axes for every measured CPU shape
 - the `token_128d_300dv_4q_50qv` shape is the tightest CPU case; Kayak still
   has higher recall and lower bytes, but the speed margin is only `1.029x`
+
+### CPU Matrix v2 Smoke
+
+Command:
+
+```bash
+pixi run bench_fastplaid_cpu_matrix_v2_smoke
+```
+
+Artifact:
+
+- `.cache/kayak/fastplaid_cpu_matrix_v2_smoke/summary.json`
+
+Controls:
+
+- shape set: `cpu_matrix_v2_smoke`
+- normalization set: `both`
+- Kayak config set: `cpu_matrix_v2`
+- FastPlaid device: `cpu`
+- FastPlaid nbits: `4`
+- warmup iterations: `1`
+- measurement iterations: `2`
+- seed: `7`
+
+Measured coverage:
+
+| Shape | Total doc vectors | Total query vectors | FastPlaid recall / qps / bytes | Kayak full-window qps / bytes | Kayak `ratio_25pct` recall / qps | Kayak dominates FastPlaid |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `small_128d_32dv_4q_16qv_raw` | `4096` | `64` | `0.675` / `177.541217912271` / `2992421` | `1506.8986764240287` / `2128784` | `0.275` / `2411.273428993025` | `true` |
+| `medium_512d_128dv_4q_50qv_raw` | `65536` | `200` | `0.4` / `22.7221247459711` / `44594563` | `34.10114796060502` / `33880728` | `0.225` / `114.73303543968606` | `true` |
+| `large_2048d_32dv_4q_96qv_raw` | `65536` | `384` | `0.325` / `16.837873639591965` / `11031386` | `17.650832324853674` / `34032104` | `0.25` / `49.44983198773549` | `false` |
+| `small_128d_32dv_4q_16qv_normalized` | `4096` | `64` | `0.7` / `169.68970646510937` / `2993053` | `1548.199715242828` / `2129104` | `0.375` / `2444.30199443263` | `true` |
+| `medium_512d_128dv_4q_50qv_normalized` | `65536` | `200` | `0.625` / `23.460152633396607` / `44600036` | `33.85741193053026` / `33892312` | `0.30000000000000004` / `112.37809609863578` | `true` |
+| `large_2048d_32dv_4q_96qv_normalized` | `65536` | `384` | `0.7` / `18.121671776568448` / `11032755` | `17.638699921365276` / `34038016` | `0.30000000000000004` / `49.04218347541088` | `false` |
+
+Interpretation:
+
+- Kayak dominates FastPlaid on the small and medium v2 smoke shapes in both raw
+  and normalized modes.
+- Kayak does not yet dominate FastPlaid on the large `2048`-document,
+  `32`-document-vector, `96`-query-vector shape. The full-window Kayak path has
+  exact recall but uses about `3.08x` the FastPlaid bytes, and the normalized
+  full-window row is slightly slower. The pruned Kayak paths are faster but
+  lose too much recall to dominate.
+- This falsifies the stronger claim that CPU coverage is already in Kayak's
+  favor across the broadened comparison. Before GPU work, the CPU gate is to
+  improve large-shape candidate recall per byte or reduce the stored exact
+  payload cost enough to change that Pareto result.
 
 ### Long-Token CPU Candidate Sweep
 

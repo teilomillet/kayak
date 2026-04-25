@@ -102,8 +102,15 @@ class LateQueryBatch:
         *,
         k: int,
         backend: str = NUMPY_REFERENCE_BACKEND,
+        approximation: object | None = None,
     ) -> tuple[tuple["SearchHit", ...], ...]:
-        """Return exact top-k hits for every query in this batch."""
+        """Return top-k hits, optionally through an explicit approximation."""
         from .late_ops import search_batch
 
-        return search_batch(self, index, k=k, backend=backend)
+        return search_batch(
+            self,
+            index,
+            k=k,
+            backend=backend,
+            approximation=approximation,
+        )

@@ -60,7 +60,8 @@ class HelpApiTests(unittest.TestCase):
 
         self.assertIn("search", text)
         self.assertIn("backend", text)
-        self.assertIn("Return exact top-k hits for one query", text)
+        self.assertIn("Return top-k hits for one query", text)
+        self.assertIn("approximation", text)
 
     def test_help_category_lists_matching_public_entries(self) -> None:
         text = kayak.help("stores")

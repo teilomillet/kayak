@@ -17,6 +17,7 @@ from kayak.search import (
     PreparedPlaidApproxIndex,
     SearchHit,
     plaid_approx_prepared_posting_count_value,
+    plaid_search_hits_for_query,
     plaid_search_positions_for_query,
     prepare_plaid_approx_hybrid_flat_dim128_index,
     search_exact,
@@ -532,6 +533,42 @@ def search_plaid_approx_prepared_batch(
     return positions_batch_to_python(positions_by_query)
 
 
+def search_plaid_approx_prepared_hits_batch(
+    py_query_batch_values: PythonObject,
+    py_final_k: PythonObject,
+    py_centroids_per_query_vector: PythonObject,
+    py_candidate_k: PythonObject,
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var queries = decode_flat_queries(py_query_batch_values)
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_final_k)
+    var centroids_per_query_vector = Int(py=py_centroids_per_query_vector)
+    var candidate_k = Int(py=py_candidate_k)
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxIndex
+    ]()
+    var hits_by_query = List[List[SearchHit]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error("all queries must share the prepared index vector dimension")
+
+        hits_by_query.append(
+            plaid_search_hits_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+            )
+        )
+
+    return hits_batch_to_python(hits_by_query)
+
+
 @export
 def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
     try:
@@ -589,6 +626,10 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         module.def_function[search_plaid_approx_prepared_batch](
             "search_plaid_approx_prepared_batch",
             docstring="Search a prepared sampled-centroid PLAID-style approximation index.",
+        )
+        module.def_function[search_plaid_approx_prepared_hits_batch](
+            "search_plaid_approx_prepared_hits_batch",
+            docstring="Search a prepared sampled-centroid PLAID-style approximation index and return hits.",
         )
         return module.finalize()
     except e:

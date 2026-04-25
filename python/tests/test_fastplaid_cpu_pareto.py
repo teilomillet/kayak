@@ -57,6 +57,38 @@ class FastPlaidCpuParetoTests(unittest.TestCase):
         self.assertEqual(shape.document_vector_count, 300)
         self.assertEqual(shape.query_vector_count, 50)
 
+    def test_cpu_matrix_v2_covers_explicit_vector_axes(self) -> None:
+        shapes = shape_presets("cpu_matrix_v2")
+
+        self.assertEqual(
+            {preset.shape.document_count for preset in shapes},
+            {128, 512, 2048},
+        )
+        self.assertEqual(
+            {preset.shape.document_vector_count for preset in shapes},
+            {32, 128, 300},
+        )
+        self.assertEqual(
+            {preset.shape.query_vector_count for preset in shapes},
+            {16, 50, 96},
+        )
+
+    def test_cpu_matrix_v2_configs_include_fixed_ratio_and_full_window(self) -> None:
+        shape = shape_presets("cpu_matrix_v2_smoke")[0].shape
+        presets = kayak_plaid_config_presets("cpu_matrix_v2")
+        rows = {
+            preset.name: preset.metadata_for_shape(shape)
+            for preset in presets
+        }
+
+        self.assertEqual(rows["fixed_64"]["candidate_k_policy"], "fixed")
+        self.assertEqual(rows["fixed_64"]["candidate_k_effective"], 64)
+        self.assertEqual(rows["ratio_10pct"]["candidate_k_policy"], "ratio")
+        self.assertEqual(rows["ratio_10pct"]["candidate_k_effective"], 13)
+        self.assertEqual(rows["ratio_25pct"]["candidate_k_effective"], 32)
+        self.assertEqual(rows["full_window"]["candidate_k_policy"], "full_window")
+        self.assertEqual(rows["full_window"]["candidate_k_effective"], 128)
+
     def test_pareto_front_removes_dominated_rows(self) -> None:
         rows = [
             _row("dominating", recall=0.8, qps=100.0, index_bytes=100),

@@ -40,6 +40,7 @@ RUNTIME_BRIDGE_MODULE_STEMS = (
     "mojo_exact_cpu",
     "mojo_payload_cache",
     "mojo_payloads",
+    "plaid_approx",
     "planned_search",
     "prepared_index_cache",
     "prepared_index_storage_artifact",

@@ -44,6 +44,10 @@ from .backend_dispatch import maxsim_scores
 from .mojo_exact_cpu import load_module as load_mojo_exact_cpu_module
 from .prepared_index_cache import prepared_packed_index_object
 from .mojo_payloads import query_payload
+from .plaid_approx import (
+    PlaidApproxConfig,
+    PlaidApproxIndex,
+)
 from .planned_search import SearchPlanResult
 from .search_plan import (
     SearchPlan,
@@ -149,8 +153,21 @@ def search(
     *,
     k: int,
     backend: str = NUMPY_REFERENCE_BACKEND,
+    approximation: PlaidApproxConfig | None = None,
 ) -> tuple[SearchHit, ...]:
-    """Return exact top-k hits for one query against one index."""
+    """Return top-k hits for one query against one index.
+
+    Passing ``approximation=PlaidApproxConfig(...)`` opts into the Mojo
+    sampled-centroid approximation lane with exact rerank.
+    """
+    if approximation is not None:
+        prepared_index = prepare_plaid_approx_index(
+            late_index,
+            config=approximation,
+            final_k=k,
+        )
+        return prepared_index.search(late_query, final_k=k)
+
     if (
         backend == MOJO_EXACT_CPU_BACKEND
         and late_index.layout == "packed"
@@ -177,8 +194,21 @@ def search_batch(
     *,
     k: int,
     backend: str = NUMPY_REFERENCE_BACKEND,
+    approximation: PlaidApproxConfig | None = None,
 ) -> tuple[tuple[SearchHit, ...], ...]:
-    """Return exact top-k hits for every query in one batch."""
+    """Return top-k hits for every query in one batch.
+
+    Passing ``approximation=PlaidApproxConfig(...)`` opts into the Mojo
+    sampled-centroid approximation lane with exact rerank.
+    """
+    if approximation is not None:
+        prepared_index = prepare_plaid_approx_index(
+            late_index,
+            config=approximation,
+            final_k=k,
+        )
+        return prepared_index.search_batch(late_query_batch, final_k=k)
+
     if (
         backend == MOJO_EXACT_CPU_BACKEND
         and late_index.layout == "packed"
@@ -204,6 +234,20 @@ def search_batch(
     return tuple(
         scores.topk(k)
         for scores in maxsim_batch(late_query_batch, late_index, backend=backend)
+    )
+
+
+def prepare_plaid_approx_index(
+    late_index: LateIndex,
+    *,
+    config: PlaidApproxConfig,
+    final_k: int,
+) -> PlaidApproxIndex:
+    """Prepare one index for explicit Mojo PLAID-style approximate search."""
+    return PlaidApproxIndex.from_late_index(
+        late_index,
+        config=config,
+        final_k=final_k,
     )
 
 

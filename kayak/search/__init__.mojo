@@ -10,6 +10,7 @@ from .hit import SearchHit
 from .plaid_approx_dim128 import (
     PreparedPlaidApproxIndex,
     plaid_approx_prepared_posting_count_value,
+    plaid_search_hits_for_query,
     plaid_search_positions_for_query,
     prepare_plaid_approx_hybrid_flat_dim128_index,
 )

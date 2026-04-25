@@ -725,6 +725,23 @@ index = kayak.documents(
 scores_batch = kayak.maxsim_batch(batch, index)
 ```
 
+PLAID-style search is an explicit opt-in parameter. Kayak still reranks the
+candidate window with exact late interaction, and the caller owns the
+candidate budget:
+
+```python
+approx = kayak.PlaidApproxConfig(
+    centroid_count=128,
+    centroids_per_query_vector=32,
+    candidate_k=64,
+)
+
+hits = kayak.search(batch.queries[0], index, k=2, approximation=approx)
+
+prepared = kayak.prepare_plaid_approx_index(index, config=approx, final_k=2)
+hits_batch = prepared.search_batch(batch, final_k=2)
+```
+
 Stage 2 is explicit too. Exact full scan now defaults to a no-op stage 2 because
 stage 1 is already exact:
 
@@ -899,6 +916,8 @@ Main exports:
 - `LateDocuments`
 - `LateIndex`
 - `LateScores`
+- `PlaidApproxConfig`
+- `PlaidApproxIndex`
 - `SearchHit`
 - `SearchPlan`
 - `SearchPlanResult`
@@ -915,6 +934,7 @@ Main exports:
 - `exact_full_scan_search_plan`
 - `generate_candidates`
 - `packed_index`
+- `prepare_plaid_approx_index`
 - `hybrid_flat_dim128_index`
 - `flat_query_dim128`
 - `maxsim`

@@ -78,6 +78,34 @@ The next optimization work should fit one of these lanes.
 The current measurement surface and latest optimization evidence are tracked in
 [docs/search_layer_optimization_scorecard.md](search_layer_optimization_scorecard.md).
 
+### GPU Readiness Gate
+
+Before making GPU the main implementation focus, Kayak should close or clearly
+label the current CPU Pareto gap against FastPlaid.
+
+Verified evidence on `2026-04-25`:
+
+- Kayak dominates FastPlaid on the `cpu_matrix_v2_smoke` small and medium CPU
+  shapes in both raw and normalized modes.
+- Kayak does not dominate FastPlaid on the large
+  `2048`-document, `32`-document-vector, `96`-query-vector CPU smoke shape.
+  The exact-recall Kayak point stores much more bytes, and the normalized row
+  is slightly slower. The pruned Kayak points are faster but lose too much
+  exact-reference recall.
+
+Reason:
+
+- GPU work should accelerate a search plan whose CPU tradeoffs are already
+  understood. Otherwise a GPU kernel can hide an unresolved candidate-recall or
+  storage-efficiency problem.
+
+The next CPU work is therefore:
+
+- improve the large-shape pruned candidate path
+- add a compressed-vector or score-proxy lane with measured bytes
+- keep `PlaidApproxConfig` as the explicit public parameter for users who want
+  the approximation tradeoff
+
 ### Lane 1: Exact Search Throughput
 
 Optimize the exact late-interaction reference path.

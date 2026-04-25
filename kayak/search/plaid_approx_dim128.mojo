@@ -8,6 +8,9 @@ from kayak.scoring import exact_score_for_hybrid_flat_document_dim128_with_flat_
 from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
 from kayak.scoring.dot128_flat import dot_product_dim128_flat_pair_at
 
+from .hit import SearchHit
+from .topk import insert_descending, top_k_hits
+
 
 # Owns the dim128 sampled-centroid approximation used by the FastPlaid speed
 # track. It does not own Python binding, benchmark reporting, or public API
@@ -256,6 +259,12 @@ def plaid_candidate_positions_for_query(
     for _ in range(prepared_index.index.document_count):
         document_scores.append(zero_score_scalar())
 
+    var token_best_scores = List[ScoreScalar]()
+    var token_seen = List[Int]()
+    for _ in range(prepared_index.index.document_count):
+        token_best_scores.append(min_score_scalar())
+        token_seen.append(0)
+
     for query_vector_index in range(query.vector_count):
         var centroid_scores = score_query_vector_against_sampled_centroids(
             query, query_vector_index, prepared_index
@@ -263,11 +272,8 @@ def plaid_candidate_positions_for_query(
         var centroid_positions = top_positions_by_score(
             centroid_scores, centroids_per_query_vector
         )
-        var token_best_scores = List[ScoreScalar]()
-        var token_seen = List[Int]()
-        for _ in range(prepared_index.index.document_count):
-            token_best_scores.append(min_score_scalar())
-            token_seen.append(0)
+        var touched_documents = List[Int]()
+        touched_documents.reserve(prepared_index.index.document_count)
 
         for centroid_position in centroid_positions:
             var centroid_score = centroid_scores[centroid_position]
@@ -281,16 +287,17 @@ def plaid_candidate_positions_for_query(
                 var document_index = prepared_index.centroid_doc_indices[
                     posting_index
                 ]
-                if (
-                    token_seen[document_index] == 0
-                    or centroid_score > token_best_scores[document_index]
-                ):
+                if token_seen[document_index] == 0:
                     token_best_scores[document_index] = centroid_score
                     token_seen[document_index] = 1
+                    touched_documents.append(document_index)
+                elif centroid_score > token_best_scores[document_index]:
+                    token_best_scores[document_index] = centroid_score
 
-        for document_index in range(prepared_index.index.document_count):
-            if token_seen[document_index] != 0:
-                document_scores[document_index] += token_best_scores[document_index]
+        for document_index in touched_documents:
+            document_scores[document_index] += token_best_scores[document_index]
+            token_best_scores[document_index] = min_score_scalar()
+            token_seen[document_index] = 0
 
     return top_positions_by_score(document_scores, candidate_k)
 
@@ -319,6 +326,28 @@ def plaid_rerank_candidates_for_query(
     return winners^
 
 
+def plaid_rerank_candidate_hits_for_query(
+    read query: FlatQueryDim128,
+    read prepared_index: PreparedPlaidApproxIndex,
+    read candidate_positions: List[Int],
+    final_k: Int,
+) raises -> List[SearchHit]:
+    require_positive_int("final_k", final_k)
+
+    var hits = List[SearchHit]()
+    for document_index in candidate_positions:
+        var score = exact_score_for_hybrid_flat_document_dim128_with_flat_query(
+            query, prepared_index.index, document_index
+        )
+        insert_descending(
+            hits,
+            SearchHit(prepared_index.index.doc_ids[document_index].copy(), score),
+            final_k,
+        )
+
+    return hits^
+
+
 def plaid_search_all_documents_for_query(
     read query: FlatQueryDim128,
     read prepared_index: PreparedPlaidApproxIndex,
@@ -333,6 +362,22 @@ def plaid_search_all_documents_for_query(
         )
 
     return top_positions_by_score(scores, final_k)
+
+
+def plaid_search_all_document_hits_for_query(
+    read query: FlatQueryDim128,
+    read prepared_index: PreparedPlaidApproxIndex,
+    final_k: Int,
+) raises -> List[SearchHit]:
+    var scores = List[ScoreScalar]()
+    for document_index in range(prepared_index.index.document_count):
+        scores.append(
+            exact_score_for_hybrid_flat_document_dim128_with_flat_query(
+                query, prepared_index.index, document_index
+            )
+        )
+
+    return top_k_hits(prepared_index.index.doc_ids, scores, final_k)
 
 
 def plaid_search_positions_for_query(
@@ -357,5 +402,31 @@ def plaid_search_positions_for_query(
         query, prepared_index, centroids_per_query_vector, candidate_k
     )
     return plaid_rerank_candidates_for_query(
+        query, prepared_index, candidate_positions, final_k
+    )
+
+
+def plaid_search_hits_for_query(
+    read query: FlatQueryDim128,
+    read prepared_index: PreparedPlaidApproxIndex,
+    centroids_per_query_vector: Int,
+    candidate_k: Int,
+    final_k: Int,
+) raises -> List[SearchHit]:
+    require_positive_int(
+        "centroids_per_query_vector", centroids_per_query_vector
+    )
+    require_positive_int("candidate_k", candidate_k)
+    require_positive_int("final_k", final_k)
+
+    if candidate_k >= prepared_index.index.document_count:
+        return plaid_search_all_document_hits_for_query(
+            query, prepared_index, final_k
+        )
+
+    var candidate_positions = plaid_candidate_positions_for_query(
+        query, prepared_index, centroids_per_query_vector, candidate_k
+    )
+    return plaid_rerank_candidate_hits_for_query(
         query, prepared_index, candidate_positions, final_k
     )
