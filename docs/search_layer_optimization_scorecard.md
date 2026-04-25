@@ -141,24 +141,24 @@ Measured coverage:
 
 | Shape | FastPlaid recall / qps / bytes | Kayak i8 config | Kayak recall / qps / bytes | QPS vs FastPlaid |
 | --- | ---: | --- | ---: | ---: |
-| `small_128d_32dv_4q_16qv_raw` | `0.675` / `178.376` / `2992429` | `i8_full_window` | `1` / `2122.517` / `572304` | `11.899x` |
-| `small_128d_128dv_4q_50qv_raw` | `0.725` / `88.661` / `11412458` | `i8_full_window` | `0.975` / `187.411` / `2244992` | `2.114x` |
-| `small_128d_300dv_4q_96qv_raw` | `0.625` / `49.557` / `26005345` | `i8_ratio_75pct` | `0.825` / `49.774` / `5185248` | `1.004x` |
-| `medium_512d_32dv_4q_50qv_raw` | `0.525` / `47.272` / `11432640` | `i8_full_window` | `1` / `185.639` / `2282784` | `3.927x` |
-| `medium_512d_128dv_4q_96qv_raw` | `0.55` / `21.018` / `44594100` | `i8_full_window` | `0.975` / `24.928` / `8977048` | `1.186x` |
-| `medium_512d_300dv_4q_16qv_raw` | `0.525` / `16.312` / `103023951` | `i8_full_window` | `1` / `63.615` / `20733688` | `3.900x` |
-| `large_2048d_32dv_4q_16qv_raw` | `0.375` / `18.837` / `11031131` | `i8_full_window` | `0.975` / `146.930` / `9128424` | `7.800x` |
-| `large_2048d_128dv_4q_50qv_raw` | `0.3` / `13.105` / `41963016` | `i8_ratio_725pct` | `0.85` / `14.198` / `35898456` | `1.083x` |
-| `large_2048d_300dv_2q_16qv_raw` | `0.4` / `8.658` / `95426720` | `i8_full_window` | `1` / `15.861` / `82942944` | `1.832x` |
-| `small_128d_32dv_4q_16qv_normalized` | `0.8` / `176.463` / `2992893` | `i8_full_window` | `0.95` / `2100.932` / `572624` | `11.906x` |
-| `small_128d_128dv_4q_50qv_normalized` | `0.675` / `95.246` / `11415883` | `i8_full_window` | `0.95` / `186.516` / `2248048` | `1.958x` |
-| `small_128d_300dv_4q_96qv_normalized` | `0.775` / `46.179` / `26017427` | `i8_ratio_725pct` | `0.825` / `50.284` / `5190216` | `1.089x` |
-| `medium_512d_32dv_4q_50qv_normalized` | `0.6` / `46.948` / `11433594` | `i8_full_window` | `0.975` / `183.434` / `2284920` | `3.907x` |
-| `medium_512d_128dv_4q_96qv_normalized` | `0.6` / `21.374` / `44599827` | `i8_full_window` | `0.95` / `23.965` / `8988632` | `1.121x` |
-| `medium_512d_300dv_4q_16qv_normalized` | `0.625` / `16.566` / `103039143` | `i8_full_window` | `1` / `62.888` / `20755104` | `3.796x` |
-| `large_2048d_32dv_4q_16qv_normalized` | `0.6` / `25.623` / `11032586` | `i8_full_window` | `0.95` / `147.215` / `9134336` | `5.745x` |
-| `large_2048d_128dv_4q_50qv_normalized` | `0.475` / `13.236` / `41970080` | `i8_ratio_725pct` | `0.75` / `14.217` / `35947696` | `1.074x` |
-| `large_2048d_300dv_2q_16qv_normalized` | `0.3` / `8.816` / `95441495` | `i8_full_window` | `1` / `15.970` / `83015376` | `1.812x` |
+| `small_128d_32dv_4q_16qv_raw` | `0.65` / `177.083` / `2992477` | `i8_full_window` | `1` / `2146.563` / `572304` | `12.122x` |
+| `small_128d_128dv_4q_50qv_raw` | `0.725` / `96.871` / `11412458` | `i8_full_window` | `0.975` / `187.332` / `2244992` | `1.934x` |
+| `small_128d_300dv_4q_96qv_raw` | `0.625` / `48.943` / `26005346` | `i8_ratio_75pct` | `0.825` / `51.002` / `5185248` | `1.042x` |
+| `medium_512d_32dv_4q_50qv_raw` | `0.525` / `47.582` / `11432642` | `i8_full_window` | `1` / `187.057` / `2282784` | `3.931x` |
+| `medium_512d_128dv_4q_96qv_raw` | `0.55` / `21.234` / `44594099` | `i8_full_window` | `0.975` / `25.093` / `8977048` | `1.182x` |
+| `medium_512d_300dv_4q_16qv_raw` | `0.525` / `16.346` / `103023951` | `i8_full_window` | `1` / `63.654` / `20733688` | `3.894x` |
+| `large_2048d_32dv_4q_16qv_raw` | `0.375` / `25.309` / `11031131` | `i8_full_window` | `0.975` / `147.358` / `9128424` | `5.822x` |
+| `large_2048d_128dv_4q_50qv_raw` | `0.3` / `12.897` / `41963015` | `i8_ratio_725pct` | `0.85` / `14.285` / `35898456` | `1.108x` |
+| `large_2048d_300dv_2q_16qv_raw` | `0.4` / `8.750` / `95426720` | `i8_full_window` | `1` / `15.901` / `82942944` | `1.817x` |
+| `small_128d_32dv_4q_16qv_normalized` | `0.8` / `175.915` / `2992893` | `i8_full_window` | `0.95` / `2038.260` / `572624` | `11.587x` |
+| `small_128d_128dv_4q_50qv_normalized` | `0.675` / `94.126` / `11415882` | `i8_full_window` | `0.95` / `185.654` / `2248048` | `1.972x` |
+| `small_128d_300dv_4q_96qv_normalized` | `0.775` / `46.975` / `26017426` | `i8_ratio_725pct` | `0.825` / `50.832` / `5190216` | `1.082x` |
+| `medium_512d_32dv_4q_50qv_normalized` | `0.6` / `46.487` / `11433593` | `i8_full_window` | `0.975` / `184.788` / `2284920` | `3.975x` |
+| `medium_512d_128dv_4q_96qv_normalized` | `0.6` / `23.057` / `44599828` | `i8_full_window` | `0.95` / `24.844` / `8988632` | `1.078x` |
+| `medium_512d_300dv_4q_16qv_normalized` | `0.625` / `16.355` / `103039143` | `i8_full_window` | `1` / `63.236` / `20755104` | `3.866x` |
+| `large_2048d_32dv_4q_16qv_normalized` | `0.6` / `19.396` / `11032585` | `i8_full_window` | `0.95` / `146.648` / `9134336` | `7.561x` |
+| `large_2048d_128dv_4q_50qv_normalized` | `0.475` / `13.070` / `41970080` | `i8_ratio_725pct` | `0.75` / `14.149` / `35947696` | `1.083x` |
+| `large_2048d_300dv_2q_16qv_normalized` | `0.3` / `8.605` / `95441495` | `i8_full_window` | `1` / `15.894` / `83015376` | `1.847x` |
 
 Interpretation:
 
@@ -167,9 +167,9 @@ Interpretation:
 - The i8 lane is the dominant CPU coverage mechanism because it lowers stored
   token bytes while keeping query-time MaxSim inside Mojo.
 - The tightest margins remain token-heavy/query-heavy rows:
-  `small_128d_300dv_4q_96qv_raw` is only `1.004x` FastPlaid QPS,
-  `large_2048d_128dv_4q_50qv_normalized` is `1.074x`, and
-  `small_128d_300dv_4q_96qv_normalized` is `1.089x`.
+  `small_128d_300dv_4q_96qv_raw` is only `1.042x` FastPlaid QPS,
+  `medium_512d_128dv_4q_96qv_normalized` is `1.078x`, and
+  `small_128d_300dv_4q_96qv_normalized` is `1.082x`.
 - This supports moving to GPU implementation work, but only with the same
   explicit approximation contract and the same recall/QPS/bytes reporting.
 

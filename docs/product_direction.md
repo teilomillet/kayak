@@ -94,8 +94,8 @@ Verified evidence on `2026-04-25`:
   document vectors/document `32`, `128`, and `300`; query vectors/query `16`,
   `50`, and `96`; vector dim `128`; and FastPlaid `nbits=4` on CPU.
 - The tightest currently verified CPU rows are still the token-heavy/query-heavy
-  shapes, where the winning Kayak i8 points are only about `1.004x`, `1.074x`,
-  and `1.089x` FastPlaid QPS. Those rows should be monitored before changing
+  shapes, where the winning Kayak i8 points are only about `1.042x`, `1.078x`,
+  and `1.082x` FastPlaid QPS. Those rows should be monitored before changing
   the benchmark or widening the claim.
 
 Reason:

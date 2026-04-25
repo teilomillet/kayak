@@ -80,14 +80,13 @@ Artifacts:
 
 - `.cache/kayak/fastplaid_cpu_matrix_v2_smoke/summary.json`
 - `.cache/kayak/fastplaid_cpu_matrix_v2/summary.json`
-- full matrix quiet log: `.cache/kayak/bench_quiet/20260425T133749Z`
+- full matrix quiet log: `.cache/kayak/bench_quiet/20260425T140154Z`
 
-Host-load caveat:
+Host-load note:
 
-- the full matrix quiet wait timed out under competing host CPU load and then
-  ran with `--force`
-- this is still a completed full matrix artifact, but tight rows should be
-  repeated under quieter load before using them as release marketing numbers
+- the full matrix quiet wrapper started after below-threshold samples
+- the tight rows should still be repeated with larger measurement counts before
+  using them as release marketing numbers
 
 ## Measured Results
 
@@ -105,9 +104,9 @@ Tight rows:
 
 | Shape | FastPlaid recall / qps / bytes | Kayak i8 config | Kayak recall / qps / bytes | QPS vs FastPlaid |
 | --- | ---: | --- | ---: | ---: |
-| `small_128d_300dv_4q_96qv_raw` | `0.625` / `49.557` / `26005345` | `i8_ratio_75pct` | `0.825` / `49.774` / `5185248` | `1.004x` |
-| `large_2048d_128dv_4q_50qv_normalized` | `0.475` / `13.236` / `41970080` | `i8_ratio_725pct` | `0.75` / `14.217` / `35947696` | `1.074x` |
-| `small_128d_300dv_4q_96qv_normalized` | `0.775` / `46.179` / `26017427` | `i8_ratio_725pct` | `0.825` / `50.284` / `5190216` | `1.089x` |
+| `small_128d_300dv_4q_96qv_raw` | `0.625` / `48.943` / `26005346` | `i8_ratio_75pct` | `0.825` / `51.002` / `5185248` | `1.042x` |
+| `medium_512d_128dv_4q_96qv_normalized` | `0.6` / `23.057` / `44599828` | `i8_full_window` | `0.95` / `24.844` / `8988632` | `1.078x` |
+| `small_128d_300dv_4q_96qv_normalized` | `0.775` / `46.975` / `26017426` | `i8_ratio_725pct` | `0.825` / `50.832` / `5190216` | `1.082x` |
 
 ## Interpretation
 
