@@ -504,7 +504,7 @@ def benchmark_kayak_plaid(
         "engine": "kayak",
         "status": "ok",
         "engine_version": "mojo_bridge",
-        "index_kind": "sampled_centroid_postings_exact_rerank",
+        "index_kind": index.index_kind,
         "backend": "mojo_centroid_postings",
         "vector_metric": "dot_product",
         "build_seconds": build_seconds,
@@ -521,7 +521,8 @@ def benchmark_kayak_plaid(
         "centroid_count": index.centroid_count,
         "centroids_per_query_vector": config.centroids_per_query_vector,
         "candidate_k": config.candidate_k,
-        "rerank": "exact_maxsim_candidate_window",
+        "payload": config.payload,
+        "rerank": index.rerank_kind,
     }
 
 

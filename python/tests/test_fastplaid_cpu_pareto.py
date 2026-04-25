@@ -86,8 +86,14 @@ class FastPlaidCpuParetoTests(unittest.TestCase):
         self.assertEqual(rows["ratio_10pct"]["candidate_k_policy"], "ratio")
         self.assertEqual(rows["ratio_10pct"]["candidate_k_effective"], 13)
         self.assertEqual(rows["ratio_25pct"]["candidate_k_effective"], 32)
+        self.assertEqual(rows["i8_ratio_25pct"]["payload"], "i8")
+        self.assertEqual(rows["i8_ratio_50pct"]["candidate_k_effective"], 64)
+        self.assertEqual(rows["i8_ratio_625pct"]["candidate_k_effective"], 80)
+        self.assertEqual(rows["i8_ratio_725pct"]["candidate_k_effective"], 93)
+        self.assertEqual(rows["i8_ratio_75pct"]["candidate_k_effective"], 96)
         self.assertEqual(rows["full_window"]["candidate_k_policy"], "full_window")
         self.assertEqual(rows["full_window"]["candidate_k_effective"], 128)
+        self.assertEqual(rows["i8_full_window"]["payload"], "i8")
 
     def test_pareto_front_removes_dominated_rows(self) -> None:
         rows = [

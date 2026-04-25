@@ -76,6 +76,49 @@ class PlaidApproxPublicApiTests(unittest.TestCase):
             ),
         )
 
+    def test_i8_payload_is_explicit_and_reports_compressed_bytes(self) -> None:
+        query = kayak.query(np.stack([_basis(0), _basis(1)]))
+        index = kayak.documents(
+            ["doc-a", "doc-b", "doc-c"],
+            [
+                np.stack([_basis(0), _basis(1)]),
+                np.stack([_basis(0), _basis(0)]),
+                np.stack([_basis(1), _basis(1)]),
+            ],
+        ).pack()
+        exact_config = kayak.PlaidApproxConfig(
+            centroid_count=3,
+            centroids_per_query_vector=2,
+            candidate_k=3,
+        )
+        i8_config = kayak.PlaidApproxConfig(
+            centroid_count=3,
+            centroids_per_query_vector=2,
+            candidate_k=3,
+            payload="i8",
+        )
+
+        exact_prepared = kayak.prepare_plaid_approx_index(
+            index, config=exact_config, final_k=2
+        )
+        i8_prepared = kayak.prepare_plaid_approx_index(
+            index, config=i8_config, final_k=2
+        )
+
+        self.assertLess(i8_prepared.index_bytes, exact_prepared.index_bytes)
+        self.assertEqual(i8_prepared.index_kind, "sampled_centroid_postings_i8_proxy")
+        self.assertEqual(i8_prepared.rerank_kind, "i8_maxsim_candidate_window")
+        self.assertEqual(
+            i8_prepared.search(query, final_k=2),
+            kayak.search(query, index, k=2, backend=kayak.MOJO_EXACT_CPU_BACKEND),
+        )
+
+    def test_plaid_approx_config_rejects_unknown_payload(self) -> None:
+        config = kayak.PlaidApproxConfig(payload="mystery")
+
+        with self.assertRaisesRegex(ValueError, "payload"):
+            config.validate(final_k=1)
+
 
 if __name__ == "__main__":
     unittest.main()

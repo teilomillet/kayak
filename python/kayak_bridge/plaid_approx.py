@@ -1,10 +1,10 @@
-"""Mojo-backed PLAID-style centroid-posting search for benchmarks.
+"""Mojo-backed PLAID-style centroid-posting search.
 
 This module owns Python orchestration for Kayak's optional approximation lane.
 It does not implement candidate generation or reranking itself: centroid
-sampling, token assignment, document candidate scoring, and exact MaxSim rerank
-are executed by the Mojo bridge so speed-track measurements exercise the same
-systems layer as the exact backend.
+sampling, token assignment, document candidate scoring, exact MaxSim rerank,
+and i8 score-proxy rerank are executed by the Mojo bridge so speed-track
+measurements exercise the same systems layer as the exact backend.
 """
 
 from __future__ import annotations
@@ -27,6 +27,10 @@ if TYPE_CHECKING:
 
 VECTOR_DIM = 128
 INT_BYTES = 8
+I8_BYTES = 1
+PLAID_PAYLOAD_EXACT = "exact"
+PLAID_PAYLOAD_I8 = "i8"
+PLAID_PAYLOADS = (PLAID_PAYLOAD_EXACT, PLAID_PAYLOAD_I8)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +40,7 @@ class KayakPlaidApproxConfig:
     centroid_count: int = 128
     centroids_per_query_vector: int = 4
     candidate_k: int = 10
+    payload: str = PLAID_PAYLOAD_EXACT
 
     def validate(self, *, final_k: int) -> None:
         _require_positive("centroid_count", self.centroid_count)
@@ -46,11 +51,13 @@ class KayakPlaidApproxConfig:
         _require_positive("candidate_k", self.candidate_k)
         if self.candidate_k < final_k:
             raise ValueError("candidate_k must be greater than or equal to final_k")
+        if self.payload not in PLAID_PAYLOADS:
+            raise ValueError("payload must be one of: exact, i8")
 
 
 @dataclass(frozen=True, slots=True)
 class KayakPlaidApproxIndex:
-    """Prepared Mojo PLAID approximation index with exact rerank search."""
+    """Prepared Mojo PLAID approximation index with explicit payload semantics."""
 
     doc_ids: tuple[str, ...]
     document_count: int
@@ -143,22 +150,38 @@ class KayakPlaidApproxIndex:
         config: KayakPlaidApproxConfig,
     ) -> "KayakPlaidApproxIndex":
         module = load_module()
-        prepared_index = module.prepare_plaid_approx_hybrid_flat_dim128(
-            list(doc_ids),
-            doc_offsets.tolist(),
-            token_values,
-            centroid_count,
-        )
-        posting_count = int(
-            module.plaid_approx_prepared_posting_count(prepared_index)
-        )
-
-        index_bytes = _prepared_index_bytes(
-            doc_offsets=doc_offsets,
-            token_value_count=len(token_values),
-            centroid_count=centroid_count,
-            posting_count=posting_count,
-        )
+        if config.payload == PLAID_PAYLOAD_I8:
+            prepared_index = module.prepare_plaid_approx_i8_hybrid_flat_dim128(
+                list(doc_ids),
+                doc_offsets.tolist(),
+                token_values,
+                centroid_count,
+            )
+            posting_count = int(
+                module.plaid_approx_i8_prepared_posting_count(prepared_index)
+            )
+            index_bytes = _prepared_i8_index_bytes(
+                doc_offsets=doc_offsets,
+                token_value_count=len(token_values),
+                centroid_count=centroid_count,
+                posting_count=posting_count,
+            )
+        else:
+            prepared_index = module.prepare_plaid_approx_hybrid_flat_dim128(
+                list(doc_ids),
+                doc_offsets.tolist(),
+                token_values,
+                centroid_count,
+            )
+            posting_count = int(
+                module.plaid_approx_prepared_posting_count(prepared_index)
+            )
+            index_bytes = _prepared_index_bytes(
+                doc_offsets=doc_offsets,
+                token_value_count=len(token_values),
+                centroid_count=centroid_count,
+                posting_count=posting_count,
+            )
         return cls(
             doc_ids=doc_ids,
             document_count=len(doc_ids),
@@ -175,6 +198,18 @@ class KayakPlaidApproxIndex:
     def index_bytes(self) -> int:
         return self._index_bytes
 
+    @property
+    def index_kind(self) -> str:
+        if self.config.payload == PLAID_PAYLOAD_I8:
+            return "sampled_centroid_postings_i8_proxy"
+        return "sampled_centroid_postings_exact_rerank"
+
+    @property
+    def rerank_kind(self) -> str:
+        if self.config.payload == PLAID_PAYLOAD_I8:
+            return "i8_maxsim_candidate_window"
+        return "exact_maxsim_candidate_window"
+
     def search_batch_positions(
         self,
         queries: np.ndarray,
@@ -186,7 +221,12 @@ class KayakPlaidApproxIndex:
         normalized_queries = _as_query_tensor(queries, vector_dim=self.vector_dim)
         query_values = _flat_query_values_by_query(normalized_queries)
         module = load_module()
-        rows = module.search_plaid_approx_prepared_batch(
+        search_function = (
+            module.search_plaid_approx_i8_prepared_batch
+            if self.config.payload == PLAID_PAYLOAD_I8
+            else module.search_plaid_approx_prepared_batch
+        )
+        rows = search_function(
             query_values,
             final_k,
             self.config.centroids_per_query_vector,
@@ -201,7 +241,7 @@ class KayakPlaidApproxIndex:
         *,
         final_k: int,
     ) -> tuple[SearchHit, ...]:
-        """Return exact-reranked approximate hits for one public query."""
+        """Return approximate hits for one public query."""
         return self.search_batch(
             _single_query_batch(query),
             final_k=final_k,
@@ -213,7 +253,7 @@ class KayakPlaidApproxIndex:
         *,
         final_k: int,
     ) -> tuple[tuple[SearchHit, ...], ...]:
-        """Return exact-reranked approximate hits for a public query batch."""
+        """Return approximate hits for a public query batch."""
         if final_k <= 0:
             raise ValueError("final_k must be positive")
         query_values = [
@@ -221,7 +261,12 @@ class KayakPlaidApproxIndex:
             for query in query_batch.queries
         ]
         module = load_module()
-        rows = module.search_plaid_approx_prepared_hits_batch(
+        search_function = (
+            module.search_plaid_approx_i8_prepared_hits_batch
+            if self.config.payload == PLAID_PAYLOAD_I8
+            else module.search_plaid_approx_prepared_hits_batch
+        )
+        rows = search_function(
             query_values,
             final_k,
             self.config.centroids_per_query_vector,
@@ -316,6 +361,29 @@ def _prepared_index_bytes(
     return int(
         doc_offsets.nbytes
         + token_value_bytes
+        + centroid_token_index_bytes
+        + centroid_doc_offset_bytes
+        + centroid_doc_index_bytes
+    )
+
+
+def _prepared_i8_index_bytes(
+    *,
+    doc_offsets: np.ndarray,
+    token_value_count: int,
+    centroid_count: int,
+    posting_count: int,
+) -> int:
+    token_count = token_value_count // VECTOR_DIM
+    token_code_bytes = token_value_count * I8_BYTES
+    token_scale_bytes = token_count * np.dtype(VECTOR_DTYPE).itemsize
+    centroid_token_index_bytes = centroid_count * INT_BYTES
+    centroid_doc_offset_bytes = (centroid_count + 1) * INT_BYTES
+    centroid_doc_index_bytes = posting_count * INT_BYTES
+    return int(
+        doc_offsets.nbytes
+        + token_code_bytes
+        + token_scale_bytes
         + centroid_token_index_bytes
         + centroid_doc_offset_bytes
         + centroid_doc_index_bytes

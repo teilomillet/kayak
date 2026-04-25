@@ -19,8 +19,11 @@ from kayak.benchmarks import make_exact_search_fixture
 from kayak.runtime import ExactCpuBackend
 from kayak.search import search_exact
 from kayak.search import (
+    plaid_approx_i8_prepared_posting_count_value,
     plaid_approx_prepared_posting_count_value,
+    plaid_i8_search_positions_for_query,
     plaid_search_positions_for_query,
+    prepare_plaid_approx_i8_hybrid_flat_dim128_index,
     prepare_plaid_approx_hybrid_flat_dim128_index,
 )
 from kayak.storage import (
@@ -197,6 +200,32 @@ def test_plaid_approx_dim128_oversized_candidate_window_matches_exact_topk() rai
         fixture.top_k,
     )
 
+    assert_equal(len(winner_positions), len(exact_hits))
+    for index in range(len(exact_hits)):
+        assert_equal(hybrid_index.doc_ids[winner_positions[index]], exact_hits[index].doc_id)
+
+
+def test_plaid_i8_approx_dim128_full_candidate_window_matches_exact_topk() raises:
+    var fixture = make_exact_search_fixture(16, 8, 4, 128, 5)
+    var backend = ExactCpuBackend()
+    var hybrid_index = build_hybrid_flat_dim128_index(fixture.index)
+    var flat_query = build_flat_query_dim128(fixture.query)
+    var prepared_index = prepare_plaid_approx_i8_hybrid_flat_dim128_index(
+        hybrid_index.copy(), 8
+    )
+
+    var exact_hits = search_exact(
+        backend, fixture.query, fixture.index, fixture.top_k
+    )
+    var winner_positions = plaid_i8_search_positions_for_query(
+        flat_query,
+        prepared_index,
+        prepared_index.centroid_count,
+        hybrid_index.document_count,
+        fixture.top_k,
+    )
+
+    assert_equal(plaid_approx_i8_prepared_posting_count_value(prepared_index) > 0, True)
     assert_equal(len(winner_positions), len(exact_hits))
     for index in range(len(exact_hits)):
         assert_equal(hybrid_index.doc_ids[winner_positions[index]], exact_hits[index].doc_id)

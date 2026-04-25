@@ -80,29 +80,38 @@ The current measurement surface and latest optimization evidence are tracked in
 
 ### GPU Readiness Gate
 
-Before making GPU the main implementation focus, Kayak should close or clearly
-label the current CPU Pareto gap against FastPlaid.
+Before making GPU the main implementation focus, Kayak should keep the CPU
+Pareto gate green against FastPlaid and clearly separate CPU claims from GPU
+claims.
 
 Verified evidence on `2026-04-25`:
 
-- Kayak dominates FastPlaid on the `cpu_matrix_v2_smoke` small and medium CPU
-  shapes in both raw and normalized modes.
-- Kayak does not dominate FastPlaid on the large
-  `2048`-document, `32`-document-vector, `96`-query-vector CPU smoke shape.
-  The exact-recall Kayak point stores much more bytes, and the normalized row
-  is slightly slower. The pruned Kayak points are faster but lose too much
-  exact-reference recall.
+- Kayak's opt-in Mojo i8 PLAID-style score-proxy lane dominates FastPlaid on
+  the full `cpu_matrix_v2` CPU suite: `18/18` raw and normalized explicit
+  vector-count shapes have a Kayak point with recall@10, query QPS, and index
+  bytes all at least as good as the FastPlaid CPU row.
+- The measured matrix covers document counts `128`, `512`, and `2048`;
+  document vectors/document `32`, `128`, and `300`; query vectors/query `16`,
+  `50`, and `96`; vector dim `128`; and FastPlaid `nbits=4` on CPU.
+- The tightest currently verified CPU rows are still the token-heavy/query-heavy
+  shapes, where the winning Kayak i8 points are only about `1.004x`, `1.074x`,
+  and `1.089x` FastPlaid QPS. Those rows should be monitored before changing
+  the benchmark or widening the claim.
 
 Reason:
 
 - GPU work should accelerate a search plan whose CPU tradeoffs are already
-  understood. Otherwise a GPU kernel can hide an unresolved candidate-recall or
-  storage-efficiency problem.
+  understood. The current CPU gate says Kayak has a defensible CPU Pareto
+  position against FastPlaid on the synthetic matrix, but it does not say the
+  GPU path is implemented or faster.
 
-The next CPU work is therefore:
+The next work is therefore:
 
-- improve the large-shape pruned candidate path
-- add a compressed-vector or score-proxy lane with measured bytes
+- keep the CPU matrix in CI or a repeatable release gate
+- confirm the tight CPU rows under quieter host load and larger measurement
+  counts
+- begin the GPU path only behind the same explicit approximation API and with
+  the same recall/QPS/bytes reporting
 - keep `PlaidApproxConfig` as the explicit public parameter for users who want
   the approximation tradeoff
 

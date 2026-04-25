@@ -49,6 +49,7 @@ class KayakPlaidConfigPreset:
     candidate_k: int | None = None
     candidate_ratio: float | None = None
     full_window: bool = False
+    payload: str = "exact"
 
     @property
     def config(self) -> KayakPlaidApproxConfig:
@@ -58,6 +59,7 @@ class KayakPlaidConfigPreset:
             centroid_count=self.centroid_count,
             centroids_per_query_vector=self.centroids_per_query_vector,
             candidate_k=self.candidate_k,
+            payload=self.payload,
         )
 
     def config_for_shape(self, shape: SpeedTrackShape) -> KayakPlaidApproxConfig:
@@ -74,10 +76,14 @@ class KayakPlaidConfigPreset:
             centroid_count=self.centroid_count,
             centroids_per_query_vector=self.centroids_per_query_vector,
             candidate_k=max(shape.top_k, candidate_k),
+            payload=self.payload,
         )
 
     def metadata_for_shape(self, shape: SpeedTrackShape) -> dict[str, object]:
-        metadata: dict[str, object] = {"candidate_k_policy": "fixed"}
+        metadata: dict[str, object] = {
+            "candidate_k_policy": "fixed",
+            "payload": self.payload,
+        }
         if self.full_window:
             metadata["candidate_k_policy"] = "full_window"
         elif self.candidate_ratio is not None:
@@ -176,11 +182,23 @@ def kayak_plaid_config_presets(name: str) -> tuple[KayakPlaidConfigPreset, ...]:
             _fixed_preset("fixed_128", 128, 32, 128),
             _ratio_preset("ratio_10pct", 128, 24, 0.10),
             _ratio_preset("ratio_25pct", 128, 32, 0.25),
+            _ratio_preset("i8_ratio_25pct", 128, 32, 0.25, payload="i8"),
+            _ratio_preset("i8_ratio_50pct", 128, 48, 0.50, payload="i8"),
+            _ratio_preset("i8_ratio_625pct", 128, 56, 0.625, payload="i8"),
+            _ratio_preset("i8_ratio_725pct", 128, 64, 0.725, payload="i8"),
+            _ratio_preset("i8_ratio_75pct", 128, 64, 0.75, payload="i8"),
             KayakPlaidConfigPreset(
                 "full_window",
                 centroid_count=128,
                 centroids_per_query_vector=32,
                 full_window=True,
+            ),
+            KayakPlaidConfigPreset(
+                "i8_full_window",
+                centroid_count=128,
+                centroids_per_query_vector=32,
+                full_window=True,
+                payload="i8",
             ),
         )
     raise argparse.ArgumentTypeError(
@@ -194,12 +212,15 @@ def _fixed_preset(
     centroid_count: int,
     centroids_per_query_vector: int,
     candidate_k: int,
+    *,
+    payload: str = "exact",
 ) -> KayakPlaidConfigPreset:
     return KayakPlaidConfigPreset(
         name,
         centroid_count=centroid_count,
         centroids_per_query_vector=centroids_per_query_vector,
         candidate_k=candidate_k,
+        payload=payload,
     )
 
 
@@ -208,12 +229,15 @@ def _ratio_preset(
     centroid_count: int,
     centroids_per_query_vector: int,
     candidate_ratio: float,
+    *,
+    payload: str = "exact",
 ) -> KayakPlaidConfigPreset:
     return KayakPlaidConfigPreset(
         name,
         centroid_count=centroid_count,
         centroids_per_query_vector=centroids_per_query_vector,
         candidate_ratio=candidate_ratio,
+        payload=payload,
     )
 
 
@@ -502,6 +526,7 @@ def _front_row(row: dict[str, Any]) -> dict[str, Any]:
         "system_name",
         "engine",
         "config_name",
+        "payload",
         "query_batch_mean_seconds",
         "query_qps",
         "query_qps_ratio_vs_exact",

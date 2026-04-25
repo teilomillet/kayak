@@ -14,3 +14,10 @@ from .plaid_approx_dim128 import (
     plaid_search_positions_for_query,
     prepare_plaid_approx_hybrid_flat_dim128_index,
 )
+from .plaid_i8_approx_dim128 import (
+    PreparedPlaidApproxI8Index,
+    plaid_approx_i8_prepared_posting_count_value,
+    plaid_i8_search_hits_for_query,
+    plaid_i8_search_positions_for_query,
+    prepare_plaid_approx_i8_hybrid_flat_dim128_index,
+)

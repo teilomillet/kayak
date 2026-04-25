@@ -64,14 +64,17 @@ Kayak approximation status:
 
 - `kayak_plaid` is an opt-in benchmark lane, not the default exact path
 - current implementation is Mojo-backed: Python only prepares API inputs, while
-  sampled centroid assignment, candidate scoring, and exact MaxSim rerank run
-  inside the Mojo bridge
+  sampled centroid assignment, candidate scoring, exact MaxSim rerank, and the
+  compressed i8 score-proxy lane run inside the Mojo bridge
 - the explicit public API is `PlaidApproxConfig`, `search(...,
   approximation=...)`, `search_batch(..., approximation=...)`, and
   `prepare_plaid_approx_index(...)`
 - exact search remains the default; approximation is a caller-selected speed,
   recall, and storage tradeoff, and every benchmark must report candidate
   budget plus exact-reference recall
+- `PlaidApproxConfig(payload="i8")` is the compressed score-proxy payload:
+  document token values are stored as int8 codes plus one scale per token, and
+  rerank uses approximate i8 MaxSim instead of exact float MaxSim
 
 Source references:
 
@@ -111,53 +114,64 @@ Interpretation:
 - the `token_128d_300dv_4q_50qv` shape is the tightest CPU case; Kayak still
   has higher recall and lower bytes, but the speed margin is only `1.029x`
 
-### CPU Matrix v2 Smoke
+### CPU Matrix v2 Gate
 
 Command:
 
 ```bash
-pixi run bench_fastplaid_cpu_matrix_v2_smoke
+pixi run bench_fastplaid_cpu_matrix_v2
 ```
 
 Artifact:
 
-- `.cache/kayak/fastplaid_cpu_matrix_v2_smoke/summary.json`
+- `.cache/kayak/fastplaid_cpu_matrix_v2/summary.json`
 
 Controls:
 
-- shape set: `cpu_matrix_v2_smoke`
+- shape set: `cpu_matrix_v2`
 - normalization set: `both`
 - Kayak config set: `cpu_matrix_v2`
 - FastPlaid device: `cpu`
 - FastPlaid nbits: `4`
 - warmup iterations: `1`
-- measurement iterations: `2`
+- measurement iterations: `3`
 - seed: `7`
 
 Measured coverage:
 
-| Shape | Total doc vectors | Total query vectors | FastPlaid recall / qps / bytes | Kayak full-window qps / bytes | Kayak `ratio_25pct` recall / qps | Kayak dominates FastPlaid |
-| --- | ---: | ---: | ---: | ---: | ---: | --- |
-| `small_128d_32dv_4q_16qv_raw` | `4096` | `64` | `0.675` / `177.541217912271` / `2992421` | `1506.8986764240287` / `2128784` | `0.275` / `2411.273428993025` | `true` |
-| `medium_512d_128dv_4q_50qv_raw` | `65536` | `200` | `0.4` / `22.7221247459711` / `44594563` | `34.10114796060502` / `33880728` | `0.225` / `114.73303543968606` | `true` |
-| `large_2048d_32dv_4q_96qv_raw` | `65536` | `384` | `0.325` / `16.837873639591965` / `11031386` | `17.650832324853674` / `34032104` | `0.25` / `49.44983198773549` | `false` |
-| `small_128d_32dv_4q_16qv_normalized` | `4096` | `64` | `0.7` / `169.68970646510937` / `2993053` | `1548.199715242828` / `2129104` | `0.375` / `2444.30199443263` | `true` |
-| `medium_512d_128dv_4q_50qv_normalized` | `65536` | `200` | `0.625` / `23.460152633396607` / `44600036` | `33.85741193053026` / `33892312` | `0.30000000000000004` / `112.37809609863578` | `true` |
-| `large_2048d_32dv_4q_96qv_normalized` | `65536` | `384` | `0.7` / `18.121671776568448` / `11032755` | `17.638699921365276` / `34038016` | `0.30000000000000004` / `49.04218347541088` | `false` |
+| Shape | FastPlaid recall / qps / bytes | Kayak i8 config | Kayak recall / qps / bytes | QPS vs FastPlaid |
+| --- | ---: | --- | ---: | ---: |
+| `small_128d_32dv_4q_16qv_raw` | `0.675` / `178.376` / `2992429` | `i8_full_window` | `1` / `2122.517` / `572304` | `11.899x` |
+| `small_128d_128dv_4q_50qv_raw` | `0.725` / `88.661` / `11412458` | `i8_full_window` | `0.975` / `187.411` / `2244992` | `2.114x` |
+| `small_128d_300dv_4q_96qv_raw` | `0.625` / `49.557` / `26005345` | `i8_ratio_75pct` | `0.825` / `49.774` / `5185248` | `1.004x` |
+| `medium_512d_32dv_4q_50qv_raw` | `0.525` / `47.272` / `11432640` | `i8_full_window` | `1` / `185.639` / `2282784` | `3.927x` |
+| `medium_512d_128dv_4q_96qv_raw` | `0.55` / `21.018` / `44594100` | `i8_full_window` | `0.975` / `24.928` / `8977048` | `1.186x` |
+| `medium_512d_300dv_4q_16qv_raw` | `0.525` / `16.312` / `103023951` | `i8_full_window` | `1` / `63.615` / `20733688` | `3.900x` |
+| `large_2048d_32dv_4q_16qv_raw` | `0.375` / `18.837` / `11031131` | `i8_full_window` | `0.975` / `146.930` / `9128424` | `7.800x` |
+| `large_2048d_128dv_4q_50qv_raw` | `0.3` / `13.105` / `41963016` | `i8_ratio_725pct` | `0.85` / `14.198` / `35898456` | `1.083x` |
+| `large_2048d_300dv_2q_16qv_raw` | `0.4` / `8.658` / `95426720` | `i8_full_window` | `1` / `15.861` / `82942944` | `1.832x` |
+| `small_128d_32dv_4q_16qv_normalized` | `0.8` / `176.463` / `2992893` | `i8_full_window` | `0.95` / `2100.932` / `572624` | `11.906x` |
+| `small_128d_128dv_4q_50qv_normalized` | `0.675` / `95.246` / `11415883` | `i8_full_window` | `0.95` / `186.516` / `2248048` | `1.958x` |
+| `small_128d_300dv_4q_96qv_normalized` | `0.775` / `46.179` / `26017427` | `i8_ratio_725pct` | `0.825` / `50.284` / `5190216` | `1.089x` |
+| `medium_512d_32dv_4q_50qv_normalized` | `0.6` / `46.948` / `11433594` | `i8_full_window` | `0.975` / `183.434` / `2284920` | `3.907x` |
+| `medium_512d_128dv_4q_96qv_normalized` | `0.6` / `21.374` / `44599827` | `i8_full_window` | `0.95` / `23.965` / `8988632` | `1.121x` |
+| `medium_512d_300dv_4q_16qv_normalized` | `0.625` / `16.566` / `103039143` | `i8_full_window` | `1` / `62.888` / `20755104` | `3.796x` |
+| `large_2048d_32dv_4q_16qv_normalized` | `0.6` / `25.623` / `11032586` | `i8_full_window` | `0.95` / `147.215` / `9134336` | `5.745x` |
+| `large_2048d_128dv_4q_50qv_normalized` | `0.475` / `13.236` / `41970080` | `i8_ratio_725pct` | `0.75` / `14.217` / `35947696` | `1.074x` |
+| `large_2048d_300dv_2q_16qv_normalized` | `0.3` / `8.816` / `95441495` | `i8_full_window` | `1` / `15.970` / `83015376` | `1.812x` |
 
 Interpretation:
 
-- Kayak dominates FastPlaid on the small and medium v2 smoke shapes in both raw
-  and normalized modes.
-- Kayak does not yet dominate FastPlaid on the large `2048`-document,
-  `32`-document-vector, `96`-query-vector shape. The full-window Kayak path has
-  exact recall but uses about `3.08x` the FastPlaid bytes, and the normalized
-  full-window row is slightly slower. The pruned Kayak paths are faster but
-  lose too much recall to dominate.
-- This falsifies the stronger claim that CPU coverage is already in Kayak's
-  favor across the broadened comparison. Before GPU work, the CPU gate is to
-  improve large-shape candidate recall per byte or reduce the stored exact
-  payload cost enough to change that Pareto result.
+- Kayak dominates FastPlaid on all `18/18` full CPU matrix rows when the i8
+  score-proxy payload is included in the opt-in approximation set.
+- The i8 lane is the dominant CPU coverage mechanism because it lowers stored
+  token bytes while keeping query-time MaxSim inside Mojo.
+- The tightest margins remain token-heavy/query-heavy rows:
+  `small_128d_300dv_4q_96qv_raw` is only `1.004x` FastPlaid QPS,
+  `large_2048d_128dv_4q_50qv_normalized` is `1.074x`, and
+  `small_128d_300dv_4q_96qv_normalized` is `1.089x`.
+- This supports moving to GPU implementation work, but only with the same
+  explicit approximation contract and the same recall/QPS/bytes reporting.
 
 ### Long-Token CPU Candidate Sweep
 

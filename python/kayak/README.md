@@ -725,9 +725,9 @@ index = kayak.documents(
 scores_batch = kayak.maxsim_batch(batch, index)
 ```
 
-PLAID-style search is an explicit opt-in parameter. Kayak still reranks the
-candidate window with exact late interaction, and the caller owns the
-candidate budget:
+PLAID-style search is an explicit opt-in parameter. The default payload still
+reranks the candidate window with exact late interaction, and the caller owns
+the candidate budget:
 
 ```python
 approx = kayak.PlaidApproxConfig(
@@ -740,6 +740,21 @@ hits = kayak.search(batch.queries[0], index, k=2, approximation=approx)
 
 prepared = kayak.prepare_plaid_approx_index(index, config=approx, final_k=2)
 hits_batch = prepared.search_batch(batch, final_k=2)
+```
+
+When you want the compressed score-proxy lane, opt into it explicitly with
+`payload="i8"`. This stores document token values as int8 codes plus one scale
+per token and reranks with approximate i8 MaxSim:
+
+```python
+compressed = kayak.PlaidApproxConfig(
+    centroid_count=128,
+    centroids_per_query_vector=64,
+    candidate_k=96,
+    payload="i8",
+)
+
+hits = kayak.search(batch.queries[0], index, k=2, approximation=compressed)
 ```
 
 Stage 2 is explicit too. Exact full scan now defaults to a no-op stage 2 because
