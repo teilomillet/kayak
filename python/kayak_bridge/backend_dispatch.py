@@ -9,7 +9,8 @@ from .late_scores import LateScores
 from .layouts import MOJO_EXACT_CPU_BACKEND, NUMPY_REFERENCE_BACKEND
 from .backend_info import _unsupported_backend_error
 from .mojo_exact_cpu import load_module as load_mojo_exact_cpu_module
-from .mojo_payloads import index_payload, query_payload, MojoIndexPayload
+from .mojo_payload_cache import cached_index_payload
+from .mojo_payloads import query_payload, MojoIndexPayload
 from .prepared_index_cache import prepared_packed_index_object
 from .reference_maxsim import maxsim_scores as numpy_maxsim_scores
 
@@ -37,11 +38,11 @@ def _mojo_scores_for_query_and_index(
             dtype=SCORE_DTYPE,
         )
 
-    if payload is None:
-        payload = index_payload(index)
-
     if index.layout != "hybrid_flat_dim128":
         raise ValueError(f"unsupported index layout: {index.layout}")
+
+    if payload is None:
+        payload = cached_index_payload(index)
 
     assert payload.flat_token_values is not None
     if query.layout == "nested":

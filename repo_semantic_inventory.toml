@@ -112,6 +112,16 @@ why = "Trace notes record point-in-time evidence and implementation history rath
 paths = ["docs/traces/*.md"]
 
 [[rule]]
+name = "internal-course-materials"
+role = "design_doc"
+why = "Internal course material explains retrieval-debugging workflows and teaching artifacts rather than engine runtime contracts."
+paths = [
+    "docs/internals/course/*.md",
+    "docs/internals/course/assets/*.svg",
+    "docs/internals/course/notebooks/*.ipynb",
+]
+
+[[rule]]
 name = "mojo-examples"
 role = "example_surface"
 why = "Mojo examples are runnable product surfaces that demonstrate the current engine and service boundaries."
@@ -301,7 +311,7 @@ tests = [
 [[rule]]
 name = "engine-search"
 role = "engine_source"
-why = "Search owns top-k exact search orchestration on packed and flat exact layouts."
+why = "Search owns top-k exact search orchestration on packed and flat exact layouts plus explicit dim128 candidate-search kernels."
 paths = ["kayak/search/*.mojo"]
 normative_docs = ["README.md", "docs/architecture/search_plan_semantics.md"]
 tests = [
@@ -455,3 +465,9 @@ name = "mojo-unit-tests"
 role = "test_suite"
 why = "Mojo tests validate engine, storage, planner, and benchmark-support behavior directly."
 paths = ["tests/*.mojo"]
+
+[[rule]]
+name = "shell-test-fixtures"
+role = "test_suite"
+why = "Shell fixtures and shell tests validate command-line benchmark wrappers rather than reusable engine modules."
+paths = ["tests/*.sh", "tests/fixtures/*.sh"]

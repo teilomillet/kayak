@@ -8,6 +8,7 @@ import time
 import numpy as np
 
 import kayak
+from kayak_bridge.mojo_payload_cache import clear_mojo_index_payload_cache
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +22,7 @@ class BenchmarkConfig:
     repeats: int
     warmup_runs: int
     seed: int
+    clear_index_payload_cache_per_run: bool
 
 
 def parse_args() -> BenchmarkConfig:
@@ -44,6 +46,15 @@ def parse_args() -> BenchmarkConfig:
     parser.add_argument("--repeats", type=int, default=20)
     parser.add_argument("--warmup-runs", type=int, default=3)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument(
+        "--clear-index-payload-cache-per-run",
+        action="store_true",
+        help=(
+            "Clear the Mojo index-payload cache before each timed operation. "
+            "This emulates the pre-cache repeated-query behavior for hybrid "
+            "flat indexes."
+        ),
+    )
     args = parser.parse_args()
     return BenchmarkConfig(
         mode=args.mode,
@@ -55,6 +66,7 @@ def parse_args() -> BenchmarkConfig:
         repeats=args.repeats,
         warmup_runs=args.warmup_runs,
         seed=args.seed,
+        clear_index_payload_cache_per_run=args.clear_index_payload_cache_per_run,
     )
 
 
@@ -139,6 +151,9 @@ def run_once(
     query_batch: kayak.LateQueryBatch,
     index: kayak.LateIndex,
 ) -> None:
+    if config.clear_index_payload_cache_per_run:
+        clear_mojo_index_payload_cache()
+
     if config.mode == "shared_batch":
         kayak.maxsim_batch(
             query_batch,
@@ -178,6 +193,10 @@ def main() -> None:
     print(f"total_index_vectors: {index.total_vector_count}")
     print(f"warmup_runs: {config.warmup_runs}")
     print(f"repeats: {config.repeats}")
+    print(
+        "clear_index_payload_cache_per_run: "
+        f"{config.clear_index_payload_cache_per_run}"
+    )
     print(f"Min: {min(durations)}")
     print(f"Median: {median(durations)}")
     print(f"Mean: {mean(durations)}")

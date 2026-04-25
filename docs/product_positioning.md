@@ -13,6 +13,7 @@ It is intentionally epistemic:
 - privacy language stays precise about what vectors do and do not hide
 
 Related repo notes:
+- [docs/product_direction.md](product_direction.md)
 - [docs/python_sdk_charter.md](python_sdk_charter.md)
 - [docs/architecture/service_api.md](architecture/service_api.md)
 - [docs/architecture/search_plan_semantics.md](architecture/search_plan_semantics.md)
@@ -63,6 +64,25 @@ Reason:
   contracts
 - the most important differentiator is not generic vector storage, but that
   the whole system is shaped around late interaction itself
+
+Narrowed direction:
+
+- Kayak should optimize for the late-interaction search layer
+- Kayak should not be framed as a complete RAG pipeline or document-intelligence
+  platform
+- OCR, parsing, extraction, and answer generation should remain integration
+  boundaries unless a separate product decision expands the scope
+
+Reason:
+
+- the current implementation is strongest around explicit late-interaction
+  representations, exact scoring, search plans, snapshots, explain surfaces,
+  and benchmark evidence
+- claiming ownership of raw-document processing would create expectations that
+  the repo does not currently validate
+- a narrower search-layer story gives engineering work clear optimization
+  targets: exact throughput, candidate recall per unit cost, vector/storage
+  efficiency, and operational search-service trust
 
 ## What Companies Actually Buy
 

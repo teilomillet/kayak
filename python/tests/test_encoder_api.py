@@ -6,6 +6,7 @@ import numpy as np
 import torch
 
 import kayak
+from kayak.encoders.registry import EncoderFactory, _ENCODER_FACTORIES
 
 
 class _FakeCheckpoint:
@@ -39,6 +40,13 @@ class _FakeCheckpoint:
 
 
 class EncoderApiTests(unittest.TestCase):
+    def _restore_encoder_registry(
+        self,
+        factories: dict[str, EncoderFactory],
+    ) -> None:
+        _ENCODER_FACTORIES.clear()
+        _ENCODER_FACTORIES.update(factories)
+
     def test_callable_text_encoder_can_bind_model_methods_directly(self) -> None:
         class _Model:
             def encode_query_tokens(self, text: str) -> list[list[float]]:
@@ -143,6 +151,10 @@ class EncoderApiTests(unittest.TestCase):
         )
 
     def test_encoder_registry_supports_builtin_and_custom_factories(self) -> None:
+        self.addCleanup(
+            self._restore_encoder_registry,
+            dict(_ENCODER_FACTORIES),
+        )
         builtin = kayak.open_encoder(
             "callable",
             query_encoder=lambda text: [[len(text), 0.0]],

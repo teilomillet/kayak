@@ -24,6 +24,7 @@ include python/kayak_bridge/late_scores.py
 include python/kayak_bridge/layouts.py
 include python/kayak_bridge/mojo_bridge_info.py
 include python/kayak_bridge/mojo_exact_cpu.py
+include python/kayak_bridge/mojo_payload_cache.py
 include python/kayak_bridge/mojo_payloads.py
 include python/kayak_bridge/planned_search.py
 include python/kayak_bridge/prepared_index_cache.py

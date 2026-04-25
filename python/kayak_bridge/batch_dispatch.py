@@ -10,7 +10,8 @@ from .backend_dispatch import _mojo_scores_for_query_and_index, maxsim_scores
 from .late_scores import LateScores
 from .layouts import MOJO_EXACT_CPU_BACKEND, NUMPY_REFERENCE_BACKEND
 from .mojo_exact_cpu import load_module as load_mojo_exact_cpu_module
-from .mojo_payloads import index_payload, query_payload
+from .mojo_payload_cache import cached_index_payload
+from .mojo_payloads import query_payload
 from .prepared_index_cache import prepared_packed_index_object
 
 
@@ -48,7 +49,7 @@ def maxsim_scores_batch(
                 for scores in scores_by_query
             )
 
-        payload = index_payload(index)
+        payload = cached_index_payload(index)
         return tuple(
             LateScores.from_values(
                 backend,

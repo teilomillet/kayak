@@ -188,6 +188,10 @@ Kayak wheels bundle the Mojo backend they were built with. If a
 Kayak's public core remains vector-first, but the SDK now exposes a small text
 encoder contract for the common "I start from text" path.
 
+This is a plain-text convenience layer, not a document-intelligence pipeline.
+Kayak does not own OCR, PDF layout recovery, table extraction, or answer
+generation as part of this SDK surface.
+
 There are two main user paths:
 
 1. use the built-in ColBERT encoder when your checkpoint is already a ColBERT
@@ -348,8 +352,8 @@ Examples:
 
 ## Text Retrievers
 
-If you want one object that owns text ingest, store materialization, and search,
-use `LateTextRetriever`.
+If you want one object that owns plain-text ingest, store materialization, and
+search, use `LateTextRetriever`.
 
 That is the highest-level public SDK shape today:
 
@@ -390,6 +394,10 @@ when the active environment can actually run the Mojo backend. If Mojo is not
 available, it falls back to `kayak.NUMPY_REFERENCE_BACKEND`. Pass
 `backend=...` when you want to override that policy explicitly.
 
+This path expects text strings. If your source data is PDFs, scans, tables, or
+other mixed-layout documents, parse or extract them first and pass the resulting
+text or token-level vectors into Kayak.
+
 The retriever keeps the lower-level pieces injectable:
 - pass your own encoder object
 - pass your own store object
@@ -399,7 +407,7 @@ For most users this is the best mental model:
 
 1. choose one encoder
 2. choose one store
-3. let the retriever own text ingest plus search
+3. let the retriever own plain-text ingest plus search
 
 The high-level contract stays narrow:
 - `encode_query(text)`
