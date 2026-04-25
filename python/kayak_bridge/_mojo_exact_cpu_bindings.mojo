@@ -21,6 +21,8 @@ from kayak.search import (
     plaid_approx_prepared_posting_count_value,
     plaid_i8_search_hits_for_query,
     plaid_i8_search_positions_for_query,
+    plaid_i8_candidate_positions_for_query,
+    plaid_i8_scores_for_candidates_for_query,
     plaid_search_hits_for_query,
     plaid_search_positions_for_query,
     prepare_plaid_approx_i8_hybrid_flat_dim128_index,
@@ -250,6 +252,33 @@ def positions_batch_to_python(
     return py_positions_by_query
 
 
+def int_values_to_python(read values: List[Int]) raises -> PythonObject:
+    var py_values = Python.list()
+
+    for value in values:
+        py_values.append(Python.int(value))
+
+    return py_values
+
+
+def int8_values_to_python(read values: List[Int8]) raises -> PythonObject:
+    var py_values = Python.list()
+
+    for value in values:
+        py_values.append(Python.int(Int(value)))
+
+    return py_values
+
+
+def scalar_values_to_python(read values: List[ScoreScalar]) raises -> PythonObject:
+    var py_values = Python.list()
+
+    for value in values:
+        py_values.append(Python.float(value))
+
+    return py_values
+
+
 def prepare_packed_index(
     py_doc_ids: PythonObject,
     py_doc_offsets: PythonObject,
@@ -344,6 +373,33 @@ def plaid_approx_i8_prepared_posting_count(
         PreparedPlaidApproxI8Index
     ]()
     return Python.int(plaid_approx_i8_prepared_posting_count_value(prepared_index[]))
+
+
+def plaid_i8_prepared_doc_offsets(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    return int_values_to_python(prepared_index[].doc_offsets)
+
+
+def plaid_i8_prepared_token_codes(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    return int8_values_to_python(prepared_index[].token_codes)
+
+
+def plaid_i8_prepared_token_scales(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    return scalar_values_to_python(prepared_index[].token_scales)
 
 
 def exact_scores_packed(
@@ -672,6 +728,74 @@ def search_plaid_approx_i8_prepared_hits_batch(
     return hits_batch_to_python(hits_by_query)
 
 
+def plaid_i8_candidate_positions_prepared_batch(
+    py_query_batch_values: PythonObject,
+    py_centroids_per_query_vector: PythonObject,
+    py_candidate_k: PythonObject,
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var queries = decode_flat_queries(py_query_batch_values)
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_centroids_per_query_vector)
+    var candidate_k = Int(py=py_candidate_k)
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error("all queries must share the prepared index vector dimension")
+
+        positions_by_query.append(
+            plaid_i8_candidate_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def plaid_i8_candidate_scores_prepared_batch(
+    py_query_batch_values: PythonObject,
+    py_candidate_positions_batch: PythonObject,
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var queries = decode_flat_queries(py_query_batch_values)
+    if len(queries) != len(py_candidate_positions_batch):
+        raise Error("query count must match candidate position row count")
+    if len(queries) == 0:
+        return Python.list()
+
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    var scores_by_query = List[List[ScoreScalar]]()
+
+    for query_index in range(len(queries)):
+        var query = queries[query_index].copy()
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error("all queries must share the prepared index vector dimension")
+
+        var candidate_positions = decode_int_list(
+            py_candidate_positions_batch[query_index]
+        )
+        scores_by_query.append(
+            plaid_i8_scores_for_candidates_for_query(
+                query,
+                prepared_index[],
+                candidate_positions,
+            )
+        )
+
+    return scores_batch_to_python(scores_by_query)
+
+
 @export
 def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
     try:
@@ -708,6 +832,18 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         module.def_function[plaid_approx_i8_prepared_posting_count](
             "plaid_approx_i8_prepared_posting_count",
             docstring="Return the prepared int8 PLAID-style index posting count.",
+        )
+        module.def_function[plaid_i8_prepared_doc_offsets](
+            "plaid_i8_prepared_doc_offsets",
+            docstring="Return prepared int8 PLAID document offsets.",
+        )
+        module.def_function[plaid_i8_prepared_token_codes](
+            "plaid_i8_prepared_token_codes",
+            docstring="Return prepared int8 PLAID token codes.",
+        )
+        module.def_function[plaid_i8_prepared_token_scales](
+            "plaid_i8_prepared_token_scales",
+            docstring="Return prepared int8 PLAID token scales.",
         )
         module.def_function[exact_scores_packed_batch](
             "exact_scores_packed_batch",
@@ -752,6 +888,14 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         module.def_function[search_plaid_approx_i8_prepared_hits_batch](
             "search_plaid_approx_i8_prepared_hits_batch",
             docstring="Search a prepared int8 sampled-centroid PLAID-style approximation index and return hits.",
+        )
+        module.def_function[plaid_i8_candidate_positions_prepared_batch](
+            "plaid_i8_candidate_positions_prepared_batch",
+            docstring="Generate int8 PLAID candidate document positions without reranking.",
+        )
+        module.def_function[plaid_i8_candidate_scores_prepared_batch](
+            "plaid_i8_candidate_scores_prepared_batch",
+            docstring="Score provided candidate positions with the prepared int8 reranker.",
         )
         return module.finalize()
     except e:

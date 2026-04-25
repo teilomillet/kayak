@@ -428,6 +428,20 @@ def plaid_i8_rerank_candidates_for_query(
     return winners^
 
 
+def plaid_i8_scores_for_candidates_for_query(
+    read query: FlatQueryDim128,
+    read prepared_index: PreparedPlaidApproxI8Index,
+    read candidate_positions: List[Int],
+) -> List[ScoreScalar]:
+    var scores = List[ScoreScalar]()
+    for document_index in candidate_positions:
+        scores.append(
+            plaid_i8_score_for_document(query, prepared_index, document_index)
+        )
+
+    return scores^
+
+
 def plaid_i8_rerank_candidate_hits_for_query(
     read query: FlatQueryDim128,
     read prepared_index: PreparedPlaidApproxI8Index,

@@ -120,6 +120,81 @@ class FastPlaidSpeedTrackTests(unittest.TestCase):
         self.assertEqual(positions[0][0], 2)
         self.assertEqual(len(positions[0]), 2)
 
+    def test_kayak_plaid_i8_scores_explicit_candidate_positions(self) -> None:
+        documents = np.zeros((3, 2, 128), dtype=np.float32)
+        documents[0, 0, 0] = 1.0
+        documents[0, 1, 0] = 0.9
+        documents[1, 0, 1] = 1.0
+        documents[1, 1, 1] = 0.9
+        documents[2, 0, 0] = 1.0
+        documents[2, 0, 1] = 1.0
+        documents[2, 1, 0] = 0.8
+        documents[2, 1, 1] = 0.8
+        queries = np.zeros((1, 2, 128), dtype=np.float32)
+        queries[0, 0, 0] = 1.0
+        queries[0, 1, 0] = 1.0
+        queries[0, 1, 1] = 1.0
+        index = KayakPlaidApproxIndex.build(
+            doc_ids=("doc-a", "doc-b", "doc-c"),
+            documents=documents,
+            config=KayakPlaidApproxConfig(
+                centroid_count=3,
+                centroids_per_query_vector=2,
+                candidate_k=2,
+                payload="i8",
+            ),
+            final_k=2,
+        )
+
+        candidate_positions = index.i8_candidate_positions_batch(queries)
+        scores = index.i8_score_candidate_positions_batch(
+            queries,
+            candidate_positions,
+        )
+        ranked_offsets = sorted(
+            range(len(candidate_positions[0])),
+            key=lambda offset: scores[0][offset],
+            reverse=True,
+        )
+        ranked_positions = tuple(
+            candidate_positions[0][offset] for offset in ranked_offsets
+        )
+
+        self.assertEqual(len(candidate_positions[0]), 2)
+        self.assertEqual(len(scores[0]), 2)
+        self.assertEqual(
+            ranked_positions,
+            index.search_batch_positions(queries, final_k=2)[0],
+        )
+
+    def test_kayak_plaid_i8_payload_snapshot_exposes_flat_buffers(self) -> None:
+        documents = np.zeros((2, 2, 128), dtype=np.float32)
+        documents[0, 0, 0] = 1.0
+        documents[0, 1, 1] = -0.5
+        documents[1, 0, 2] = 0.25
+        documents[1, 1, 3] = -1.0
+        index = KayakPlaidApproxIndex.build(
+            doc_ids=("doc-a", "doc-b"),
+            documents=documents,
+            config=KayakPlaidApproxConfig(
+                centroid_count=2,
+                centroids_per_query_vector=1,
+                candidate_k=2,
+                payload="i8",
+            ),
+            final_k=2,
+        )
+
+        snapshot = index.i8_payload_snapshot()
+
+        self.assertEqual(snapshot.doc_offsets.tolist(), [0, 2, 4])
+        self.assertEqual(snapshot.token_codes.shape, (4 * 128,))
+        self.assertEqual(snapshot.token_scales.shape, (4,))
+        self.assertEqual(snapshot.token_codes.dtype, np.int8)
+        self.assertEqual(snapshot.token_scales.dtype, np.float32)
+        self.assertGreaterEqual(int(snapshot.token_codes.max()), 0)
+        self.assertLessEqual(int(snapshot.token_codes.min()), 0)
+
     def test_script_emits_kayak_only_smoke_report(self) -> None:
         temp_root = Path(tempfile.mkdtemp())
         output_path = temp_root / "summary.json"

@@ -10,7 +10,7 @@ measurements exercise the same systems layer as the exact backend.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 import numpy as np
 
@@ -53,6 +53,32 @@ class KayakPlaidApproxConfig:
             raise ValueError("candidate_k must be greater than or equal to final_k")
         if self.payload not in PLAID_PAYLOADS:
             raise ValueError("payload must be one of: exact, i8")
+
+
+@dataclass(frozen=True, slots=True)
+class KayakPlaidI8PayloadSnapshot:
+    """Flat dim128 i8 payload exported for benchmark-only GPU probes."""
+
+    doc_offsets: np.ndarray
+    token_codes: np.ndarray
+    token_scales: np.ndarray
+    document_count: int
+    total_vector_count: int
+    vector_dim: int
+
+    def validate(self) -> None:
+        if self.vector_dim != VECTOR_DIM:
+            raise ValueError("i8 payload snapshot requires vector_dim=128")
+        if self.document_count <= 0:
+            raise ValueError("document_count must be positive")
+        if self.total_vector_count <= 0:
+            raise ValueError("total_vector_count must be positive")
+        if self.doc_offsets.shape != (self.document_count + 1,):
+            raise ValueError("doc_offsets shape must be document_count + 1")
+        if self.token_codes.shape != (self.total_vector_count * VECTOR_DIM,):
+            raise ValueError("token_codes shape must be total_vector_count * 128")
+        if self.token_scales.shape != (self.total_vector_count,):
+            raise ValueError("token_scales shape must be total_vector_count")
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +260,70 @@ class KayakPlaidApproxIndex:
             self._prepared_index,
         )
         return tuple(tuple(int(position) for position in row) for row in rows)
+
+    def i8_candidate_positions_batch(
+        self,
+        queries: np.ndarray,
+    ) -> tuple[tuple[int, ...], ...]:
+        if self.config.payload != PLAID_PAYLOAD_I8:
+            raise ValueError("i8 candidate positions require payload='i8'")
+        normalized_queries = _as_query_tensor(queries, vector_dim=self.vector_dim)
+        query_values = _flat_query_values_by_query(normalized_queries)
+        module = load_module()
+        rows = module.plaid_i8_candidate_positions_prepared_batch(
+            query_values,
+            self.config.centroids_per_query_vector,
+            self.config.candidate_k,
+            self._prepared_index,
+        )
+        return tuple(tuple(int(position) for position in row) for row in rows)
+
+    def i8_score_candidate_positions_batch(
+        self,
+        queries: np.ndarray,
+        candidate_positions_by_query: Sequence[Sequence[int]],
+    ) -> tuple[tuple[float, ...], ...]:
+        if self.config.payload != PLAID_PAYLOAD_I8:
+            raise ValueError("i8 candidate scores require payload='i8'")
+        normalized_queries = _as_query_tensor(queries, vector_dim=self.vector_dim)
+        if len(candidate_positions_by_query) != int(normalized_queries.shape[0]):
+            raise ValueError("query count must match candidate position row count")
+        query_values = _flat_query_values_by_query(normalized_queries)
+        candidate_rows = [
+            [int(position) for position in positions]
+            for positions in candidate_positions_by_query
+        ]
+        module = load_module()
+        rows = module.plaid_i8_candidate_scores_prepared_batch(
+            query_values,
+            candidate_rows,
+            self._prepared_index,
+        )
+        return tuple(tuple(float(score) for score in row) for row in rows)
+
+    def i8_payload_snapshot(self) -> KayakPlaidI8PayloadSnapshot:
+        if self.config.payload != PLAID_PAYLOAD_I8:
+            raise ValueError("i8 payload snapshot requires payload='i8'")
+        module = load_module()
+        snapshot = KayakPlaidI8PayloadSnapshot(
+            doc_offsets=np.asarray(
+                module.plaid_i8_prepared_doc_offsets(self._prepared_index),
+                dtype=INDEX_OFFSET_DTYPE,
+            ),
+            token_codes=np.asarray(
+                module.plaid_i8_prepared_token_codes(self._prepared_index),
+                dtype=np.int8,
+            ),
+            token_scales=np.asarray(
+                module.plaid_i8_prepared_token_scales(self._prepared_index),
+                dtype=VECTOR_DTYPE,
+            ),
+            document_count=self.document_count,
+            total_vector_count=sum(self.document_vector_counts),
+            vector_dim=self.vector_dim,
+        )
+        snapshot.validate()
+        return snapshot
 
     def search(
         self,
