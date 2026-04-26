@@ -26,6 +26,8 @@ from kayak_bridge.gpu_i8_real_payload_score import (  # noqa: E402
 )
 from kayak_bridge.gpu_i8_rerank_contract import write_report  # noqa: E402
 from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
+    profile_i8_prepared_payload_session,
+    profile_i8_prepared_payload_session_ndarray,
     score_i8_real_payload_once,
 )
 from kayak_bridge.plaid_approx import KayakPlaidApproxConfig, KayakPlaidApproxIndex
@@ -43,6 +45,12 @@ STATUS_OK = "ok"
 STATUS_PARTIAL_GPU_UNAVAILABLE = "partial_gpu_unavailable"
 STATUS_BLOCKED_GPU_REAL_PAYLOAD_FAILED = "blocked_gpu_real_payload_failed"
 STATUS_BLOCKED_GPU_BRIDGE_FAILED = "blocked_gpu_bridge_failed"
+STATUS_BLOCKED_GPU_PREPARED_BRIDGE_FAILED = (
+    "blocked_gpu_prepared_bridge_failed"
+)
+STATUS_BLOCKED_GPU_PREPARED_NDARRAY_BRIDGE_FAILED = (
+    "blocked_gpu_prepared_ndarray_bridge_failed"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +213,8 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
     capability = probe_mojo_gpu(args.gpu_query_command)
     gpu_probe: dict[str, object] | None = None
     bridge_probe: dict[str, object] | None = None
+    prepared_bridge_probe: dict[str, object] | None = None
+    prepared_ndarray_bridge_probe: dict[str, object] | None = None
     if capability.available:
         gpu_probe = run_gpu_i8_real_payload_score_probe(
             shape,
@@ -223,14 +233,40 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             warmup_iterations=args.warmup_iterations,
             measurement_iterations=args.measurement_iterations,
         )
+        prepared_bridge_probe = run_gpu_i8_prepared_bridge_probe(
+            shape=shape,
+            candidate_k=args.candidate_k,
+            target_accelerator=capability.target_accelerator,
+            queries=inputs.queries,
+            payload=payload,
+            candidate_positions_by_query=candidate_positions,
+            reference_scores_by_query=reference_scores,
+            warmup_iterations=args.warmup_iterations,
+            measurement_iterations=args.measurement_iterations,
+        )
+        prepared_ndarray_bridge_probe = run_gpu_i8_prepared_ndarray_bridge_probe(
+            shape=shape,
+            candidate_k=args.candidate_k,
+            target_accelerator=capability.target_accelerator,
+            queries=inputs.queries,
+            payload=payload,
+            candidate_positions_by_query=candidate_positions,
+            reference_scores_by_query=reference_scores,
+            warmup_iterations=args.warmup_iterations,
+            measurement_iterations=args.measurement_iterations,
+        )
     status = report_status(
         capability=capability,
         gpu_probe=gpu_probe,
         bridge_probe=bridge_probe,
+        prepared_bridge_probe=prepared_bridge_probe,
+        prepared_ndarray_bridge_probe=prepared_ndarray_bridge_probe,
     )
 
     parsed = parsed_payload(gpu_probe)
     bridge_parsed = parsed_payload(bridge_probe)
+    prepared_bridge_parsed = parsed_payload(prepared_bridge_probe)
+    prepared_ndarray_bridge_parsed = parsed_payload(prepared_ndarray_bridge_probe)
     return (
         {
             "schema_version": 1,
@@ -287,15 +323,55 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
                     else None
                 ),
             },
+            "gpu_real_payload_prepared_bridge": {
+                "status": (
+                    prepared_bridge_probe.get("status")
+                    if prepared_bridge_probe is not None
+                    else STATUS_PARTIAL_GPU_UNAVAILABLE
+                ),
+                "target_accelerator": capability.target_accelerator,
+                "parsed": prepared_bridge_parsed,
+                "derived": prepared_bridge_derived_metrics(
+                    prepared_bridge_parsed
+                ),
+                "error": (
+                    prepared_bridge_probe.get("error")
+                    if isinstance(prepared_bridge_probe, dict)
+                    else None
+                ),
+            },
+            "gpu_real_payload_prepared_ndarray_bridge": {
+                "status": (
+                    prepared_ndarray_bridge_probe.get("status")
+                    if prepared_ndarray_bridge_probe is not None
+                    else STATUS_PARTIAL_GPU_UNAVAILABLE
+                ),
+                "target_accelerator": capability.target_accelerator,
+                "parsed": prepared_ndarray_bridge_parsed,
+                "derived": prepared_bridge_derived_metrics(
+                    prepared_ndarray_bridge_parsed
+                ),
+                "error": (
+                    prepared_ndarray_bridge_probe.get("error")
+                    if isinstance(prepared_ndarray_bridge_probe, dict)
+                    else None
+                ),
+            },
             "comparison": comparison_payload(
                 parsed,
                 bridge_parsed,
+                prepared_bridge_parsed,
+                prepared_ndarray_bridge_parsed,
                 cpu_score_mean_seconds=score_timing.mean_seconds,
             ),
             "measurement_note": (
                 "This is the first real-payload GPU profile. Candidate "
                 "generation and top-k remain on CPU; the GPU row only scores "
-                "the CPU-provided i8 candidate window."
+                "the CPU-provided i8 candidate window. The prepared bridge "
+                "keeps index buffers resident only inside one profiling "
+                "session; it is not a reusable public backend object. The "
+                "prepared ndarray row passes contiguous NumPy arrays directly "
+                "to the same Mojo function to isolate Python list materialization."
             ),
         },
         capability,
@@ -379,6 +455,8 @@ def report_status(
     capability: MojoGpuCapability,
     gpu_probe: dict[str, object] | None,
     bridge_probe: dict[str, object] | None,
+    prepared_bridge_probe: dict[str, object] | None,
+    prepared_ndarray_bridge_probe: dict[str, object] | None,
 ) -> str:
     if not capability.available:
         return STATUS_PARTIAL_GPU_UNAVAILABLE
@@ -386,6 +464,16 @@ def report_status(
         return STATUS_BLOCKED_GPU_REAL_PAYLOAD_FAILED
     if bridge_probe is None or bridge_probe.get("status") != STATUS_OK:
         return STATUS_BLOCKED_GPU_BRIDGE_FAILED
+    if (
+        prepared_bridge_probe is None
+        or prepared_bridge_probe.get("status") != STATUS_OK
+    ):
+        return STATUS_BLOCKED_GPU_PREPARED_BRIDGE_FAILED
+    if (
+        prepared_ndarray_bridge_probe is None
+        or prepared_ndarray_bridge_probe.get("status") != STATUS_OK
+    ):
+        return STATUS_BLOCKED_GPU_PREPARED_NDARRAY_BRIDGE_FAILED
     return STATUS_OK
 
 
@@ -413,6 +501,8 @@ def controls_payload(args: argparse.Namespace) -> dict[str, object]:
 def comparison_payload(
     parsed: dict[str, object],
     bridge_parsed: dict[str, object],
+    prepared_bridge_parsed: dict[str, object],
+    prepared_ndarray_bridge_parsed: dict[str, object],
     *,
     cpu_score_mean_seconds: float,
 ) -> dict[str, float | None]:
@@ -424,6 +514,40 @@ def comparison_payload(
     bridge_h2d = optional_float(bridge_parsed.get("host_to_device_mean_seconds"))
     bridge_d2h = optional_float(bridge_parsed.get("device_to_host_mean_seconds"))
     bridge_e2e = sum_optional(bridge_h2d, bridge_kernel, bridge_d2h)
+    prepared_prepare_h2d = optional_float(
+        prepared_bridge_parsed.get("prepare_host_to_device_mean_seconds")
+    )
+    prepared_score_h2d = optional_float(
+        prepared_bridge_parsed.get("score_host_to_device_mean_seconds")
+    )
+    prepared_kernel = optional_float(
+        prepared_bridge_parsed.get("twopass_kernel_mean_seconds")
+    )
+    prepared_d2h = optional_float(
+        prepared_bridge_parsed.get("device_to_host_mean_seconds")
+    )
+    prepared_score_e2e = sum_optional(
+        prepared_score_h2d,
+        prepared_kernel,
+        prepared_d2h,
+    )
+    prepared_ndarray_prepare_h2d = optional_float(
+        prepared_ndarray_bridge_parsed.get("prepare_host_to_device_mean_seconds")
+    )
+    prepared_ndarray_score_h2d = optional_float(
+        prepared_ndarray_bridge_parsed.get("score_host_to_device_mean_seconds")
+    )
+    prepared_ndarray_kernel = optional_float(
+        prepared_ndarray_bridge_parsed.get("twopass_kernel_mean_seconds")
+    )
+    prepared_ndarray_d2h = optional_float(
+        prepared_ndarray_bridge_parsed.get("device_to_host_mean_seconds")
+    )
+    prepared_ndarray_score_e2e = sum_optional(
+        prepared_ndarray_score_h2d,
+        prepared_ndarray_kernel,
+        prepared_ndarray_d2h,
+    )
     return {
         "gpu_twopass_kernel_mean_seconds": kernel,
         "gpu_h2d_kernel_d2h_mean_seconds": gpu_e2e,
@@ -434,6 +558,32 @@ def comparison_payload(
         ),
         "gpu_bridge_host_marshalling_seconds": optional_float(
             bridge_parsed.get("host_marshalling_seconds")
+        ),
+        "gpu_prepared_bridge_prepare_h2d_mean_seconds": prepared_prepare_h2d,
+        "gpu_prepared_bridge_twopass_kernel_mean_seconds": prepared_kernel,
+        "gpu_prepared_bridge_score_h2d_kernel_d2h_mean_seconds": (
+            prepared_score_e2e
+        ),
+        "gpu_prepared_bridge_extension_call_seconds": optional_float(
+            prepared_bridge_parsed.get("extension_call_seconds")
+        ),
+        "gpu_prepared_bridge_host_marshalling_seconds": optional_float(
+            prepared_bridge_parsed.get("host_marshalling_seconds")
+        ),
+        "gpu_prepared_ndarray_bridge_prepare_h2d_mean_seconds": (
+            prepared_ndarray_prepare_h2d
+        ),
+        "gpu_prepared_ndarray_bridge_twopass_kernel_mean_seconds": (
+            prepared_ndarray_kernel
+        ),
+        "gpu_prepared_ndarray_bridge_score_h2d_kernel_d2h_mean_seconds": (
+            prepared_ndarray_score_e2e
+        ),
+        "gpu_prepared_ndarray_bridge_extension_call_seconds": optional_float(
+            prepared_ndarray_bridge_parsed.get("extension_call_seconds")
+        ),
+        "gpu_prepared_ndarray_bridge_host_marshalling_seconds": optional_float(
+            prepared_ndarray_bridge_parsed.get("host_marshalling_seconds")
         ),
         "cpu_i8_same_candidate_score_mean_seconds": cpu_score_mean_seconds,
         "gpu_kernel_seconds_per_cpu_score_second": ratio(
@@ -450,6 +600,22 @@ def comparison_payload(
         ),
         "gpu_bridge_h2d_kernel_d2h_seconds_per_cpu_score_second": ratio(
             bridge_e2e,
+            cpu_score_mean_seconds,
+        ),
+        "gpu_prepared_bridge_kernel_seconds_per_cpu_score_second": ratio(
+            prepared_kernel,
+            cpu_score_mean_seconds,
+        ),
+        "gpu_prepared_bridge_score_h2d_kernel_d2h_seconds_per_cpu_score_second": ratio(
+            prepared_score_e2e,
+            cpu_score_mean_seconds,
+        ),
+        "gpu_prepared_ndarray_bridge_kernel_seconds_per_cpu_score_second": ratio(
+            prepared_ndarray_kernel,
+            cpu_score_mean_seconds,
+        ),
+        "gpu_prepared_ndarray_bridge_score_h2d_kernel_d2h_seconds_per_cpu_score_second": ratio(
+            prepared_ndarray_score_e2e,
             cpu_score_mean_seconds,
         ),
     }
@@ -489,6 +655,64 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
         print("== gpu_i8_real_payload_bridge_h2d_kernel_d2h ==")
         print("Mean:", bridge_e2e)
 
+    prepared_parsed = parsed_payload(report.get("gpu_real_payload_prepared_bridge"))
+    prepared_prepare_h2d = optional_float(
+        prepared_parsed.get("prepare_host_to_device_mean_seconds")
+    )
+    prepared_score_h2d = optional_float(
+        prepared_parsed.get("score_host_to_device_mean_seconds")
+    )
+    prepared_kernel = prepared_parsed.get("twopass_kernel_mean_seconds")
+    prepared_d2h = optional_float(prepared_parsed.get("device_to_host_mean_seconds"))
+    if prepared_prepare_h2d is not None:
+        print("== gpu_i8_real_payload_prepared_bridge_prepare_h2d ==")
+        print("Mean:", prepared_prepare_h2d)
+    if isinstance(prepared_kernel, (float, int)):
+        print("== gpu_i8_real_payload_prepared_bridge_twopass_kernel ==")
+        print("Mean:", prepared_kernel)
+    prepared_e2e = sum_optional(
+        prepared_score_h2d,
+        optional_float(prepared_kernel),
+        prepared_d2h,
+    )
+    if prepared_e2e is not None:
+        print("== gpu_i8_real_payload_prepared_bridge_score_h2d_kernel_d2h ==")
+        print("Mean:", prepared_e2e)
+
+    prepared_ndarray_parsed = parsed_payload(
+        report.get("gpu_real_payload_prepared_ndarray_bridge")
+    )
+    prepared_ndarray_prepare_h2d = optional_float(
+        prepared_ndarray_parsed.get("prepare_host_to_device_mean_seconds")
+    )
+    prepared_ndarray_score_h2d = optional_float(
+        prepared_ndarray_parsed.get("score_host_to_device_mean_seconds")
+    )
+    prepared_ndarray_kernel = prepared_ndarray_parsed.get(
+        "twopass_kernel_mean_seconds"
+    )
+    prepared_ndarray_d2h = optional_float(
+        prepared_ndarray_parsed.get("device_to_host_mean_seconds")
+    )
+    if prepared_ndarray_prepare_h2d is not None:
+        print("== gpu_i8_real_payload_prepared_ndarray_bridge_prepare_h2d ==")
+        print("Mean:", prepared_ndarray_prepare_h2d)
+    if isinstance(prepared_ndarray_kernel, (float, int)):
+        print("== gpu_i8_real_payload_prepared_ndarray_bridge_twopass_kernel ==")
+        print("Mean:", prepared_ndarray_kernel)
+    prepared_ndarray_e2e = sum_optional(
+        prepared_ndarray_score_h2d,
+        optional_float(prepared_ndarray_kernel),
+        prepared_ndarray_d2h,
+    )
+    if prepared_ndarray_e2e is not None:
+        print(
+            "== "
+            "gpu_i8_real_payload_prepared_ndarray_bridge_score_h2d_kernel_d2h"
+            " =="
+        )
+        print("Mean:", prepared_ndarray_e2e)
+
 
 def exit_code(
     report: dict[str, Any],
@@ -506,6 +730,10 @@ def exit_code(
         return 3
     if status == STATUS_BLOCKED_GPU_BRIDGE_FAILED:
         return 5
+    if status == STATUS_BLOCKED_GPU_PREPARED_BRIDGE_FAILED:
+        return 6
+    if status == STATUS_BLOCKED_GPU_PREPARED_NDARRAY_BRIDGE_FAILED:
+        return 7
     return 4
 
 
@@ -562,7 +790,10 @@ def run_gpu_i8_bridge_probe(
         raise ValueError("measurement_iterations must be positive")
 
     candidate_score_count = results[0].candidate_score_count
-    if any(result.candidate_score_count != candidate_score_count for result in results):
+    if any(
+        result.candidate_score_count != candidate_score_count
+        for result in results
+    ):
         raise RuntimeError("GPU bridge candidate score count changed between runs")
 
     parsed = {
@@ -598,9 +829,153 @@ def run_gpu_i8_bridge_probe(
         ),
     }
     return {
-        "status": STATUS_OK if parsed["score_agreement_ok"] else "score_agreement_failed",
+        "status": (
+            STATUS_OK
+            if parsed["score_agreement_ok"]
+            else "score_agreement_failed"
+        ),
         "parsed": parsed,
         "measurements": [result.to_json_ready() for result in results],
+    }
+
+
+def run_gpu_i8_prepared_bridge_probe(
+    *,
+    shape: SpeedTrackShape,
+    candidate_k: int,
+    target_accelerator: str | None,
+    queries: Any,
+    payload: Any,
+    candidate_positions_by_query: Sequence[Sequence[int]],
+    reference_scores_by_query: Sequence[Sequence[float]],
+    warmup_iterations: int,
+    measurement_iterations: int,
+) -> dict[str, object]:
+    return _run_gpu_i8_prepared_bridge_probe(
+        shape=shape,
+        candidate_k=candidate_k,
+        target_accelerator=target_accelerator,
+        queries=queries,
+        payload=payload,
+        candidate_positions_by_query=candidate_positions_by_query,
+        reference_scores_by_query=reference_scores_by_query,
+        warmup_iterations=warmup_iterations,
+        measurement_iterations=measurement_iterations,
+        bridge_scope="single_extension_call_resident_index_session",
+        profile_fn=profile_i8_prepared_payload_session,
+    )
+
+
+def run_gpu_i8_prepared_ndarray_bridge_probe(
+    *,
+    shape: SpeedTrackShape,
+    candidate_k: int,
+    target_accelerator: str | None,
+    queries: Any,
+    payload: Any,
+    candidate_positions_by_query: Sequence[Sequence[int]],
+    reference_scores_by_query: Sequence[Sequence[float]],
+    warmup_iterations: int,
+    measurement_iterations: int,
+) -> dict[str, object]:
+    return _run_gpu_i8_prepared_bridge_probe(
+        shape=shape,
+        candidate_k=candidate_k,
+        target_accelerator=target_accelerator,
+        queries=queries,
+        payload=payload,
+        candidate_positions_by_query=candidate_positions_by_query,
+        reference_scores_by_query=reference_scores_by_query,
+        warmup_iterations=warmup_iterations,
+        measurement_iterations=measurement_iterations,
+        bridge_scope="single_extension_call_resident_index_session_ndarray",
+        profile_fn=profile_i8_prepared_payload_session_ndarray,
+    )
+
+
+def _run_gpu_i8_prepared_bridge_probe(
+    *,
+    shape: SpeedTrackShape,
+    candidate_k: int,
+    target_accelerator: str | None,
+    queries: Any,
+    payload: Any,
+    candidate_positions_by_query: Sequence[Sequence[int]],
+    reference_scores_by_query: Sequence[Sequence[float]],
+    warmup_iterations: int,
+    measurement_iterations: int,
+    bridge_scope: str,
+    profile_fn: Any,
+) -> dict[str, object]:
+    if target_accelerator is None:
+        return {
+            "status": STATUS_PARTIAL_GPU_UNAVAILABLE,
+            "parsed": {},
+            "error": "target_accelerator was not available",
+        }
+
+    try:
+        result = profile_fn(
+            target_accelerator=target_accelerator,
+            shape=shape,
+            candidate_k=candidate_k,
+            queries=queries,
+            payload=payload,
+            candidate_positions_by_query=candidate_positions_by_query,
+            reference_scores_by_query=reference_scores_by_query,
+            warmup_iterations=warmup_iterations,
+            measurement_iterations=measurement_iterations,
+        )
+    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        return {
+            "status": "error",
+            "parsed": {},
+            "error": str(exc),
+        }
+
+    parsed = {
+        "payload_source": "real_kayak_i8_snapshot",
+        "bridge_scope": bridge_scope,
+        "query_count": shape.query_count,
+        "query_vector_count": shape.query_vector_count,
+        "document_count": shape.document_count,
+        "document_vector_count": shape.document_vector_count,
+        "total_document_vector_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "resident_index_token_code_count": (
+            shape.document_count * shape.document_vector_count * shape.vector_dim
+        ),
+        "resident_index_token_scale_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "resident_index_doc_offset_count": shape.document_count + 1,
+        "candidate_k": candidate_k,
+        "candidate_score_count": result.candidate_score_count,
+        "vector_dim": shape.vector_dim,
+        "warmup_iterations": warmup_iterations,
+        "measurement_iterations": measurement_iterations,
+        "host_marshalling_seconds": result.host_marshalling_seconds,
+        "extension_call_seconds": result.extension_call_seconds,
+        "prepare_host_to_device_mean_seconds": (
+            result.prepare_host_to_device_mean_seconds
+        ),
+        "score_host_to_device_mean_seconds": (
+            result.score_host_to_device_mean_seconds
+        ),
+        "twopass_kernel_mean_seconds": result.kernel_mean_seconds,
+        "device_to_host_mean_seconds": result.device_to_host_mean_seconds,
+        "score_delta_max_abs": result.score_delta_max_abs,
+        "score_agreement_ok": result.score_delta_max_abs <= 0.0001,
+    }
+    return {
+        "status": (
+            STATUS_OK
+            if parsed["score_agreement_ok"]
+            else "score_agreement_failed"
+        ),
+        "parsed": parsed,
+        "measurements": [result.to_json_ready()],
     }
 
 
@@ -612,6 +987,29 @@ def bridge_derived_metrics(parsed: dict[str, object]) -> dict[str, float | None]
     host_marshalling = optional_float(parsed.get("host_marshalling_seconds"))
     return {
         "h2d_kernel_d2h_mean_seconds": sum_optional(h2d, kernel, d2h),
+        "host_marshalling_seconds": host_marshalling,
+        "extension_call_seconds": extension_call,
+    }
+
+
+def prepared_bridge_derived_metrics(
+    parsed: dict[str, object],
+) -> dict[str, float | None]:
+    prepare_h2d = optional_float(
+        parsed.get("prepare_host_to_device_mean_seconds")
+    )
+    score_h2d = optional_float(parsed.get("score_host_to_device_mean_seconds"))
+    kernel = optional_float(parsed.get("twopass_kernel_mean_seconds"))
+    d2h = optional_float(parsed.get("device_to_host_mean_seconds"))
+    extension_call = optional_float(parsed.get("extension_call_seconds"))
+    host_marshalling = optional_float(parsed.get("host_marshalling_seconds"))
+    return {
+        "prepare_host_to_device_mean_seconds": prepare_h2d,
+        "score_h2d_kernel_d2h_mean_seconds": sum_optional(
+            score_h2d,
+            kernel,
+            d2h,
+        ),
         "host_marshalling_seconds": host_marshalling,
         "extension_call_seconds": extension_call,
     }

@@ -258,6 +258,215 @@ def score_i8_real_payload_once(py_request: PythonObject) raises -> PythonObject:
         return py_result
 
 
+def profile_i8_prepared_payload_session(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var py_query_values = py_request[0]
+    var py_token_codes = py_request[1]
+    var py_token_scales = py_request[2]
+    var py_doc_offsets = py_request[3]
+    var py_candidate_positions = py_request[4]
+    var py_reference_scores = py_request[5]
+    var query_count = Int(py=py_request[6])
+    var query_vector_count = Int(py=py_request[7])
+    var document_count = Int(py=py_request[8])
+    var document_vector_count = Int(py=py_request[9])
+    var candidate_k = Int(py=py_request[10])
+    var warmup_iterations = Int(py=py_request[11])
+    var measurement_iterations = Int(py=py_request[12])
+    if query_count <= 0:
+        raise Error("query_count must be positive")
+    if query_vector_count <= 0:
+        raise Error("query_vector_count must be positive")
+    if document_count <= 0:
+        raise Error("document_count must be positive")
+    if document_vector_count <= 0:
+        raise Error("document_vector_count must be positive")
+    if candidate_k <= 0:
+        raise Error("candidate_k must be positive")
+    if warmup_iterations < 0:
+        raise Error("warmup_iterations must be non-negative")
+    if measurement_iterations <= 0:
+        raise Error("measurement_iterations must be positive")
+
+    var total_document_vector_count = document_count * document_vector_count
+    var query_value_count = query_count * query_vector_count * VECTOR_DIM
+    var token_code_count = total_document_vector_count * VECTOR_DIM
+    var doc_offset_count = document_count + 1
+    var candidate_score_count = query_count * candidate_k
+    var partial_score_count = (
+        candidate_score_count * query_vector_count * document_vector_count
+    )
+    var grid_x = (candidate_score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
+    var partial_grid_x = (partial_score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
+
+    require_len("query_values", py_query_values, query_value_count)
+    require_len("token_codes", py_token_codes, token_code_count)
+    require_len("token_scales", py_token_scales, total_document_vector_count)
+    require_len("doc_offsets", py_doc_offsets, doc_offset_count)
+    require_len(
+        "candidate_positions", py_candidate_positions, candidate_score_count
+    )
+    require_len("reference_scores", py_reference_scores, candidate_score_count)
+
+    with DeviceContext() as ctx:
+        var query_device = ctx.enqueue_create_buffer[DType.float32](
+            query_value_count
+        )
+        var codes_device = ctx.enqueue_create_buffer[DType.int8](
+            token_code_count
+        )
+        var scales_device = ctx.enqueue_create_buffer[DType.float32](
+            total_document_vector_count
+        )
+        var offsets_device = ctx.enqueue_create_buffer[DType.int64](
+            doc_offset_count
+        )
+        var candidate_device = ctx.enqueue_create_buffer[DType.int64](
+            candidate_score_count
+        )
+        var partial_score_device = ctx.enqueue_create_buffer[DType.float32](
+            partial_score_count
+        )
+        var score_device = ctx.enqueue_create_buffer[DType.float32](
+            candidate_score_count
+        )
+
+        var query_host = ctx.enqueue_create_host_buffer[DType.float32](
+            query_value_count
+        )
+        var codes_host = ctx.enqueue_create_host_buffer[DType.int8](
+            token_code_count
+        )
+        var scales_host = ctx.enqueue_create_host_buffer[DType.float32](
+            total_document_vector_count
+        )
+        var offsets_host = ctx.enqueue_create_host_buffer[DType.int64](
+            doc_offset_count
+        )
+        var candidate_host = ctx.enqueue_create_host_buffer[DType.int64](
+            candidate_score_count
+        )
+        var score_host = ctx.enqueue_create_host_buffer[DType.float32](
+            candidate_score_count
+        )
+
+        for index in range(query_value_count):
+            query_host[index] = Float32(py=py_query_values[index])
+
+        for index in range(token_code_count):
+            codes_host[index] = Int8(py=py_token_codes[index])
+
+        for index in range(total_document_vector_count):
+            scales_host[index] = Float32(py=py_token_scales[index])
+
+        for index in range(doc_offset_count):
+            offsets_host[index] = Int64(py=py_doc_offsets[index])
+
+        for index in range(candidate_score_count):
+            var candidate_position = Int64(py=py_candidate_positions[index])
+            if candidate_position < 0 or candidate_position >= Int64(
+                document_count
+            ):
+                raise Error(
+                    "candidate position outside prepared index document range"
+                )
+            candidate_host[index] = candidate_position
+            score_host[index] = Float32(0.0)
+
+        def prepare_h2d_once() capturing raises:
+            codes_device.enqueue_copy_from(codes_host)
+            scales_device.enqueue_copy_from(scales_host)
+            offsets_device.enqueue_copy_from(offsets_host)
+            ctx.synchronize()
+
+        def score_h2d_once() capturing raises:
+            query_device.enqueue_copy_from(query_host)
+            candidate_device.enqueue_copy_from(candidate_host)
+            ctx.synchronize()
+
+        def twopass_kernel_once() capturing raises:
+            ctx.enqueue_function[
+                score_i8_candidate_token_kernel_dynamic,
+                score_i8_candidate_token_kernel_dynamic,
+            ](
+                query_device,
+                codes_device,
+                scales_device,
+                offsets_device,
+                candidate_device,
+                partial_score_device,
+                query_vector_count,
+                document_vector_count,
+                candidate_k,
+                partial_score_count,
+                grid_dim=partial_grid_x,
+                block_dim=BLOCK_SIZE,
+            )
+            ctx.enqueue_function[
+                reduce_i8_candidate_score_kernel_dynamic,
+                reduce_i8_candidate_score_kernel_dynamic,
+            ](
+                partial_score_device,
+                score_device,
+                query_vector_count,
+                document_vector_count,
+                candidate_score_count,
+                grid_dim=grid_x,
+                block_dim=BLOCK_SIZE,
+            )
+            ctx.synchronize()
+
+        def d2h_once() capturing raises:
+            score_device.enqueue_copy_to(score_host)
+            ctx.synchronize()
+
+        var prepare_h2d = benchmark.run[prepare_h2d_once](
+            max_iters=measurement_iterations
+        )
+        prepare_h2d_once()
+
+        for _ in range(warmup_iterations):
+            score_h2d_once()
+            twopass_kernel_once()
+            d2h_once()
+
+        var score_h2d = benchmark.run[score_h2d_once](
+            max_iters=measurement_iterations
+        )
+        var kernel = benchmark.run[twopass_kernel_once](
+            max_iters=measurement_iterations
+        )
+        var d2h = benchmark.run[d2h_once](max_iters=measurement_iterations)
+
+        score_h2d_once()
+        twopass_kernel_once()
+        d2h_once()
+
+        var score_delta_max_abs = Float64(0.0)
+        for score_index in range(candidate_score_count):
+            var reference_score = Float32(py=py_reference_scores[score_index])
+            var score_delta = abs(
+                Float64(score_host[score_index]) - Float64(reference_score)
+            )
+            if score_delta > score_delta_max_abs:
+                score_delta_max_abs = score_delta
+
+        var py_scores = Python.list()
+        for score_index in range(candidate_score_count):
+            py_scores.append(Python.float(score_host[score_index]))
+
+        var py_result = Python.list()
+        py_result.append(Python.float(prepare_h2d.mean()))
+        py_result.append(Python.float(score_h2d.mean()))
+        py_result.append(Python.float(kernel.mean()))
+        py_result.append(Python.float(d2h.mean()))
+        py_result.append(Python.float(score_delta_max_abs))
+        py_result.append(Python.int(candidate_score_count))
+        py_result.append(py_scores)
+        return py_result
+
+
 @export
 def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
     try:
@@ -274,6 +483,13 @@ def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
             docstring=(
                 "Score one real Kayak i8 candidate window with a GPU-targeted"
                 " Mojo extension."
+            ),
+        )
+        module.def_function[profile_i8_prepared_payload_session](
+            "profile_i8_prepared_payload_session",
+            docstring=(
+                "Profile a session that keeps real Kayak i8 payload buffers"
+                " resident on the GPU while scoring query candidate windows."
             ),
         )
         return module.finalize()

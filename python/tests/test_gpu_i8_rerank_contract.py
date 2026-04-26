@@ -42,6 +42,7 @@ from kayak_bridge.gpu_i8_real_payload_score import (  # noqa: E402
     write_gpu_i8_real_payload_probe_inputs,
 )
 from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
+    MojoGpuI8PreparedSessionResult,
     MojoGpuI8RerankBridgeResult,
 )
 from kayak_bridge.gpu_i8_rerank_contract import (  # noqa: E402
@@ -472,6 +473,10 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 capability=capability,
                 gpu_probe={"status": GPU_REAL_PAYLOAD_STATUS_OK},
                 bridge_probe={"status": real_payload_profile.STATUS_OK},
+                prepared_bridge_probe={"status": real_payload_profile.STATUS_OK},
+                prepared_ndarray_bridge_probe={
+                    "status": real_payload_profile.STATUS_OK
+                },
             ),
             real_payload_profile.STATUS_OK,
         )
@@ -480,8 +485,34 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 capability=capability,
                 gpu_probe={"status": GPU_REAL_PAYLOAD_STATUS_OK},
                 bridge_probe={"status": "error"},
+                prepared_bridge_probe={"status": real_payload_profile.STATUS_OK},
+                prepared_ndarray_bridge_probe={
+                    "status": real_payload_profile.STATUS_OK
+                },
             ),
             real_payload_profile.STATUS_BLOCKED_GPU_BRIDGE_FAILED,
+        )
+        self.assertEqual(
+            real_payload_profile.report_status(
+                capability=capability,
+                gpu_probe={"status": GPU_REAL_PAYLOAD_STATUS_OK},
+                bridge_probe={"status": real_payload_profile.STATUS_OK},
+                prepared_bridge_probe={"status": "error"},
+                prepared_ndarray_bridge_probe={
+                    "status": real_payload_profile.STATUS_OK
+                },
+            ),
+            real_payload_profile.STATUS_BLOCKED_GPU_PREPARED_BRIDGE_FAILED,
+        )
+        self.assertEqual(
+            real_payload_profile.report_status(
+                capability=capability,
+                gpu_probe={"status": GPU_REAL_PAYLOAD_STATUS_OK},
+                bridge_probe={"status": real_payload_profile.STATUS_OK},
+                prepared_bridge_probe={"status": real_payload_profile.STATUS_OK},
+                prepared_ndarray_bridge_probe={"status": "error"},
+            ),
+            real_payload_profile.STATUS_BLOCKED_GPU_PREPARED_NDARRAY_BRIDGE_FAILED,
         )
 
     def test_gpu_bridge_result_reports_profile_boundary_fields(self) -> None:
@@ -501,6 +532,28 @@ class GpuI8RerankContractTests(unittest.TestCase):
         self.assertEqual(payload["candidate_score_count"], 2)
         self.assertEqual(payload["score_count"], 2)
         self.assertEqual(payload["host_marshalling_seconds"], 0.1)
+
+    def test_prepared_gpu_bridge_result_reports_prepare_and_score_boundaries(
+        self,
+    ) -> None:
+        result = MojoGpuI8PreparedSessionResult(
+            host_marshalling_seconds=0.1,
+            extension_call_seconds=0.2,
+            prepare_host_to_device_mean_seconds=0.003,
+            score_host_to_device_mean_seconds=0.004,
+            kernel_mean_seconds=0.005,
+            device_to_host_mean_seconds=0.006,
+            score_delta_max_abs=0.00001,
+            candidate_score_count=2,
+            scores=(1.0, 2.0),
+        )
+
+        payload = result.to_json_ready()
+
+        self.assertEqual(payload["candidate_score_count"], 2)
+        self.assertEqual(payload["score_count"], 2)
+        self.assertEqual(payload["prepare_host_to_device_mean_seconds"], 0.003)
+        self.assertEqual(payload["score_host_to_device_mean_seconds"], 0.004)
 
     def test_candidate_score_profile_derives_rates_and_ratios(self) -> None:
         derived = candidate_profile.derive_candidate_score_metrics(

@@ -189,9 +189,13 @@ Current GPU probes:
   scores. Candidate generation and top-k remain on CPU.
 - `python/kayak_bridge/_mojo_gpu_i8_rerank_bindings.mojo` and
   `python/kayak_bridge/mojo_gpu_i8_rerank.py` build a separate GPU-targeted
-  Python extension and run the same real-payload scoring boundary in-process.
-  This removes file staging from the measured bridge path while still copying
-  full index payloads on every call.
+  Python extension and run the same real-payload scoring boundary in-process:
+  a full-copy bridge row, a prepared-session list bridge row, and a
+  prepared-session ndarray bridge row. The prepared sessions copy token codes,
+  token scales, and document offsets to device once inside a single profiling
+  call, then time query/candidate H2D, two-pass kernel, and D2H against those
+  resident index buffers. The ndarray row passes contiguous NumPy arrays
+  directly to the same Mojo function to isolate Python list materialization.
 
 Reason: this checks kernel launch, pointer argument types, scalar i8 math,
 copy boundaries, readback, `global_idx` indexing, doc offsets, and candidate
@@ -199,9 +203,11 @@ positions before production backend integration. It is not evidence of speedup.
 The real-payload probe additionally verifies that the GPU score math agrees
 with Kayak's prepared i8 payload representation rather than only synthetic
 formula-generated buffers. The extension bridge verifies that a Python/Mojo GPU
-boundary is feasible, but its current element-wise Python-object decode is much
-slower than the GPU copy+kernel+readback work and should not be mistaken for a
-production backend.
+boundary is feasible, but its current element-wise Python-object decode and
+per-call allocation are much slower than the GPU copy+kernel+readback work and
+should not be mistaken for a production backend. The prepared-session rows test
+device residency and host-ingestion surfaces without committing to a
+Python-owned prepared object.
 
 Exploratory optimization result: the two-pass probe is consistently faster
 than the serial GPU probe on the measured deterministic shapes while preserving
@@ -217,13 +223,33 @@ The result supports carrying the two-pass structure forward, but not claiming a
 production speedup yet.
 
 Latest bridge finding: on the `2 queries x 8 query vectors x 256 documents x
-16 document vectors x candidate_k 128` real-payload smoke shape, the in-process
-extension reports about `6.50e-05s` for H2D + two-pass kernel + D2H and score
-agreement within `4.57763671875e-05`, matching the standalone probe. The
-extension call itself is about `0.47s` because it decodes Python lists into Mojo
-host buffers element by element. The next optimization target is therefore
-resident device buffers or a lower-overhead host buffer interface, not kernel
-math.
+16 document vectors x candidate_k 128` real-payload smoke shape, the full-copy
+in-process extension reports about `6.47e-05s` for H2D + two-pass kernel + D2H
+and score agreement within `4.57763671875e-05`, matching the standalone probe.
+The prepared list bridge reports about `2.64e-05s` to prepare resident index
+buffers and about `3.88e-05s` for score H2D + two-pass kernel + D2H with those
+index buffers already resident. The prepared ndarray bridge reports about
+`2.65e-05s` to prepare resident index buffers, about `3.85e-05s` for score
+H2D + two-pass kernel + D2H, and about `2.48e-05s` of Python host marshalling
+instead of the list bridge's about `3.22e-03s`. That validates device residency
+as useful and validates direct ndarray input as useful for Python-side
+materialization on this shape.
+
+It does not validate a production backend because the extension call remains
+about `0.72s` for the ndarray row. That debunks `.tolist()` as the dominant
+extension-call bottleneck; the remaining cost is consistent with Mojo-side
+Python object indexing and scalar conversion for every payload element, plus
+allocation and profiling work inside the call.
+
+Ownership finding: a first Python-visible `PreparedGpuI8RerankDim128` object was
+not kept because Mojo Python `module.add_type[...]` requires `Writable`, while
+`DeviceContext` cannot derive `Writable`. The current prepared session is
+therefore deliberately one call, not a reusable Python object.
+
+Reason: this keeps measured evidence ahead of abstraction. The next
+optimization target is a typed host buffer interface or real internal
+prepared-index ownership model that avoids per-element `py_values[index]`
+conversion, not kernel math.
 
 ## Primitive 5: Measurement Contract
 
@@ -284,11 +310,13 @@ The report intentionally keeps three surfaces separate:
 - Kayak GPU i8: benchmark-only candidate-score primitive
 
 Reason: FastPlaid search includes indexing, candidate generation, approximate
-search, and top-k output. The current Kayak GPU row only times candidate-score
-math over deterministic flat dim128 i8 tensors. Putting those numbers in one
-report is useful profiling context, but treating the ratio as a backend speedup
-claim would be wrong until the GPU primitive consumes real Kayak i8 payloads
-and reports end-to-end copy, kernel, readback, and CPU top-k time.
+search, and top-k output. The current Kayak GPU rows time candidate-score math
+over deterministic flat dim128 tensors and real Kayak i8 payload snapshots, but
+candidate generation and top-k remain outside the GPU row. Putting those numbers
+in one report is useful profiling context, but treating the ratio as a backend
+speedup claim would be wrong until the GPU primitive reports the complete
+candidate-window rerank path, including CPU candidate generation, GPU scoring,
+readback, CPU top-k, and bridge overhead.
 
 Required fields for every FastPlaid comparison row:
 
@@ -345,10 +373,18 @@ evidence only justifies a measured primitive.
    `query_count=2`, `query_vector_count=8`, `document_count=256`,
    `document_vector_count=16`, and `candidate_k=128`.
 8. Move from snapshot export to an internal prepared-index GPU rerank boundary
-   that avoids file staging.
-9. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+   that avoids file staging. Current local result: a single-call prepared
+   session keeps index buffers resident and reduces score H2D + kernel + D2H
+   from about `6.47e-05s` to `3.88e-05s` on the smoke shape, while preserving
+   `score_delta_max_abs=4.57763671875e-05`.
+9. Replace the single-call prepared session with a reusable internal ownership
+   boundary or lower-overhead host buffer path. Current local result: direct
+   ndarray input reduces Python host marshalling from about `3.22e-03s` to
+   about `2.48e-05s`, but does not reduce the extension call, which remains
+   about `0.72s`.
+10. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times.
-10. Only after a measured win, consider public API design.
+11. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

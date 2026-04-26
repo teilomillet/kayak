@@ -238,6 +238,20 @@ Observed:
   and candidate-score probe status `ok`; production backend integration still
   correctly reports missing
 - standalone real-payload Mojo probe after formatting reported status `ok`
+
+## Follow-Up
+
+The next step was completed in
+`docs/traces/2026-04-26_gpu_i8_prepared_bridge.md`.
+
+Result: a single-call prepared-session bridge keeps real Kayak i8 index payload
+buffers resident on device for the profiled score path. On the same smoke
+shape, score H2D + two-pass kernel + D2H moved from about `6.47e-05s` in the
+full-copy bridge to about `3.88e-05s` with resident index buffers, while
+preserving `score_delta_max_abs=4.57763671875e-05`.
+
+Reason: this validates the resident-buffer hypothesis without claiming a public
+GPU backend or settling Python-owned device-buffer lifetime.
 - both real-payload executable runs reported `twopass_score_agreement_ok=True`
 - the real-payload extension bridge reported status `ok`
 - `git diff --check` passed
