@@ -107,6 +107,33 @@ class MojoGpuI8AddressServeResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class MojoGpuI8AddressResidentSessionResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    score_delta_max_abs: float
+    candidate_score_count: int
+    session_iterations: int
+    scores: tuple[float, ...]
+
+    @property
+    def extension_call_seconds_per_iteration(self) -> float:
+        return self.extension_call_seconds / float(self.session_iterations)
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "extension_call_seconds_per_iteration": (
+                self.extension_call_seconds_per_iteration
+            ),
+            "score_delta_max_abs": self.score_delta_max_abs,
+            "candidate_score_count": self.candidate_score_count,
+            "session_iterations": self.session_iterations,
+            "score_count": len(self.scores),
+        }
+
+
 def gpu_extension_device_probe(*, target_accelerator: str) -> str:
     module = load_module(target_accelerator=target_accelerator)
     return str(module.gpu_extension_device_probe())
@@ -443,6 +470,75 @@ def score_i8_prepared_payload_session_addresses(
         extension_call_seconds=extension_call_seconds,
         score_delta_max_abs=float(raw_result[0]),
         candidate_score_count=int(raw_result[1]),
+        scores=scores,
+    )
+
+
+def score_i8_prepared_payload_session_addresses_repeated(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    candidate_k: int,
+    queries: np.ndarray,
+    payload: KayakPlaidI8PayloadSnapshot,
+    candidate_positions_by_query: Sequence[Sequence[int]],
+    reference_scores_by_query: Sequence[Sequence[float]],
+    session_iterations: int,
+) -> MojoGpuI8AddressResidentSessionResult:
+    if session_iterations <= 0:
+        raise ValueError("session_iterations must be positive")
+    marshalling_started_at = time.perf_counter()
+    query_values = _float32_array(queries)
+    token_codes = _int8_array(payload.token_codes)
+    token_scales = _float32_array(payload.token_scales)
+    doc_offsets = _int64_array(payload.doc_offsets)
+    candidate_positions = _flatten_int_rows_array(
+        candidate_positions_by_query,
+        expected_rows=shape.query_count,
+        expected_cols=candidate_k,
+        name="candidate_positions_by_query",
+    )
+    reference_scores = _flatten_float_rows_array(
+        reference_scores_by_query,
+        expected_rows=shape.query_count,
+        expected_cols=candidate_k,
+        name="reference_scores_by_query",
+    )
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    module = load_module(target_accelerator=target_accelerator)
+    request = [
+        _array_address(query_values),
+        _array_address(token_codes),
+        _array_address(token_scales),
+        _array_address(doc_offsets),
+        _array_address(candidate_positions),
+        _array_address(reference_scores),
+        int(shape.query_count),
+        int(shape.query_vector_count),
+        int(shape.document_count),
+        int(shape.document_vector_count),
+        int(candidate_k),
+        int(session_iterations),
+    ]
+    extension_started_at = time.perf_counter()
+    raw_result = module.score_i8_prepared_payload_session_addresses_repeated(
+        request
+    )
+    extension_call_seconds = time.perf_counter() - extension_started_at
+
+    if len(raw_result) != 4:
+        raise RuntimeError(
+            "GPU i8 address resident session returned an unexpected result shape"
+        )
+
+    scores = tuple(float(value) for value in raw_result[3])
+    return MojoGpuI8AddressResidentSessionResult(
+        host_marshalling_seconds=host_marshalling_seconds,
+        extension_call_seconds=extension_call_seconds,
+        score_delta_max_abs=float(raw_result[0]),
+        candidate_score_count=int(raw_result[1]),
+        session_iterations=int(raw_result[2]),
         scores=scores,
     )
 

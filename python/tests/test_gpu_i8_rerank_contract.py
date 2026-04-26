@@ -43,6 +43,7 @@ from kayak_bridge.gpu_i8_real_payload_score import (  # noqa: E402
 )
 from kayak_bridge import gpu_i8_address_serve_sweep as address_serve_sweep  # noqa: E402
 from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
+    MojoGpuI8AddressResidentSessionResult,
     MojoGpuI8AddressServeResult,
     MojoGpuI8PreparedSessionResult,
     MojoGpuI8RerankBridgeResult,
@@ -619,6 +620,25 @@ class GpuI8RerankContractTests(unittest.TestCase):
         self.assertEqual(payload["host_marshalling_seconds"], 0.1)
         self.assertEqual(payload["extension_call_seconds"], 0.2)
 
+    def test_address_resident_session_result_reports_iteration_boundary(
+        self,
+    ) -> None:
+        result = MojoGpuI8AddressResidentSessionResult(
+            host_marshalling_seconds=0.1,
+            extension_call_seconds=0.2,
+            score_delta_max_abs=0.00001,
+            candidate_score_count=2,
+            session_iterations=4,
+            scores=(1.0, 2.0),
+        )
+
+        payload = result.to_json_ready()
+
+        self.assertEqual(payload["candidate_score_count"], 2)
+        self.assertEqual(payload["score_count"], 2)
+        self.assertEqual(payload["session_iterations"], 4)
+        self.assertEqual(payload["extension_call_seconds_per_iteration"], 0.05)
+
     def test_address_serve_sweep_case_parser_keeps_vector_counts_explicit(
         self,
     ) -> None:
@@ -645,6 +665,7 @@ class GpuI8RerankContractTests(unittest.TestCase):
             cpu_candidate_generation_mean_seconds=0.003,
             cpu_score_mean_seconds=0.002,
             gpu_parsed={"extension_call_seconds": 0.001},
+            resident_parsed={"extension_call_seconds_per_iteration": 0.0005},
         )
 
         self.assertEqual(
@@ -658,6 +679,18 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 "cpu_candidate_plus_gpu_address_serve_seconds_per_cpu_candidate_plus_score_second"
             ],
             0.8,
+        )
+        self.assertEqual(
+            comparison[
+                "gpu_address_resident_iteration_seconds_per_cpu_score_second"
+            ],
+            0.25,
+        )
+        self.assertEqual(
+            comparison[
+                "cpu_candidate_plus_gpu_resident_iteration_seconds_per_cpu_candidate_plus_score_second"
+            ],
+            0.7,
         )
 
     def test_candidate_score_profile_derives_rates_and_ratios(self) -> None:

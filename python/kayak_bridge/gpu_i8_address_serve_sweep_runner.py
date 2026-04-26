@@ -21,6 +21,9 @@ from kayak_bridge.gpu_i8_address_serve_sweep import (
     report_status,
     summary_payload,
 )
+from kayak_bridge.mojo_gpu_i8_rerank import (
+    score_i8_prepared_payload_session_addresses_repeated,
+)
 from kayak_bridge.plaid_approx import (
     KayakPlaidApproxConfig,
     KayakPlaidApproxIndex,
@@ -64,9 +67,12 @@ def build_report(
             "summary": summary_payload(rows),
             "measurement_note": (
                 "This sweep times the internal typed-address GPU i8 serving "
-                "call. Candidate generation remains CPU-side, top-k remains "
-                "outside this GPU row, and the call still allocates and copies "
-                "the prepared index tensors inside each serving call."
+                "call and an in-call resident-session variant. Candidate "
+                "generation remains CPU-side and top-k remains outside these "
+                "GPU rows. The serving row still allocates and copies prepared "
+                "index tensors inside each call; the resident-session row "
+                "copies them once inside one extension call and repeats the "
+                "same candidate window."
             ),
         },
         capability,
@@ -119,18 +125,31 @@ def run_case(
         warmup_iterations=controls.warmup_iterations,
         measurement_iterations=controls.measurement_iterations,
     )
+    payload = index.i8_payload_snapshot()
     gpu_probe = _run_gpu_probe(
         case=case,
         shape=shape,
         controls=controls,
         capability=capability,
         queries=inputs.queries,
-        payload=index.i8_payload_snapshot(),
+        payload=payload,
+        candidate_positions=candidate_positions,
+        reference_scores=reference_scores,
+    )
+    resident_probe = _run_resident_probe(
+        case=case,
+        shape=shape,
+        controls=controls,
+        capability=capability,
+        queries=inputs.queries,
+        payload=payload,
         candidate_positions=candidate_positions,
         reference_scores=reference_scores,
     )
     gpu_status = _gpu_status(gpu_probe)
+    resident_status = _gpu_status(resident_probe)
     gpu_parsed = parsed_payload(gpu_probe)
+    resident_parsed = parsed_payload(resident_probe)
     return _case_row(
         case=case,
         controls=controls,
@@ -143,6 +162,9 @@ def run_case(
         gpu_probe=gpu_probe,
         gpu_status=gpu_status,
         gpu_parsed=gpu_parsed,
+        resident_probe=resident_probe,
+        resident_status=resident_status,
+        resident_parsed=resident_parsed,
     )
 
 
@@ -172,6 +194,62 @@ def _run_gpu_probe(
     )
 
 
+def _run_resident_probe(
+    *,
+    case: AddressServeSweepCase,
+    shape: SpeedTrackShape,
+    controls: AddressServeSweepControls,
+    capability: MojoGpuCapability,
+    queries: Any,
+    payload: Any,
+    candidate_positions: Sequence[Sequence[int]],
+    reference_scores: Sequence[Sequence[float]],
+) -> dict[str, object] | None:
+    if not capability.available:
+        return None
+    try:
+        result = score_i8_prepared_payload_session_addresses_repeated(
+            target_accelerator=capability.target_accelerator or "",
+            shape=shape,
+            candidate_k=case.candidate_k,
+            queries=queries,
+            payload=payload,
+            candidate_positions_by_query=candidate_positions,
+            reference_scores_by_query=reference_scores,
+            session_iterations=controls.resident_session_iterations,
+        )
+    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        return {"status": "error", "parsed": {}, "error": str(exc)}
+
+    parsed = {
+        "bridge_scope": "single_extension_call_address_resident_session",
+        "candidate_k": case.candidate_k,
+        "candidate_score_count": result.candidate_score_count,
+        "document_count": shape.document_count,
+        "document_vector_count": shape.document_vector_count,
+        "extension_call_seconds": result.extension_call_seconds,
+        "extension_call_seconds_per_iteration": (
+            result.extension_call_seconds_per_iteration
+        ),
+        "host_marshalling_seconds": result.host_marshalling_seconds,
+        "payload_source": "real_kayak_i8_snapshot",
+        "query_count": shape.query_count,
+        "query_vector_count": shape.query_vector_count,
+        "score_agreement_ok": result.score_delta_max_abs <= 0.0001,
+        "score_delta_max_abs": result.score_delta_max_abs,
+        "session_iterations": result.session_iterations,
+        "total_document_vector_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "vector_dim": shape.vector_dim,
+    }
+    return {
+        "status": STATUS_OK if parsed["score_agreement_ok"] else "error",
+        "parsed": parsed,
+        "measurements": [result.to_json_ready()],
+    }
+
+
 def _gpu_status(gpu_probe: dict[str, object] | None) -> object:
     if isinstance(gpu_probe, dict):
         return gpu_probe.get("status")
@@ -191,10 +269,18 @@ def _case_row(
     gpu_probe: dict[str, object] | None,
     gpu_status: object,
     gpu_parsed: dict[str, object],
+    resident_probe: dict[str, object] | None,
+    resident_status: object,
+    resident_parsed: dict[str, object],
 ) -> dict[str, Any]:
+    status = (
+        STATUS_OK
+        if gpu_status == STATUS_OK and resident_status == STATUS_OK
+        else "error"
+    )
     return {
         "name": case.name,
-        "status": STATUS_OK if gpu_status == STATUS_OK else gpu_status,
+        "status": status,
         "shape": case.to_json_ready(
             vector_dim=controls.vector_dim,
             top_k=controls.top_k,
@@ -210,10 +296,17 @@ def _case_row(
             gpu_status=gpu_status,
             gpu_parsed=gpu_parsed,
         ),
+        "gpu_address_resident_session": _gpu_payload(
+            capability=capability,
+            gpu_probe=resident_probe,
+            gpu_status=resident_status,
+            gpu_parsed=resident_parsed,
+        ),
         "comparison": comparison_payload(
             cpu_candidate_generation_mean_seconds=candidate_timing.mean_seconds,
             cpu_score_mean_seconds=score_timing.mean_seconds,
             gpu_parsed=gpu_parsed,
+            resident_parsed=resident_parsed,
         ),
     }
 
@@ -232,6 +325,9 @@ def _gpu_payload(
         "derived": {
             "extension_call_seconds": optional_float(
                 gpu_parsed.get("extension_call_seconds")
+            ),
+            "extension_call_seconds_per_iteration": optional_float(
+                gpu_parsed.get("extension_call_seconds_per_iteration")
             ),
             "host_marshalling_seconds": optional_float(
                 gpu_parsed.get("host_marshalling_seconds")

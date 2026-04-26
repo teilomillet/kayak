@@ -127,9 +127,11 @@ and end-to-end rerank composition, not the dim128 dot-product math.
 
 Follow-up: `docs/traces/2026-04-26_gpu_i8_address_serve_sweep.md` adds the
 shape sweep. It kept score agreement across all six cases, but showed the
-current serving call loses on small candidate windows and enlarged document
-counts, while larger copied-index cases move toward break-even or loss. That
-strengthens the decision to solve prepared-index residency before kernel math.
+current one-shot serving call loses on small candidate windows and enlarged
+document counts. The added resident-session row copies the prepared index once
+inside a single extension call and makes every swept same-candidate scoring row
+faster than CPU i8. That strengthens the decision to solve prepared-index
+residency before kernel math, while leaving cross-call ownership unproven.
 
 ## Validation
 

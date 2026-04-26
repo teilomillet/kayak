@@ -48,6 +48,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--warmup-iterations", type=int, default=1)
     parser.add_argument("--measurement-iterations", type=int, default=3)
+    parser.add_argument("--resident-session-iterations", type=int, default=4)
     parser.add_argument("--kayak-plaid-centroid-count", type=int, default=128)
     parser.add_argument(
         "--kayak-plaid-centroids-per-query-vector",
@@ -88,6 +89,7 @@ def controls_from_args(args: argparse.Namespace) -> AddressServeSweepControls:
         seed=args.seed,
         warmup_iterations=args.warmup_iterations,
         measurement_iterations=args.measurement_iterations,
+        resident_session_iterations=args.resident_session_iterations,
         kayak_plaid_centroid_count=args.kayak_plaid_centroid_count,
         kayak_plaid_centroids_per_query_vector=(
             args.kayak_plaid_centroids_per_query_vector
@@ -118,6 +120,12 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
         print_quiet_mean(
             f"gpu_i8_address_serve_sweep_{name}_cpu_candidate_plus_gpu",
             comparison.get("cpu_candidate_generation_plus_gpu_address_serve_seconds"),
+        )
+        print_quiet_mean(
+            f"gpu_i8_address_serve_sweep_{name}_resident_iteration",
+            comparison.get(
+                "gpu_address_resident_session_extension_call_seconds_per_iteration"
+            ),
         )
 
 

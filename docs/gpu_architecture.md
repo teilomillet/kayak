@@ -4,7 +4,7 @@ Status: measured scaffold, benchmark-only GPU score probes, and an internal
 GPU-targeted Python/Mojo extension probe; no production GPU backend integration
 yet.
 
-Date: `2026-04-25`
+Date: `2026-04-26`
 
 ## Verified Local Facts
 
@@ -269,14 +269,21 @@ not reuse a prepared GPU index across calls, and candidate generation plus
 top-k remain on CPU.
 
 Shape-sweep finding: `profile_gpu_i8_address_serve_sweep` kept CPU i8 score
-agreement across six explicit vector-count shapes. The serving call was faster
-than CPU same-candidate scoring for larger score work, such as `candidate256`
-and `query_vectors16`, slower for `candidate32` and `documents512`, and near
-break-even for `doc_vectors32`. The end-to-end CPU-candidate-generation-plus-GPU
-score envelope ranged from about `0.813x` to `1.112x` of CPU candidate
-generation plus CPU score. This is evidence that fixed call overhead and
-repeated prepared-index copies now matter more than dim128 kernel math on the
-swept shapes.
+agreement across six explicit vector-count shapes. The one-shot serving call
+was faster than CPU same-candidate scoring for larger score work, such as
+`candidate256` and `query_vectors16`, slower for `candidate32` and
+`documents512`, and slightly slower for `doc_vectors32`. The end-to-end
+CPU-candidate-generation-plus-GPU score envelope ranged from about `0.820x` to
+`1.104x` of CPU candidate generation plus CPU score.
+
+Resident-session finding: an in-call repeated address session copies the
+prepared index tensors once, then scores the same query and candidate window
+four times against those resident buffers. Its per-iteration score time ranged
+from about `0.281x` to `0.641x` of CPU same-candidate scoring, and the
+CPU-candidate-generation-plus-resident-iteration envelope ranged from about
+`0.698x` to `0.897x` of CPU candidate generation plus CPU score. This is
+evidence that prepared-index residency and allocation reuse are likely higher
+leverage than immediate dim128 kernel rewrites on the swept shapes.
 
 Ownership finding: a first Python-visible `PreparedGpuI8RerankDim128` object was
 not kept because Mojo Python `module.add_type[...]` requires `Writable`, while
@@ -285,8 +292,8 @@ therefore deliberately one call, not a reusable Python object.
 
 Reason: this keeps measured evidence ahead of abstraction. The next
 optimization target is a real internal prepared-index ownership model plus a
-larger shape sweep after index residency exists. Kernel math is still not the
-next bottleneck on the measured smoke and sweep shapes.
+larger shape sweep after cross-call index residency exists. Kernel math is
+still not the next bottleneck on the measured smoke and sweep shapes.
 
 ## Primitive 5: Measurement Contract
 
@@ -423,10 +430,22 @@ evidence only justifies a measured primitive.
    CPU i8 agreement and reduces Python host marshalling to about `1.19e-05s`,
    but the profiled extension call remains about `0.67s`.
 11. Add a no-internal-benchmark serving-style address call to separate
-   extension-call overhead from profiler harness overhead.
-12. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
-   CPU top-k, and end-to-end times.
-13. Only after a measured win, consider public API design.
+   extension-call overhead from profiler harness overhead. Current local
+   result: about `0.262ms` on the smoke shape, preserving
+   `score_delta_max_abs=4.57763671875e-05`.
+12. Sweep the no-internal-benchmark address call across explicit vector-count
+   shapes. Current quiet result: one-shot GPU score ratios range from about
+   `0.524x` to `1.364x` of CPU same-candidate scoring, so the one-shot call is
+   not uniformly faster.
+13. Test in-call prepared-index residency without introducing a hidden global
+   cache. Current quiet result: resident-session per-iteration score ratios
+   range from about `0.281x` to `0.641x` of CPU same-candidate scoring across
+   the six swept cases, but this repeats the same candidate window inside one
+   extension call and does not prove cross-call ownership.
+14. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+   CPU top-k, and end-to-end times after the resident ownership boundary
+   exists.
+15. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 
