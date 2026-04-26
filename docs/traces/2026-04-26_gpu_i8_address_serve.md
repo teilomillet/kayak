@@ -125,6 +125,12 @@ Reason: the measured kernel and copy timings are already small on this shape.
 The next likely bottlenecks are ownership, allocation, repeated index copies,
 and end-to-end rerank composition, not the dim128 dot-product math.
 
+Follow-up: `docs/traces/2026-04-26_gpu_i8_address_serve_sweep.md` adds the
+shape sweep. It kept score agreement across all six cases, but showed the
+current serving call loses on small candidate windows and enlarged document
+counts, while larger copied-index cases move toward break-even or loss. That
+strengthens the decision to solve prepared-index residency before kernel math.
+
 ## Validation
 
 Ran:

@@ -49,6 +49,8 @@ compare_gpu_i8_fastplaid_cuda_raw = "UV_CACHE_DIR=.cache/uv uv run --python 3.11
 compare_gpu_i8_fastplaid_cuda = "bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 5 --force -- pixi run compare_gpu_i8_fastplaid_cuda_raw"
 profile_gpu_i8_real_payload_rerank_raw = "python python/scripts/profile_gpu_i8_real_payload_rerank.py --allow-missing-gpu --emit-quiet-mean --output .cache/kayak/gpu_i8_real_payload_rerank/summary.json --data-root .cache/kayak/gpu_i8_real_payload_rerank/input"
 profile_gpu_i8_real_payload_rerank = "bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 5 --force -- pixi run profile_gpu_i8_real_payload_rerank_raw"
+profile_gpu_i8_address_serve_sweep_raw = "python python/scripts/profile_gpu_i8_address_serve_sweep.py --allow-missing-gpu --emit-quiet-mean --output .cache/kayak/gpu_i8_address_serve_sweep/summary.json"
+profile_gpu_i8_address_serve_sweep = "bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 5 --force -- pixi run profile_gpu_i8_address_serve_sweep_raw"
 bench_python_store_load_raw = "PYTHONPATH=python python python/scripts/bench_store_load.py --store directory --document-count 1000 --vectors-per-document 16 --vector-dim 128 --subset-size 50 --layout packed"
 bench_python_store_load = "bash scripts/run_bench_quiet.sh -- pixi run bench_python_store_load_raw"
 bench_python_store_search_raw = "PYTHONPATH=python python python/scripts/bench_store_search.py --store directory --document-count 1000 --vectors-per-document 16 --vector-dim 128 --candidate-window-size 50 --layout packed --backend mojo_exact_cpu"

@@ -268,6 +268,16 @@ checks the CPU reference, and returns Python scores inside one call. It does
 not reuse a prepared GPU index across calls, and candidate generation plus
 top-k remain on CPU.
 
+Shape-sweep finding: `profile_gpu_i8_address_serve_sweep` kept CPU i8 score
+agreement across six explicit vector-count shapes. The serving call was faster
+than CPU same-candidate scoring for larger score work, such as `candidate256`
+and `query_vectors16`, slower for `candidate32` and `documents512`, and near
+break-even for `doc_vectors32`. The end-to-end CPU-candidate-generation-plus-GPU
+score envelope ranged from about `0.813x` to `1.112x` of CPU candidate
+generation plus CPU score. This is evidence that fixed call overhead and
+repeated prepared-index copies now matter more than dim128 kernel math on the
+swept shapes.
+
 Ownership finding: a first Python-visible `PreparedGpuI8RerankDim128` object was
 not kept because Mojo Python `module.add_type[...]` requires `Writable`, while
 `DeviceContext` cannot derive `Writable`. The current prepared session is
@@ -275,8 +285,8 @@ therefore deliberately one call, not a reusable Python object.
 
 Reason: this keeps measured evidence ahead of abstraction. The next
 optimization target is a real internal prepared-index ownership model plus a
-shape sweep for the serving-shaped call. Kernel math is still not the next
-bottleneck on the measured smoke shape.
+larger shape sweep after index residency exists. Kernel math is still not the
+next bottleneck on the measured smoke and sweep shapes.
 
 ## Primitive 5: Measurement Contract
 

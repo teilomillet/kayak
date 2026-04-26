@@ -41,6 +41,7 @@ from kayak_bridge.gpu_i8_real_payload_score import (  # noqa: E402
     gpu_real_payload_probe_counts,
     write_gpu_i8_real_payload_probe_inputs,
 )
+from kayak_bridge import gpu_i8_address_serve_sweep as address_serve_sweep  # noqa: E402
 from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
     MojoGpuI8AddressServeResult,
     MojoGpuI8PreparedSessionResult,
@@ -617,6 +618,47 @@ class GpuI8RerankContractTests(unittest.TestCase):
         self.assertEqual(payload["score_count"], 2)
         self.assertEqual(payload["host_marshalling_seconds"], 0.1)
         self.assertEqual(payload["extension_call_seconds"], 0.2)
+
+    def test_address_serve_sweep_case_parser_keeps_vector_counts_explicit(
+        self,
+    ) -> None:
+        case = address_serve_sweep.parse_sweep_case(
+            "wide:documents=512,document_vectors=32,"
+            "queries=2,query_vectors=16,candidate_k=128"
+        )
+
+        self.assertEqual(case.name, "wide")
+        self.assertEqual(case.document_count, 512)
+        self.assertEqual(case.document_vector_count, 32)
+        self.assertEqual(case.query_count, 2)
+        self.assertEqual(case.query_vector_count, 16)
+        self.assertEqual(case.candidate_k, 128)
+        self.assertEqual(
+            case.shape(vector_dim=128, top_k=10).total_document_vector_count,
+            16_384,
+        )
+
+    def test_address_serve_sweep_comparison_reports_isolated_and_envelope_ratios(
+        self,
+    ) -> None:
+        comparison = address_serve_sweep.comparison_payload(
+            cpu_candidate_generation_mean_seconds=0.003,
+            cpu_score_mean_seconds=0.002,
+            gpu_parsed={"extension_call_seconds": 0.001},
+        )
+
+        self.assertEqual(
+            comparison[
+                "gpu_address_serve_extension_call_seconds_per_cpu_score_second"
+            ],
+            0.5,
+        )
+        self.assertEqual(
+            comparison[
+                "cpu_candidate_plus_gpu_address_serve_seconds_per_cpu_candidate_plus_score_second"
+            ],
+            0.8,
+        )
 
     def test_candidate_score_profile_derives_rates_and_ratios(self) -> None:
         derived = candidate_profile.derive_candidate_score_metrics(
