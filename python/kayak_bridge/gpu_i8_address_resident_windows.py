@@ -17,6 +17,7 @@ from kayak_bridge.gpu_i8_address_serve_sweep import (
     AddressServeSweepControls,
 )
 from kayak_bridge.mojo_gpu_i8_rerank import (
+    prepare_i8_address_session_handle,
     score_i8_prepared_payload_session_addresses_multi_window,
     score_i8_prepared_payload_session_addresses_repeated,
 )
@@ -196,4 +197,104 @@ def run_multi_window_resident_probe(
         "status": STATUS_OK if parsed["score_agreement_ok"] else "error",
         "parsed": parsed,
         "measurements": [result.to_json_ready()],
+    }
+
+
+def run_cross_call_prepared_handle_probe(
+    *,
+    case: AddressServeSweepCase,
+    shape: SpeedTrackShape,
+    controls: AddressServeSweepControls,
+    capability: MojoGpuCapability,
+    query_windows: np.ndarray,
+    payload: Any,
+    candidate_positions: Sequence[Sequence[Sequence[int]]],
+    reference_scores: Sequence[Sequence[Sequence[float]]],
+) -> dict[str, object] | None:
+    if not capability.available:
+        return None
+    handle = None
+    release_seconds = 0.0
+    try:
+        handle = prepare_i8_address_session_handle(
+            target_accelerator=capability.target_accelerator or "",
+            shape=shape,
+            candidate_k=case.candidate_k,
+            payload=payload,
+        )
+        score_results = []
+        for window_index in range(controls.resident_session_iterations):
+            score_results.append(
+                handle.score(
+                    queries=query_windows[window_index],
+                    candidate_positions_by_query=candidate_positions[window_index],
+                    reference_scores_by_query=reference_scores[window_index],
+                )
+            )
+        release_seconds = handle.close()
+    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        if handle is not None:
+            try:
+                release_seconds = handle.close()
+            except Exception:
+                pass
+        return {"status": "error", "parsed": {}, "error": str(exc)}
+
+    score_extension_total = sum(
+        result.extension_call_seconds for result in score_results
+    )
+    score_host_marshalling_total = sum(
+        result.host_marshalling_seconds for result in score_results
+    )
+    score_delta_max_abs = max(
+        (result.score_delta_max_abs for result in score_results),
+        default=0.0,
+    )
+    score_count_total = sum(result.candidate_score_count for result in score_results)
+    parsed = {
+        "bridge_scope": "explicit_handle_address_resident_multi_window",
+        "candidate_k": case.candidate_k,
+        "candidate_score_count_per_window": (
+            shape.query_count * case.candidate_k
+        ),
+        "candidate_score_count_total": score_count_total,
+        "document_count": shape.document_count,
+        "document_vector_count": shape.document_vector_count,
+        "extension_call_seconds": score_extension_total,
+        "extension_call_seconds_per_window": (
+            score_extension_total / float(controls.resident_session_iterations)
+        ),
+        "host_marshalling_seconds": score_host_marshalling_total,
+        "host_marshalling_seconds_per_window": (
+            score_host_marshalling_total
+            / float(controls.resident_session_iterations)
+        ),
+        "payload_source": "real_kayak_i8_snapshot",
+        "prepare_extension_call_seconds": handle.prepare_extension_call_seconds,
+        "prepare_host_marshalling_seconds": (
+            handle.prepare_host_marshalling_seconds
+        ),
+        "query_count_per_window": shape.query_count,
+        "query_vector_count": shape.query_vector_count,
+        "release_extension_call_seconds": release_seconds,
+        "score_agreement_ok": score_delta_max_abs <= 0.0001,
+        "score_delta_max_abs": score_delta_max_abs,
+        "score_extension_call_seconds_total": score_extension_total,
+        "score_extension_call_seconds_per_window": (
+            score_extension_total / float(controls.resident_session_iterations)
+        ),
+        "total_document_vector_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "vector_dim": shape.vector_dim,
+        "window_count": controls.resident_session_iterations,
+    }
+    return {
+        "status": STATUS_OK if parsed["score_agreement_ok"] else "error",
+        "parsed": parsed,
+        "measurements": [
+            handle.to_json_ready(),
+            *(result.to_json_ready() for result in score_results),
+            {"release_extension_call_seconds": release_seconds},
+        ],
     }

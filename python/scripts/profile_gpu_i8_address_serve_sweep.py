@@ -133,6 +133,12 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
                 "gpu_address_resident_multi_window_extension_call_seconds_per_window"
             ),
         )
+        print_quiet_mean(
+            f"gpu_i8_address_serve_sweep_{name}_prepared_handle_score",
+            comparison.get(
+                "gpu_address_prepared_handle_score_extension_call_seconds_per_window"
+            ),
+        )
 
 
 def print_quiet_mean(section: str, value: object) -> None:

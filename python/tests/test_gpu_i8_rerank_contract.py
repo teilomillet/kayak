@@ -45,6 +45,7 @@ from kayak_bridge import gpu_i8_address_serve_sweep as address_serve_sweep  # no
 from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
     MojoGpuI8AddressMultiWindowSessionResult,
     MojoGpuI8AddressResidentSessionResult,
+    MojoGpuI8AddressSessionHandle,
     MojoGpuI8AddressServeResult,
     MojoGpuI8PreparedSessionResult,
     MojoGpuI8RerankBridgeResult,
@@ -658,6 +659,37 @@ class GpuI8RerankContractTests(unittest.TestCase):
         self.assertEqual(payload["window_count"], 4)
         self.assertEqual(payload["extension_call_seconds_per_window"], 0.05)
 
+    def test_address_session_handle_reports_explicit_prepare_boundary(
+        self,
+    ) -> None:
+        shape = bench_contract.SpeedTrackShape(
+            document_count=8,
+            document_vector_count=4,
+            query_count=2,
+            query_vector_count=3,
+            vector_dim=128,
+            top_k=5,
+            update_document_count=0,
+        )
+        handle = MojoGpuI8AddressSessionHandle(
+            target_accelerator="nvidia:sm_89",
+            handle=123,
+            shape=shape,
+            candidate_k=5,
+            prepare_host_marshalling_seconds=0.001,
+            prepare_extension_call_seconds=0.002,
+        )
+
+        payload = handle.to_json_ready()
+
+        self.assertTrue(payload["handle_open"])
+        self.assertEqual(payload["document_count"], 8)
+        self.assertEqual(payload["document_vector_count"], 4)
+        self.assertEqual(payload["query_count"], 2)
+        self.assertEqual(payload["query_vector_count"], 3)
+        self.assertEqual(payload["candidate_k"], 5)
+        self.assertEqual(payload["prepare_extension_call_seconds"], 0.002)
+
     def test_address_serve_sweep_case_parser_keeps_vector_counts_explicit(
         self,
     ) -> None:
@@ -688,6 +720,9 @@ class GpuI8RerankContractTests(unittest.TestCase):
             cpu_multi_window_candidate_generation_mean_seconds_per_window=0.004,
             cpu_multi_window_score_mean_seconds_per_window=0.002,
             multi_window_parsed={"extension_call_seconds_per_window": 0.001},
+            prepared_handle_parsed={
+                "score_extension_call_seconds_per_window": 0.00075
+            },
         )
 
         self.assertEqual(
@@ -725,6 +760,18 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 "cpu_multi_window_candidate_plus_gpu_resident_multi_window_seconds_per_cpu_multi_window_candidate_plus_score_second"
             ],
             5.0 / 6.0,
+        )
+        self.assertEqual(
+            comparison[
+                "gpu_address_prepared_handle_score_seconds_per_cpu_multi_window_score_second"
+            ],
+            0.375,
+        )
+        self.assertEqual(
+            comparison[
+                "cpu_multi_window_candidate_plus_gpu_prepared_handle_score_seconds_per_cpu_multi_window_candidate_plus_score_second"
+            ],
+            4.75 / 6.0,
         )
 
     def test_candidate_score_profile_derives_rates_and_ratios(self) -> None:

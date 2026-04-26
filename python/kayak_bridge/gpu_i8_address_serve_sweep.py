@@ -184,6 +184,7 @@ def comparison_payload(
     ) = None,
     cpu_multi_window_score_mean_seconds_per_window: float | None = None,
     multi_window_parsed: dict[str, object] | None = None,
+    prepared_handle_parsed: dict[str, object] | None = None,
 ) -> dict[str, float | None]:
     gpu_extension_call = optional_float(gpu_parsed.get("extension_call_seconds"))
     resident = resident_parsed if resident_parsed is not None else {}
@@ -193,6 +194,12 @@ def comparison_payload(
     multi_window = multi_window_parsed if multi_window_parsed is not None else {}
     multi_window_per_window = optional_float(
         multi_window.get("extension_call_seconds_per_window")
+    )
+    prepared_handle = (
+        prepared_handle_parsed if prepared_handle_parsed is not None else {}
+    )
+    prepared_handle_per_window = optional_float(
+        prepared_handle.get("score_extension_call_seconds_per_window")
     )
     cpu_candidate_plus_score = (
         cpu_candidate_generation_mean_seconds + cpu_score_mean_seconds
@@ -212,6 +219,10 @@ def comparison_payload(
     cpu_multi_window_candidate_plus_gpu_score = sum_optional(
         cpu_multi_window_candidate_generation_mean_seconds_per_window,
         multi_window_per_window,
+    )
+    cpu_multi_window_candidate_plus_prepared_handle_score = sum_optional(
+        cpu_multi_window_candidate_generation_mean_seconds_per_window,
+        prepared_handle_per_window,
     )
     return {
         "cpu_i8_candidate_generation_mean_seconds": (
@@ -237,6 +248,9 @@ def comparison_payload(
         "gpu_address_resident_multi_window_extension_call_seconds_per_window": (
             multi_window_per_window
         ),
+        "gpu_address_prepared_handle_score_extension_call_seconds_per_window": (
+            prepared_handle_per_window
+        ),
         "cpu_candidate_generation_plus_gpu_address_serve_seconds": (
             cpu_candidate_plus_gpu_score
         ),
@@ -245,6 +259,9 @@ def comparison_payload(
         ),
         "cpu_multi_window_candidate_generation_plus_gpu_resident_multi_window_seconds_per_window": (
             cpu_multi_window_candidate_plus_gpu_score
+        ),
+        "cpu_multi_window_candidate_generation_plus_gpu_prepared_handle_score_seconds_per_window": (
+            cpu_multi_window_candidate_plus_prepared_handle_score
         ),
         "gpu_address_serve_extension_call_seconds_per_cpu_score_second": ratio(
             gpu_extension_call,
@@ -258,6 +275,10 @@ def comparison_payload(
             multi_window_per_window,
             cpu_multi_window_score_mean_seconds_per_window,
         ),
+        "gpu_address_prepared_handle_score_seconds_per_cpu_multi_window_score_second": ratio(
+            prepared_handle_per_window,
+            cpu_multi_window_score_mean_seconds_per_window,
+        ),
         "cpu_candidate_plus_gpu_address_serve_seconds_per_cpu_candidate_plus_score_second": ratio(
             cpu_candidate_plus_gpu_score,
             cpu_candidate_plus_score,
@@ -268,6 +289,10 @@ def comparison_payload(
         ),
         "cpu_multi_window_candidate_plus_gpu_resident_multi_window_seconds_per_cpu_multi_window_candidate_plus_score_second": ratio(
             cpu_multi_window_candidate_plus_gpu_score,
+            cpu_multi_window_candidate_plus_score,
+        ),
+        "cpu_multi_window_candidate_plus_gpu_prepared_handle_score_seconds_per_cpu_multi_window_candidate_plus_score_second": ratio(
+            cpu_multi_window_candidate_plus_prepared_handle_score,
             cpu_multi_window_candidate_plus_score,
         ),
     }
@@ -321,6 +346,18 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         )
         for row in ok_rows
     ]
+    prepared_handle_ratios = [
+        row["comparison"].get(
+            "gpu_address_prepared_handle_score_seconds_per_cpu_multi_window_score_second"
+        )
+        for row in ok_rows
+    ]
+    prepared_handle_envelope_ratios = [
+        row["comparison"].get(
+            "cpu_multi_window_candidate_plus_gpu_prepared_handle_score_seconds_per_cpu_multi_window_candidate_plus_score_second"
+        )
+        for row in ok_rows
+    ]
     return {
         "case_count": len(rows),
         "ok_case_count": len(ok_rows),
@@ -347,6 +384,14 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         ),
         "worst_candidate_plus_resident_multi_window_ratio": max_float(
             multi_window_envelope_ratios
+        ),
+        "best_prepared_handle_gpu_ratio": min_float(prepared_handle_ratios),
+        "worst_prepared_handle_gpu_ratio": max_float(prepared_handle_ratios),
+        "best_candidate_plus_prepared_handle_ratio": min_float(
+            prepared_handle_envelope_ratios
+        ),
+        "worst_candidate_plus_prepared_handle_ratio": max_float(
+            prepared_handle_envelope_ratios
         ),
     }
 

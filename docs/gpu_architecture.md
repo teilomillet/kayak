@@ -270,11 +270,11 @@ top-k remain on CPU.
 
 Shape-sweep finding: `profile_gpu_i8_address_serve_sweep` kept CPU i8 score
 agreement across six explicit vector-count shapes. The one-shot serving call
-was faster than CPU same-candidate scoring for larger score work, such as
-`candidate256` and `query_vectors16`, slower for `candidate32` and
-`documents512`, and slightly slower for `doc_vectors32`. The end-to-end
-CPU-candidate-generation-plus-GPU score envelope ranged from about `0.820x` to
-`1.103x` of CPU candidate generation plus CPU score.
+remains useful as a fixed-overhead baseline, but after adding the explicit
+prepared handle the one-shot serving call is no longer the best measured
+implementation. The latest quiet sweep reports one-shot GPU score ratios from
+about `0.723x` to `2.067x` of CPU same-candidate scoring, so the one-shot call
+is still not uniformly faster.
 
 Resident-session finding: an in-call repeated address session copies the
 prepared index tensors once, then scores the same query and candidate window
@@ -285,10 +285,10 @@ CPU-candidate-generation-plus-resident-iteration envelope ranged from about
 
 Multi-window resident finding: a second in-call resident probe copies the same
 prepared index tensors once, then scores four different query/candidate windows
-inside the call. Its per-window score time ranged from about `0.331x` to
-`0.318x` to `0.558x` of CPU same-candidate scoring per window, and the
+inside the call. Its latest per-window score time ranged from about `0.327x`
+to `0.588x` of CPU same-candidate scoring per window, and the
 CPU-candidate-generation-plus-multi-window-resident envelope ranged from about
-`0.746x` to `0.877x` of CPU candidate generation plus CPU score per window.
+`0.750x` to `0.885x` of CPU candidate generation plus CPU score per window.
 This is evidence that prepared-index residency and allocation reuse are likely
 higher leverage than immediate dim128 kernel rewrites on the swept shapes. It
 also debunks the narrower hypothesis that the resident win only comes from
@@ -296,13 +296,23 @@ repeating one identical candidate window.
 
 Ownership finding: a first Python-visible `PreparedGpuI8RerankDim128` object was
 not kept because Mojo Python `module.add_type[...]` requires `Writable`, while
-`DeviceContext` cannot derive `Writable`. The current prepared session is
-therefore deliberately one call, not a reusable Python object.
+`DeviceContext` cannot derive `Writable`. A follow-up probe verified that a
+heap-owned Mojo struct can still own `DeviceContext`, `DeviceBuffer`, and
+`HostBuffer` fields and be controlled by an explicit integer handle with
+`prepare -> score -> release`. This is not a public object and not a hidden
+cache; it is unsafe internal ownership with explicit release.
+
+Explicit-handle finding: the latest quiet
+`profile_gpu_i8_address_serve_sweep` row keeps the prepared i8 index resident
+across separate Python score calls. Prepared-handle score ratios ranged from
+about `0.244x` to `0.361x` of CPU same-candidate scoring per window, and the
+CPU-candidate-generation-plus-prepared-handle envelope ranged from about
+`0.719x` to `0.815x` of CPU candidate generation plus CPU scoring. All six
+cases preserved CPU i8 score agreement.
 
 Reason: this keeps measured evidence ahead of abstraction. The next
-optimization target is a real internal prepared-index ownership model plus a
-larger shape sweep after cross-call index residency exists. Kernel math is
-still not the next bottleneck on the measured smoke and sweep shapes.
+optimization target is the candidate-score return and top-k boundary after the
+explicit handle, not immediate dim128 kernel rewrites.
 
 ## Primitive 5: Measurement Contract
 
@@ -453,12 +463,18 @@ evidence only justifies a measured primitive.
    extension call and does not prove cross-call ownership.
 14. Test different query/candidate windows inside the same in-call resident
    session. Current quiet result: multi-window per-window score ratios range
-   from about `0.318x` to `0.558x` of CPU same-candidate scoring per window
+   from about `0.327x` to `0.588x` of CPU same-candidate scoring per window
    across the six swept cases, while preserving CPU i8 score agreement.
-15. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+15. Test explicit cross-call prepared-index ownership without a public GPU
+   object or hidden global cache. Current quiet result: prepared-handle
+   per-window score ratios range from about `0.244x` to `0.361x` of CPU
+   same-candidate scoring, and CPU candidate generation plus prepared-handle
+   GPU scoring is faster than CPU candidate generation plus CPU score in all
+   six swept cases.
+16. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-16. Only after a measured win, consider public API design.
+17. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

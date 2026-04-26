@@ -24,6 +24,8 @@ query/candidate windows rather than only repeating one window.
   scores the same candidate window repeatedly
 - an in-call multi-window resident-session probe that copies the prepared index
   once and scores different query/candidate windows
+- an explicit prepared-handle probe that keeps the prepared index resident
+  across separate Python score calls and then releases the handle
 - `--resident-session-iterations`
 
 Reason: this keeps the sweep separate from the broader real-payload profiler.
@@ -49,11 +51,13 @@ Each case reports:
 - GPU address serving extension-call timing
 - GPU address resident-session extension-call timing per repeated iteration
 - GPU address resident multi-window timing per window
+- GPU address prepared-handle prepare, score-per-window, and release timing
 - CPU candidate generation plus GPU serving-call envelope
 - CPU candidate generation plus GPU resident-session envelopes
+- CPU candidate generation plus GPU prepared-handle score envelope
 - score agreement against CPU i8
 
-It does not:
+The one-shot and in-call resident rows do not:
 
 - reuse a GPU-resident prepared index across Python calls
 - include CPU or GPU top-k timing
@@ -66,6 +70,15 @@ The resident rows do:
   one extension call
 - reuse those device buffers for `resident_session_iterations`
 - measure both repeated same-window scoring and different-window scoring
+
+The prepared-handle row does:
+
+- copy token codes, token scales, and document offsets to device once during
+  explicit prepare
+- score different query/candidate windows across separate Python calls
+- explicitly release the handle
+
+It still does not expose a public GPU backend or run top-k on GPU.
 
 Reason: this is still an internal primitive measurement. It should not be
 presented as full search speedup or as proof of safe cross-call GPU object
@@ -213,3 +226,44 @@ Observed:
 - quiet address serving sweep status: `ok`
 - quiet wrapper emitted `30` sections, including resident multi-window timing
   for all six cases
+
+## Follow-Up: Explicit Prepared Handle
+
+The follow-up explicit-handle row is documented in
+`docs/traces/2026-04-26_gpu_i8_explicit_handle.md`.
+
+Command:
+
+```bash
+pixi run profile_gpu_i8_address_serve_sweep
+```
+
+Artifacts:
+
+- report: `.cache/kayak/gpu_i8_address_serve_sweep/summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260426T170855Z`
+
+Prepared-handle results:
+
+| case | prepared score/window s | prepared/CPU score | CPU cand+prepared/CPU cand+score | prepare s | max delta |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| baseline | `0.00010364099944126792` | `0.35092087146580947` | `0.7693998184485685` | `0.00023694199990131892` | `0.00006103515625` |
+| candidate32 | `0.000048795999646245036` | `0.33459425718026564` | `0.8147401115617653` | `0.00023716199939372018` | `0.0000457763671875` |
+| candidate256 | `0.00016373325024687801` | `0.3293083221115956` | `0.7197112281147191` | `0.0002375229996687267` | `0.0000762939453125` |
+| query_vectors16 | `0.0001246552496922959` | `0.24400748478778` | `0.7192502774635106` | `0.0002370729998801835` | `0.000091552734375` |
+| doc_vectors32 | `0.00014970674965297803` | `0.3610252937041942` | `0.7228157684618225` | `0.00045214400051918346` | `0.00006103515625` |
+| documents512 | `0.00009989149975808687` | `0.33530295294556844` | `0.8101282125737786` | `0.00045230400064610876` | `0.00006103515625` |
+
+Latest summary:
+
+- ok cases: `6 / 6`
+- best prepared-handle isolated score ratio: `0.24400748478778`
+- worst prepared-handle isolated score ratio: `0.3610252937041942`
+- best CPU-candidate-plus-prepared-handle ratio: `0.7192502774635106`
+- worst CPU-candidate-plus-prepared-handle ratio: `0.8147401115617653`
+- quiet wrapper sections: `36`
+
+Decision update: the next optimization target is the score-return and top-k
+boundary after the explicit handle. Reason: cross-call index residency now wins
+on every swept case, so kernel rewrites are no longer the first unresolved
+bottleneck.

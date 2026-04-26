@@ -1,7 +1,8 @@
 import std.benchmark as benchmark
 from std.gpu import global_idx
-from std.gpu.host import DeviceContext
+from std.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.math import abs
+from std.memory import alloc
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -91,6 +92,314 @@ def reduce_i8_candidate_score_kernel_dynamic(
         total += best_score
 
     score_out[score_index] = total
+
+
+struct PreparedGpuI8AddressSession(Movable):
+    var ctx: DeviceContext
+    var codes_device: DeviceBuffer[DType.int8]
+    var scales_device: DeviceBuffer[DType.float32]
+    var offsets_device: DeviceBuffer[DType.int64]
+    var query_device: DeviceBuffer[DType.float32]
+    var candidate_device: DeviceBuffer[DType.int64]
+    var partial_score_device: DeviceBuffer[DType.float32]
+    var score_device: DeviceBuffer[DType.float32]
+    var query_host: HostBuffer[DType.float32]
+    var candidate_host: HostBuffer[DType.int64]
+    var score_host: HostBuffer[DType.float32]
+    var document_count: Int
+    var document_vector_count: Int
+    var query_count: Int
+    var query_vector_count: Int
+    var candidate_k: Int
+    var query_value_count: Int
+    var candidate_score_count: Int
+    var partial_score_count: Int
+    var grid_x: Int
+    var partial_grid_x: Int
+
+    def __init__(
+        out self,
+        py_token_codes: UnsafePointer[Int8, MutAnyOrigin],
+        py_token_scales: UnsafePointer[Float32, MutAnyOrigin],
+        py_doc_offsets: UnsafePointer[Int64, MutAnyOrigin],
+        document_count: Int,
+        document_vector_count: Int,
+        query_count: Int,
+        query_vector_count: Int,
+        candidate_k: Int,
+    ) raises:
+        self.ctx = DeviceContext()
+        self.document_count = document_count
+        self.document_vector_count = document_vector_count
+        self.query_count = query_count
+        self.query_vector_count = query_vector_count
+        self.candidate_k = candidate_k
+
+        var total_document_vector_count = document_count * document_vector_count
+        var token_code_count = total_document_vector_count * VECTOR_DIM
+        var doc_offset_count = document_count + 1
+        self.query_value_count = query_count * query_vector_count * VECTOR_DIM
+        self.candidate_score_count = query_count * candidate_k
+        self.partial_score_count = (
+            self.candidate_score_count
+            * query_vector_count
+            * document_vector_count
+        )
+        self.grid_x = (
+            self.candidate_score_count + BLOCK_SIZE - 1
+        ) // BLOCK_SIZE
+        self.partial_grid_x = (
+            self.partial_score_count + BLOCK_SIZE - 1
+        ) // BLOCK_SIZE
+
+        self.codes_device = self.ctx.enqueue_create_buffer[DType.int8](
+            token_code_count
+        )
+        self.scales_device = self.ctx.enqueue_create_buffer[DType.float32](
+            total_document_vector_count
+        )
+        self.offsets_device = self.ctx.enqueue_create_buffer[DType.int64](
+            doc_offset_count
+        )
+        self.query_device = self.ctx.enqueue_create_buffer[DType.float32](
+            self.query_value_count
+        )
+        self.candidate_device = self.ctx.enqueue_create_buffer[DType.int64](
+            self.candidate_score_count
+        )
+        self.partial_score_device = self.ctx.enqueue_create_buffer[
+            DType.float32
+        ](self.partial_score_count)
+        self.score_device = self.ctx.enqueue_create_buffer[DType.float32](
+            self.candidate_score_count
+        )
+        self.query_host = self.ctx.enqueue_create_host_buffer[DType.float32](
+            self.query_value_count
+        )
+        self.candidate_host = self.ctx.enqueue_create_host_buffer[DType.int64](
+            self.candidate_score_count
+        )
+        self.score_host = self.ctx.enqueue_create_host_buffer[DType.float32](
+            self.candidate_score_count
+        )
+
+        var codes_host = self.ctx.enqueue_create_host_buffer[DType.int8](
+            token_code_count
+        )
+        var scales_host = self.ctx.enqueue_create_host_buffer[DType.float32](
+            total_document_vector_count
+        )
+        var offsets_host = self.ctx.enqueue_create_host_buffer[DType.int64](
+            doc_offset_count
+        )
+        self.ctx.synchronize()
+
+        for index in range(token_code_count):
+            codes_host[index] = py_token_codes[index]
+        for index in range(total_document_vector_count):
+            scales_host[index] = py_token_scales[index]
+        for index in range(doc_offset_count):
+            offsets_host[index] = py_doc_offsets[index]
+
+        self.codes_device.enqueue_copy_from(codes_host)
+        self.scales_device.enqueue_copy_from(scales_host)
+        self.offsets_device.enqueue_copy_from(offsets_host)
+        self.ctx.synchronize()
+
+    def score_window(
+        mut self,
+        py_query_values: UnsafePointer[Float32, MutAnyOrigin],
+        py_candidate_positions: UnsafePointer[Int64, MutAnyOrigin],
+        py_reference_scores: UnsafePointer[Float32, MutAnyOrigin],
+    ) raises -> PythonObject:
+        for index in range(self.query_value_count):
+            self.query_host[index] = py_query_values[index]
+
+        for index in range(self.candidate_score_count):
+            var candidate_position = py_candidate_positions[index]
+            if candidate_position < 0 or candidate_position >= Int64(
+                self.document_count
+            ):
+                raise Error(
+                    "candidate position outside prepared index document range"
+                )
+            self.candidate_host[index] = candidate_position
+
+        self.query_device.enqueue_copy_from(self.query_host)
+        self.candidate_device.enqueue_copy_from(self.candidate_host)
+        self.ctx.synchronize()
+
+        self.ctx.enqueue_function[
+            score_i8_candidate_token_kernel_dynamic,
+            score_i8_candidate_token_kernel_dynamic,
+        ](
+            self.query_device,
+            self.codes_device,
+            self.scales_device,
+            self.offsets_device,
+            self.candidate_device,
+            self.partial_score_device,
+            self.query_vector_count,
+            self.document_vector_count,
+            self.candidate_k,
+            self.partial_score_count,
+            grid_dim=self.partial_grid_x,
+            block_dim=BLOCK_SIZE,
+        )
+        self.ctx.enqueue_function[
+            reduce_i8_candidate_score_kernel_dynamic,
+            reduce_i8_candidate_score_kernel_dynamic,
+        ](
+            self.partial_score_device,
+            self.score_device,
+            self.query_vector_count,
+            self.document_vector_count,
+            self.candidate_score_count,
+            grid_dim=self.grid_x,
+            block_dim=BLOCK_SIZE,
+        )
+        self.ctx.synchronize()
+
+        self.score_device.enqueue_copy_to(self.score_host)
+        self.ctx.synchronize()
+
+        var score_delta_max_abs = Float64(0.0)
+        var py_scores = Python.list()
+        for score_index in range(self.candidate_score_count):
+            var reference_score = py_reference_scores[score_index]
+            var score_delta = abs(
+                Float64(self.score_host[score_index]) - Float64(reference_score)
+            )
+            if score_delta > score_delta_max_abs:
+                score_delta_max_abs = score_delta
+            py_scores.append(Python.float(self.score_host[score_index]))
+
+        var py_result = Python.list()
+        py_result.append(Python.float(score_delta_max_abs))
+        py_result.append(Python.int(self.candidate_score_count))
+        py_result.append(py_scores)
+        return py_result
+
+
+def validate_address_session_shape(
+    document_count: Int,
+    document_vector_count: Int,
+    query_count: Int,
+    query_vector_count: Int,
+    candidate_k: Int,
+) raises:
+    if document_count <= 0:
+        raise Error("document_count must be positive")
+    if document_vector_count <= 0:
+        raise Error("document_vector_count must be positive")
+    if query_count <= 0:
+        raise Error("query_count must be positive")
+    if query_vector_count <= 0:
+        raise Error("query_vector_count must be positive")
+    if candidate_k <= 0:
+        raise Error("candidate_k must be positive")
+    if candidate_k > document_count:
+        raise Error("candidate_k must not exceed document_count")
+
+
+def prepare_i8_address_session_handle(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var token_codes_address = Int(py=py_request[0])
+    var token_scales_address = Int(py=py_request[1])
+    var doc_offsets_address = Int(py=py_request[2])
+    var document_count = Int(py=py_request[3])
+    var document_vector_count = Int(py=py_request[4])
+    var query_count = Int(py=py_request[5])
+    var query_vector_count = Int(py=py_request[6])
+    var candidate_k = Int(py=py_request[7])
+    if token_codes_address == 0:
+        raise Error("token_codes address must be non-zero")
+    if token_scales_address == 0:
+        raise Error("token_scales address must be non-zero")
+    if doc_offsets_address == 0:
+        raise Error("doc_offsets address must be non-zero")
+    validate_address_session_shape(
+        document_count,
+        document_vector_count,
+        query_count,
+        query_vector_count,
+        candidate_k,
+    )
+
+    var py_token_codes = UnsafePointer[Int8, MutAnyOrigin](
+        unsafe_from_address=token_codes_address
+    )
+    var py_token_scales = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=token_scales_address
+    )
+    var py_doc_offsets = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=doc_offsets_address
+    )
+    var session = alloc[PreparedGpuI8AddressSession](1)
+    session.init_pointee_move(
+        PreparedGpuI8AddressSession(
+            py_token_codes,
+            py_token_scales,
+            py_doc_offsets,
+            document_count,
+            document_vector_count,
+            query_count,
+            query_vector_count,
+            candidate_k,
+        )
+    )
+    return Python.int(session.__int__())
+
+
+def score_i8_address_session_handle(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var handle = Int(py=py_request[0])
+    var query_address = Int(py=py_request[1])
+    var candidate_positions_address = Int(py=py_request[2])
+    var reference_scores_address = Int(py=py_request[3])
+    if handle == 0:
+        raise Error("prepared GPU i8 address session handle must be non-zero")
+    if query_address == 0:
+        raise Error("query address must be non-zero")
+    if candidate_positions_address == 0:
+        raise Error("candidate_positions address must be non-zero")
+    if reference_scores_address == 0:
+        raise Error("reference_scores address must be non-zero")
+
+    var session = UnsafePointer[PreparedGpuI8AddressSession, MutAnyOrigin](
+        unsafe_from_address=handle
+    )
+    var py_query_values = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=query_address
+    )
+    var py_candidate_positions = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=candidate_positions_address
+    )
+    var py_reference_scores = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=reference_scores_address
+    )
+    return session[].score_window(
+        py_query_values,
+        py_candidate_positions,
+        py_reference_scores,
+    )
+
+
+def release_i8_address_session_handle(
+    py_handle: PythonObject,
+) raises -> PythonObject:
+    var handle = Int(py=py_handle)
+    if handle == 0:
+        raise Error("prepared GPU i8 address session handle must be non-zero")
+    var session = UnsafePointer[PreparedGpuI8AddressSession, MutAnyOrigin](
+        unsafe_from_address=handle
+    )
+    session[].ctx.synchronize()
+    session.destroy_pointee()
+    session.free()
+    return Python.str("released")
 
 
 def score_i8_real_payload_once(py_request: PythonObject) raises -> PythonObject:
@@ -1306,6 +1615,23 @@ def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
                 "Verify that the GPU-targeted Mojo Python extension can create"
                 " a device context."
             ),
+        )
+        module.def_function[prepare_i8_address_session_handle](
+            "prepare_i8_address_session_handle",
+            docstring=(
+                "Prepare an explicit heap-owned GPU i8 address session handle."
+            ),
+        )
+        module.def_function[score_i8_address_session_handle](
+            "score_i8_address_session_handle",
+            docstring=(
+                "Score one query/candidate window with an explicit GPU i8"
+                " address session handle."
+            ),
+        )
+        module.def_function[release_i8_address_session_handle](
+            "release_i8_address_session_handle",
+            docstring="Release an explicit GPU i8 address session handle.",
         )
         module.def_function[score_i8_real_payload_once](
             "score_i8_real_payload_once",

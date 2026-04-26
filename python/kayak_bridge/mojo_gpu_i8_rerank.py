@@ -168,9 +168,151 @@ class MojoGpuI8AddressMultiWindowSessionResult:
         }
 
 
+@dataclass(slots=True)
+class MojoGpuI8AddressSessionHandle:
+    target_accelerator: str
+    handle: int
+    shape: Any
+    candidate_k: int
+    prepare_host_marshalling_seconds: float
+    prepare_extension_call_seconds: float
+    _closed: bool = False
+
+    def score(
+        self,
+        *,
+        queries: np.ndarray,
+        candidate_positions_by_query: Sequence[Sequence[int]],
+        reference_scores_by_query: Sequence[Sequence[float]],
+    ) -> MojoGpuI8AddressServeResult:
+        if self._closed or self.handle == 0:
+            raise RuntimeError("GPU i8 address session handle is closed")
+
+        marshalling_started_at = time.perf_counter()
+        query_values = _float32_array(queries)
+        expected_query_values = (
+            int(self.shape.query_count)
+            * int(self.shape.query_vector_count)
+            * int(self.shape.vector_dim)
+        )
+        if query_values.size != expected_query_values:
+            raise ValueError("queries shape must match the prepared handle shape")
+        candidate_positions = _flatten_int_rows_array(
+            candidate_positions_by_query,
+            expected_rows=int(self.shape.query_count),
+            expected_cols=int(self.candidate_k),
+            name="candidate_positions_by_query",
+        )
+        reference_scores = _flatten_float_rows_array(
+            reference_scores_by_query,
+            expected_rows=int(self.shape.query_count),
+            expected_cols=int(self.candidate_k),
+            name="reference_scores_by_query",
+        )
+        host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+        module = load_module(target_accelerator=self.target_accelerator)
+        request = [
+            int(self.handle),
+            _array_address(query_values),
+            _array_address(candidate_positions),
+            _array_address(reference_scores),
+        ]
+        extension_started_at = time.perf_counter()
+        raw_result = module.score_i8_address_session_handle(request)
+        extension_call_seconds = time.perf_counter() - extension_started_at
+
+        if len(raw_result) != 3:
+            raise RuntimeError(
+                "GPU i8 address session handle returned an unexpected result shape"
+            )
+
+        scores = tuple(float(value) for value in raw_result[2])
+        return MojoGpuI8AddressServeResult(
+            host_marshalling_seconds=host_marshalling_seconds,
+            extension_call_seconds=extension_call_seconds,
+            score_delta_max_abs=float(raw_result[0]),
+            candidate_score_count=int(raw_result[1]),
+            scores=scores,
+        )
+
+    def close(self) -> float:
+        if self._closed or self.handle == 0:
+            return 0.0
+        module = load_module(target_accelerator=self.target_accelerator)
+        extension_started_at = time.perf_counter()
+        module.release_i8_address_session_handle(int(self.handle))
+        extension_call_seconds = time.perf_counter() - extension_started_at
+        self.handle = 0
+        self._closed = True
+        return extension_call_seconds
+
+    def __enter__(self) -> "MojoGpuI8AddressSessionHandle":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        self.close()
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "handle_open": not self._closed,
+            "prepare_host_marshalling_seconds": (
+                self.prepare_host_marshalling_seconds
+            ),
+            "prepare_extension_call_seconds": self.prepare_extension_call_seconds,
+            "document_count": int(self.shape.document_count),
+            "document_vector_count": int(self.shape.document_vector_count),
+            "query_count": int(self.shape.query_count),
+            "query_vector_count": int(self.shape.query_vector_count),
+            "candidate_k": int(self.candidate_k),
+            "vector_dim": int(self.shape.vector_dim),
+        }
+
+
 def gpu_extension_device_probe(*, target_accelerator: str) -> str:
     module = load_module(target_accelerator=target_accelerator)
     return str(module.gpu_extension_device_probe())
+
+
+def prepare_i8_address_session_handle(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    candidate_k: int,
+    payload: KayakPlaidI8PayloadSnapshot,
+) -> MojoGpuI8AddressSessionHandle:
+    marshalling_started_at = time.perf_counter()
+    token_codes = _int8_array(payload.token_codes)
+    token_scales = _float32_array(payload.token_scales)
+    doc_offsets = _int64_array(payload.doc_offsets)
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    module = load_module(target_accelerator=target_accelerator)
+    request = [
+        _array_address(token_codes),
+        _array_address(token_scales),
+        _array_address(doc_offsets),
+        int(shape.document_count),
+        int(shape.document_vector_count),
+        int(shape.query_count),
+        int(shape.query_vector_count),
+        int(candidate_k),
+    ]
+    extension_started_at = time.perf_counter()
+    raw_handle = module.prepare_i8_address_session_handle(request)
+    extension_call_seconds = time.perf_counter() - extension_started_at
+
+    handle = int(raw_handle)
+    if handle == 0:
+        raise RuntimeError("GPU i8 address session returned a null handle")
+    return MojoGpuI8AddressSessionHandle(
+        target_accelerator=target_accelerator,
+        handle=handle,
+        shape=shape,
+        candidate_k=int(candidate_k),
+        prepare_host_marshalling_seconds=host_marshalling_seconds,
+        prepare_extension_call_seconds=extension_call_seconds,
+    )
 
 
 def score_i8_real_payload_once(
