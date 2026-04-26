@@ -29,6 +29,7 @@ from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
     profile_i8_prepared_payload_session,
     profile_i8_prepared_payload_session_addresses,
     profile_i8_prepared_payload_session_ndarray,
+    score_i8_prepared_payload_session_addresses,
     score_i8_real_payload_once,
 )
 from kayak_bridge.plaid_approx import KayakPlaidApproxConfig, KayakPlaidApproxIndex
@@ -55,6 +56,7 @@ STATUS_BLOCKED_GPU_PREPARED_NDARRAY_BRIDGE_FAILED = (
 STATUS_BLOCKED_GPU_PREPARED_ADDRESS_BRIDGE_FAILED = (
     "blocked_gpu_prepared_address_bridge_failed"
 )
+STATUS_BLOCKED_GPU_ADDRESS_SERVE_FAILED = "blocked_gpu_address_serve_failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +222,7 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
     prepared_bridge_probe: dict[str, object] | None = None
     prepared_ndarray_bridge_probe: dict[str, object] | None = None
     prepared_address_bridge_probe: dict[str, object] | None = None
+    address_serve_probe: dict[str, object] | None = None
     if capability.available:
         gpu_probe = run_gpu_i8_real_payload_score_probe(
             shape,
@@ -271,6 +274,17 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             warmup_iterations=args.warmup_iterations,
             measurement_iterations=args.measurement_iterations,
         )
+        address_serve_probe = run_gpu_i8_address_serve_probe(
+            shape=shape,
+            candidate_k=args.candidate_k,
+            target_accelerator=capability.target_accelerator,
+            queries=inputs.queries,
+            payload=payload,
+            candidate_positions_by_query=candidate_positions,
+            reference_scores_by_query=reference_scores,
+            warmup_iterations=args.warmup_iterations,
+            measurement_iterations=args.measurement_iterations,
+        )
     status = report_status(
         capability=capability,
         gpu_probe=gpu_probe,
@@ -278,6 +292,7 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
         prepared_bridge_probe=prepared_bridge_probe,
         prepared_ndarray_bridge_probe=prepared_ndarray_bridge_probe,
         prepared_address_bridge_probe=prepared_address_bridge_probe,
+        address_serve_probe=address_serve_probe,
     )
 
     parsed = parsed_payload(gpu_probe)
@@ -285,6 +300,7 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
     prepared_bridge_parsed = parsed_payload(prepared_bridge_probe)
     prepared_ndarray_bridge_parsed = parsed_payload(prepared_ndarray_bridge_probe)
     prepared_address_bridge_parsed = parsed_payload(prepared_address_bridge_probe)
+    address_serve_parsed = parsed_payload(address_serve_probe)
     return (
         {
             "schema_version": 1,
@@ -392,12 +408,28 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
                     else None
                 ),
             },
+            "gpu_real_payload_prepared_address_serve": {
+                "status": (
+                    address_serve_probe.get("status")
+                    if address_serve_probe is not None
+                    else STATUS_PARTIAL_GPU_UNAVAILABLE
+                ),
+                "target_accelerator": capability.target_accelerator,
+                "parsed": address_serve_parsed,
+                "derived": address_serve_derived_metrics(address_serve_parsed),
+                "error": (
+                    address_serve_probe.get("error")
+                    if isinstance(address_serve_probe, dict)
+                    else None
+                ),
+            },
             "comparison": comparison_payload(
                 parsed,
                 bridge_parsed,
                 prepared_bridge_parsed,
                 prepared_ndarray_bridge_parsed,
                 prepared_address_bridge_parsed,
+                address_serve_parsed,
                 cpu_score_mean_seconds=score_timing.mean_seconds,
             ),
             "measurement_note": (
@@ -409,7 +441,10 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
                 "prepared ndarray row passes contiguous NumPy arrays directly "
                 "to the same Mojo function to isolate Python list materialization. "
                 "The prepared address row passes raw typed array addresses to "
-                "avoid per-element PythonObject indexing inside Mojo."
+                "avoid per-element PythonObject indexing inside Mojo. The "
+                "prepared address serve row uses the same typed-address tensor "
+                "boundary without internal Mojo benchmark sections, so its "
+                "extension-call timing is the serving-shaped evidence row."
             ),
         },
         capability,
@@ -496,6 +531,7 @@ def report_status(
     prepared_bridge_probe: dict[str, object] | None,
     prepared_ndarray_bridge_probe: dict[str, object] | None,
     prepared_address_bridge_probe: dict[str, object] | None,
+    address_serve_probe: dict[str, object] | None,
 ) -> str:
     if not capability.available:
         return STATUS_PARTIAL_GPU_UNAVAILABLE
@@ -518,6 +554,8 @@ def report_status(
         or prepared_address_bridge_probe.get("status") != STATUS_OK
     ):
         return STATUS_BLOCKED_GPU_PREPARED_ADDRESS_BRIDGE_FAILED
+    if address_serve_probe is None or address_serve_probe.get("status") != STATUS_OK:
+        return STATUS_BLOCKED_GPU_ADDRESS_SERVE_FAILED
     return STATUS_OK
 
 
@@ -548,6 +586,7 @@ def comparison_payload(
     prepared_bridge_parsed: dict[str, object],
     prepared_ndarray_bridge_parsed: dict[str, object],
     prepared_address_bridge_parsed: dict[str, object],
+    address_serve_parsed: dict[str, object],
     *,
     cpu_score_mean_seconds: float,
 ) -> dict[str, float | None]:
@@ -610,6 +649,9 @@ def comparison_payload(
         prepared_address_kernel,
         prepared_address_d2h,
     )
+    address_serve_extension_call = optional_float(
+        address_serve_parsed.get("extension_call_seconds")
+    )
     return {
         "gpu_twopass_kernel_mean_seconds": kernel,
         "gpu_h2d_kernel_d2h_mean_seconds": gpu_e2e,
@@ -662,6 +704,10 @@ def comparison_payload(
         "gpu_prepared_address_bridge_host_marshalling_seconds": optional_float(
             prepared_address_bridge_parsed.get("host_marshalling_seconds")
         ),
+        "gpu_address_serve_extension_call_seconds": address_serve_extension_call,
+        "gpu_address_serve_host_marshalling_seconds": optional_float(
+            address_serve_parsed.get("host_marshalling_seconds")
+        ),
         "cpu_i8_same_candidate_score_mean_seconds": cpu_score_mean_seconds,
         "gpu_kernel_seconds_per_cpu_score_second": ratio(
             kernel,
@@ -701,6 +747,10 @@ def comparison_payload(
         ),
         "gpu_prepared_address_bridge_score_h2d_kernel_d2h_seconds_per_cpu_score_second": ratio(
             prepared_address_score_e2e,
+            cpu_score_mean_seconds,
+        ),
+        "gpu_address_serve_extension_call_seconds_per_cpu_score_second": ratio(
+            address_serve_extension_call,
             cpu_score_mean_seconds,
         ),
     }
@@ -832,6 +882,16 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
         )
         print("Mean:", prepared_address_e2e)
 
+    address_serve_parsed = parsed_payload(
+        report.get("gpu_real_payload_prepared_address_serve")
+    )
+    address_serve_extension_call = address_serve_parsed.get(
+        "extension_call_seconds"
+    )
+    if isinstance(address_serve_extension_call, (float, int)):
+        print("== gpu_i8_real_payload_prepared_address_serve_extension_call ==")
+        print("Mean:", address_serve_extension_call)
+
 
 def exit_code(
     report: dict[str, Any],
@@ -855,6 +915,8 @@ def exit_code(
         return 7
     if status == STATUS_BLOCKED_GPU_PREPARED_ADDRESS_BRIDGE_FAILED:
         return 8
+    if status == STATUS_BLOCKED_GPU_ADDRESS_SERVE_FAILED:
+        return 9
     return 4
 
 
@@ -1041,6 +1103,109 @@ def run_gpu_i8_prepared_address_bridge_probe(
     )
 
 
+def run_gpu_i8_address_serve_probe(
+    *,
+    shape: SpeedTrackShape,
+    candidate_k: int,
+    target_accelerator: str | None,
+    queries: Any,
+    payload: Any,
+    candidate_positions_by_query: Sequence[Sequence[int]],
+    reference_scores_by_query: Sequence[Sequence[float]],
+    warmup_iterations: int,
+    measurement_iterations: int,
+) -> dict[str, object]:
+    if target_accelerator is None:
+        return {
+            "status": STATUS_PARTIAL_GPU_UNAVAILABLE,
+            "parsed": {},
+            "error": "target_accelerator was not available",
+        }
+
+    try:
+        for _ in range(warmup_iterations):
+            score_i8_prepared_payload_session_addresses(
+                target_accelerator=target_accelerator,
+                shape=shape,
+                candidate_k=candidate_k,
+                queries=queries,
+                payload=payload,
+                candidate_positions_by_query=candidate_positions_by_query,
+                reference_scores_by_query=reference_scores_by_query,
+            )
+
+        results = [
+            score_i8_prepared_payload_session_addresses(
+                target_accelerator=target_accelerator,
+                shape=shape,
+                candidate_k=candidate_k,
+                queries=queries,
+                payload=payload,
+                candidate_positions_by_query=candidate_positions_by_query,
+                reference_scores_by_query=reference_scores_by_query,
+            )
+            for _ in range(measurement_iterations)
+        ]
+    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        return {
+            "status": "error",
+            "parsed": {},
+            "error": str(exc),
+        }
+    if not results:
+        raise ValueError("measurement_iterations must be positive")
+
+    candidate_score_count = results[0].candidate_score_count
+    if any(
+        result.candidate_score_count != candidate_score_count
+        for result in results
+    ):
+        raise RuntimeError("GPU address serving candidate score count changed")
+
+    parsed = {
+        "payload_source": "real_kayak_i8_snapshot",
+        "bridge_scope": "single_extension_call_address_serve_no_internal_benchmark",
+        "query_count": shape.query_count,
+        "query_vector_count": shape.query_vector_count,
+        "document_count": shape.document_count,
+        "document_vector_count": shape.document_vector_count,
+        "total_document_vector_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "prepared_index_token_code_count": (
+            shape.document_count * shape.document_vector_count * shape.vector_dim
+        ),
+        "prepared_index_token_scale_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "prepared_index_doc_offset_count": shape.document_count + 1,
+        "candidate_k": candidate_k,
+        "candidate_score_count": candidate_score_count,
+        "vector_dim": shape.vector_dim,
+        "warmup_iterations": warmup_iterations,
+        "measurement_iterations": measurement_iterations,
+        "host_marshalling_seconds": mean_result(
+            results, "host_marshalling_seconds"
+        ),
+        "extension_call_seconds": mean_result(results, "extension_call_seconds"),
+        "score_delta_max_abs": max(
+            result.score_delta_max_abs for result in results
+        ),
+        "score_agreement_ok": all(
+            result.score_delta_max_abs <= 0.0001 for result in results
+        ),
+    }
+    return {
+        "status": (
+            STATUS_OK
+            if parsed["score_agreement_ok"]
+            else "score_agreement_failed"
+        ),
+        "parsed": parsed,
+        "measurements": [result.to_json_ready() for result in results],
+    }
+
+
 def _run_gpu_i8_prepared_bridge_probe(
     *,
     shape: SpeedTrackShape,
@@ -1160,6 +1325,19 @@ def prepared_bridge_derived_metrics(
         ),
         "host_marshalling_seconds": host_marshalling,
         "extension_call_seconds": extension_call,
+    }
+
+
+def address_serve_derived_metrics(
+    parsed: dict[str, object],
+) -> dict[str, float | None]:
+    return {
+        "host_marshalling_seconds": optional_float(
+            parsed.get("host_marshalling_seconds")
+        ),
+        "extension_call_seconds": optional_float(
+            parsed.get("extension_call_seconds")
+        ),
     }
 
 

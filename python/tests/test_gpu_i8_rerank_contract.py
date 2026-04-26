@@ -42,6 +42,7 @@ from kayak_bridge.gpu_i8_real_payload_score import (  # noqa: E402
     write_gpu_i8_real_payload_probe_inputs,
 )
 from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
+    MojoGpuI8AddressServeResult,
     MojoGpuI8PreparedSessionResult,
     MojoGpuI8RerankBridgeResult,
 )
@@ -480,6 +481,7 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 prepared_address_bridge_probe={
                     "status": real_payload_profile.STATUS_OK
                 },
+                address_serve_probe={"status": real_payload_profile.STATUS_OK},
             ),
             real_payload_profile.STATUS_OK,
         )
@@ -495,6 +497,7 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 prepared_address_bridge_probe={
                     "status": real_payload_profile.STATUS_OK
                 },
+                address_serve_probe={"status": real_payload_profile.STATUS_OK},
             ),
             real_payload_profile.STATUS_BLOCKED_GPU_BRIDGE_FAILED,
         )
@@ -510,6 +513,7 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 prepared_address_bridge_probe={
                     "status": real_payload_profile.STATUS_OK
                 },
+                address_serve_probe={"status": real_payload_profile.STATUS_OK},
             ),
             real_payload_profile.STATUS_BLOCKED_GPU_PREPARED_BRIDGE_FAILED,
         )
@@ -523,6 +527,7 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 prepared_address_bridge_probe={
                     "status": real_payload_profile.STATUS_OK
                 },
+                address_serve_probe={"status": real_payload_profile.STATUS_OK},
             ),
             real_payload_profile.STATUS_BLOCKED_GPU_PREPARED_NDARRAY_BRIDGE_FAILED,
         )
@@ -536,8 +541,25 @@ class GpuI8RerankContractTests(unittest.TestCase):
                     "status": real_payload_profile.STATUS_OK
                 },
                 prepared_address_bridge_probe={"status": "error"},
+                address_serve_probe={"status": real_payload_profile.STATUS_OK},
             ),
             real_payload_profile.STATUS_BLOCKED_GPU_PREPARED_ADDRESS_BRIDGE_FAILED,
+        )
+        self.assertEqual(
+            real_payload_profile.report_status(
+                capability=capability,
+                gpu_probe={"status": GPU_REAL_PAYLOAD_STATUS_OK},
+                bridge_probe={"status": real_payload_profile.STATUS_OK},
+                prepared_bridge_probe={"status": real_payload_profile.STATUS_OK},
+                prepared_ndarray_bridge_probe={
+                    "status": real_payload_profile.STATUS_OK
+                },
+                prepared_address_bridge_probe={
+                    "status": real_payload_profile.STATUS_OK
+                },
+                address_serve_probe={"status": "error"},
+            ),
+            real_payload_profile.STATUS_BLOCKED_GPU_ADDRESS_SERVE_FAILED,
         )
 
     def test_gpu_bridge_result_reports_profile_boundary_fields(self) -> None:
@@ -579,6 +601,22 @@ class GpuI8RerankContractTests(unittest.TestCase):
         self.assertEqual(payload["score_count"], 2)
         self.assertEqual(payload["prepare_host_to_device_mean_seconds"], 0.003)
         self.assertEqual(payload["score_host_to_device_mean_seconds"], 0.004)
+
+    def test_address_serve_result_reports_serving_call_boundary(self) -> None:
+        result = MojoGpuI8AddressServeResult(
+            host_marshalling_seconds=0.1,
+            extension_call_seconds=0.2,
+            score_delta_max_abs=0.00001,
+            candidate_score_count=2,
+            scores=(1.0, 2.0),
+        )
+
+        payload = result.to_json_ready()
+
+        self.assertEqual(payload["candidate_score_count"], 2)
+        self.assertEqual(payload["score_count"], 2)
+        self.assertEqual(payload["host_marshalling_seconds"], 0.1)
+        self.assertEqual(payload["extension_call_seconds"], 0.2)
 
     def test_candidate_score_profile_derives_rates_and_ratios(self) -> None:
         derived = candidate_profile.derive_candidate_score_metrics(

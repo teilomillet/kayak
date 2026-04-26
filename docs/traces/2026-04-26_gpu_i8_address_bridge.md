@@ -129,6 +129,11 @@ multiple internal `benchmark.run` sections, so their extension-call timings are
 not serving-call timings. The next check should measure one address-ingested
 prepare + score + readback call with no internal benchmark harness.
 
+Follow-up: `docs/traces/2026-04-26_gpu_i8_address_serve.md` adds that check.
+It measured `0.00026204533302613225s` extension-call time with the same
+`score_delta_max_abs=4.57763671875e-05`, confirming that the `~0.67s` address
+profile row was dominated by internal profiling scaffolding on this shape.
+
 ## Validation
 
 Ran:

@@ -198,7 +198,9 @@ Current GPU probes:
   buffers. The ndarray row passes contiguous NumPy arrays directly to the same
   Mojo function to isolate Python list materialization. The address row passes
   raw typed array addresses and reconstructs `UnsafePointer` values inside Mojo
-  to test per-element `PythonObject` indexing overhead.
+  to test per-element `PythonObject` indexing overhead. The address serving row
+  uses the same typed-address tensor boundary without internal `benchmark.run`
+  sections to measure a serving-shaped extension call.
 
 Reason: this checks kernel launch, pointer argument types, scalar i8 math,
 copy boundaries, readback, `global_idx` indexing, doc offsets, and candidate
@@ -250,15 +252,31 @@ about `0.67s` for the address row. That debunks `.tolist()` and per-element
 profiled function; the remaining cost is likely dominated by the internal
 `benchmark.run` harness, allocation, and session setup work inside the call.
 
+Follow-up finding: the no-internal-benchmark address serving call reports
+about `2.62e-04s` extension-call time, about `1.02e-05s` Python host
+marshalling, and the same `score_delta_max_abs=4.57763671875e-05` on the same
+`2 x 8 x 256 x 16 x candidate_k 128` shape. That validates the hypothesis that
+the previous `0.67s` address profile was dominated by internal profiling
+scaffolding, not by the Python extension boundary alone. It also gives a first
+end-to-end serving-shaped measurement that is slightly faster than the CPU i8
+same-candidate reference on this small shape: about `0.262ms` versus about
+`0.296ms`.
+
+This still does not validate a production GPU backend. The serving call
+allocates buffers, copies the prepared index tensors, scores, reads back scores,
+checks the CPU reference, and returns Python scores inside one call. It does
+not reuse a prepared GPU index across calls, and candidate generation plus
+top-k remain on CPU.
+
 Ownership finding: a first Python-visible `PreparedGpuI8RerankDim128` object was
 not kept because Mojo Python `module.add_type[...]` requires `Writable`, while
 `DeviceContext` cannot derive `Writable`. The current prepared session is
 therefore deliberately one call, not a reusable Python object.
 
 Reason: this keeps measured evidence ahead of abstraction. The next
-optimization target is a no-internal-benchmark serving-style address call, then
-a real internal prepared-index ownership model. Kernel math is still not the
-next bottleneck.
+optimization target is a real internal prepared-index ownership model plus a
+shape sweep for the serving-shaped call. Kernel math is still not the next
+bottleneck on the measured smoke shape.
 
 ## Primitive 5: Measurement Contract
 
