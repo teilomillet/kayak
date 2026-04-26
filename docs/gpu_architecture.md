@@ -191,11 +191,14 @@ Current GPU probes:
   `python/kayak_bridge/mojo_gpu_i8_rerank.py` build a separate GPU-targeted
   Python extension and run the same real-payload scoring boundary in-process:
   a full-copy bridge row, a prepared-session list bridge row, and a
-  prepared-session ndarray bridge row. The prepared sessions copy token codes,
-  token scales, and document offsets to device once inside a single profiling
-  call, then time query/candidate H2D, two-pass kernel, and D2H against those
-  resident index buffers. The ndarray row passes contiguous NumPy arrays
-  directly to the same Mojo function to isolate Python list materialization.
+  prepared-session ndarray bridge row, and a prepared-session address bridge
+  row. The prepared sessions copy token codes, token scales, and document
+  offsets to device once inside a single profiling call, then time
+  query/candidate H2D, two-pass kernel, and D2H against those resident index
+  buffers. The ndarray row passes contiguous NumPy arrays directly to the same
+  Mojo function to isolate Python list materialization. The address row passes
+  raw typed array addresses and reconstructs `UnsafePointer` values inside Mojo
+  to test per-element `PythonObject` indexing overhead.
 
 Reason: this checks kernel launch, pointer argument types, scalar i8 math,
 copy boundaries, readback, `global_idx` indexing, doc offsets, and candidate
@@ -235,11 +238,17 @@ instead of the list bridge's about `3.22e-03s`. That validates device residency
 as useful and validates direct ndarray input as useful for Python-side
 materialization on this shape.
 
+The prepared address bridge reports about `2.65e-05s` to prepare resident index
+buffers, about `3.71e-05s` for score H2D + two-pass kernel + D2H, about
+`1.19e-05s` of Python host marshalling, and the same
+`score_delta_max_abs=4.57763671875e-05`. That validates typed address ingestion
+for this internal probe shape.
+
 It does not validate a production backend because the extension call remains
-about `0.72s` for the ndarray row. That debunks `.tolist()` as the dominant
-extension-call bottleneck; the remaining cost is consistent with Mojo-side
-Python object indexing and scalar conversion for every payload element, plus
-allocation and profiling work inside the call.
+about `0.67s` for the address row. That debunks `.tolist()` and per-element
+`PythonObject[index]` access as the only extension-call bottlenecks in the
+profiled function; the remaining cost is likely dominated by the internal
+`benchmark.run` harness, allocation, and session setup work inside the call.
 
 Ownership finding: a first Python-visible `PreparedGpuI8RerankDim128` object was
 not kept because Mojo Python `module.add_type[...]` requires `Writable`, while
@@ -247,9 +256,9 @@ not kept because Mojo Python `module.add_type[...]` requires `Writable`, while
 therefore deliberately one call, not a reusable Python object.
 
 Reason: this keeps measured evidence ahead of abstraction. The next
-optimization target is a typed host buffer interface or real internal
-prepared-index ownership model that avoids per-element `py_values[index]`
-conversion, not kernel math.
+optimization target is a no-internal-benchmark serving-style address call, then
+a real internal prepared-index ownership model. Kernel math is still not the
+next bottleneck.
 
 ## Primitive 5: Measurement Contract
 
@@ -382,9 +391,14 @@ evidence only justifies a measured primitive.
    ndarray input reduces Python host marshalling from about `3.22e-03s` to
    about `2.48e-05s`, but does not reduce the extension call, which remains
    about `0.72s`.
-10. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+10. Test typed address ingestion. Current local result: address input preserves
+   CPU i8 agreement and reduces Python host marshalling to about `1.19e-05s`,
+   but the profiled extension call remains about `0.67s`.
+11. Add a no-internal-benchmark serving-style address call to separate
+   extension-call overhead from profiler harness overhead.
+12. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times.
-11. Only after a measured win, consider public API design.
+13. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

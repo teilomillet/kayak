@@ -297,6 +297,76 @@ def profile_i8_prepared_payload_session_ndarray(
     )
 
 
+def profile_i8_prepared_payload_session_addresses(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    candidate_k: int,
+    queries: np.ndarray,
+    payload: KayakPlaidI8PayloadSnapshot,
+    candidate_positions_by_query: Sequence[Sequence[int]],
+    reference_scores_by_query: Sequence[Sequence[float]],
+    warmup_iterations: int,
+    measurement_iterations: int,
+) -> MojoGpuI8PreparedSessionResult:
+    marshalling_started_at = time.perf_counter()
+    query_values = _float32_array(queries)
+    token_codes = _int8_array(payload.token_codes)
+    token_scales = _float32_array(payload.token_scales)
+    doc_offsets = _int64_array(payload.doc_offsets)
+    candidate_positions = _flatten_int_rows_array(
+        candidate_positions_by_query,
+        expected_rows=shape.query_count,
+        expected_cols=candidate_k,
+        name="candidate_positions_by_query",
+    )
+    reference_scores = _flatten_float_rows_array(
+        reference_scores_by_query,
+        expected_rows=shape.query_count,
+        expected_cols=candidate_k,
+        name="reference_scores_by_query",
+    )
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    module = load_module(target_accelerator=target_accelerator)
+    request = [
+        _array_address(query_values),
+        _array_address(token_codes),
+        _array_address(token_scales),
+        _array_address(doc_offsets),
+        _array_address(candidate_positions),
+        _array_address(reference_scores),
+        int(shape.query_count),
+        int(shape.query_vector_count),
+        int(shape.document_count),
+        int(shape.document_vector_count),
+        int(candidate_k),
+        int(warmup_iterations),
+        int(measurement_iterations),
+    ]
+    extension_started_at = time.perf_counter()
+    raw_result = module.profile_i8_prepared_payload_session_addresses(request)
+    extension_call_seconds = time.perf_counter() - extension_started_at
+
+    if len(raw_result) != 7:
+        raise RuntimeError(
+            "GPU i8 prepared address bridge returned an unexpected result shape"
+        )
+
+    scores = tuple(float(value) for value in raw_result[6])
+    return MojoGpuI8PreparedSessionResult(
+        host_marshalling_seconds=host_marshalling_seconds,
+        extension_call_seconds=extension_call_seconds,
+        prepare_host_to_device_mean_seconds=float(raw_result[0]),
+        score_host_to_device_mean_seconds=float(raw_result[1]),
+        kernel_mean_seconds=float(raw_result[2]),
+        device_to_host_mean_seconds=float(raw_result[3]),
+        score_delta_max_abs=float(raw_result[4]),
+        candidate_score_count=int(raw_result[5]),
+        scores=scores,
+    )
+
+
 @lru_cache(maxsize=None)
 def load_module(*, target_accelerator: str) -> ModuleType:
     if not target_accelerator:
@@ -407,6 +477,10 @@ def _int_values(values: Any) -> list[int]:
 
 def _int64_array(values: Any) -> np.ndarray:
     return np.ascontiguousarray(values, dtype=np.int64).reshape(-1)
+
+
+def _array_address(values: np.ndarray) -> int:
+    return int(values.ctypes.data)
 
 
 def _flatten_int_rows(

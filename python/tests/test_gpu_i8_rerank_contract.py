@@ -477,6 +477,9 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 prepared_ndarray_bridge_probe={
                     "status": real_payload_profile.STATUS_OK
                 },
+                prepared_address_bridge_probe={
+                    "status": real_payload_profile.STATUS_OK
+                },
             ),
             real_payload_profile.STATUS_OK,
         )
@@ -487,6 +490,9 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 bridge_probe={"status": "error"},
                 prepared_bridge_probe={"status": real_payload_profile.STATUS_OK},
                 prepared_ndarray_bridge_probe={
+                    "status": real_payload_profile.STATUS_OK
+                },
+                prepared_address_bridge_probe={
                     "status": real_payload_profile.STATUS_OK
                 },
             ),
@@ -501,6 +507,9 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 prepared_ndarray_bridge_probe={
                     "status": real_payload_profile.STATUS_OK
                 },
+                prepared_address_bridge_probe={
+                    "status": real_payload_profile.STATUS_OK
+                },
             ),
             real_payload_profile.STATUS_BLOCKED_GPU_PREPARED_BRIDGE_FAILED,
         )
@@ -511,8 +520,24 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 bridge_probe={"status": real_payload_profile.STATUS_OK},
                 prepared_bridge_probe={"status": real_payload_profile.STATUS_OK},
                 prepared_ndarray_bridge_probe={"status": "error"},
+                prepared_address_bridge_probe={
+                    "status": real_payload_profile.STATUS_OK
+                },
             ),
             real_payload_profile.STATUS_BLOCKED_GPU_PREPARED_NDARRAY_BRIDGE_FAILED,
+        )
+        self.assertEqual(
+            real_payload_profile.report_status(
+                capability=capability,
+                gpu_probe={"status": GPU_REAL_PAYLOAD_STATUS_OK},
+                bridge_probe={"status": real_payload_profile.STATUS_OK},
+                prepared_bridge_probe={"status": real_payload_profile.STATUS_OK},
+                prepared_ndarray_bridge_probe={
+                    "status": real_payload_profile.STATUS_OK
+                },
+                prepared_address_bridge_probe={"status": "error"},
+            ),
+            real_payload_profile.STATUS_BLOCKED_GPU_PREPARED_ADDRESS_BRIDGE_FAILED,
         )
 
     def test_gpu_bridge_result_reports_profile_boundary_fields(self) -> None:

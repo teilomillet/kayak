@@ -151,3 +151,18 @@ Observed:
 - raw real-payload profile status: `ok`
 - GPU i8 rerank contract tests: `24/24` passed
 - quiet real-payload profile status: `ok`
+
+## Follow-Up
+
+The typed-address bridge check was completed in
+`docs/traces/2026-04-26_gpu_i8_address_bridge.md`.
+
+Result: passing raw typed NumPy data addresses preserved
+`score_delta_max_abs=4.57763671875e-05` and reduced Python host marshalling to
+about `12us`. The profiled extension call only moved from about `0.719s` to
+about `0.674s`, so per-element `PythonObject[index]` access is not the only
+remaining cost.
+
+Reason: the prepared profiler functions still run internal `benchmark.run`
+sections. The next check should be a no-internal-benchmark serving-style
+address call.
