@@ -102,6 +102,25 @@ DEFAULT_CASES: tuple[AddressServeSweepCase, ...] = (
 )
 
 
+WIDE_TOPK_CASES: tuple[AddressServeSweepCase, ...] = (
+    AddressServeSweepCase("candidate512", 512, 16, 2, 8, 512),
+    AddressServeSweepCase("candidate1024", 1024, 16, 2, 8, 1024),
+    AddressServeSweepCase("query_vectors32", 512, 16, 2, 32, 256),
+    AddressServeSweepCase("doc_vectors64", 512, 64, 2, 8, 256),
+    AddressServeSweepCase("query_batch4", 512, 16, 4, 8, 256),
+)
+
+
+CASE_SETS: dict[str, tuple[AddressServeSweepCase, ...]] = {
+    "default": DEFAULT_CASES,
+    "wide_topk": WIDE_TOPK_CASES,
+}
+
+
+def case_set_names() -> tuple[str, ...]:
+    return tuple(sorted(CASE_SETS))
+
+
 def parse_sweep_case(value: str) -> AddressServeSweepCase:
     name, separator, assignments_text = value.partition(":")
     if not separator or not name.strip() or not assignments_text.strip():

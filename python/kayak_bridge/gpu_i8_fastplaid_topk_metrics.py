@@ -97,6 +97,9 @@ def build_gpu_prepared_topk_vs_fastplaid_comparison(
             parsed.get("topk_position_agreement")
         ),
         "score_delta_max_abs": _optional_float(parsed.get("score_delta_max_abs")),
+        "score_delta_tolerance": _optional_float(
+            parsed.get("score_delta_tolerance")
+        ),
         "gpu_prepared_handle_topk_seconds_per_window": topk_per_window,
         "cpu_candidate_generation_seconds_per_window": cpu_candidate_per_window,
         "cpu_same_candidate_score_seconds_per_window": cpu_score_per_window,

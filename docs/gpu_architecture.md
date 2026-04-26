@@ -322,6 +322,21 @@ Reason: this keeps measured evidence ahead of abstraction. The next
 optimization target is a wider candidate-window top-k sweep after the explicit
 handle, not immediate dim128 kernel rewrites.
 
+Wide top-k finding: `profile_gpu_i8_address_serve_wide_topk` adds explicit
+larger candidate-window and vector-count cases without changing the default
+sweep. The quiet run on `nvidia:sm_89` preserved `topk_position_agreement=1.0`
+on all five cases. Prepared-handle top-k ratios ranged from about `0.104x` to
+`0.228x` of CPU same-candidate scoring, and the
+CPU-candidate-generation-plus-top-k envelope ranged from about `0.586x` to
+`0.755x` of CPU candidate generation plus CPU scoring. The first wide run also
+debunked the fixed `1.0e-4` absolute score-delta threshold for
+`query_vector_count=32`; GPU i8 score agreement now reports an explicit
+vector-count-aware tolerance field.
+
+Reason: the wider run validates the prepared-handle top-k boundary beyond the
+original small windows, while the tolerance finding keeps correctness evidence
+visible instead of hiding a widened threshold.
+
 ## Primitive 5: Measurement Contract
 
 Every GPU row must report:
@@ -371,6 +386,8 @@ Current comparison task:
 ```bash
 pixi run compare_gpu_i8_fastplaid
 pixi run compare_gpu_i8_fastplaid_cuda
+pixi run compare_gpu_i8_fastplaid_wide_candidate1024
+pixi run compare_gpu_i8_fastplaid_wide_candidate1024_cuda
 ```
 
 The report intentionally keeps these surfaces separate:
@@ -389,6 +406,18 @@ boundary, but candidate generation still starts on CPU and the handle boundary
 is internal. Putting those numbers in one report is useful profiling context,
 but treating the ratio as a backend speedup claim would be wrong until the GPU
 primitive is integrated into a complete search path.
+
+Wide FastPlaid finding: on the explicit `1024 x 16` documents,
+`2 x 8` queries, `candidate_k=1024` shape, the prepared-handle top-k boundary
+remained correct with `topk_position_agreement=1.0`. The isolated GPU top-k
+boundary was about `0.028x` of CPU FastPlaid full-search batch time and about
+`0.088x` of CUDA FastPlaid full-search batch time. Once CPU candidate
+generation is included, the envelope was about `0.605x` of CPU FastPlaid but
+about `1.865x` of CUDA FastPlaid.
+
+Reason: the wide comparison shows the current isolated rerank primitive is
+useful, while also showing that CPU candidate generation is the limiter when
+the external baseline is already GPU-backed.
 
 Required fields for every FastPlaid comparison row:
 

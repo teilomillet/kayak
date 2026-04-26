@@ -18,6 +18,7 @@ import bench_gpu_i8_rerank_contract as bench_contract  # noqa: E402
 import compare_gpu_i8_fastplaid as fastplaid_compare  # noqa: E402
 import gpu_i8_cpu_reference as cpu_reference  # noqa: E402
 import profile_gpu_i8_candidate_score as candidate_profile  # noqa: E402
+import profile_gpu_i8_address_serve_sweep as address_sweep_script  # noqa: E402
 import profile_gpu_i8_real_payload_rerank as real_payload_profile  # noqa: E402
 from kayak_bridge.gpu_device_capability import (  # noqa: E402
     CommandResult,
@@ -65,6 +66,10 @@ from kayak_bridge.gpu_i8_rerank_contract import (  # noqa: E402
     report_status,
     shape_contract,
     tensor_contract,
+)
+from kayak_bridge.gpu_i8_score_agreement import (  # noqa: E402
+    gpu_i8_score_agreement_fields,
+    gpu_i8_score_delta_tolerance,
 )
 from kayak_bridge.gpu_i8_single_score import (  # noqa: E402
     gpu_single_score_probe_counts,
@@ -731,6 +736,78 @@ class GpuI8RerankContractTests(unittest.TestCase):
             16_384,
         )
 
+    def test_address_serve_sweep_case_sets_make_wide_topk_explicit(
+        self,
+    ) -> None:
+        case_sets = address_serve_sweep.CASE_SETS
+        default_cases = case_sets["default"]
+        wide_cases = case_sets["wide_topk"]
+
+        self.assertGreater(
+            max(case.candidate_k for case in wide_cases),
+            max(case.candidate_k for case in default_cases),
+        )
+        self.assertTrue(
+            any(case.query_vector_count > 16 for case in wide_cases)
+        )
+        self.assertTrue(
+            any(case.document_vector_count > 32 for case in wide_cases)
+        )
+        for case in wide_cases:
+            shape = case.shape(vector_dim=128, top_k=10)
+            self.assertEqual(shape.vector_dim, 128)
+            self.assertGreaterEqual(case.candidate_k, 10)
+            self.assertLessEqual(case.candidate_k, case.document_count)
+            self.assertGreater(shape.total_document_vector_count, 0)
+
+    def test_address_serve_sweep_cli_selects_named_case_sets(self) -> None:
+        args = address_sweep_script.parse_args(["--case-set", "wide_topk"])
+
+        self.assertEqual(
+            address_sweep_script.cases_from_args(args),
+            address_serve_sweep.CASE_SETS["wide_topk"],
+        )
+        self.assertEqual(
+            address_sweep_script.case_selection_from_args(args),
+            {"source": "wide_topk", "case_count": 5},
+        )
+
+    def test_address_serve_sweep_cli_custom_cases_override_case_set(self) -> None:
+        args = address_sweep_script.parse_args(
+            [
+                "--case-set",
+                "wide_topk",
+                "--case",
+                (
+                    "smoke:documents=64,document_vectors=8,queries=1,"
+                    "query_vectors=4,candidate_k=16"
+                ),
+            ]
+        )
+
+        cases = address_sweep_script.cases_from_args(args)
+
+        self.assertEqual(len(cases), 1)
+        self.assertEqual(cases[0].name, "smoke")
+        self.assertEqual(
+            address_sweep_script.case_selection_from_args(args),
+            {"source": "custom", "case_count": 1},
+        )
+
+    def test_gpu_i8_score_agreement_tolerance_scales_with_query_vectors(
+        self,
+    ) -> None:
+        self.assertEqual(gpu_i8_score_delta_tolerance(8), 1.0e-4)
+        self.assertEqual(gpu_i8_score_delta_tolerance(32), 3.2e-4)
+
+        fields = gpu_i8_score_agreement_fields(
+            score_delta_max_abs=0.000244140625,
+            query_vector_count=32,
+        )
+
+        self.assertEqual(fields["score_delta_tolerance"], 3.2e-4)
+        self.assertIs(fields["score_agreement_ok"], True)
+
     def test_address_serve_sweep_comparison_reports_isolated_and_envelope_ratios(
         self,
     ) -> None:
@@ -899,6 +976,7 @@ class GpuI8RerankContractTests(unittest.TestCase):
                         "topk_return_count_per_window": 20,
                         "topk_position_agreement": 1.0,
                         "score_delta_max_abs": 0.000061,
+                        "score_delta_tolerance": 0.0001,
                         "score_extension_call_seconds_per_window": 0.0006,
                     },
                 },
@@ -914,6 +992,7 @@ class GpuI8RerankContractTests(unittest.TestCase):
         self.assertEqual(comparison["status"], "ok")
         self.assertEqual(comparison["candidate_score_count_per_window"], 256)
         self.assertEqual(comparison["topk_return_count_per_window"], 20)
+        self.assertEqual(comparison["score_delta_tolerance"], 0.0001)
         self.assertAlmostEqual(
             float(
                 comparison[

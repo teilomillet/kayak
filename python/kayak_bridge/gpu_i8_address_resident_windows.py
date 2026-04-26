@@ -16,6 +16,7 @@ from kayak_bridge.gpu_i8_address_serve_sweep import (
     AddressServeSweepCase,
     AddressServeSweepControls,
 )
+from kayak_bridge.gpu_i8_score_agreement import gpu_i8_score_agreement_fields
 from kayak_bridge.mojo_gpu_i8_rerank import (
     prepare_i8_address_session_handle,
     score_i8_prepared_payload_session_addresses_multi_window,
@@ -126,14 +127,15 @@ def run_repeated_resident_probe(
         "payload_source": "real_kayak_i8_snapshot",
         "query_count": shape.query_count,
         "query_vector_count": shape.query_vector_count,
-        "score_agreement_ok": result.score_delta_max_abs <= 0.0001,
-        "score_delta_max_abs": result.score_delta_max_abs,
         "session_iterations": result.session_iterations,
         "total_document_vector_count": (
             shape.document_count * shape.document_vector_count
         ),
         "vector_dim": shape.vector_dim,
-    }
+    } | gpu_i8_score_agreement_fields(
+        score_delta_max_abs=result.score_delta_max_abs,
+        query_vector_count=shape.query_vector_count,
+    )
     return {
         "status": STATUS_OK if parsed["score_agreement_ok"] else "error",
         "parsed": parsed,
@@ -185,14 +187,15 @@ def run_multi_window_resident_probe(
         "payload_source": "real_kayak_i8_snapshot",
         "query_count_per_window": shape.query_count,
         "query_vector_count": shape.query_vector_count,
-        "score_agreement_ok": result.score_delta_max_abs <= 0.0001,
-        "score_delta_max_abs": result.score_delta_max_abs,
         "total_document_vector_count": (
             shape.document_count * shape.document_vector_count
         ),
         "vector_dim": shape.vector_dim,
         "window_count": result.window_count,
-    }
+    } | gpu_i8_score_agreement_fields(
+        score_delta_max_abs=result.score_delta_max_abs,
+        query_vector_count=shape.query_vector_count,
+    )
     return {
         "status": STATUS_OK if parsed["score_agreement_ok"] else "error",
         "parsed": parsed,
@@ -277,8 +280,6 @@ def run_cross_call_prepared_handle_probe(
         "query_count_per_window": shape.query_count,
         "query_vector_count": shape.query_vector_count,
         "release_extension_call_seconds": release_seconds,
-        "score_agreement_ok": score_delta_max_abs <= 0.0001,
-        "score_delta_max_abs": score_delta_max_abs,
         "score_extension_call_seconds_total": score_extension_total,
         "score_extension_call_seconds_per_window": (
             score_extension_total / float(controls.resident_session_iterations)
@@ -288,7 +289,10 @@ def run_cross_call_prepared_handle_probe(
         ),
         "vector_dim": shape.vector_dim,
         "window_count": controls.resident_session_iterations,
-    }
+    } | gpu_i8_score_agreement_fields(
+        score_delta_max_abs=score_delta_max_abs,
+        query_vector_count=shape.query_vector_count,
+    )
     return {
         "status": STATUS_OK if parsed["score_agreement_ok"] else "error",
         "parsed": parsed,
@@ -384,8 +388,6 @@ def run_cross_call_prepared_handle_topk_probe(
         "query_count_per_window": shape.query_count,
         "query_vector_count": shape.query_vector_count,
         "release_extension_call_seconds": release_seconds,
-        "score_agreement_ok": score_delta_max_abs <= 0.0001,
-        "score_delta_max_abs": score_delta_max_abs,
         "score_extension_call_seconds_total": score_extension_total,
         "score_extension_call_seconds_per_window": (
             score_extension_total / float(controls.resident_session_iterations)
@@ -405,7 +407,10 @@ def run_cross_call_prepared_handle_topk_probe(
         ),
         "vector_dim": shape.vector_dim,
         "window_count": controls.resident_session_iterations,
-    }
+    } | gpu_i8_score_agreement_fields(
+        score_delta_max_abs=score_delta_max_abs,
+        query_vector_count=shape.query_vector_count,
+    )
     status = (
         STATUS_OK
         if parsed["score_agreement_ok"]

@@ -138,3 +138,23 @@ Observed:
 One implementation bug was found and fixed during validation: the first raw
 CPU comparison run used a stale local name for the exact reference positions and
 failed before writing a valid report.
+
+## Wide Candidate1024 Follow-Up
+
+The same comparison boundary was run on a wider `candidate_k=1024` shape. See
+`docs/traces/2026-04-26_gpu_i8_fastplaid_wide_candidate1024.md`.
+
+Summary:
+
+- shape: `1024` documents, `16` document vectors, `2` queries, `8` query
+  vectors, `candidate_k=1024`
+- CPU FastPlaid batch: `0.007979334000992822 s`
+- CUDA FastPlaid batch: `0.0025957119978556875 s`
+- GPU top-k/window: `0.00021881324937567115 s` in the CPU FastPlaid report and
+  `0.0002280552507727407 s` in the CUDA FastPlaid report
+- CPU candidates plus GPU top-k/window: about `0.00483 s`
+- top-k agreement: `1.0` in both reports
+
+Interpretation: the isolated GPU top-k boundary remains small, but the
+CPU-candidate-generation-plus-GPU-top-k envelope is slower than CUDA FastPlaid
+full search on this wider synthetic shape.

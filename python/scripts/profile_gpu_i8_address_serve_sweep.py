@@ -13,10 +13,11 @@ if str(PYTHON_ROOT) not in sys.path:
     sys.path.append(str(PYTHON_ROOT))
 
 from kayak_bridge.gpu_i8_address_serve_sweep import (  # noqa: E402
-    DEFAULT_CASES,
+    CASE_SETS,
     STATUS_BLOCKED_GPU_ADDRESS_SERVE_FAILED,
     AddressServeSweepCase,
     AddressServeSweepControls,
+    case_set_names,
     parse_sweep_case,
 )
 from kayak_bridge.gpu_i8_address_serve_sweep_runner import build_report  # noqa: E402
@@ -41,6 +42,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "Repeatable case spec: "
             "name:documents=256,document_vectors=16,queries=2,"
             "query_vectors=8,candidate_k=128"
+        ),
+    )
+    parser.add_argument(
+        "--case-set",
+        choices=case_set_names(),
+        default="default",
+        help=(
+            "Named case set to run when --case is not provided. "
+            "Use wide_topk for larger candidate-window and vector-count probes."
         ),
     )
     parser.add_argument("--vector-dim", type=int, default=128)
@@ -79,7 +89,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def cases_from_args(args: argparse.Namespace) -> tuple[AddressServeSweepCase, ...]:
-    return tuple(args.case) if args.case else DEFAULT_CASES
+    return tuple(args.case) if args.case else CASE_SETS[args.case_set]
+
+
+def case_selection_from_args(args: argparse.Namespace) -> dict[str, object]:
+    if args.case:
+        return {"source": "custom", "case_count": len(args.case)}
+    return {"source": args.case_set, "case_count": len(CASE_SETS[args.case_set])}
 
 
 def controls_from_args(args: argparse.Namespace) -> AddressServeSweepControls:
@@ -179,6 +195,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cases=cases_from_args(args),
         controls=controls_from_args(args),
     )
+    report["case_selection"] = case_selection_from_args(args)
     write_report(args.output, report)
     print(json.dumps(report, indent=2, sort_keys=True))
     if args.emit_quiet_mean:

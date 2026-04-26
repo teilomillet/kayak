@@ -25,6 +25,9 @@ from kayak_bridge.gpu_i8_real_payload_score import (  # noqa: E402
     write_gpu_i8_real_payload_probe_inputs,
 )
 from kayak_bridge.gpu_i8_rerank_contract import write_report  # noqa: E402
+from kayak_bridge.gpu_i8_score_agreement import (  # noqa: E402
+    gpu_i8_score_agreement_fields,
+)
 from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
     profile_i8_prepared_payload_session,
     profile_i8_prepared_payload_session_addresses,
@@ -979,6 +982,7 @@ def run_gpu_i8_bridge_probe(
     ):
         raise RuntimeError("GPU bridge candidate score count changed between runs")
 
+    score_delta_max_abs = max(result.score_delta_max_abs for result in results)
     parsed = {
         "payload_source": "real_kayak_i8_snapshot",
         "query_count": shape.query_count,
@@ -1004,13 +1008,10 @@ def run_gpu_i8_bridge_probe(
         "device_to_host_mean_seconds": mean_result(
             results, "device_to_host_mean_seconds"
         ),
-        "score_delta_max_abs": max(
-            result.score_delta_max_abs for result in results
-        ),
-        "score_agreement_ok": all(
-            result.score_delta_max_abs <= 0.0001 for result in results
-        ),
-    }
+    } | gpu_i8_score_agreement_fields(
+        score_delta_max_abs=score_delta_max_abs,
+        query_vector_count=shape.query_vector_count,
+    )
     return {
         "status": (
             STATUS_OK
@@ -1162,6 +1163,7 @@ def run_gpu_i8_address_serve_probe(
     ):
         raise RuntimeError("GPU address serving candidate score count changed")
 
+    score_delta_max_abs = max(result.score_delta_max_abs for result in results)
     parsed = {
         "payload_source": "real_kayak_i8_snapshot",
         "bridge_scope": "single_extension_call_address_serve_no_internal_benchmark",
@@ -1188,13 +1190,10 @@ def run_gpu_i8_address_serve_probe(
             results, "host_marshalling_seconds"
         ),
         "extension_call_seconds": mean_result(results, "extension_call_seconds"),
-        "score_delta_max_abs": max(
-            result.score_delta_max_abs for result in results
-        ),
-        "score_agreement_ok": all(
-            result.score_delta_max_abs <= 0.0001 for result in results
-        ),
-    }
+    } | gpu_i8_score_agreement_fields(
+        score_delta_max_abs=score_delta_max_abs,
+        query_vector_count=shape.query_vector_count,
+    )
     return {
         "status": (
             STATUS_OK
@@ -1278,9 +1277,10 @@ def _run_gpu_i8_prepared_bridge_probe(
         ),
         "twopass_kernel_mean_seconds": result.kernel_mean_seconds,
         "device_to_host_mean_seconds": result.device_to_host_mean_seconds,
-        "score_delta_max_abs": result.score_delta_max_abs,
-        "score_agreement_ok": result.score_delta_max_abs <= 0.0001,
-    }
+    } | gpu_i8_score_agreement_fields(
+        score_delta_max_abs=result.score_delta_max_abs,
+        query_vector_count=shape.query_vector_count,
+    )
     return {
         "status": (
             STATUS_OK

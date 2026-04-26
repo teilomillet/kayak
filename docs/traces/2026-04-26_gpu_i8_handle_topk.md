@@ -165,3 +165,22 @@ Quiet summary:
   `0.0006539250007335795 s`
 
 Both comparison reports kept `topk_position_agreement=1.0`.
+
+## Wide Sweep Follow-Up
+
+The prepared-handle top-k boundary was then run on wider candidate-window and
+vector-count cases. See
+`docs/traces/2026-04-26_gpu_i8_wide_topk_sweep.md`.
+
+Result summary:
+
+- wide sweep status: `ok`
+- cases: `5 / 5`
+- top-k agreement: `1.0` on every case
+- prepared top-k/CPU score ratio range: `0.10399884544003907` to
+  `0.22828419281542678`
+- CPU candidate generation plus prepared top-k ratio range:
+  `0.5858688078982071` to `0.7553267484881523`
+- correctness note: `query_vector_count=32` required an explicit
+  vector-count-aware score-delta tolerance; the report now records the tolerance
+  used for each row
