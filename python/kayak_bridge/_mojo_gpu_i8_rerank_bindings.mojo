@@ -206,12 +206,11 @@ struct PreparedGpuI8AddressSession(Movable):
         self.offsets_device.enqueue_copy_from(offsets_host)
         self.ctx.synchronize()
 
-    def score_window(
+    def run_score_window(
         mut self,
         py_query_values: UnsafePointer[Float32, MutAnyOrigin],
         py_candidate_positions: UnsafePointer[Int64, MutAnyOrigin],
-        py_reference_scores: UnsafePointer[Float32, MutAnyOrigin],
-    ) raises -> PythonObject:
+    ) raises:
         for index in range(self.query_value_count):
             self.query_host[index] = py_query_values[index]
 
@@ -263,6 +262,14 @@ struct PreparedGpuI8AddressSession(Movable):
         self.score_device.enqueue_copy_to(self.score_host)
         self.ctx.synchronize()
 
+    def score_window(
+        mut self,
+        py_query_values: UnsafePointer[Float32, MutAnyOrigin],
+        py_candidate_positions: UnsafePointer[Int64, MutAnyOrigin],
+        py_reference_scores: UnsafePointer[Float32, MutAnyOrigin],
+    ) raises -> PythonObject:
+        self.run_score_window(py_query_values, py_candidate_positions)
+
         var score_delta_max_abs = Float64(0.0)
         var py_scores = Python.list()
         for score_index in range(self.candidate_score_count):
@@ -277,6 +284,59 @@ struct PreparedGpuI8AddressSession(Movable):
         var py_result = Python.list()
         py_result.append(Python.float(score_delta_max_abs))
         py_result.append(Python.int(self.candidate_score_count))
+        py_result.append(py_scores)
+        return py_result
+
+    def score_window_topk(
+        mut self,
+        py_query_values: UnsafePointer[Float32, MutAnyOrigin],
+        py_candidate_positions: UnsafePointer[Int64, MutAnyOrigin],
+        py_reference_scores: UnsafePointer[Float32, MutAnyOrigin],
+        top_k: Int,
+    ) raises -> PythonObject:
+        if top_k <= 0:
+            raise Error("top_k must be positive")
+        if top_k > self.candidate_k:
+            raise Error("top_k must not exceed candidate_k")
+        self.run_score_window(py_query_values, py_candidate_positions)
+
+        var score_delta_max_abs = Float64(0.0)
+        for score_index in range(self.candidate_score_count):
+            var reference_score = py_reference_scores[score_index]
+            var score_delta = abs(
+                Float64(self.score_host[score_index]) - Float64(reference_score)
+            )
+            if score_delta > score_delta_max_abs:
+                score_delta_max_abs = score_delta
+
+        var py_positions = Python.list()
+        var py_scores = Python.list()
+
+        for query_index in range(self.query_count):
+            var query_base = query_index * self.candidate_k
+            for rank in range(top_k):
+                var best_candidate_index = 0
+                var best_score = Float32(-3.4028234663852886e38)
+                for candidate_index in range(self.candidate_k):
+                    var score_index = query_base + candidate_index
+                    var score = self.score_host[score_index]
+                    if score > best_score:
+                        best_score = score
+                        best_candidate_index = candidate_index
+
+                var best_score_index = query_base + best_candidate_index
+                var best_position = self.candidate_host[best_score_index]
+                py_positions.append(Python.int(best_position))
+                py_scores.append(Python.float(best_score))
+                self.score_host[best_score_index] = Float32(
+                    -3.4028234663852886e38
+                )
+
+        var py_result = Python.list()
+        py_result.append(Python.float(score_delta_max_abs))
+        py_result.append(Python.int(self.candidate_score_count))
+        py_result.append(Python.int(top_k))
+        py_result.append(py_positions)
         py_result.append(py_scores)
         return py_result
 
@@ -384,6 +444,43 @@ def score_i8_address_session_handle(
         py_query_values,
         py_candidate_positions,
         py_reference_scores,
+    )
+
+
+def score_i8_address_session_handle_topk(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var handle = Int(py=py_request[0])
+    var query_address = Int(py=py_request[1])
+    var candidate_positions_address = Int(py=py_request[2])
+    var reference_scores_address = Int(py=py_request[3])
+    var top_k = Int(py=py_request[4])
+    if handle == 0:
+        raise Error("prepared GPU i8 address session handle must be non-zero")
+    if query_address == 0:
+        raise Error("query address must be non-zero")
+    if candidate_positions_address == 0:
+        raise Error("candidate_positions address must be non-zero")
+    if reference_scores_address == 0:
+        raise Error("reference_scores address must be non-zero")
+
+    var session = UnsafePointer[PreparedGpuI8AddressSession, MutAnyOrigin](
+        unsafe_from_address=handle
+    )
+    var py_query_values = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=query_address
+    )
+    var py_candidate_positions = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=candidate_positions_address
+    )
+    var py_reference_scores = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=reference_scores_address
+    )
+    return session[].score_window_topk(
+        py_query_values,
+        py_candidate_positions,
+        py_reference_scores,
+        top_k,
     )
 
 
@@ -1627,6 +1724,13 @@ def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
             docstring=(
                 "Score one query/candidate window with an explicit GPU i8"
                 " address session handle."
+            ),
+        )
+        module.def_function[score_i8_address_session_handle_topk](
+            "score_i8_address_session_handle_topk",
+            docstring=(
+                "Score one query/candidate window with an explicit GPU i8"
+                " address session handle and return top-k positions."
             ),
         )
         module.def_function[release_i8_address_session_handle](

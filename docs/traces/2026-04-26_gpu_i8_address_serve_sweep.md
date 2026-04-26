@@ -267,3 +267,22 @@ Decision update: the next optimization target is the score-return and top-k
 boundary after the explicit handle. Reason: cross-call index residency now wins
 on every swept case, so kernel rewrites are no longer the first unresolved
 bottleneck.
+
+## Follow-Up: Top-K Return
+
+The score-return boundary is documented in
+`docs/traces/2026-04-26_gpu_i8_handle_topk.md`.
+
+Latest summary:
+
+- quiet log: `.cache/kayak/bench_quiet/20260426T182201Z`
+- ok cases: `6 / 6`
+- best prepared-handle top-k score ratio: `0.15912253456197387`
+- worst prepared-handle top-k score ratio: `0.3001565758850426`
+- best CPU-candidate-plus-top-k ratio: `0.6494656692255495`
+- worst CPU-candidate-plus-top-k ratio: `0.8043717309441957`
+- top-k agreement: `1.0` for all swept cases
+- quiet wrapper sections: `42`
+
+Decision update: the next internal serving-shaped GPU row should return top-k
+positions and scores, not every candidate score.

@@ -199,3 +199,38 @@ Open validation still needed:
   tensors
 - connect the GPU primitive to Kayak i8 payloads and measure true end-to-end
   rerank timing
+
+## 2026-04-26 Follow-Up
+
+The comparison report now also includes the real-payload prepared-handle top-k
+boundary. See
+`docs/traces/2026-04-26_gpu_i8_fastplaid_topk_compare.md`.
+
+Quiet verification:
+
+- CPU FastPlaid report:
+  `.cache/kayak/gpu_i8_fastplaid_compare/summary.json`
+- CUDA FastPlaid report:
+  `.cache/kayak/gpu_i8_fastplaid_compare/cuda_summary.json`
+- CPU quiet log:
+  `.cache/kayak/bench_quiet/20260426T191305Z`
+- CUDA quiet log:
+  `.cache/kayak/bench_quiet/20260426T191822Z`
+
+Key measured rows:
+
+- CPU FastPlaid full-search batch:
+  `0.003948755998862907 s`
+- CPU report prepared-handle top-k:
+  `0.00010890049907175126 s/window`
+- CPU report CPU candidates plus GPU top-k:
+  `0.0006470917487604311 s/window`
+- CUDA FastPlaid full-search batch:
+  `0.0016726499998185318 s`
+- CUDA report prepared-handle top-k:
+  `0.00011942050059587928 s/window`
+- CUDA report CPU candidates plus GPU top-k:
+  `0.0006539250007335795 s/window`
+
+Both reports preserved `topk_position_agreement=1.0` and
+`score_delta_max_abs=0.0000457763671875`.

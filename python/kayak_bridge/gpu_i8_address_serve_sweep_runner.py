@@ -15,6 +15,7 @@ from kayak_bridge.gpu_i8_address_resident_windows import (
     build_query_windows,
     reshape_windows,
     run_cross_call_prepared_handle_probe,
+    run_cross_call_prepared_handle_topk_probe,
     run_multi_window_resident_probe,
     run_repeated_resident_probe,
     timing_payload_per_window,
@@ -80,7 +81,9 @@ def build_report(
                 "scores the same candidate window, while the multi-window row "
                 "scores different query and candidate windows. The prepared "
                 "handle row keeps the same index buffers resident across "
-                "separate Python calls with explicit release."
+                "separate Python calls with explicit release. The top-k row "
+                "uses the same explicit-handle boundary but returns only "
+                "top-k positions and scores."
             ),
         },
         capability,
@@ -219,14 +222,34 @@ def run_case(
             query_count=shape.query_count,
         ),
     )
+    prepared_handle_topk_probe = run_cross_call_prepared_handle_topk_probe(
+        case=case,
+        shape=shape,
+        controls=controls,
+        capability=capability,
+        query_windows=query_windows,
+        payload=payload,
+        candidate_positions=reshape_windows(
+            multi_candidate_positions,
+            window_count=controls.resident_session_iterations,
+            query_count=shape.query_count,
+        ),
+        reference_scores=reshape_windows(
+            multi_reference_scores,
+            window_count=controls.resident_session_iterations,
+            query_count=shape.query_count,
+        ),
+    )
     gpu_status = _gpu_status(gpu_probe)
     resident_status = _gpu_status(resident_probe)
     multi_window_status = _gpu_status(multi_window_probe)
     prepared_handle_status = _gpu_status(prepared_handle_probe)
+    prepared_handle_topk_status = _gpu_status(prepared_handle_topk_probe)
     gpu_parsed = parsed_payload(gpu_probe)
     resident_parsed = parsed_payload(resident_probe)
     multi_window_parsed = parsed_payload(multi_window_probe)
     prepared_handle_parsed = parsed_payload(prepared_handle_probe)
+    prepared_handle_topk_parsed = parsed_payload(prepared_handle_topk_probe)
     return _case_row(
         case=case,
         controls=controls,
@@ -250,6 +273,9 @@ def run_case(
         prepared_handle_probe=prepared_handle_probe,
         prepared_handle_status=prepared_handle_status,
         prepared_handle_parsed=prepared_handle_parsed,
+        prepared_handle_topk_probe=prepared_handle_topk_probe,
+        prepared_handle_topk_status=prepared_handle_topk_status,
+        prepared_handle_topk_parsed=prepared_handle_topk_parsed,
     )
 
 
@@ -309,6 +335,9 @@ def _case_row(
     prepared_handle_probe: dict[str, object] | None,
     prepared_handle_status: object,
     prepared_handle_parsed: dict[str, object],
+    prepared_handle_topk_probe: dict[str, object] | None,
+    prepared_handle_topk_status: object,
+    prepared_handle_topk_parsed: dict[str, object],
 ) -> dict[str, Any]:
     status = (
         STATUS_OK
@@ -317,6 +346,7 @@ def _case_row(
             and resident_status == STATUS_OK
             and multi_window_status == STATUS_OK
             and prepared_handle_status == STATUS_OK
+            and prepared_handle_topk_status == STATUS_OK
         )
         else "error"
     )
@@ -378,6 +408,12 @@ def _case_row(
             gpu_status=prepared_handle_status,
             gpu_parsed=prepared_handle_parsed,
         ),
+        "gpu_address_prepared_handle_topk_session": _gpu_payload(
+            capability=capability,
+            gpu_probe=prepared_handle_topk_probe,
+            gpu_status=prepared_handle_topk_status,
+            gpu_parsed=prepared_handle_topk_parsed,
+        ),
         "comparison": comparison_payload(
             cpu_candidate_generation_mean_seconds=candidate_timing.mean_seconds,
             cpu_score_mean_seconds=score_timing.mean_seconds,
@@ -393,6 +429,7 @@ def _case_row(
             ),
             multi_window_parsed=multi_window_parsed,
             prepared_handle_parsed=prepared_handle_parsed,
+            prepared_handle_topk_parsed=prepared_handle_topk_parsed,
         ),
     }
 

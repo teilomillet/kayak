@@ -149,6 +149,19 @@ buffers across Python calls, keeps vector counts explicit, avoids silent CPU
 fallback, and wins on every swept case. Kernel rewrites should wait until the
 score-return and top-k boundary is measured.
 
+## Follow-Up
+
+The score-return boundary was tested in
+`docs/traces/2026-04-26_gpu_i8_handle_topk.md`.
+
+Result: returning only top-k positions and scores from the explicit handle
+preserved score agreement and `topk_position_agreement=1.0` across all six
+swept cases. It was also faster than returning every candidate score on every
+case, with top-k/score-return ratios from about `0.454x` to `0.923x`.
+
+Reason: the next serving-shaped GPU primitive should return top-k positions,
+not a full candidate-score matrix.
+
 ## Validation
 
 Ran:

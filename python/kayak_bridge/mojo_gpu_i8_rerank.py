@@ -108,6 +108,41 @@ class MojoGpuI8AddressServeResult:
 
 
 @dataclass(frozen=True, slots=True)
+class MojoGpuI8AddressTopKResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    score_delta_max_abs: float
+    candidate_score_count: int
+    top_k: int
+    topk_position_match_count: int
+    positions: tuple[int, ...]
+    scores: tuple[float, ...]
+
+    @property
+    def topk_position_count(self) -> int:
+        return len(self.positions)
+
+    @property
+    def topk_position_agreement(self) -> float:
+        if not self.positions:
+            return 0.0
+        return self.topk_position_match_count / float(len(self.positions))
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "score_delta_max_abs": self.score_delta_max_abs,
+            "candidate_score_count": self.candidate_score_count,
+            "top_k": self.top_k,
+            "topk_position_count": self.topk_position_count,
+            "topk_position_match_count": self.topk_position_match_count,
+            "topk_position_agreement": self.topk_position_agreement,
+            "score_count": len(self.scores),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class MojoGpuI8AddressResidentSessionResult:
     host_marshalling_seconds: float
     extension_call_seconds: float
@@ -233,6 +268,87 @@ class MojoGpuI8AddressSessionHandle:
             extension_call_seconds=extension_call_seconds,
             score_delta_max_abs=float(raw_result[0]),
             candidate_score_count=int(raw_result[1]),
+            scores=scores,
+        )
+
+    def score_topk(
+        self,
+        *,
+        queries: np.ndarray,
+        candidate_positions_by_query: Sequence[Sequence[int]],
+        reference_scores_by_query: Sequence[Sequence[float]],
+        top_k: int,
+    ) -> MojoGpuI8AddressTopKResult:
+        if self._closed or self.handle == 0:
+            raise RuntimeError("GPU i8 address session handle is closed")
+        if top_k <= 0:
+            raise ValueError("top_k must be positive")
+        if top_k > self.candidate_k:
+            raise ValueError("top_k must not exceed candidate_k")
+
+        marshalling_started_at = time.perf_counter()
+        query_values = _float32_array(queries)
+        expected_query_values = (
+            int(self.shape.query_count)
+            * int(self.shape.query_vector_count)
+            * int(self.shape.vector_dim)
+        )
+        if query_values.size != expected_query_values:
+            raise ValueError("queries shape must match the prepared handle shape")
+        candidate_positions = _flatten_int_rows_array(
+            candidate_positions_by_query,
+            expected_rows=int(self.shape.query_count),
+            expected_cols=int(self.candidate_k),
+            name="candidate_positions_by_query",
+        )
+        reference_scores = _flatten_float_rows_array(
+            reference_scores_by_query,
+            expected_rows=int(self.shape.query_count),
+            expected_cols=int(self.candidate_k),
+            name="reference_scores_by_query",
+        )
+        host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+        module = load_module(target_accelerator=self.target_accelerator)
+        request = [
+            int(self.handle),
+            _array_address(query_values),
+            _array_address(candidate_positions),
+            _array_address(reference_scores),
+            int(top_k),
+        ]
+        extension_started_at = time.perf_counter()
+        raw_result = module.score_i8_address_session_handle_topk(request)
+        extension_call_seconds = time.perf_counter() - extension_started_at
+
+        if len(raw_result) != 5:
+            raise RuntimeError(
+                "GPU i8 address session top-k returned an unexpected result shape"
+            )
+
+        positions = tuple(int(value) for value in raw_result[3])
+        scores = tuple(float(value) for value in raw_result[4])
+        reference_positions = _rank_candidate_positions_by_score(
+            candidate_positions_by_query,
+            reference_scores_by_query,
+            final_k=int(raw_result[2]),
+        )
+        expected_positions = tuple(
+            int(position) for row in reference_positions for position in row
+        )
+        topk_position_match_count = sum(
+            1
+            for actual, expected in zip(positions, expected_positions)
+            if actual == expected
+        )
+        return MojoGpuI8AddressTopKResult(
+            host_marshalling_seconds=host_marshalling_seconds,
+            extension_call_seconds=extension_call_seconds,
+            score_delta_max_abs=float(raw_result[0]),
+            candidate_score_count=int(raw_result[1]),
+            top_k=int(raw_result[2]),
+            topk_position_match_count=topk_position_match_count,
+            positions=positions,
             scores=scores,
         )
 
@@ -1010,3 +1126,32 @@ def _flatten_float_windows_array(
             f"{name} shape must match window_count, query_count, and candidate_k"
         )
     return values
+
+
+def _rank_candidate_positions_by_score(
+    candidate_positions_by_query: Sequence[Sequence[int]],
+    scores_by_query: Sequence[Sequence[float]],
+    *,
+    final_k: int,
+) -> tuple[tuple[int, ...], ...]:
+    if len(candidate_positions_by_query) != len(scores_by_query):
+        raise ValueError("candidate and score query counts must match")
+    ranked_rows: list[tuple[int, ...]] = []
+    for candidate_positions, scores in zip(
+        candidate_positions_by_query,
+        scores_by_query,
+    ):
+        if len(candidate_positions) != len(scores):
+            raise ValueError("candidate and score row lengths must match")
+        ranked_offsets = sorted(
+            range(len(candidate_positions)),
+            key=lambda offset: float(scores[offset]),
+            reverse=True,
+        )
+        ranked_rows.append(
+            tuple(
+                int(candidate_positions[offset])
+                for offset in ranked_offsets[:final_k]
+            )
+        )
+    return tuple(ranked_rows)

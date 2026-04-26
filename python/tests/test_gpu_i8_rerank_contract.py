@@ -47,6 +47,7 @@ from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
     MojoGpuI8AddressResidentSessionResult,
     MojoGpuI8AddressSessionHandle,
     MojoGpuI8AddressServeResult,
+    MojoGpuI8AddressTopKResult,
     MojoGpuI8PreparedSessionResult,
     MojoGpuI8RerankBridgeResult,
 )
@@ -690,6 +691,27 @@ class GpuI8RerankContractTests(unittest.TestCase):
         self.assertEqual(payload["candidate_k"], 5)
         self.assertEqual(payload["prepare_extension_call_seconds"], 0.002)
 
+    def test_address_topk_result_reports_return_boundary(self) -> None:
+        result = MojoGpuI8AddressTopKResult(
+            host_marshalling_seconds=0.1,
+            extension_call_seconds=0.2,
+            score_delta_max_abs=0.00001,
+            candidate_score_count=20,
+            top_k=5,
+            topk_position_match_count=10,
+            positions=tuple(range(10)),
+            scores=tuple(float(value) for value in range(10)),
+        )
+
+        payload = result.to_json_ready()
+
+        self.assertEqual(payload["candidate_score_count"], 20)
+        self.assertEqual(payload["top_k"], 5)
+        self.assertEqual(payload["topk_position_count"], 10)
+        self.assertEqual(payload["topk_position_match_count"], 10)
+        self.assertEqual(payload["topk_position_agreement"], 1.0)
+        self.assertEqual(payload["score_count"], 10)
+
     def test_address_serve_sweep_case_parser_keeps_vector_counts_explicit(
         self,
     ) -> None:
@@ -722,6 +744,9 @@ class GpuI8RerankContractTests(unittest.TestCase):
             multi_window_parsed={"extension_call_seconds_per_window": 0.001},
             prepared_handle_parsed={
                 "score_extension_call_seconds_per_window": 0.00075
+            },
+            prepared_handle_topk_parsed={
+                "score_extension_call_seconds_per_window": 0.0009
             },
         )
 
@@ -772,6 +797,24 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 "cpu_multi_window_candidate_plus_gpu_prepared_handle_score_seconds_per_cpu_multi_window_candidate_plus_score_second"
             ],
             4.75 / 6.0,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "gpu_address_prepared_handle_topk_seconds_per_cpu_multi_window_score_second"
+            ],
+            0.45,
+        )
+        self.assertEqual(
+            comparison[
+                "gpu_address_prepared_handle_topk_seconds_per_prepared_handle_score_second"
+            ],
+            1.2,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "cpu_multi_window_candidate_plus_gpu_prepared_handle_topk_seconds_per_cpu_multi_window_candidate_plus_score_second"
+            ],
+            4.9 / 6.0,
         )
 
     def test_candidate_score_profile_derives_rates_and_ratios(self) -> None:
@@ -835,6 +878,57 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 ]
             ),
             0.002,
+        )
+        self.assertIn("not an apples-to-apples", comparison["scope_warning"])
+
+    def test_gpu_fastplaid_compare_reports_prepared_topk_boundary(
+        self,
+    ) -> None:
+        comparison = (
+            fastplaid_compare.build_gpu_prepared_topk_vs_fastplaid_comparison(
+                prepared_handle_topk_row={
+                    "status": "ok",
+                    "cpu_i8_multi_window_candidate_generation": {
+                        "mean_seconds_per_window": 0.001,
+                    },
+                    "cpu_i8_multi_window_same_candidate_reference": {
+                        "mean_seconds_per_window": 0.002,
+                    },
+                    "parsed": {
+                        "candidate_score_count_per_window": 256,
+                        "topk_return_count_per_window": 20,
+                        "topk_position_agreement": 1.0,
+                        "score_delta_max_abs": 0.000061,
+                        "score_extension_call_seconds_per_window": 0.0006,
+                    },
+                },
+                fastplaid_row={
+                    "system_name": "fastplaid",
+                    "status": "ok",
+                    "query_batch_mean_seconds": 0.03,
+                    "query_mean_seconds": 0.015,
+                },
+            )
+        )
+
+        self.assertEqual(comparison["status"], "ok")
+        self.assertEqual(comparison["candidate_score_count_per_window"], 256)
+        self.assertEqual(comparison["topk_return_count_per_window"], 20)
+        self.assertAlmostEqual(
+            float(
+                comparison[
+                    "gpu_prepared_handle_topk_seconds_per_fastplaid_batch_second"
+                ]
+            ),
+            0.02,
+        )
+        self.assertAlmostEqual(
+            float(
+                comparison[
+                    "cpu_candidate_generation_plus_gpu_topk_seconds_per_cpu_candidate_generation_plus_cpu_score_second"
+                ]
+            ),
+            0.0016 / 0.003,
         )
         self.assertIn("not an apples-to-apples", comparison["scope_warning"])
 

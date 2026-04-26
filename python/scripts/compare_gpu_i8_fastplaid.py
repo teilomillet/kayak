@@ -22,6 +22,14 @@ from kayak_bridge.gpu_i8_candidate_score import (  # noqa: E402
     GPU_CANDIDATE_SCORE_STATUS_OK,
     run_gpu_i8_candidate_score_probe,
 )
+from kayak_bridge.gpu_i8_fastplaid_topk_compare import (  # noqa: E402
+    build_missing_prepared_handle_topk_scope_row,
+    build_prepared_handle_topk_scope_row,
+)
+from kayak_bridge.gpu_i8_fastplaid_topk_metrics import (  # noqa: E402
+    STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED,
+    build_gpu_prepared_topk_vs_fastplaid_comparison,
+)
 from kayak_bridge.plaid_approx import KayakPlaidApproxConfig  # noqa: E402
 
 from bench_fastplaid_speed_track import (  # noqa: E402
@@ -71,6 +79,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--warmup-iterations", type=int, default=1)
     parser.add_argument("--measurement-iterations", type=int, default=1)
+    parser.add_argument(
+        "--gpu-topk-session-iterations",
+        type=int,
+        default=4,
+        help=(
+            "Prepared-handle top-k GPU score windows measured per report row. "
+            "Each window keeps the same explicit query/document vector counts."
+        ),
+    )
     parser.add_argument(
         "--kayak-backend",
         choices=(kayak.MOJO_EXACT_CPU_BACKEND, kayak.NUMPY_REFERENCE_BACKEND),
@@ -158,6 +175,8 @@ def build_shape(args: argparse.Namespace) -> SpeedTrackShape:
         )
     if args.candidate_k < shape.top_k:
         raise ValueError("candidate_k must be greater than or equal to top_k")
+    if args.gpu_topk_session_iterations <= 0:
+        raise ValueError("gpu_topk_session_iterations must be positive")
     return shape
 
 
@@ -168,7 +187,7 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
         seed=args.seed,
         normalize_vectors=args.normalize_vectors,
     )
-    systems, _reference_positions = benchmark_system_rows(
+    systems, reference_positions = benchmark_system_rows(
         shape=shape,
         inputs=inputs,
         args=args,
@@ -176,11 +195,19 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
 
     capability = probe_mojo_gpu(args.gpu_query_command)
     gpu_probe: dict[str, object] | None = None
+    prepared_handle_topk_row: dict[str, Any] | None = None
     if capability.available:
         gpu_probe = run_gpu_i8_candidate_score_probe(
             shape,
             candidate_k=args.candidate_k,
             target_accelerator=capability.target_accelerator,
+        )
+        prepared_handle_topk_row = build_prepared_handle_topk_scope_row(
+            shape=shape,
+            inputs=inputs,
+            reference_positions=reference_positions,
+            capability=capability,
+            args=args,
         )
 
     fastplaid_row = _system_by_name(systems, "fastplaid")
@@ -194,9 +221,16 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
         gpu_probe=gpu_probe,
         fastplaid_row=fastplaid_row,
     )
+    prepared_handle_topk_comparison = (
+        build_gpu_prepared_topk_vs_fastplaid_comparison(
+            prepared_handle_topk_row=prepared_handle_topk_row,
+            fastplaid_row=fastplaid_row,
+        )
+    )
     status = report_status(
         capability=capability,
         gpu_probe=gpu_probe,
+        prepared_handle_topk_row=prepared_handle_topk_row,
         fastplaid_row=fastplaid_row,
     )
 
@@ -217,12 +251,27 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             "pairwise_vs_kayak_exact": build_pairwise_rows(systems),
             "mojo_gpu_capability": capability.to_json_ready(),
             "gpu_candidate_score_primitive": gpu_scope_row,
+            "gpu_prepared_handle_topk_primitive": (
+                prepared_handle_topk_row
+                if prepared_handle_topk_row is not None
+                else build_missing_prepared_handle_topk_scope_row(
+                    shape=shape,
+                    candidate_k=args.candidate_k,
+                    capability=capability,
+                )
+            ),
             "gpu_vs_fastplaid_scope_comparison": comparison,
+            "gpu_prepared_handle_topk_vs_fastplaid_scope_comparison": (
+                prepared_handle_topk_comparison
+            ),
             "measurement_note": (
                 "FastPlaid rows are full-search timings. The GPU row is a "
                 "benchmark-only candidate-score primitive over deterministic "
-                "flat i8 tensors. Ratios across those scopes are profiling "
-                "context only, not production search speedup claims."
+                "flat i8 tensors. The prepared-handle top-k GPU row uses real "
+                "Kayak i8 payload snapshots and CPU-provided candidate "
+                "windows, but is still an internal rerank boundary rather than "
+                "a full search backend. Ratios across those scopes are "
+                "profiling context only, not production search speedup claims."
             ),
         },
         capability,
@@ -258,6 +307,8 @@ def controls_payload(args: argparse.Namespace) -> dict[str, object]:
         "fastplaid_use_triton_kmeans": _parse_optional_bool(
             args.fastplaid_use_triton_kmeans
         ),
+        "fastplaid_update_buffer_size": args.fastplaid_update_buffer_size,
+        "gpu_topk_session_iterations": args.gpu_topk_session_iterations,
     }
 
 
@@ -406,6 +457,7 @@ def report_status(
     *,
     capability: MojoGpuCapability,
     gpu_probe: dict[str, object] | None,
+    prepared_handle_topk_row: dict[str, Any] | None,
     fastplaid_row: dict[str, Any] | None,
 ) -> str:
     if fastplaid_row is None or fastplaid_row.get("status") != STATUS_OK:
@@ -417,6 +469,11 @@ def report_status(
         or gpu_probe.get("status") != GPU_CANDIDATE_SCORE_STATUS_OK
     ):
         return STATUS_BLOCKED_GPU_CANDIDATE_SCORE_FAILED
+    if (
+        prepared_handle_topk_row is None
+        or prepared_handle_topk_row.get("status") != STATUS_OK
+    ):
+        return STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED
     return STATUS_OK
 
 
@@ -447,6 +504,24 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
             if gpu_probe_e2e is not None:
                 print("== kayak_gpu_i8_candidate_h2d_kernel_d2h ==")
                 print("Mean:", gpu_probe_e2e)
+    topk = report.get("gpu_prepared_handle_topk_primitive")
+    if isinstance(topk, dict):
+        parsed = topk.get("parsed")
+        if isinstance(parsed, dict):
+            topk_per_window = parsed.get("score_extension_call_seconds_per_window")
+            if isinstance(topk_per_window, (float, int)):
+                print("== kayak_gpu_i8_prepared_handle_topk_per_window ==")
+                print("Mean:", topk_per_window)
+        comparison = report.get(
+            "gpu_prepared_handle_topk_vs_fastplaid_scope_comparison"
+        )
+        if isinstance(comparison, dict):
+            envelope = comparison.get(
+                "cpu_candidate_generation_plus_gpu_topk_seconds_per_window"
+            )
+            if isinstance(envelope, (float, int)):
+                print("== kayak_cpu_candidates_gpu_i8_topk_per_window ==")
+                print("Mean:", envelope)
 
 
 def exit_code(
@@ -467,6 +542,8 @@ def exit_code(
         return 3
     if status == STATUS_BLOCKED_FASTPLAID_UNAVAILABLE:
         return 4
+    if status == STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED:
+        return 6
     return 5
 
 

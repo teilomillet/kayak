@@ -273,7 +273,7 @@ agreement across six explicit vector-count shapes. The one-shot serving call
 remains useful as a fixed-overhead baseline, but after adding the explicit
 prepared handle the one-shot serving call is no longer the best measured
 implementation. The latest quiet sweep reports one-shot GPU score ratios from
-about `0.723x` to `2.067x` of CPU same-candidate scoring, so the one-shot call
+about `0.719x` to `2.000x` of CPU same-candidate scoring, so the one-shot call
 is still not uniformly faster.
 
 Resident-session finding: an in-call repeated address session copies the
@@ -286,9 +286,9 @@ CPU-candidate-generation-plus-resident-iteration envelope ranged from about
 Multi-window resident finding: a second in-call resident probe copies the same
 prepared index tensors once, then scores four different query/candidate windows
 inside the call. Its latest per-window score time ranged from about `0.327x`
-to `0.588x` of CPU same-candidate scoring per window, and the
+to `0.585x` of CPU same-candidate scoring per window, and the
 CPU-candidate-generation-plus-multi-window-resident envelope ranged from about
-`0.750x` to `0.885x` of CPU candidate generation plus CPU score per window.
+`0.745x` to `0.884x` of CPU candidate generation plus CPU score per window.
 This is evidence that prepared-index residency and allocation reuse are likely
 higher leverage than immediate dim128 kernel rewrites on the swept shapes. It
 also debunks the narrower hypothesis that the resident win only comes from
@@ -305,14 +305,22 @@ cache; it is unsafe internal ownership with explicit release.
 Explicit-handle finding: the latest quiet
 `profile_gpu_i8_address_serve_sweep` row keeps the prepared i8 index resident
 across separate Python score calls. Prepared-handle score ratios ranged from
-about `0.244x` to `0.361x` of CPU same-candidate scoring per window, and the
+about `0.250x` to `0.371x` of CPU same-candidate scoring per window, and the
 CPU-candidate-generation-plus-prepared-handle envelope ranged from about
-`0.719x` to `0.815x` of CPU candidate generation plus CPU scoring. All six
+`0.719x` to `0.817x` of CPU candidate generation plus CPU scoring. All six
 cases preserved CPU i8 score agreement.
 
+Top-k return finding: the prepared handle can return only `[query_count,
+top_k]` positions and scores after Mojo-side host top-k selection. The latest
+quiet sweep preserved `topk_position_agreement=1.0` for all six cases. Top-k
+return ratios ranged from about `0.159x` to `0.300x` of CPU same-candidate
+scoring, and the CPU-candidate-generation-plus-top-k envelope ranged from about
+`0.649x` to `0.804x` of CPU candidate generation plus CPU scoring. Returning
+top-k was faster than returning all candidate scores on every swept case.
+
 Reason: this keeps measured evidence ahead of abstraction. The next
-optimization target is the candidate-score return and top-k boundary after the
-explicit handle, not immediate dim128 kernel rewrites.
+optimization target is a wider candidate-window top-k sweep after the explicit
+handle, not immediate dim128 kernel rewrites.
 
 ## Primitive 5: Measurement Contract
 
@@ -365,21 +373,22 @@ pixi run compare_gpu_i8_fastplaid
 pixi run compare_gpu_i8_fastplaid_cuda
 ```
 
-The report intentionally keeps three surfaces separate:
+The report intentionally keeps these surfaces separate:
 
 - Kayak exact CPU: full-search correctness reference
 - Kayak i8 CPU: full-search i8 candidate-window baseline
 - FastPlaid CPU or CUDA: full-search external system baseline
 - Kayak GPU i8: benchmark-only candidate-score primitive
+- Kayak GPU i8 prepared-handle top-k: real Kayak i8 payload, CPU-provided
+  candidate windows, explicit GPU handle, top-k positions/scores returned
 
 Reason: FastPlaid search includes indexing, candidate generation, approximate
-search, and top-k output. The current Kayak GPU rows time candidate-score math
-over deterministic flat dim128 tensors and real Kayak i8 payload snapshots, but
-candidate generation and top-k remain outside the GPU row. Putting those numbers
-in one report is useful profiling context, but treating the ratio as a backend
-speedup claim would be wrong until the GPU primitive reports the complete
-candidate-window rerank path, including CPU candidate generation, GPU scoring,
-readback, CPU top-k, and bridge overhead.
+search, and top-k output. The Kayak GPU rows now include both a deterministic
+flat dim128 candidate-score primitive and a real-payload prepared-handle top-k
+boundary, but candidate generation still starts on CPU and the handle boundary
+is internal. Putting those numbers in one report is useful profiling context,
+but treating the ratio as a backend speedup claim would be wrong until the GPU
+primitive is integrated into a complete search path.
 
 Required fields for every FastPlaid comparison row:
 
@@ -388,6 +397,7 @@ Required fields for every FastPlaid comparison row:
 - query count and query vector count
 - document count, document vector count, and total document vector count
 - candidate score count for the GPU primitive
+- top-k return count and top-k agreement for prepared-handle rows
 - recall@k versus Kayak exact for full-search rows
 - a scope warning when GPU primitive timings are shown beside full-search rows
 
@@ -467,14 +477,19 @@ evidence only justifies a measured primitive.
    across the six swept cases, while preserving CPU i8 score agreement.
 15. Test explicit cross-call prepared-index ownership without a public GPU
    object or hidden global cache. Current quiet result: prepared-handle
-   per-window score ratios range from about `0.244x` to `0.361x` of CPU
+   per-window score ratios range from about `0.250x` to `0.371x` of CPU
    same-candidate scoring, and CPU candidate generation plus prepared-handle
    GPU scoring is faster than CPU candidate generation plus CPU score in all
    six swept cases.
-16. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+16. Return only top-k positions and scores from the explicit handle. Current
+   quiet result: top-k return ratios range from about `0.159x` to `0.300x`
+   of CPU same-candidate scoring, top-k order agreement is `1.0` in all six
+   cases, and top-k return is faster than returning all candidate scores on
+   every swept case.
+17. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-17. Only after a measured win, consider public API design.
+18. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 
