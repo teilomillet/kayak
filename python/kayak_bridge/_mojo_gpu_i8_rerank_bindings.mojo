@@ -1091,6 +1091,211 @@ def score_i8_prepared_payload_session_addresses_repeated(
         return py_result
 
 
+def score_i8_prepared_payload_session_addresses_multi_window(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_address = Int(py=py_request[0])
+    var token_codes_address = Int(py=py_request[1])
+    var token_scales_address = Int(py=py_request[2])
+    var doc_offsets_address = Int(py=py_request[3])
+    var candidate_positions_address = Int(py=py_request[4])
+    var reference_scores_address = Int(py=py_request[5])
+    var query_count = Int(py=py_request[6])
+    var query_vector_count = Int(py=py_request[7])
+    var document_count = Int(py=py_request[8])
+    var document_vector_count = Int(py=py_request[9])
+    var candidate_k = Int(py=py_request[10])
+    var window_count = Int(py=py_request[11])
+    if query_address == 0:
+        raise Error("query address must be non-zero")
+    if token_codes_address == 0:
+        raise Error("token_codes address must be non-zero")
+    if token_scales_address == 0:
+        raise Error("token_scales address must be non-zero")
+    if doc_offsets_address == 0:
+        raise Error("doc_offsets address must be non-zero")
+    if candidate_positions_address == 0:
+        raise Error("candidate_positions address must be non-zero")
+    if reference_scores_address == 0:
+        raise Error("reference_scores address must be non-zero")
+    if query_count <= 0:
+        raise Error("query_count must be positive")
+    if query_vector_count <= 0:
+        raise Error("query_vector_count must be positive")
+    if document_count <= 0:
+        raise Error("document_count must be positive")
+    if document_vector_count <= 0:
+        raise Error("document_vector_count must be positive")
+    if candidate_k <= 0:
+        raise Error("candidate_k must be positive")
+    if window_count <= 0:
+        raise Error("window_count must be positive")
+
+    var py_query_values = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=query_address
+    )
+    var py_token_codes = UnsafePointer[Int8, MutAnyOrigin](
+        unsafe_from_address=token_codes_address
+    )
+    var py_token_scales = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=token_scales_address
+    )
+    var py_doc_offsets = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=doc_offsets_address
+    )
+    var py_candidate_positions = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=candidate_positions_address
+    )
+    var py_reference_scores = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=reference_scores_address
+    )
+
+    var total_document_vector_count = document_count * document_vector_count
+    var query_value_count = query_count * query_vector_count * VECTOR_DIM
+    var token_code_count = total_document_vector_count * VECTOR_DIM
+    var doc_offset_count = document_count + 1
+    var candidate_score_count = query_count * candidate_k
+    var partial_score_count = (
+        candidate_score_count * query_vector_count * document_vector_count
+    )
+    var grid_x = (candidate_score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
+    var partial_grid_x = (partial_score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
+
+    with DeviceContext() as ctx:
+        var query_device = ctx.enqueue_create_buffer[DType.float32](
+            query_value_count
+        )
+        var codes_device = ctx.enqueue_create_buffer[DType.int8](
+            token_code_count
+        )
+        var scales_device = ctx.enqueue_create_buffer[DType.float32](
+            total_document_vector_count
+        )
+        var offsets_device = ctx.enqueue_create_buffer[DType.int64](
+            doc_offset_count
+        )
+        var candidate_device = ctx.enqueue_create_buffer[DType.int64](
+            candidate_score_count
+        )
+        var partial_score_device = ctx.enqueue_create_buffer[DType.float32](
+            partial_score_count
+        )
+        var score_device = ctx.enqueue_create_buffer[DType.float32](
+            candidate_score_count
+        )
+
+        var query_host = ctx.enqueue_create_host_buffer[DType.float32](
+            query_value_count
+        )
+        var codes_host = ctx.enqueue_create_host_buffer[DType.int8](
+            token_code_count
+        )
+        var scales_host = ctx.enqueue_create_host_buffer[DType.float32](
+            total_document_vector_count
+        )
+        var offsets_host = ctx.enqueue_create_host_buffer[DType.int64](
+            doc_offset_count
+        )
+        var candidate_host = ctx.enqueue_create_host_buffer[DType.int64](
+            candidate_score_count
+        )
+        var score_host = ctx.enqueue_create_host_buffer[DType.float32](
+            candidate_score_count
+        )
+
+        for index in range(token_code_count):
+            codes_host[index] = py_token_codes[index]
+
+        for index in range(total_document_vector_count):
+            scales_host[index] = py_token_scales[index]
+
+        for index in range(doc_offset_count):
+            offsets_host[index] = py_doc_offsets[index]
+
+        codes_device.enqueue_copy_from(codes_host)
+        scales_device.enqueue_copy_from(scales_host)
+        offsets_device.enqueue_copy_from(offsets_host)
+        ctx.synchronize()
+
+        var score_delta_max_abs = Float64(0.0)
+        var py_scores = Python.list()
+        for window_index in range(window_count):
+            var query_window_offset = window_index * query_value_count
+            var candidate_window_offset = window_index * candidate_score_count
+
+            for index in range(query_value_count):
+                query_host[index] = py_query_values[query_window_offset + index]
+
+            for index in range(candidate_score_count):
+                var candidate_position = py_candidate_positions[
+                    candidate_window_offset + index
+                ]
+                if candidate_position < 0 or candidate_position >= Int64(
+                    document_count
+                ):
+                    raise Error(
+                        "candidate position outside prepared index document"
+                        " range"
+                    )
+                candidate_host[index] = candidate_position
+
+            query_device.enqueue_copy_from(query_host)
+            candidate_device.enqueue_copy_from(candidate_host)
+            ctx.synchronize()
+
+            ctx.enqueue_function[
+                score_i8_candidate_token_kernel_dynamic,
+                score_i8_candidate_token_kernel_dynamic,
+            ](
+                query_device,
+                codes_device,
+                scales_device,
+                offsets_device,
+                candidate_device,
+                partial_score_device,
+                query_vector_count,
+                document_vector_count,
+                candidate_k,
+                partial_score_count,
+                grid_dim=partial_grid_x,
+                block_dim=BLOCK_SIZE,
+            )
+            ctx.enqueue_function[
+                reduce_i8_candidate_score_kernel_dynamic,
+                reduce_i8_candidate_score_kernel_dynamic,
+            ](
+                partial_score_device,
+                score_device,
+                query_vector_count,
+                document_vector_count,
+                candidate_score_count,
+                grid_dim=grid_x,
+                block_dim=BLOCK_SIZE,
+            )
+            ctx.synchronize()
+
+            score_device.enqueue_copy_to(score_host)
+            ctx.synchronize()
+
+            for score_index in range(candidate_score_count):
+                var reference_score = py_reference_scores[
+                    candidate_window_offset + score_index
+                ]
+                var score_delta = abs(
+                    Float64(score_host[score_index]) - Float64(reference_score)
+                )
+                if score_delta > score_delta_max_abs:
+                    score_delta_max_abs = score_delta
+                py_scores.append(Python.float(score_host[score_index]))
+
+        var py_result = Python.list()
+        py_result.append(Python.float(score_delta_max_abs))
+        py_result.append(Python.int(candidate_score_count))
+        py_result.append(Python.int(window_count))
+        py_result.append(py_scores)
+        return py_result
+
+
 @export
 def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
     try:
@@ -1136,6 +1341,15 @@ def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
             "score_i8_prepared_payload_session_addresses_repeated",
             docstring=(
                 "Score repeated typed-address GPU i8 windows after one"
+                " in-call prepared-index device copy."
+            ),
+        )
+        module.def_function[
+            score_i8_prepared_payload_session_addresses_multi_window
+        ](
+            "score_i8_prepared_payload_session_addresses_multi_window",
+            docstring=(
+                "Score different typed-address GPU i8 windows after one"
                 " in-call prepared-index device copy."
             ),
         )

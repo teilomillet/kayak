@@ -1,0 +1,199 @@
+"""Resident-window helpers for the GPU i8 address serving sweep.
+
+This module owns deterministic query-window construction and resident GPU probe
+dispatch. It does not build indexes or assemble the final sweep report.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Sequence
+
+import numpy as np
+
+from kayak_bridge.gpu_device_capability import MojoGpuCapability
+from kayak_bridge.gpu_i8_address_serve_sweep import (
+    STATUS_OK,
+    AddressServeSweepCase,
+    AddressServeSweepControls,
+)
+from kayak_bridge.mojo_gpu_i8_rerank import (
+    score_i8_prepared_payload_session_addresses_multi_window,
+    score_i8_prepared_payload_session_addresses_repeated,
+)
+
+from bench_fastplaid_speed_track import SpeedTrackShape
+
+
+def build_query_windows(
+    *,
+    base_queries: np.ndarray,
+    shape: SpeedTrackShape,
+    window_count: int,
+    seed: int,
+) -> np.ndarray:
+    if window_count <= 0:
+        raise ValueError("window_count must be positive")
+    query_windows = np.empty(
+        (
+            window_count,
+            shape.query_count,
+            shape.query_vector_count,
+            shape.vector_dim,
+        ),
+        dtype=np.float32,
+    )
+    query_windows[0] = np.ascontiguousarray(base_queries, dtype=np.float32)
+    if window_count == 1:
+        return query_windows
+    rng = np.random.default_rng(seed)
+    query_windows[1:] = rng.standard_normal(
+        (
+            window_count - 1,
+            shape.query_count,
+            shape.query_vector_count,
+            shape.vector_dim,
+        )
+    ).astype(np.float32)
+    return query_windows
+
+
+def reshape_windows(
+    rows: Sequence[Sequence[Any]],
+    *,
+    window_count: int,
+    query_count: int,
+) -> tuple[tuple[tuple[Any, ...], ...], ...]:
+    expected_rows = window_count * query_count
+    if len(rows) != expected_rows:
+        raise ValueError("row count must match window_count * query_count")
+    return tuple(
+        tuple(tuple(row) for row in rows[offset : offset + query_count])
+        for offset in range(0, expected_rows, query_count)
+    )
+
+
+def timing_payload_per_window(
+    timing: Any,
+    *,
+    window_count: int,
+) -> dict[str, object]:
+    payload = timing.to_json_ready()
+    return payload | {
+        "mean_seconds_per_window": timing.mean_seconds / float(window_count),
+        "window_count": window_count,
+    }
+
+
+def run_repeated_resident_probe(
+    *,
+    case: AddressServeSweepCase,
+    shape: SpeedTrackShape,
+    controls: AddressServeSweepControls,
+    capability: MojoGpuCapability,
+    queries: Any,
+    payload: Any,
+    candidate_positions: Sequence[Sequence[int]],
+    reference_scores: Sequence[Sequence[float]],
+) -> dict[str, object] | None:
+    if not capability.available:
+        return None
+    try:
+        result = score_i8_prepared_payload_session_addresses_repeated(
+            target_accelerator=capability.target_accelerator or "",
+            shape=shape,
+            candidate_k=case.candidate_k,
+            queries=queries,
+            payload=payload,
+            candidate_positions_by_query=candidate_positions,
+            reference_scores_by_query=reference_scores,
+            session_iterations=controls.resident_session_iterations,
+        )
+    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        return {"status": "error", "parsed": {}, "error": str(exc)}
+
+    parsed = {
+        "bridge_scope": "single_extension_call_address_resident_session",
+        "candidate_k": case.candidate_k,
+        "candidate_score_count": result.candidate_score_count,
+        "document_count": shape.document_count,
+        "document_vector_count": shape.document_vector_count,
+        "extension_call_seconds": result.extension_call_seconds,
+        "extension_call_seconds_per_iteration": (
+            result.extension_call_seconds_per_iteration
+        ),
+        "host_marshalling_seconds": result.host_marshalling_seconds,
+        "payload_source": "real_kayak_i8_snapshot",
+        "query_count": shape.query_count,
+        "query_vector_count": shape.query_vector_count,
+        "score_agreement_ok": result.score_delta_max_abs <= 0.0001,
+        "score_delta_max_abs": result.score_delta_max_abs,
+        "session_iterations": result.session_iterations,
+        "total_document_vector_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "vector_dim": shape.vector_dim,
+    }
+    return {
+        "status": STATUS_OK if parsed["score_agreement_ok"] else "error",
+        "parsed": parsed,
+        "measurements": [result.to_json_ready()],
+    }
+
+
+def run_multi_window_resident_probe(
+    *,
+    case: AddressServeSweepCase,
+    shape: SpeedTrackShape,
+    controls: AddressServeSweepControls,
+    capability: MojoGpuCapability,
+    query_windows: np.ndarray,
+    payload: Any,
+    candidate_positions: Sequence[Sequence[Sequence[int]]],
+    reference_scores: Sequence[Sequence[Sequence[float]]],
+) -> dict[str, object] | None:
+    if not capability.available:
+        return None
+    try:
+        result = score_i8_prepared_payload_session_addresses_multi_window(
+            target_accelerator=capability.target_accelerator or "",
+            shape=shape,
+            candidate_k=case.candidate_k,
+            query_windows=query_windows,
+            payload=payload,
+            candidate_positions_by_window=candidate_positions,
+            reference_scores_by_window=reference_scores,
+            window_count=controls.resident_session_iterations,
+        )
+    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        return {"status": "error", "parsed": {}, "error": str(exc)}
+
+    parsed = {
+        "bridge_scope": "single_extension_call_address_resident_multi_window",
+        "candidate_k": case.candidate_k,
+        "candidate_score_count_per_window": (
+            result.candidate_score_count_per_window
+        ),
+        "candidate_score_count_total": result.candidate_score_count_total,
+        "document_count": shape.document_count,
+        "document_vector_count": shape.document_vector_count,
+        "extension_call_seconds": result.extension_call_seconds,
+        "extension_call_seconds_per_window": (
+            result.extension_call_seconds_per_window
+        ),
+        "host_marshalling_seconds": result.host_marshalling_seconds,
+        "payload_source": "real_kayak_i8_snapshot",
+        "query_count_per_window": shape.query_count,
+        "query_vector_count": shape.query_vector_count,
+        "score_agreement_ok": result.score_delta_max_abs <= 0.0001,
+        "score_delta_max_abs": result.score_delta_max_abs,
+        "total_document_vector_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "vector_dim": shape.vector_dim,
+        "window_count": result.window_count,
+    }
+    return {
+        "status": STATUS_OK if parsed["score_agreement_ok"] else "error",
+        "parsed": parsed,
+        "measurements": [result.to_json_ready()],
+    }

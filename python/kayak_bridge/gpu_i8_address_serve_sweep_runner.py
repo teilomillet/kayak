@@ -11,6 +11,13 @@ import time
 from typing import Any, Sequence
 
 from kayak_bridge.gpu_device_capability import MojoGpuCapability, probe_mojo_gpu
+from kayak_bridge.gpu_i8_address_resident_windows import (
+    build_query_windows,
+    reshape_windows,
+    run_multi_window_resident_probe,
+    run_repeated_resident_probe,
+    timing_payload_per_window,
+)
 from kayak_bridge.gpu_i8_address_serve_sweep import (
     STATUS_OK,
     STATUS_PARTIAL_GPU_UNAVAILABLE,
@@ -20,9 +27,6 @@ from kayak_bridge.gpu_i8_address_serve_sweep import (
     optional_float,
     report_status,
     summary_payload,
-)
-from kayak_bridge.mojo_gpu_i8_rerank import (
-    score_i8_prepared_payload_session_addresses_repeated,
 )
 from kayak_bridge.plaid_approx import (
     KayakPlaidApproxConfig,
@@ -71,8 +75,9 @@ def build_report(
                 "generation remains CPU-side and top-k remains outside these "
                 "GPU rows. The serving row still allocates and copies prepared "
                 "index tensors inside each call; the resident-session row "
-                "copies them once inside one extension call and repeats the "
-                "same candidate window."
+                "copies them once inside one extension call. The repeated row "
+                "scores the same candidate window, while the multi-window row "
+                "scores different query and candidate windows."
             ),
         },
         capability,
@@ -126,6 +131,35 @@ def run_case(
         measurement_iterations=controls.measurement_iterations,
     )
     payload = index.i8_payload_snapshot()
+    query_windows = build_query_windows(
+        base_queries=inputs.queries,
+        shape=shape,
+        window_count=controls.resident_session_iterations,
+        seed=controls.seed + case_index + 100_000,
+    )
+    multi_queries = query_windows.reshape(
+        controls.resident_session_iterations * shape.query_count,
+        shape.query_vector_count,
+        shape.vector_dim,
+    )
+    multi_candidate_positions = index.i8_candidate_positions_batch(multi_queries)
+    multi_reference_scores = index.i8_score_candidate_positions_batch(
+        multi_queries,
+        multi_candidate_positions,
+    )
+    multi_candidate_timing = time_candidate_generation(
+        index,
+        multi_queries,
+        warmup_iterations=controls.warmup_iterations,
+        measurement_iterations=controls.measurement_iterations,
+    )
+    multi_score_timing = time_same_candidate_scores(
+        index,
+        multi_queries,
+        multi_candidate_positions,
+        warmup_iterations=controls.warmup_iterations,
+        measurement_iterations=controls.measurement_iterations,
+    )
     gpu_probe = _run_gpu_probe(
         case=case,
         shape=shape,
@@ -136,7 +170,7 @@ def run_case(
         candidate_positions=candidate_positions,
         reference_scores=reference_scores,
     )
-    resident_probe = _run_resident_probe(
+    resident_probe = run_repeated_resident_probe(
         case=case,
         shape=shape,
         controls=controls,
@@ -146,10 +180,30 @@ def run_case(
         candidate_positions=candidate_positions,
         reference_scores=reference_scores,
     )
+    multi_window_probe = run_multi_window_resident_probe(
+        case=case,
+        shape=shape,
+        controls=controls,
+        capability=capability,
+        query_windows=query_windows,
+        payload=payload,
+        candidate_positions=reshape_windows(
+            multi_candidate_positions,
+            window_count=controls.resident_session_iterations,
+            query_count=shape.query_count,
+        ),
+        reference_scores=reshape_windows(
+            multi_reference_scores,
+            window_count=controls.resident_session_iterations,
+            query_count=shape.query_count,
+        ),
+    )
     gpu_status = _gpu_status(gpu_probe)
     resident_status = _gpu_status(resident_probe)
+    multi_window_status = _gpu_status(multi_window_probe)
     gpu_parsed = parsed_payload(gpu_probe)
     resident_parsed = parsed_payload(resident_probe)
+    multi_window_parsed = parsed_payload(multi_window_probe)
     return _case_row(
         case=case,
         controls=controls,
@@ -158,6 +212,8 @@ def run_case(
         build_seconds=build_seconds,
         candidate_timing=candidate_timing,
         score_timing=score_timing,
+        multi_candidate_timing=multi_candidate_timing,
+        multi_score_timing=multi_score_timing,
         capability=capability,
         gpu_probe=gpu_probe,
         gpu_status=gpu_status,
@@ -165,6 +221,9 @@ def run_case(
         resident_probe=resident_probe,
         resident_status=resident_status,
         resident_parsed=resident_parsed,
+        multi_window_probe=multi_window_probe,
+        multi_window_status=multi_window_status,
+        multi_window_parsed=multi_window_parsed,
     )
 
 
@@ -194,62 +253,6 @@ def _run_gpu_probe(
     )
 
 
-def _run_resident_probe(
-    *,
-    case: AddressServeSweepCase,
-    shape: SpeedTrackShape,
-    controls: AddressServeSweepControls,
-    capability: MojoGpuCapability,
-    queries: Any,
-    payload: Any,
-    candidate_positions: Sequence[Sequence[int]],
-    reference_scores: Sequence[Sequence[float]],
-) -> dict[str, object] | None:
-    if not capability.available:
-        return None
-    try:
-        result = score_i8_prepared_payload_session_addresses_repeated(
-            target_accelerator=capability.target_accelerator or "",
-            shape=shape,
-            candidate_k=case.candidate_k,
-            queries=queries,
-            payload=payload,
-            candidate_positions_by_query=candidate_positions,
-            reference_scores_by_query=reference_scores,
-            session_iterations=controls.resident_session_iterations,
-        )
-    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
-        return {"status": "error", "parsed": {}, "error": str(exc)}
-
-    parsed = {
-        "bridge_scope": "single_extension_call_address_resident_session",
-        "candidate_k": case.candidate_k,
-        "candidate_score_count": result.candidate_score_count,
-        "document_count": shape.document_count,
-        "document_vector_count": shape.document_vector_count,
-        "extension_call_seconds": result.extension_call_seconds,
-        "extension_call_seconds_per_iteration": (
-            result.extension_call_seconds_per_iteration
-        ),
-        "host_marshalling_seconds": result.host_marshalling_seconds,
-        "payload_source": "real_kayak_i8_snapshot",
-        "query_count": shape.query_count,
-        "query_vector_count": shape.query_vector_count,
-        "score_agreement_ok": result.score_delta_max_abs <= 0.0001,
-        "score_delta_max_abs": result.score_delta_max_abs,
-        "session_iterations": result.session_iterations,
-        "total_document_vector_count": (
-            shape.document_count * shape.document_vector_count
-        ),
-        "vector_dim": shape.vector_dim,
-    }
-    return {
-        "status": STATUS_OK if parsed["score_agreement_ok"] else "error",
-        "parsed": parsed,
-        "measurements": [result.to_json_ready()],
-    }
-
-
 def _gpu_status(gpu_probe: dict[str, object] | None) -> object:
     if isinstance(gpu_probe, dict):
         return gpu_probe.get("status")
@@ -265,6 +268,8 @@ def _case_row(
     build_seconds: float,
     candidate_timing: Any,
     score_timing: Any,
+    multi_candidate_timing: Any,
+    multi_score_timing: Any,
     capability: MojoGpuCapability,
     gpu_probe: dict[str, object] | None,
     gpu_status: object,
@@ -272,10 +277,17 @@ def _case_row(
     resident_probe: dict[str, object] | None,
     resident_status: object,
     resident_parsed: dict[str, object],
+    multi_window_probe: dict[str, object] | None,
+    multi_window_status: object,
+    multi_window_parsed: dict[str, object],
 ) -> dict[str, Any]:
     status = (
         STATUS_OK
-        if gpu_status == STATUS_OK and resident_status == STATUS_OK
+        if (
+            gpu_status == STATUS_OK
+            and resident_status == STATUS_OK
+            and multi_window_status == STATUS_OK
+        )
         else "error"
     )
     return {
@@ -290,6 +302,28 @@ def _case_row(
         "cpu_i8_candidate_generation": candidate_timing.to_json_ready(),
         "cpu_i8_same_candidate_reference": score_timing.to_json_ready()
         | {"candidate_score_count_total": shape.query_count * case.candidate_k},
+        "cpu_i8_multi_window_candidate_generation": (
+            timing_payload_per_window(
+                multi_candidate_timing,
+                window_count=controls.resident_session_iterations,
+            )
+        ),
+        "cpu_i8_multi_window_same_candidate_reference": (
+            timing_payload_per_window(
+                multi_score_timing,
+                window_count=controls.resident_session_iterations,
+            )
+            | {
+                "candidate_score_count_total": (
+                    controls.resident_session_iterations
+                    * shape.query_count
+                    * case.candidate_k
+                ),
+                "candidate_score_count_per_window": (
+                    shape.query_count * case.candidate_k
+                ),
+            }
+        ),
         "gpu_address_serve": _gpu_payload(
             capability=capability,
             gpu_probe=gpu_probe,
@@ -302,11 +336,26 @@ def _case_row(
             gpu_status=resident_status,
             gpu_parsed=resident_parsed,
         ),
+        "gpu_address_resident_multi_window_session": _gpu_payload(
+            capability=capability,
+            gpu_probe=multi_window_probe,
+            gpu_status=multi_window_status,
+            gpu_parsed=multi_window_parsed,
+        ),
         "comparison": comparison_payload(
             cpu_candidate_generation_mean_seconds=candidate_timing.mean_seconds,
             cpu_score_mean_seconds=score_timing.mean_seconds,
             gpu_parsed=gpu_parsed,
             resident_parsed=resident_parsed,
+            cpu_multi_window_candidate_generation_mean_seconds_per_window=(
+                multi_candidate_timing.mean_seconds
+                / float(controls.resident_session_iterations)
+            ),
+            cpu_multi_window_score_mean_seconds_per_window=(
+                multi_score_timing.mean_seconds
+                / float(controls.resident_session_iterations)
+            ),
+            multi_window_parsed=multi_window_parsed,
         ),
     }
 
@@ -328,6 +377,9 @@ def _gpu_payload(
             ),
             "extension_call_seconds_per_iteration": optional_float(
                 gpu_parsed.get("extension_call_seconds_per_iteration")
+            ),
+            "extension_call_seconds_per_window": optional_float(
+                gpu_parsed.get("extension_call_seconds_per_window")
             ),
             "host_marshalling_seconds": optional_float(
                 gpu_parsed.get("host_marshalling_seconds")

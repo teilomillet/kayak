@@ -274,16 +274,25 @@ was faster than CPU same-candidate scoring for larger score work, such as
 `candidate256` and `query_vectors16`, slower for `candidate32` and
 `documents512`, and slightly slower for `doc_vectors32`. The end-to-end
 CPU-candidate-generation-plus-GPU score envelope ranged from about `0.820x` to
-`1.104x` of CPU candidate generation plus CPU score.
+`1.103x` of CPU candidate generation plus CPU score.
 
 Resident-session finding: an in-call repeated address session copies the
 prepared index tensors once, then scores the same query and candidate window
 four times against those resident buffers. Its per-iteration score time ranged
-from about `0.281x` to `0.641x` of CPU same-candidate scoring, and the
+from about `0.282x` to `0.637x` of CPU same-candidate scoring, and the
 CPU-candidate-generation-plus-resident-iteration envelope ranged from about
-`0.698x` to `0.897x` of CPU candidate generation plus CPU score. This is
-evidence that prepared-index residency and allocation reuse are likely higher
-leverage than immediate dim128 kernel rewrites on the swept shapes.
+`0.701x` to `0.896x` of CPU candidate generation plus CPU score.
+
+Multi-window resident finding: a second in-call resident probe copies the same
+prepared index tensors once, then scores four different query/candidate windows
+inside the call. Its per-window score time ranged from about `0.331x` to
+`0.318x` to `0.558x` of CPU same-candidate scoring per window, and the
+CPU-candidate-generation-plus-multi-window-resident envelope ranged from about
+`0.746x` to `0.877x` of CPU candidate generation plus CPU score per window.
+This is evidence that prepared-index residency and allocation reuse are likely
+higher leverage than immediate dim128 kernel rewrites on the swept shapes. It
+also debunks the narrower hypothesis that the resident win only comes from
+repeating one identical candidate window.
 
 Ownership finding: a first Python-visible `PreparedGpuI8RerankDim128` object was
 not kept because Mojo Python `module.add_type[...]` requires `Writable`, while
@@ -439,13 +448,17 @@ evidence only justifies a measured primitive.
    not uniformly faster.
 13. Test in-call prepared-index residency without introducing a hidden global
    cache. Current quiet result: resident-session per-iteration score ratios
-   range from about `0.281x` to `0.641x` of CPU same-candidate scoring across
+   range from about `0.282x` to `0.637x` of CPU same-candidate scoring across
    the six swept cases, but this repeats the same candidate window inside one
    extension call and does not prove cross-call ownership.
-14. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+14. Test different query/candidate windows inside the same in-call resident
+   session. Current quiet result: multi-window per-window score ratios range
+   from about `0.318x` to `0.558x` of CPU same-candidate scoring per window
+   across the six swept cases, while preserving CPU i8 score agreement.
+15. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-15. Only after a measured win, consider public API design.
+16. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

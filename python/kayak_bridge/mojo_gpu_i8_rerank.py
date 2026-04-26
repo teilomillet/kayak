@@ -134,6 +134,40 @@ class MojoGpuI8AddressResidentSessionResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class MojoGpuI8AddressMultiWindowSessionResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    score_delta_max_abs: float
+    candidate_score_count_per_window: int
+    window_count: int
+    scores: tuple[float, ...]
+
+    @property
+    def extension_call_seconds_per_window(self) -> float:
+        return self.extension_call_seconds / float(self.window_count)
+
+    @property
+    def candidate_score_count_total(self) -> int:
+        return self.candidate_score_count_per_window * self.window_count
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "extension_call_seconds_per_window": (
+                self.extension_call_seconds_per_window
+            ),
+            "score_delta_max_abs": self.score_delta_max_abs,
+            "candidate_score_count_per_window": (
+                self.candidate_score_count_per_window
+            ),
+            "candidate_score_count_total": self.candidate_score_count_total,
+            "window_count": self.window_count,
+            "score_count": len(self.scores),
+        }
+
+
 def gpu_extension_device_probe(*, target_accelerator: str) -> str:
     module = load_module(target_accelerator=target_accelerator)
     return str(module.gpu_extension_device_probe())
@@ -543,6 +577,85 @@ def score_i8_prepared_payload_session_addresses_repeated(
     )
 
 
+def score_i8_prepared_payload_session_addresses_multi_window(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    candidate_k: int,
+    query_windows: Any,
+    payload: KayakPlaidI8PayloadSnapshot,
+    candidate_positions_by_window: Sequence[Sequence[Sequence[int]]],
+    reference_scores_by_window: Sequence[Sequence[Sequence[float]]],
+    window_count: int,
+) -> MojoGpuI8AddressMultiWindowSessionResult:
+    if window_count <= 0:
+        raise ValueError("window_count must be positive")
+    marshalling_started_at = time.perf_counter()
+    query_values = _float32_array(query_windows)
+    expected_query_values = (
+        window_count
+        * shape.query_count
+        * shape.query_vector_count
+        * shape.vector_dim
+    )
+    if query_values.size != expected_query_values:
+        raise ValueError("query_windows shape must match window_count and shape")
+    token_codes = _int8_array(payload.token_codes)
+    token_scales = _float32_array(payload.token_scales)
+    doc_offsets = _int64_array(payload.doc_offsets)
+    candidate_positions = _flatten_int_windows_array(
+        candidate_positions_by_window,
+        expected_windows=window_count,
+        expected_rows=shape.query_count,
+        expected_cols=candidate_k,
+        name="candidate_positions_by_window",
+    )
+    reference_scores = _flatten_float_windows_array(
+        reference_scores_by_window,
+        expected_windows=window_count,
+        expected_rows=shape.query_count,
+        expected_cols=candidate_k,
+        name="reference_scores_by_window",
+    )
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    module = load_module(target_accelerator=target_accelerator)
+    request = [
+        _array_address(query_values),
+        _array_address(token_codes),
+        _array_address(token_scales),
+        _array_address(doc_offsets),
+        _array_address(candidate_positions),
+        _array_address(reference_scores),
+        int(shape.query_count),
+        int(shape.query_vector_count),
+        int(shape.document_count),
+        int(shape.document_vector_count),
+        int(candidate_k),
+        int(window_count),
+    ]
+    extension_started_at = time.perf_counter()
+    raw_result = module.score_i8_prepared_payload_session_addresses_multi_window(
+        request
+    )
+    extension_call_seconds = time.perf_counter() - extension_started_at
+
+    if len(raw_result) != 4:
+        raise RuntimeError(
+            "GPU i8 address multi-window session returned an unexpected result shape"
+        )
+
+    scores = tuple(float(value) for value in raw_result[3])
+    return MojoGpuI8AddressMultiWindowSessionResult(
+        host_marshalling_seconds=host_marshalling_seconds,
+        extension_call_seconds=extension_call_seconds,
+        score_delta_max_abs=float(raw_result[0]),
+        candidate_score_count_per_window=int(raw_result[1]),
+        window_count=int(raw_result[2]),
+        scores=scores,
+    )
+
+
 @lru_cache(maxsize=None)
 def load_module(*, target_accelerator: str) -> ModuleType:
     if not target_accelerator:
@@ -720,4 +833,38 @@ def _flatten_float_rows_array(
     values = np.ascontiguousarray(rows, dtype=np.float32).reshape(-1)
     if values.size != expected_rows * expected_cols:
         raise ValueError(f"{name} rows must match candidate_k")
+    return values
+
+
+def _flatten_int_windows_array(
+    windows: Sequence[Sequence[Sequence[int]]],
+    *,
+    expected_windows: int,
+    expected_rows: int,
+    expected_cols: int,
+    name: str,
+) -> np.ndarray:
+    values = np.ascontiguousarray(windows, dtype=np.int64).reshape(-1)
+    expected_size = expected_windows * expected_rows * expected_cols
+    if values.size != expected_size:
+        raise ValueError(
+            f"{name} shape must match window_count, query_count, and candidate_k"
+        )
+    return values
+
+
+def _flatten_float_windows_array(
+    windows: Sequence[Sequence[Sequence[float]]],
+    *,
+    expected_windows: int,
+    expected_rows: int,
+    expected_cols: int,
+    name: str,
+) -> np.ndarray:
+    values = np.ascontiguousarray(windows, dtype=np.float32).reshape(-1)
+    expected_size = expected_windows * expected_rows * expected_cols
+    if values.size != expected_size:
+        raise ValueError(
+            f"{name} shape must match window_count, query_count, and candidate_k"
+        )
     return values

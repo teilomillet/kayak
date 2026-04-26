@@ -43,6 +43,7 @@ from kayak_bridge.gpu_i8_real_payload_score import (  # noqa: E402
 )
 from kayak_bridge import gpu_i8_address_serve_sweep as address_serve_sweep  # noqa: E402
 from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
+    MojoGpuI8AddressMultiWindowSessionResult,
     MojoGpuI8AddressResidentSessionResult,
     MojoGpuI8AddressServeResult,
     MojoGpuI8PreparedSessionResult,
@@ -639,6 +640,24 @@ class GpuI8RerankContractTests(unittest.TestCase):
         self.assertEqual(payload["session_iterations"], 4)
         self.assertEqual(payload["extension_call_seconds_per_iteration"], 0.05)
 
+    def test_address_multi_window_result_reports_window_boundary(self) -> None:
+        result = MojoGpuI8AddressMultiWindowSessionResult(
+            host_marshalling_seconds=0.1,
+            extension_call_seconds=0.2,
+            score_delta_max_abs=0.00001,
+            candidate_score_count_per_window=2,
+            window_count=4,
+            scores=(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0),
+        )
+
+        payload = result.to_json_ready()
+
+        self.assertEqual(payload["candidate_score_count_per_window"], 2)
+        self.assertEqual(payload["candidate_score_count_total"], 8)
+        self.assertEqual(payload["score_count"], 8)
+        self.assertEqual(payload["window_count"], 4)
+        self.assertEqual(payload["extension_call_seconds_per_window"], 0.05)
+
     def test_address_serve_sweep_case_parser_keeps_vector_counts_explicit(
         self,
     ) -> None:
@@ -666,6 +685,9 @@ class GpuI8RerankContractTests(unittest.TestCase):
             cpu_score_mean_seconds=0.002,
             gpu_parsed={"extension_call_seconds": 0.001},
             resident_parsed={"extension_call_seconds_per_iteration": 0.0005},
+            cpu_multi_window_candidate_generation_mean_seconds_per_window=0.004,
+            cpu_multi_window_score_mean_seconds_per_window=0.002,
+            multi_window_parsed={"extension_call_seconds_per_window": 0.001},
         )
 
         self.assertEqual(
@@ -691,6 +713,18 @@ class GpuI8RerankContractTests(unittest.TestCase):
                 "cpu_candidate_plus_gpu_resident_iteration_seconds_per_cpu_candidate_plus_score_second"
             ],
             0.7,
+        )
+        self.assertEqual(
+            comparison[
+                "gpu_address_resident_multi_window_seconds_per_cpu_multi_window_score_second"
+            ],
+            0.5,
+        )
+        self.assertEqual(
+            comparison[
+                "cpu_multi_window_candidate_plus_gpu_resident_multi_window_seconds_per_cpu_multi_window_candidate_plus_score_second"
+            ],
+            5.0 / 6.0,
         )
 
     def test_candidate_score_profile_derives_rates_and_ratios(self) -> None:
