@@ -37,6 +37,7 @@ from kayak_bridge.gpu_copy_roundtrip import (  # noqa: E402
 from kayak_bridge.gpu_i8_candidate_score import (  # noqa: E402
     gpu_candidate_score_probe_counts,
 )
+from kayak_bridge import gpu_i8_centroid_budget_sweep as centroid_budget_sweep  # noqa: E402
 from kayak_bridge.gpu_i8_real_payload_score import (  # noqa: E402
     GPU_REAL_PAYLOAD_STATUS_OK,
     gpu_real_payload_probe_counts,
@@ -810,6 +811,77 @@ class GpuI8RerankContractTests(unittest.TestCase):
         self.assertEqual(
             address_sweep_script.case_selection_from_args(args),
             {"source": "custom", "case_count": 1},
+        )
+
+    def test_centroid_budget_sweep_parses_sorted_unique_budgets(self) -> None:
+        self.assertEqual(
+            centroid_budget_sweep.parse_centroid_budgets("32, 8,16,8"),
+            (8, 16, 32),
+        )
+
+        with self.assertRaisesRegex(ValueError, "positive"):
+            centroid_budget_sweep.parse_centroid_budgets("4,0")
+
+    def test_centroid_budget_sweep_filters_non_full_windows(self) -> None:
+        cases = centroid_budget_sweep.non_full_candidate_cases(
+            address_serve_sweep.CASE_SETS["wide_topk"],
+            include_full_window=False,
+        )
+
+        self.assertEqual(
+            tuple(case.name for case in cases),
+            ("query_vectors32", "doc_vectors64", "query_batch4"),
+        )
+
+    def test_candidate_window_recall_uses_whole_candidate_window(self) -> None:
+        recall = centroid_budget_sweep.candidate_window_recall_at_k(
+            candidate_positions_by_query=((4, 1, 2), (9, 7, 0)),
+            reference_positions_by_query=((1, 2, 3), (7, 8, 9)),
+            k=2,
+        )
+
+        self.assertAlmostEqual(recall, 0.75)
+
+    def test_centroid_budget_sweep_adds_baseline_ratios(self) -> None:
+        rows = centroid_budget_sweep.add_baseline_ratios(
+            [
+                {
+                    "centroids_per_query_vector": 8,
+                    "cpu_i8_candidate_generation": {"mean_seconds": 0.25},
+                    "candidate_window_recall_at_k_vs_kayak_exact": 1.0,
+                    "recall_at_k_vs_kayak_exact": 0.9,
+                    "comparison": {
+                        "cpu_candidate_generation_plus_score_seconds": 0.5
+                    },
+                },
+                {
+                    "centroids_per_query_vector": 32,
+                    "cpu_i8_candidate_generation": {"mean_seconds": 1.0},
+                    "candidate_window_recall_at_k_vs_kayak_exact": 1.0,
+                    "recall_at_k_vs_kayak_exact": 0.9,
+                    "comparison": {
+                        "cpu_candidate_generation_plus_score_seconds": 1.0
+                    },
+                },
+            ],
+            baseline_budget=32,
+        )
+
+        self.assertEqual(
+            rows[0]["comparison"][
+                "candidate_generation_seconds_vs_baseline_budget"
+            ],
+            0.25,
+        )
+        self.assertEqual(
+            rows[0]["comparison"][
+                "candidate_plus_score_seconds_vs_baseline_budget"
+            ],
+            0.5,
+        )
+        self.assertEqual(
+            rows[0]["comparison"]["final_recall_delta_vs_baseline_budget"],
+            0.0,
         )
 
     def test_gpu_i8_score_agreement_tolerance_scales_with_query_vectors(

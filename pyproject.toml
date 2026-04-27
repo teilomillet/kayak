@@ -59,6 +59,8 @@ profile_gpu_i8_address_serve_wide_topk_raw = "python python/scripts/profile_gpu_
 profile_gpu_i8_address_serve_wide_topk = "bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 10 --force -- pixi run profile_gpu_i8_address_serve_wide_topk_raw"
 profile_gpu_i8_candidate_generation_breakdown_raw = "python python/scripts/profile_gpu_i8_candidate_generation_breakdown.py --emit-quiet-mean --output .cache/kayak/gpu_i8_candidate_generation_breakdown/summary.json"
 profile_gpu_i8_candidate_generation_breakdown = "bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 10 --force -- pixi run profile_gpu_i8_candidate_generation_breakdown_raw"
+profile_gpu_i8_centroid_budget_sweep_raw = "python python/scripts/profile_gpu_i8_centroid_budget_sweep.py --emit-quiet-mean --output .cache/kayak/gpu_i8_centroid_budget_sweep/summary.json"
+profile_gpu_i8_centroid_budget_sweep = "bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 20 --force -- pixi run profile_gpu_i8_centroid_budget_sweep_raw"
 bench_python_store_load_raw = "PYTHONPATH=python python python/scripts/bench_store_load.py --store directory --document-count 1000 --vectors-per-document 16 --vector-dim 128 --subset-size 50 --layout packed"
 bench_python_store_load = "bash scripts/run_bench_quiet.sh -- pixi run bench_python_store_load_raw"
 bench_python_store_search_raw = "PYTHONPATH=python python python/scripts/bench_store_search.py --store directory --document-count 1000 --vectors-per-document 16 --vector-dim 128 --candidate-window-size 50 --layout packed --backend mojo_exact_cpu"

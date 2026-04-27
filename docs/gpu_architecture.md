@@ -413,6 +413,22 @@ posting fanout and vector-count fields. The current evidence points to
 reducing or restructuring candidate-generation work before treating GPU as a
 direct port of the CPU loop.
 
+Centroid-budget finding: a benchmark-only sweep now varies
+`centroids_per_query_vector` while holding `centroid_count`, `candidate_k`,
+document vectors, query vectors, and i8 payload fixed. On the wide non-full
+case set, the fastest no-loss budgets versus the `32`-centroid baseline were
+`4` for `query_vectors32`, `16` for `doc_vectors64`, and `8` for
+`query_batch4`. On the default non-full case set, the fastest no-loss budgets
+were `4`, `4`, `16`, `4`, and `24` across the five cases. Lower budgets
+preserved or improved the baseline exact-reference recall on these synthetic
+rows, while reducing posting visits substantially. The winning budget is
+shape-dependent.
+
+Reason: this debunks `32` as a universally justified fixed budget, but it does
+not justify a new static default. The next optimization should be a measured
+shape-aware budget policy or calibration step, followed by a same-shape
+FastPlaid comparison.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -628,10 +644,14 @@ evidence only justifies a measured primitive.
    produce a decision-quality win across default and wide sweeps. The new
    breakdown shows centroid selection, posting accumulation, and final
    candidate top-k as the dominant non-full-window substeps.
-21. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+21. Sweep centroid budgets as the first policy lever on posting fanout. Current
+   quiet result: lower budgets preserve or improve the `32`-centroid baseline
+   recall on measured default and wide non-full synthetic cases, but the
+   fastest no-loss budget is shape-dependent.
+22. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-22. Only after a measured win, consider public API design.
+23. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 
