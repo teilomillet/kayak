@@ -580,6 +580,23 @@ CPU posting accumulation, so the next GPU step should fuse traversal with
 per-document accumulation/reduction instead of materializing the whole visit
 stream as the production boundary.
 
+Dense accumulation finding: a benchmark-only GPU accumulation probe now
+computes dense per-query document scores directly from selected centroids. A
+race-free document-centric variant validated the score semantics, but lost to
+isolated CPU posting accumulation. A follow-up posting-oriented variant using
+`std.os.atomic.Atomic.compare_exchange` for `Float32` atomic max also preserved
+`score_delta_max_abs=0.0` on all `5 / 5` wide rows. On the three non-full rows,
+the atomic all-measured GPU path was about `1.307x`, `3.535x`, and `0.865x` of
+full CPU candidate generation, and about `8.555x`, `17.646x`, and `9.382x` of
+isolated CPU posting accumulation.
+
+Reason: this validates the dense accumulation semantics, but it falsifies both
+the document-centric binary-search kernel and naive global atomic-max posting
+updates as winning primitives on these shapes. The next useful shape needs to
+avoid full visit readback, repeated posting-list search, and high-contention
+global atomics; a tiled or per-query-vector segmented reduction is now the more
+plausible GPU candidate-generation direction.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -841,9 +858,11 @@ evidence only justifies a measured primitive.
    isolated posting path loses on the `doc_vectors64` row versus CPU posting
    accumulation.
 31. Add a benchmark-only GPU posting-accumulation/reduction probe for non-full
-   rows while final candidate top-k remains on CPU. Reason: the traversal probe
-   says materializing the whole visit stream is not enough; the next evidence
-   needs fused per-document accumulation.
+   rows while final candidate top-k remains on CPU. Current quiet result:
+   dense accumulation agrees exactly with the CPU score reference, but both
+   the document-centric binary-search variant and the posting-oriented atomic
+   max variant lose to isolated CPU posting accumulation on the non-full rows.
+   This validates semantics and falsifies the two obvious GPU work assignments.
 32. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and FastPlaid scope rows after the resident ownership boundary
    exists.

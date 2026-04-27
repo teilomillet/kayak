@@ -281,6 +281,59 @@ class MojoGpuI8SelectedPostingTraversalResult:
 
 
 @dataclass(frozen=True, slots=True)
+class MojoGpuI8SelectedPostingAccumulationResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    mojo_host_ingest_mean_seconds: float
+    payload_host_to_device_mean_seconds: float
+    selected_host_to_device_mean_seconds: float
+    kernel_mean_seconds: float
+    device_to_host_mean_seconds: float
+    selected_position_out_of_range_count: int
+    doc_index_out_of_range_count: int
+    score_mismatch_count: int
+    score_delta_max_abs: float
+    selected_centroid_count: int
+    document_score_count: int
+    document_count: int
+
+    @property
+    def accumulation_agreement_ok(self) -> bool:
+        return (
+            self.selected_position_out_of_range_count == 0
+            and self.doc_index_out_of_range_count == 0
+            and self.score_mismatch_count == 0
+        )
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "mojo_host_ingest_mean_seconds": (
+                self.mojo_host_ingest_mean_seconds
+            ),
+            "payload_host_to_device_mean_seconds": (
+                self.payload_host_to_device_mean_seconds
+            ),
+            "selected_host_to_device_mean_seconds": (
+                self.selected_host_to_device_mean_seconds
+            ),
+            "kernel_mean_seconds": self.kernel_mean_seconds,
+            "device_to_host_mean_seconds": self.device_to_host_mean_seconds,
+            "selected_position_out_of_range_count": (
+                self.selected_position_out_of_range_count
+            ),
+            "doc_index_out_of_range_count": self.doc_index_out_of_range_count,
+            "score_mismatch_count": self.score_mismatch_count,
+            "score_delta_max_abs": self.score_delta_max_abs,
+            "accumulation_agreement_ok": self.accumulation_agreement_ok,
+            "selected_centroid_count": self.selected_centroid_count,
+            "document_score_count": self.document_score_count,
+            "document_count": self.document_count,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class _SelectedPostingTraversalReference:
     selected_positions: np.ndarray
     selected_scores: np.ndarray
@@ -295,6 +348,21 @@ class _SelectedPostingTraversalReference:
     @property
     def expanded_posting_count(self) -> int:
         return int(self.expected_doc_indices.size)
+
+
+@dataclass(frozen=True, slots=True)
+class _SelectedPostingAccumulationReference:
+    selected_positions: np.ndarray
+    selected_scores: np.ndarray
+    expected_document_scores: np.ndarray
+
+    @property
+    def selected_centroid_count(self) -> int:
+        return int(self.selected_positions.size)
+
+    @property
+    def document_score_count(self) -> int:
+        return int(self.expected_document_scores.size)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1052,6 +1120,75 @@ def profile_i8_selected_posting_traversal_addresses(
     )
 
 
+def profile_i8_selected_posting_accumulation_addresses(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    warmup_iterations: int,
+    measurement_iterations: int,
+) -> MojoGpuI8SelectedPostingAccumulationResult:
+    if warmup_iterations < 0:
+        raise ValueError("warmup_iterations must be non-negative")
+    if measurement_iterations <= 0:
+        raise ValueError("measurement_iterations must be positive")
+
+    marshalling_started_at = time.perf_counter()
+    centroid_doc_offsets = _int64_array(payload.centroid_doc_offsets)
+    centroid_doc_indices = _int64_array(payload.centroid_doc_indices)
+    reference = _selected_posting_accumulation_reference(
+        payload=payload,
+        selected=selected,
+    )
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    module = load_module(target_accelerator=target_accelerator)
+    request = [
+        _array_address(centroid_doc_offsets),
+        _array_address(centroid_doc_indices),
+        _array_address(reference.selected_positions),
+        _array_address(reference.selected_scores),
+        _array_address(reference.expected_document_scores),
+        int(payload.centroid_count),
+        int(payload.posting_count),
+        int(shape.document_count),
+        int(shape.query_count),
+        int(shape.query_vector_count),
+        int(selected.centroids_per_query_vector),
+        int(warmup_iterations),
+        int(measurement_iterations),
+    ]
+    extension_started_at = time.perf_counter()
+    raw_result = module.profile_i8_selected_posting_accumulation_addresses(
+        request
+    )
+    extension_call_seconds = time.perf_counter() - extension_started_at
+
+    if len(raw_result) != 12:
+        raise RuntimeError(
+            "GPU i8 selected-posting accumulation bridge returned an "
+            "unexpected result shape"
+        )
+
+    return MojoGpuI8SelectedPostingAccumulationResult(
+        host_marshalling_seconds=host_marshalling_seconds,
+        extension_call_seconds=extension_call_seconds,
+        mojo_host_ingest_mean_seconds=float(raw_result[0]),
+        payload_host_to_device_mean_seconds=float(raw_result[1]),
+        selected_host_to_device_mean_seconds=float(raw_result[2]),
+        kernel_mean_seconds=float(raw_result[3]),
+        device_to_host_mean_seconds=float(raw_result[4]),
+        selected_position_out_of_range_count=int(raw_result[5]),
+        doc_index_out_of_range_count=int(raw_result[6]),
+        score_mismatch_count=int(raw_result[7]),
+        score_delta_max_abs=float(raw_result[8]),
+        selected_centroid_count=int(raw_result[9]),
+        document_score_count=int(raw_result[10]),
+        document_count=int(raw_result[11]),
+    )
+
+
 def score_i8_prepared_payload_session_addresses(
     *,
     target_accelerator: str,
@@ -1430,6 +1567,58 @@ def _selected_posting_traversal_reference(
             dtype=np.int64,
         ),
         expected_scores=np.ascontiguousarray(expected_scores, dtype=np.float32),
+    )
+
+
+def _selected_posting_accumulation_reference(
+    *,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+) -> _SelectedPostingAccumulationReference:
+    payload.validate()
+    selected.validate()
+    selected_positions = _int64_array(selected.positions_array())
+    selected_scores = _float32_array(selected.scores_array())
+    if selected_positions.size != selected_scores.size:
+        raise ValueError("selected centroid positions and scores must align")
+
+    centroid_doc_offsets = _int64_array(payload.centroid_doc_offsets)
+    centroid_doc_indices = _int64_array(payload.centroid_doc_indices)
+    document_scores = np.zeros(
+        (selected.query_count, payload.document_count),
+        dtype=np.float32,
+    )
+    selected_per_query = selected.selected_centroid_count_per_query
+    for query_index in range(selected.query_count):
+        query_base = query_index * selected_per_query
+        for query_vector_index in range(selected.query_vector_count):
+            selected_base = (
+                query_base
+                + query_vector_index * selected.centroids_per_query_vector
+            )
+            best_scores = np.empty(payload.document_count, dtype=np.float32)
+            best_scores.fill(np.float32(-np.inf))
+            seen = np.zeros(payload.document_count, dtype=bool)
+            for selected_offset in range(selected.centroids_per_query_vector):
+                selected_index = selected_base + selected_offset
+                centroid = int(selected_positions[selected_index])
+                if centroid < 0 or centroid >= payload.centroid_count:
+                    raise ValueError("selected centroid position out of range")
+                posting_start = int(centroid_doc_offsets[centroid])
+                posting_stop = int(centroid_doc_offsets[centroid + 1])
+                docs = centroid_doc_indices[posting_start:posting_stop]
+                score = selected_scores[selected_index]
+                best_scores[docs] = np.maximum(best_scores[docs], score)
+                seen[docs] = True
+            document_scores[query_index, seen] += best_scores[seen]
+
+    return _SelectedPostingAccumulationReference(
+        selected_positions=selected_positions,
+        selected_scores=selected_scores,
+        expected_document_scores=np.ascontiguousarray(
+            document_scores.reshape(-1),
+            dtype=np.float32,
+        ),
     )
 
 
