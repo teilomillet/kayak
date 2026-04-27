@@ -103,7 +103,42 @@ Naming rule:
 - it is not a cross-encoder ceiling
 - it is not a long-context LLM ceiling
 
-### 5. Future Code Or Multimodal Lane
+### 5. Corpus-Scale PLAID Serving
+
+Current status:
+- scaffolded, not yet a decision-quality full-corpus benchmark
+
+Current scaffold:
+- `python/scripts/profile_task_plaid_i8_candidate_generation.py`
+
+Target families:
+- MS MARCO passage full corpus
+- one long-context corpus: LoCoV1, LEMB/NarrativeQA, or local arXiv chunks
+
+Question this rung answers:
+- does Kayak's advantage come from candidate generation, pruning, compact
+  storage, and residual/exact materialization rather than from isolated MaxSim
+  kernels?
+
+Exit criteria:
+- corpus size and vector counts are explicit: document count, query count,
+  total document vectors, query-vector distribution, document-vector
+  distribution
+- candidate generation is measured separately from exact rerank
+- residual or i8 token payload materialization is measured or estimated as its
+  own field
+- external baselines include FastPlaid where the comparison is batch/offline
+  and NextPlaid where the comparison is serving/index lifecycle
+- full-corpus runs use the quiet benchmark wrapper, and any sampled smoke run
+  is labeled as a pipeline validation only
+
+Reason:
+- the current GPU/FastPlaid rows are useful primitive tests, but they are too
+  small to prove corpus-scale PLAID serving behavior. Long documents and large
+  corpora are where posting fanout, candidate pruning, and residual
+  materialization become the system bottleneck.
+
+### 6. Future Code Or Multimodal Lane
 
 Current status:
 - not implemented
@@ -138,6 +173,16 @@ Local stronger ceiling:
 
 ```bash
 pixi run bench_browsecomp_plus_gold_ceiling_comparison
+```
+
+Corpus-scale scaffold on an already encoded task JSON:
+
+```bash
+PYTHONPATH=python python python/scripts/profile_task_plaid_i8_candidate_generation.py \
+  --task .cache/kayak/browsecomp_plus_real_subset/python_task_gold.json \
+  --query-limit 4 \
+  --candidate-k 256 \
+  --emit-quiet-mean
 ```
 
 ## What This Note Does Not Claim

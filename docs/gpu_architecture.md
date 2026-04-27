@@ -1135,6 +1135,14 @@ evidence only justifies a measured primitive.
    delta versus FastPlaid to `0.05`, and still costs at most about `0.243x` of
    FastPlaid full-search batch time. This should be repeated and tested on
    broader shapes before it becomes a public default.
+46. Add a corpus-scale PLAID serving benchmark boundary before making stronger
+   FastPlaid or NextPlaid claims. Current result: the encoded-task scaffold in
+   `python/scripts/profile_task_plaid_i8_candidate_generation.py` profiles
+   real-task PLAID i8 candidate-generation substeps, posting visits, touched
+   documents, candidate vector counts, and candidate payload estimates. This
+   is not a full MS MARCO/LoCo result yet. It exists to keep the next
+   optimization aimed at candidate generation, pruning, and materialization
+   rather than isolated MaxSim kernels.
 
 ## Falsification Conditions
 

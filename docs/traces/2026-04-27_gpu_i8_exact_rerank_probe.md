@@ -10,7 +10,7 @@ non-full rows are exact-rerank dominated. The address scorer writes and reads a
 large partial-score buffer, so a fused query-vector implementation was worth
 testing before deeper kernel work.
 
-## Probe
+## Probe 1: Single-Thread Query-Vector Fusion
 
 Tested an additive local implementation that computed one best score per
 `(query, candidate, query vector)` directly, then reduced those query-vector
@@ -43,9 +43,47 @@ parallelism into each thread. On the smoke case it was roughly `121x` slower
 than the existing scorer, so the experimental code was removed instead of
 leaving an unused internal path.
 
+## Probe 2: Block-Level Query-Vector Reduction
+
+Tested a second additive local implementation with one block per
+`(query, candidate, query vector)`. Threads in the block covered document
+vectors and reduced the max score in shared memory before reducing query-vector
+scores to final candidate scores.
+
+Reason: this kept parallelism across document vectors while still avoiding the
+full partial-score write/read path.
+
+Validation smoke used the same synthetic shape, seed, payload, candidate
+window, and top-k as Probe 1.
+
+Result:
+
+| scorer | extension seconds |
+| --- | ---: |
+| existing partial-score scorer | `0.00023619100102223456` |
+| block-level query-vector scorer | `0.024296386996866204` |
+
+Correctness matched for this smoke:
+
+- `positions_equal`: `True`
+- `max_score_delta`: `0.0`
+
+Decision: reject this block-level implementation too.
+
+Reason: preserving document-vector parallelism was not enough to offset the
+cost of launching thousands of small blocks and doing per-block shared-memory
+reductions. It was roughly `103x` slower than the existing scorer on the smoke
+case, so the experimental code was removed.
+
 ## Next
 
-Exact-rerank optimization should not fuse all document-vector work into one
-thread. The next viable kernel direction is a block-level reduction that keeps
-parallelism across document vectors while avoiding the full partial-score
-write/read path.
+The two negative probes suggest the existing partial-score kernel is fast
+because it exposes much finer-grained parallelism than the fused alternatives.
+The next exact-rerank work should use profiler data from the existing kernels
+instead of reducing launch granularity further. Plausible directions are:
+
+- improve memory locality or vectorized loads in the existing token-dot kernel
+- specialize fixed dim128/document-vector-count kernels if Mojo supports useful
+  compile-time specialization
+- avoid exact rerank work algorithmically through a measured shortlist policy
+  rather than by making each exact score thread coarser
