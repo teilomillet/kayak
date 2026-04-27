@@ -4,7 +4,6 @@ from std.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.math import abs
 from std.memory import alloc
 from std.os import abort
-from std.os.atomic import Atomic
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 
@@ -142,123 +141,6 @@ def posting_contains_document(
     )
 
 
-def accumulate_i8_selected_centroid_scores_by_document_kernel(
-    selected_centroid_positions: UnsafePointer[Int64, MutAnyOrigin],
-    selected_centroid_scores: UnsafePointer[Float32, MutAnyOrigin],
-    centroid_doc_offsets: UnsafePointer[Int64, MutAnyOrigin],
-    centroid_doc_indices: UnsafePointer[Int64, MutAnyOrigin],
-    output_document_scores: UnsafePointer[Float32, MutAnyOrigin],
-    query_vector_count: Int,
-    centroids_per_query_vector: Int,
-    document_count: Int,
-    score_count: Int,
-):
-    var score_index = Int(global_idx.x)
-    if score_index >= score_count:
-        return
-
-    var query_index = score_index // document_count
-    var document_index = score_index % document_count
-    var selected_query_base = (
-        query_index * query_vector_count * centroids_per_query_vector
-    )
-    var total_score = Float32(0.0)
-
-    for query_vector_index in range(query_vector_count):
-        var selected_base = (
-            selected_query_base
-            + query_vector_index * centroids_per_query_vector
-        )
-        var seen = False
-        var best_score = Float32(-3.4028234663852886e38)
-
-        for selected_offset in range(centroids_per_query_vector):
-            var selected_index = selected_base + selected_offset
-            var centroid_position = Int(
-                selected_centroid_positions[selected_index]
-            )
-            var posting_start = Int(centroid_doc_offsets[centroid_position])
-            var posting_stop = Int(centroid_doc_offsets[centroid_position + 1])
-            if posting_contains_document(
-                centroid_doc_indices,
-                posting_start,
-                posting_stop,
-                document_index,
-            ):
-                var centroid_score = selected_centroid_scores[selected_index]
-                if not seen or centroid_score > best_score:
-                    best_score = centroid_score
-                    seen = True
-
-        if seen:
-            total_score += best_score
-
-    output_document_scores[score_index] = total_score
-
-
-def fill_float32_kernel(
-    values: UnsafePointer[Float32, MutAnyOrigin],
-    fill_value: Float32,
-    value_count: Int,
-):
-    var value_index = Int(global_idx.x)
-    if value_index >= value_count:
-        return
-    values[value_index] = fill_value
-
-
-def atomic_max_float32(
-    values: UnsafePointer[Float32, MutAnyOrigin],
-    value_index: Int,
-    candidate: Float32,
-):
-    var ptr = values + value_index
-    var current = Atomic[DType.float32].load(ptr)
-    while candidate > current:
-        var expected = current
-        if Atomic[DType.float32].compare_exchange(ptr, expected, candidate):
-            return
-        current = expected
-
-
-def accumulate_i8_selected_centroid_scores_atomic_max_kernel(
-    selected_centroid_positions: UnsafePointer[Int64, MutAnyOrigin],
-    selected_centroid_scores: UnsafePointer[Float32, MutAnyOrigin],
-    centroid_doc_offsets: UnsafePointer[Int64, MutAnyOrigin],
-    centroid_doc_indices: UnsafePointer[Int64, MutAnyOrigin],
-    best_scores_by_query_vector: UnsafePointer[Float32, MutAnyOrigin],
-    query_vector_count: Int,
-    centroids_per_query_vector: Int,
-    document_count: Int,
-    selected_centroid_count: Int,
-):
-    var selected_index = Int(global_idx.x)
-    if selected_index >= selected_centroid_count:
-        return
-
-    var selected_per_query = query_vector_count * centroids_per_query_vector
-    var query_index = selected_index // selected_per_query
-    var selected_within_query = (
-        selected_index - query_index * selected_per_query
-    )
-    var query_vector_index = selected_within_query // centroids_per_query_vector
-    var best_score_base = (
-        query_index * query_vector_count + query_vector_index
-    ) * document_count
-    var centroid_position = Int(selected_centroid_positions[selected_index])
-    var centroid_score = selected_centroid_scores[selected_index]
-    var posting_start = Int(centroid_doc_offsets[centroid_position])
-    var posting_stop = Int(centroid_doc_offsets[centroid_position + 1])
-
-    for posting_index in range(posting_start, posting_stop):
-        var document_index = Int(centroid_doc_indices[posting_index])
-        atomic_max_float32(
-            best_scores_by_query_vector,
-            best_score_base + document_index,
-            centroid_score,
-        )
-
-
 def reduce_i8_selected_centroid_best_scores_kernel(
     best_scores_by_query_vector: UnsafePointer[Float32, MutAnyOrigin],
     output_document_scores: UnsafePointer[Float32, MutAnyOrigin],
@@ -282,6 +164,55 @@ def reduce_i8_selected_centroid_best_scores_kernel(
             total_score += best_score
 
     output_document_scores[score_index] = total_score
+
+
+def accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel(
+    selected_centroid_positions: UnsafePointer[Int64, MutAnyOrigin],
+    selected_centroid_scores: UnsafePointer[Float32, MutAnyOrigin],
+    centroid_doc_offsets: UnsafePointer[Int64, MutAnyOrigin],
+    centroid_doc_indices: UnsafePointer[Int64, MutAnyOrigin],
+    best_scores_by_query_vector: UnsafePointer[Float32, MutAnyOrigin],
+    query_vector_count: Int,
+    centroids_per_query_vector: Int,
+    document_count: Int,
+    best_score_count: Int,
+):
+    var best_score_index = Int(global_idx.x)
+    if best_score_index >= best_score_count:
+        return
+
+    var document_index = best_score_index % document_count
+    var query_vector_global = best_score_index // document_count
+    var query_index = query_vector_global // query_vector_count
+    var query_vector_index = (
+        query_vector_global - query_index * query_vector_count
+    )
+    var selected_base = (
+        query_index * query_vector_count + query_vector_index
+    ) * centroids_per_query_vector
+    var seen = False
+    var best_score = Float32(0.0)
+
+    for selected_offset in range(centroids_per_query_vector):
+        var selected_index = selected_base + selected_offset
+        var centroid_position = Int(selected_centroid_positions[selected_index])
+        var posting_start = Int(centroid_doc_offsets[centroid_position])
+        var posting_stop = Int(centroid_doc_offsets[centroid_position + 1])
+        if posting_contains_document(
+            centroid_doc_indices,
+            posting_start,
+            posting_stop,
+            document_index,
+        ):
+            var centroid_score = selected_centroid_scores[selected_index]
+            if not seen or centroid_score > best_score:
+                best_score = centroid_score
+                seen = True
+
+    if seen:
+        best_scores_by_query_vector[best_score_index] = best_score
+    else:
+        best_scores_by_query_vector[best_score_index] = Float32(0.0)
 
 
 struct PreparedGpuI8AddressSession(Movable):
@@ -2445,9 +2376,6 @@ def profile_i8_selected_posting_accumulation_addresses(
     var score_count = query_count * document_count
     var best_score_count = query_count * query_vector_count * document_count
     var grid_x = (score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
-    var selected_grid_x = (
-        selected_centroid_count + BLOCK_SIZE - 1
-    ) // BLOCK_SIZE
     var best_grid_x = (best_score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
 
     with DeviceContext() as ctx:
@@ -2518,18 +2446,8 @@ def profile_i8_selected_posting_accumulation_addresses(
 
         def accumulation_kernel_once() capturing raises:
             ctx.enqueue_function[
-                fill_float32_kernel,
-                fill_float32_kernel,
-            ](
-                best_scores_device,
-                Float32(-3.4028234663852886e38),
-                best_score_count,
-                grid_dim=best_grid_x,
-                block_dim=BLOCK_SIZE,
-            )
-            ctx.enqueue_function[
-                accumulate_i8_selected_centroid_scores_atomic_max_kernel,
-                accumulate_i8_selected_centroid_scores_atomic_max_kernel,
+                accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel,
+                accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel,
             ](
                 selected_positions_device,
                 selected_scores_device,
@@ -2539,8 +2457,8 @@ def profile_i8_selected_posting_accumulation_addresses(
                 query_vector_count,
                 centroids_per_query_vector,
                 document_count,
-                selected_centroid_count,
-                grid_dim=selected_grid_x,
+                best_score_count,
+                grid_dim=best_grid_x,
                 block_dim=BLOCK_SIZE,
             )
             ctx.enqueue_function[

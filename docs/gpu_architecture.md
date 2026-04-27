@@ -581,21 +581,30 @@ per-document accumulation/reduction instead of materializing the whole visit
 stream as the production boundary.
 
 Dense accumulation finding: a benchmark-only GPU accumulation probe now
-computes dense per-query document scores directly from selected centroids. A
-race-free document-centric variant validated the score semantics, but lost to
-isolated CPU posting accumulation. A follow-up posting-oriented variant using
-`std.os.atomic.Atomic.compare_exchange` for `Float32` atomic max also preserved
-`score_delta_max_abs=0.0` on all `5 / 5` wide rows. On the three non-full rows,
-the atomic all-measured GPU path was about `1.307x`, `3.535x`, and `0.865x` of
-full CPU candidate generation, and about `8.555x`, `17.646x`, and `9.382x` of
-isolated CPU posting accumulation.
+computes dense per-query document scores directly from selected centroids. The
+surviving implementation assigns one GPU lane to each
+`[query, query_vector, document]` score contribution, binary-searches the
+selected centroid posting lists for that document, writes a dense
+`[query_count, query_vector_count, document_count]` best-score tensor, and
+reduces it to `[query_count, document_count]` scores on device. The latest quiet
+wide run was exact on all `5 / 5` rows with `score_delta_max_abs=0.0`. On the
+three non-full rows, the all-measured GPU path was about `0.064x`, `0.121x`,
+and `0.050x` of full CPU candidate generation, and about `0.429x`, `0.621x`,
+and `0.524x` of isolated CPU posting accumulation.
 
-Reason: this validates the dense accumulation semantics, but it falsifies both
-the document-centric binary-search kernel and naive global atomic-max posting
-updates as winning primitives on these shapes. The next useful shape needs to
-avoid full visit readback, repeated posting-list search, and high-contention
-global atomics; a tiled or per-query-vector segmented reduction is now the more
-plausible GPU candidate-generation direction.
+Rejected accumulation variants are also recorded. The first document-centric
+variant validated score semantics but did not expose enough parallelism. A
+posting-oriented global `Float32` atomic-max variant preserved exact scores but
+was much slower than CPU posting accumulation. A qv-doc `Float32` atomic-add
+variant removed the reduction launch, but failed the exact agreement contract
+on the wide rows with `score_delta_max_abs` up to about `9.16e-05` and hundreds of
+mismatches.
+
+Reason: the winning qv-doc reduce shape keeps correctness deterministic and
+beats isolated CPU posting accumulation on the measured standard rows. It still
+does repeated posting-list search and materializes a dense query-vector score
+buffer, so the next optimization should target tiled or segmented reduction
+without global atomics or nondeterministic score order.
 
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
