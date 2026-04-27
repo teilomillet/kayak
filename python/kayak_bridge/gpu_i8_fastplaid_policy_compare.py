@@ -28,6 +28,7 @@ class FastPlaidPolicyCompareControls:
     gpu_topk_session_iterations: int = 4
     kayak_plaid_centroid_count: int = 128
     policy_name: str = "shape_rule_v0"
+    kayak_i8_candidate_order: str = "unordered"
     fastplaid_devices: tuple[str, ...] = ("cpu", "cuda")
 
     def validate(self) -> None:
@@ -41,6 +42,8 @@ class FastPlaidPolicyCompareControls:
             raise ValueError("measurement_iterations must be positive")
         if self.gpu_topk_session_iterations <= 0:
             raise ValueError("gpu_topk_session_iterations must be positive")
+        if self.kayak_i8_candidate_order not in {"ordered", "unordered"}:
+            raise ValueError("kayak_i8_candidate_order must be ordered or unordered")
         if not self.fastplaid_devices:
             raise ValueError("at least one FastPlaid device is required")
 
@@ -53,6 +56,7 @@ class FastPlaidPolicyCompareControls:
             "warmup_iterations": self.warmup_iterations,
             "measurement_iterations": self.measurement_iterations,
             "gpu_topk_session_iterations": self.gpu_topk_session_iterations,
+            "kayak_i8_candidate_order": self.kayak_i8_candidate_order,
         }
 
 
@@ -110,6 +114,8 @@ def compare_argv_for_case(
         str(controls.kayak_plaid_centroid_count),
         "--kayak-plaid-centroids-per-query-vector",
         str(choice.centroids_per_query_vector),
+        "--kayak-i8-candidate-order",
+        controls.kayak_i8_candidate_order,
         "--fastplaid-device",
         fastplaid_device,
         "--index-root",
@@ -160,6 +166,7 @@ def summarize_case_device_report(
         "seed": controls.seed + case_index,
         "shape": report.get("shape"),
         "policy": choice.to_json_ready(),
+        "kayak_i8_candidate_order": controls.kayak_i8_candidate_order,
         "report_path": str(report_path),
         "kayak_i8_recall_at_k_vs_kayak_exact": _optional_float(
             kayak_i8.get("recall_at_k_vs_kayak_exact") if kayak_i8 else None

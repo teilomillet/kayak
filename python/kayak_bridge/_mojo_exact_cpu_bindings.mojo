@@ -30,6 +30,9 @@ from kayak.search import (
     search_exact,
     search_exact_hybrid_flat_only_dim128,
 )
+from kayak.search.plaid_i8_approx_dim128 import (
+    plaid_i8_candidate_positions_for_query_unordered,
+)
 from kayak.search.plaid_i8_candidate_profile_dim128 import (
     profile_plaid_i8_candidate_generation_for_query,
 )
@@ -353,6 +356,26 @@ def i8_candidate_generation_profile_to_python(
     )
     append_profile_float(
         py_result,
+        "workspace_full_candidate_mean_seconds",
+        profile.workspace_full_candidate_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "workspace_candidate_position_agreement",
+        profile.workspace_candidate_position_agreement,
+    )
+    append_profile_float(
+        py_result,
+        "unordered_candidate_mean_seconds",
+        profile.unordered_candidate_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "unordered_candidate_set_agreement",
+        profile.unordered_candidate_set_agreement,
+    )
+    append_profile_float(
+        py_result,
         "centroid_scoring_mean_seconds",
         profile.centroid_scoring_mean_seconds,
     )
@@ -370,6 +393,11 @@ def i8_candidate_generation_profile_to_python(
         py_result,
         "final_topk_mean_seconds",
         profile.final_topk_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "unordered_final_topk_mean_seconds",
+        profile.unordered_final_topk_mean_seconds,
     )
     append_profile_int(
         py_result, "query_vector_count", profile.query_vector_count
@@ -961,6 +989,50 @@ def plaid_i8_candidate_positions_prepared_batch_address(
     return positions_batch_to_python(positions_by_query)
 
 
+def plaid_i8_candidate_positions_prepared_batch_address_unordered(
+    py_query_values_address: PythonObject,
+    py_query_count: PythonObject,
+    py_query_vector_count: PythonObject,
+    py_centroids_per_query_vector: PythonObject,
+    py_candidate_k: PythonObject,
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_query_values_address)
+    var query_count = Int(py=py_query_count)
+    var query_vector_count = Int(py=py_query_vector_count)
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_centroids_per_query_vector)
+    var candidate_k = Int(py=py_candidate_k)
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            plaid_i8_candidate_positions_for_query_unordered(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
 def plaid_i8_candidate_scores_prepared_batch(
     py_query_batch_values: PythonObject,
     py_candidate_positions_batch: PythonObject,
@@ -1183,6 +1255,15 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
             docstring=(
                 "Generate int8 PLAID candidate positions from a contiguous"
                 " float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            plaid_i8_candidate_positions_prepared_batch_address_unordered
+        ](
+            "plaid_i8_candidate_positions_prepared_batch_address_unordered",
+            docstring=(
+                "Generate unordered int8 PLAID candidate positions from a"
+                " contiguous float32 query tensor address."
             ),
         )
         module.def_function[plaid_i8_candidate_scores_prepared_batch](

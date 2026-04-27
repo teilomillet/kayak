@@ -49,6 +49,7 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
             _arg_value(argv, "--kayak-plaid-centroids-per-query-vector"),
             "8",
         )
+        self.assertEqual(_arg_value(argv, "--kayak-i8-candidate-order"), "unordered")
         self.assertEqual(_arg_value(argv, "--fastplaid-device"), "cuda")
         self.assertIn("--allow-missing-gpu", argv)
         self.assertIn("--require-fastplaid", argv)
@@ -88,6 +89,7 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
         )
 
         self.assertEqual(row["policy"]["centroids_per_query_vector"], 4)
+        self.assertEqual(row["kayak_i8_candidate_order"], "unordered")
         self.assertEqual(row["kayak_i8_recall_at_k_vs_kayak_exact"], 0.7)
         self.assertEqual(row["fastplaid_recall_at_k_vs_kayak_exact"], 0.4)
         self.assertEqual(

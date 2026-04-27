@@ -21,6 +21,7 @@ from .plaid_approx_dim128 import (
     require_positive_int,
     sampled_centroid_token_indices,
     top_positions_by_score,
+    top_unordered_positions_by_score,
 )
 from .topk import insert_descending, top_k_hits
 
@@ -331,6 +332,7 @@ def score_query_vector_against_i8_centroids(
     read prepared_index: PreparedPlaidApproxI8Index,
 ) -> List[ScoreScalar]:
     var centroid_scores = List[ScoreScalar]()
+    centroid_scores.reserve(prepared_index.centroid_count)
 
     for centroid_index in range(prepared_index.centroid_count):
         centroid_scores.append(
@@ -351,6 +353,37 @@ def plaid_i8_candidate_positions_for_query(
     centroids_per_query_vector: Int,
     candidate_k: Int,
 ) raises -> List[Int]:
+    return plaid_i8_candidate_positions_for_query_with_topk_order(
+        query,
+        prepared_index,
+        centroids_per_query_vector,
+        candidate_k,
+        True,
+    )
+
+
+def plaid_i8_candidate_positions_for_query_unordered(
+    read query: FlatQueryDim128,
+    read prepared_index: PreparedPlaidApproxI8Index,
+    centroids_per_query_vector: Int,
+    candidate_k: Int,
+) raises -> List[Int]:
+    return plaid_i8_candidate_positions_for_query_with_topk_order(
+        query,
+        prepared_index,
+        centroids_per_query_vector,
+        candidate_k,
+        False,
+    )
+
+
+def plaid_i8_candidate_positions_for_query_with_topk_order(
+    read query: FlatQueryDim128,
+    read prepared_index: PreparedPlaidApproxI8Index,
+    centroids_per_query_vector: Int,
+    candidate_k: Int,
+    ordered_output: Bool,
+) raises -> List[Int]:
     require_positive_int(
         "centroids_per_query_vector", centroids_per_query_vector
     )
@@ -364,14 +397,20 @@ def plaid_i8_candidate_positions_for_query(
         return all_positions^
 
     var document_scores = List[ScoreScalar]()
+    document_scores.reserve(prepared_index.document_count)
     for _ in range(prepared_index.document_count):
         document_scores.append(zero_score_scalar())
 
     var token_best_scores = List[ScoreScalar]()
     var token_seen = List[Int]()
+    token_best_scores.reserve(prepared_index.document_count)
+    token_seen.reserve(prepared_index.document_count)
     for _ in range(prepared_index.document_count):
         token_best_scores.append(min_score_scalar())
         token_seen.append(0)
+
+    var touched_documents = List[Int]()
+    touched_documents.reserve(prepared_index.document_count)
 
     for query_vector_index in range(query.vector_count):
         var centroid_scores = score_query_vector_against_i8_centroids(
@@ -380,8 +419,7 @@ def plaid_i8_candidate_positions_for_query(
         var centroid_positions = top_positions_by_score(
             centroid_scores, centroids_per_query_vector
         )
-        var touched_documents = List[Int]()
-        touched_documents.reserve(prepared_index.document_count)
+        var touched_document_count = 0
 
         for centroid_position in centroid_positions:
             var centroid_score = centroid_scores[centroid_position]
@@ -398,16 +436,26 @@ def plaid_i8_candidate_positions_for_query(
                 if token_seen[document_index] == 0:
                     token_best_scores[document_index] = centroid_score
                     token_seen[document_index] = 1
-                    touched_documents.append(document_index)
+                    if touched_document_count == len(touched_documents):
+                        touched_documents.append(document_index)
+                    else:
+                        touched_documents[
+                            touched_document_count
+                        ] = document_index
+                    touched_document_count += 1
                 elif centroid_score > token_best_scores[document_index]:
                     token_best_scores[document_index] = centroid_score
 
-        for document_index in touched_documents:
+        for touched_offset in range(touched_document_count):
+            var document_index = touched_documents[touched_offset]
             document_scores[document_index] += token_best_scores[document_index]
             token_best_scores[document_index] = min_score_scalar()
             token_seen[document_index] = 0
 
-    return top_positions_by_score(document_scores, candidate_k)
+    if ordered_output:
+        return top_positions_by_score(document_scores, candidate_k)
+
+    return top_unordered_positions_by_score(document_scores, candidate_k)
 
 
 def plaid_i8_score_for_document(

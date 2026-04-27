@@ -362,6 +362,30 @@ def top_positions_by_score(
     return selected^
 
 
+def top_unordered_positions_by_score(
+    read scores: List[ScoreScalar], k: Int
+) raises -> List[Int]:
+    require_positive_int("k", k)
+
+    var heap_positions = List[Int]()
+    if len(scores) == 0:
+        return heap_positions^
+
+    var limit = k
+    if limit > len(scores):
+        limit = len(scores)
+
+    heap_positions.reserve(limit)
+    var heap_scores = List[ScoreScalar]()
+    heap_scores.reserve(limit)
+    for position in range(len(scores)):
+        insert_top_score_position(
+            heap_positions, heap_scores, position, scores[position], limit
+        )
+
+    return heap_positions^
+
+
 def score_query_vector_against_sampled_centroids(
     read query: FlatQueryDim128,
     query_vector_index: Int,

@@ -108,3 +108,31 @@ Observed:
 - focused policy FastPlaid tests: `3 / 3` passed
 - focused GPU/FastPlaid suite including policy tests: `61 / 61` passed
 - quiet automated policy FastPlaid comparison status: `ok`
+
+## Follow-Up: Unordered Internal Candidate Windows
+
+The policy comparison now runs the internal GPU pipeline with
+`kayak_i8_candidate_order=unordered` by default. The ordered public candidate
+API remains unchanged.
+
+Latest quiet artifact:
+
+- quiet log: `.cache/kayak/bench_quiet/20260427T105039Z`
+- summary report: `.cache/kayak/gpu_i8_fastplaid_policy_compare/summary.json`
+
+The unordered run reported status `ok` on all `6 / 6` rows, top-k position
+agreement minimum `1.0`, and minimum Kayak recall delta versus FastPlaid
+`1.1102230246251565e-16`.
+
+Summary:
+
+- mean envelope / FastPlaid batch: `0.09869997626737713`
+- max envelope / FastPlaid batch: `0.21780632157235916`
+- mean CPU candidate-generation share of envelope:
+  `0.6723469052696253`
+- mean GPU no-reference top-k share of envelope:
+  `0.3276530947303748`
+
+Reason: candidate-window rerank only needs the retained document set. The
+unordered path is kept behind an explicit internal flag so we can use it in GPU
+pipeline profiling without changing public candidate ordering semantics.

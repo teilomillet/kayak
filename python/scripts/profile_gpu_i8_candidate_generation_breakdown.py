@@ -11,8 +11,11 @@ from typing import Any, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_ROOT = REPO_ROOT / "python"
+SCRIPT_ROOT = Path(__file__).resolve().parent
 if str(PYTHON_ROOT) not in sys.path:
     sys.path.append(str(PYTHON_ROOT))
+if str(SCRIPT_ROOT) not in sys.path:
+    sys.path.append(str(SCRIPT_ROOT))
 
 from bench_fastplaid_speed_track import build_synthetic_inputs  # noqa: E402
 from kayak_bridge.gpu_i8_address_serve_sweep import (  # noqa: E402
@@ -22,6 +25,9 @@ from kayak_bridge.gpu_i8_address_serve_sweep import (  # noqa: E402
     AddressServeSweepControls,
     case_set_names,
     parse_sweep_case,
+)
+from kayak_bridge.gpu_i8_centroid_budget_policy import (  # noqa: E402
+    choose_policy_budget,
 )
 from kayak_bridge.mojo_exact_cpu import load_module  # noqa: E402
 from kayak_bridge.plaid_approx import (  # noqa: E402
@@ -60,6 +66,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=32,
     )
     parser.add_argument(
+        "--centroid-budget-policy",
+        default=None,
+        help=(
+            "Optional benchmark-only policy name. When set, each case uses "
+            "the policy-selected centroids_per_query_vector instead of the "
+            "static --kayak-plaid-centroids-per-query-vector value."
+        ),
+    )
+    parser.add_argument(
         "--emit-quiet-mean",
         action="store_true",
         help="Print run_bench_quiet-compatible Mean sections.",
@@ -94,7 +109,14 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     controls.validate()
     cases = selected_cases(args)
     rows = [
-        run_case(case, case_index=index, controls=controls)
+        run_case(
+            case,
+            case_index=index,
+            controls=controls,
+            centroids_per_query_vector=centroids_per_query_vector_for_case(
+                args, case
+            ),
+        )
         for index, case in enumerate(cases)
     ]
     return {
@@ -107,6 +129,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "case_count": len(cases),
         },
         "controls": controls.to_json_ready(),
+        "centroid_budget_policy": args.centroid_budget_policy,
         "cases": rows,
         "summary": summary_payload(rows),
         "measurement_note": (
@@ -125,11 +148,22 @@ def report_status(rows: Sequence[dict[str, Any]]) -> str:
     return "error"
 
 
+def centroids_per_query_vector_for_case(
+    args: argparse.Namespace, case: AddressServeSweepCase
+) -> int:
+    if args.centroid_budget_policy is None:
+        return int(args.kayak_plaid_centroids_per_query_vector)
+    return choose_policy_budget(
+        str(args.centroid_budget_policy), case
+    ).centroids_per_query_vector
+
+
 def run_case(
     case: AddressServeSweepCase,
     *,
     case_index: int,
     controls: AddressServeSweepControls,
+    centroids_per_query_vector: int,
 ) -> dict[str, Any]:
     shape = case.shape(vector_dim=controls.vector_dim, top_k=controls.top_k)
     inputs = build_synthetic_inputs(
@@ -143,9 +177,7 @@ def run_case(
         documents=inputs.documents,
         config=KayakPlaidApproxConfig(
             centroid_count=controls.kayak_plaid_centroid_count,
-            centroids_per_query_vector=(
-                controls.kayak_plaid_centroids_per_query_vector
-            ),
+            centroids_per_query_vector=centroids_per_query_vector,
             candidate_k=case.candidate_k,
             payload="i8",
         ),
@@ -159,7 +191,7 @@ def run_case(
                 int(inputs.queries.ctypes.data),
                 int(inputs.queries.shape[0]),
                 int(inputs.queries.shape[1]),
-                controls.kayak_plaid_centroids_per_query_vector,
+                centroids_per_query_vector,
                 case.candidate_k,
                 controls.measurement_iterations,
                 index._prepared_index,
@@ -190,10 +222,15 @@ def aggregate_profiles(profiles: Sequence[dict[str, Any]]) -> dict[str, Any]:
         return {}
     float_fields = (
         "full_candidate_mean_seconds",
+        "workspace_full_candidate_mean_seconds",
+        "workspace_candidate_position_agreement",
+        "unordered_candidate_mean_seconds",
+        "unordered_candidate_set_agreement",
         "centroid_scoring_mean_seconds",
         "centroid_selection_mean_seconds",
         "posting_accumulation_mean_seconds",
         "final_topk_mean_seconds",
+        "unordered_final_topk_mean_seconds",
     )
     int_fields = (
         "selected_centroid_count",
@@ -221,11 +258,29 @@ def aggregate_profiles(profiles: Sequence[dict[str, Any]]) -> dict[str, Any]:
     )
     aggregate["candidate_k"] = int(first["candidate_k"])
     full = aggregate["full_candidate_mean_seconds_batch_sum"]
-    for field in float_fields[1:]:
+    workspace_full = aggregate[
+        "workspace_full_candidate_mean_seconds_batch_sum"
+    ]
+    aggregate[
+        "workspace_full_candidate_mean_seconds_per_full_candidate_second"
+    ] = ratio(workspace_full, full)
+    aggregate["unordered_candidate_mean_seconds_per_full_candidate_second"] = (
+        ratio(
+            aggregate["unordered_candidate_mean_seconds_batch_sum"],
+            full,
+        )
+    )
+    for field in float_fields[5:]:
         aggregate[f"{field}_per_full_candidate_second"] = ratio(
             aggregate[f"{field}_batch_sum"],
             full,
         )
+    aggregate[
+        "unordered_final_topk_mean_seconds_per_final_topk_second"
+    ] = ratio(
+        aggregate["unordered_final_topk_mean_seconds_batch_sum"],
+        aggregate["final_topk_mean_seconds_batch_sum"],
+    )
     return aggregate
 
 
@@ -247,6 +302,63 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         for row in ok_rows
         if row.get("aggregate")
     ]
+    workspace_ratios = [
+        float(
+            row["aggregate"][
+                "workspace_full_candidate_mean_seconds_per_full_candidate_second"
+            ]
+        )
+        for row in ok_rows
+        if row.get("aggregate")
+        and row["aggregate"][
+            "workspace_full_candidate_mean_seconds_per_full_candidate_second"
+        ]
+        is not None
+    ]
+    workspace_agreements = [
+        float(
+            row["aggregate"][
+                "workspace_candidate_position_agreement_batch_sum"
+            ]
+        )
+        / float(row["aggregate"]["query_count"])
+        for row in ok_rows
+        if row.get("aggregate")
+        and int(row["aggregate"]["query_count"]) > 0
+    ]
+    unordered_candidate_ratios = [
+        float(
+            row["aggregate"][
+                "unordered_candidate_mean_seconds_per_full_candidate_second"
+            ]
+        )
+        for row in ok_rows
+        if row.get("aggregate")
+        and row["aggregate"][
+            "unordered_candidate_mean_seconds_per_full_candidate_second"
+        ]
+        is not None
+    ]
+    unordered_candidate_agreements = [
+        float(row["aggregate"]["unordered_candidate_set_agreement_batch_sum"])
+        / float(row["aggregate"]["query_count"])
+        for row in ok_rows
+        if row.get("aggregate")
+        and int(row["aggregate"]["query_count"]) > 0
+    ]
+    unordered_topk_ratios = [
+        float(
+            row["aggregate"][
+                "unordered_final_topk_mean_seconds_per_final_topk_second"
+            ]
+        )
+        for row in ok_rows
+        if row.get("aggregate")
+        and row["aggregate"][
+            "unordered_final_topk_mean_seconds_per_final_topk_second"
+        ]
+        is not None
+    ]
     return {
         "case_count": len(rows),
         "ok_case_count": len(ok_rows),
@@ -262,6 +374,36 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "worst_posting_accumulation_mean_seconds_batch_sum": (
             max(posting_values) if posting_values else None
         ),
+        "best_workspace_full_candidate_seconds_per_full_candidate_second": (
+            min(workspace_ratios) if workspace_ratios else None
+        ),
+        "worst_workspace_full_candidate_seconds_per_full_candidate_second": (
+            max(workspace_ratios) if workspace_ratios else None
+        ),
+        "min_workspace_candidate_position_agreement": (
+            min(workspace_agreements) if workspace_agreements else None
+        ),
+        "best_unordered_candidate_seconds_per_full_candidate_second": (
+            min(unordered_candidate_ratios)
+            if unordered_candidate_ratios
+            else None
+        ),
+        "worst_unordered_candidate_seconds_per_full_candidate_second": (
+            max(unordered_candidate_ratios)
+            if unordered_candidate_ratios
+            else None
+        ),
+        "min_unordered_candidate_set_agreement": (
+            min(unordered_candidate_agreements)
+            if unordered_candidate_agreements
+            else None
+        ),
+        "best_unordered_final_topk_seconds_per_final_topk_second": (
+            min(unordered_topk_ratios) if unordered_topk_ratios else None
+        ),
+        "worst_unordered_final_topk_seconds_per_final_topk_second": (
+            max(unordered_topk_ratios) if unordered_topk_ratios else None
+        ),
     }
 
 
@@ -270,10 +412,13 @@ def emit_quiet_means(report: dict[str, Any]) -> None:
         aggregate = row.get("aggregate") or {}
         for field in (
             "full_candidate_mean_seconds_batch_sum",
+            "workspace_full_candidate_mean_seconds_batch_sum",
+            "unordered_candidate_mean_seconds_batch_sum",
             "centroid_scoring_mean_seconds_batch_sum",
             "centroid_selection_mean_seconds_batch_sum",
             "posting_accumulation_mean_seconds_batch_sum",
             "final_topk_mean_seconds_batch_sum",
+            "unordered_final_topk_mean_seconds_batch_sum",
         ):
             value = aggregate.get(field)
             if value is None:

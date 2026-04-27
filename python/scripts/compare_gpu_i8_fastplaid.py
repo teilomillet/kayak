@@ -101,6 +101,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=32,
     )
     parser.add_argument(
+        "--kayak-i8-candidate-order",
+        choices=("ordered", "unordered"),
+        default="ordered",
+        help=(
+            "Internal GPU pipeline candidate-window order. Unordered keeps "
+            "the retained candidate set but skips approximate-score ordering."
+        ),
+    )
+    parser.add_argument(
         "--fastplaid-device",
         default="cpu",
         help='FastPlaid device string, e.g. "cpu", "cuda", or an empty auto value.',
@@ -309,6 +318,7 @@ def controls_payload(args: argparse.Namespace) -> dict[str, object]:
         ),
         "kayak_plaid_candidate_k": args.candidate_k,
         "kayak_plaid_payload": "i8",
+        "kayak_i8_candidate_order": args.kayak_i8_candidate_order,
         "fastplaid_device": args.fastplaid_device,
         "fastplaid_low_memory": args.fastplaid_low_memory,
         "fastplaid_kmeans_niters": args.fastplaid_kmeans_niters,

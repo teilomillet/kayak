@@ -59,6 +59,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--measurement-iterations", type=int, default=1)
     parser.add_argument("--gpu-topk-session-iterations", type=int, default=4)
     parser.add_argument("--kayak-plaid-centroid-count", type=int, default=128)
+    parser.add_argument(
+        "--kayak-i8-candidate-order",
+        choices=("ordered", "unordered"),
+        default="unordered",
+    )
     parser.add_argument("--policy-name", default="shape_rule_v0")
     parser.add_argument(
         "--fastplaid-devices",
@@ -107,6 +112,7 @@ def controls_from_args(args: argparse.Namespace) -> FastPlaidPolicyCompareContro
         measurement_iterations=args.measurement_iterations,
         gpu_topk_session_iterations=args.gpu_topk_session_iterations,
         kayak_plaid_centroid_count=args.kayak_plaid_centroid_count,
+        kayak_i8_candidate_order=args.kayak_i8_candidate_order,
         policy_name=args.policy_name,
         fastplaid_devices=tuple(args.fastplaid_devices),
     )

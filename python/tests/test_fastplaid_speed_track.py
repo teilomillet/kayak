@@ -167,6 +167,29 @@ class FastPlaidSpeedTrackTests(unittest.TestCase):
             index.search_batch_positions(queries, final_k=2)[0],
         )
 
+    def test_kayak_plaid_i8_unordered_candidate_positions_keep_set(self) -> None:
+        rng = np.random.default_rng(11)
+        documents = rng.normal(size=(8, 4, 128)).astype(np.float32)
+        queries = rng.normal(size=(2, 3, 128)).astype(np.float32)
+        index = KayakPlaidApproxIndex.build(
+            doc_ids=tuple(f"doc-{index}" for index in range(8)),
+            documents=documents,
+            config=KayakPlaidApproxConfig(
+                centroid_count=8,
+                centroids_per_query_vector=3,
+                candidate_k=4,
+                payload="i8",
+            ),
+            final_k=2,
+        )
+
+        ordered = index.i8_candidate_positions_batch(queries)
+        unordered = index.i8_candidate_positions_batch_unordered(queries)
+
+        self.assertEqual(len(unordered), len(ordered))
+        for ordered_row, unordered_row in zip(ordered, unordered, strict=True):
+            self.assertEqual(set(unordered_row), set(ordered_row))
+
     def test_kayak_plaid_i8_full_window_candidate_positions_skip_proxy_sort(
         self,
     ) -> None:

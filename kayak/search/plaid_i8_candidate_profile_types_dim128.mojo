@@ -30,10 +30,15 @@ struct PlaidI8CandidateAccumulation(Movable):
 
 struct PlaidI8CandidateGenerationProfile(Movable):
     var full_candidate_mean_seconds: Float64
+    var workspace_full_candidate_mean_seconds: Float64
+    var workspace_candidate_position_agreement: Float64
+    var unordered_candidate_mean_seconds: Float64
+    var unordered_candidate_set_agreement: Float64
     var centroid_scoring_mean_seconds: Float64
     var centroid_selection_mean_seconds: Float64
     var posting_accumulation_mean_seconds: Float64
     var final_topk_mean_seconds: Float64
+    var unordered_final_topk_mean_seconds: Float64
     var query_vector_count: Int
     var document_count: Int
     var document_vector_count: Int
@@ -51,10 +56,15 @@ struct PlaidI8CandidateGenerationProfile(Movable):
     def __init__(
         out self,
         full_candidate_mean_seconds: Float64,
+        workspace_full_candidate_mean_seconds: Float64,
+        workspace_candidate_position_agreement: Float64,
+        unordered_candidate_mean_seconds: Float64,
+        unordered_candidate_set_agreement: Float64,
         centroid_scoring_mean_seconds: Float64,
         centroid_selection_mean_seconds: Float64,
         posting_accumulation_mean_seconds: Float64,
         final_topk_mean_seconds: Float64,
+        unordered_final_topk_mean_seconds: Float64,
         query_vector_count: Int,
         document_count: Int,
         document_vector_count: Int,
@@ -70,12 +80,25 @@ struct PlaidI8CandidateGenerationProfile(Movable):
         sink_value: Float64,
     ):
         self.full_candidate_mean_seconds = full_candidate_mean_seconds
+        self.workspace_full_candidate_mean_seconds = (
+            workspace_full_candidate_mean_seconds
+        )
+        self.workspace_candidate_position_agreement = (
+            workspace_candidate_position_agreement
+        )
+        self.unordered_candidate_mean_seconds = unordered_candidate_mean_seconds
+        self.unordered_candidate_set_agreement = (
+            unordered_candidate_set_agreement
+        )
         self.centroid_scoring_mean_seconds = centroid_scoring_mean_seconds
         self.centroid_selection_mean_seconds = centroid_selection_mean_seconds
         self.posting_accumulation_mean_seconds = (
             posting_accumulation_mean_seconds
         )
         self.final_topk_mean_seconds = final_topk_mean_seconds
+        self.unordered_final_topk_mean_seconds = (
+            unordered_final_topk_mean_seconds
+        )
         self.query_vector_count = query_vector_count
         self.document_count = document_count
         self.document_vector_count = document_vector_count

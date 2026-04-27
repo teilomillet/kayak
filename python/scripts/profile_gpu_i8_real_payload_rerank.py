@@ -460,14 +460,20 @@ def time_candidate_generation(
     *,
     warmup_iterations: int,
     measurement_iterations: int,
+    unordered: bool = False,
 ) -> TimingSummary:
+    candidate_function = (
+        index.i8_candidate_positions_batch_unordered
+        if unordered
+        else index.i8_candidate_positions_batch
+    )
     for _ in range(warmup_iterations):
-        index.i8_candidate_positions_batch(queries)
+        candidate_function(queries)
 
     durations: list[float] = []
     for _ in range(measurement_iterations):
         started_at = time.perf_counter()
-        index.i8_candidate_positions_batch(queries)
+        candidate_function(queries)
         durations.append(time.perf_counter() - started_at)
     return timing_summary(durations)
 

@@ -72,7 +72,14 @@ def build_prepared_handle_topk_scope_row(
     )
     build_seconds = time.perf_counter() - started_at
 
-    base_candidate_positions = index.i8_candidate_positions_batch(inputs.queries)
+    candidate_order = getattr(args, "kayak_i8_candidate_order", "ordered")
+    use_unordered_candidates = candidate_order == "unordered"
+    candidate_function = (
+        index.i8_candidate_positions_batch_unordered
+        if use_unordered_candidates
+        else index.i8_candidate_positions_batch
+    )
+    base_candidate_positions = candidate_function(inputs.queries)
     base_reference_scores = index.i8_score_candidate_positions_batch(
         inputs.queries,
         base_candidate_positions,
@@ -93,7 +100,7 @@ def build_prepared_handle_topk_scope_row(
         shape.query_vector_count,
         shape.vector_dim,
     )
-    multi_candidate_positions = index.i8_candidate_positions_batch(multi_queries)
+    multi_candidate_positions = candidate_function(multi_queries)
     multi_reference_scores = index.i8_score_candidate_positions_batch(
         multi_queries,
         multi_candidate_positions,
@@ -103,6 +110,7 @@ def build_prepared_handle_topk_scope_row(
         multi_queries,
         warmup_iterations=args.warmup_iterations,
         measurement_iterations=args.measurement_iterations,
+        unordered=use_unordered_candidates,
     )
     score_timing = time_same_candidate_scores(
         index,
@@ -165,6 +173,7 @@ def build_prepared_handle_topk_scope_row(
         "index_kind": index.index_kind,
         "rerank_kind": index.rerank_kind,
         "scope": "real_kayak_i8_candidate_window_prepared_handle_topk",
+        "candidate_window_order": candidate_order,
         "shape": _shape_payload(shape, candidate_k=args.candidate_k),
         "cpu_i8_build_seconds": build_seconds,
         "cpu_i8_multi_window_candidate_generation": timing_payload_per_window(

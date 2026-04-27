@@ -478,6 +478,22 @@ generation remains CPU-side and FastPlaid is timed as full search. The next
 optimization target should be candidate-generation/workspace behavior rather
 than the GPU top-k kernel.
 
+Unordered candidate-window finding: the internal GPU pipeline now has an
+explicit unordered CPU candidate-window option while the public ordered
+candidate API stays unchanged. On the policy-budget wide non-full profile, the
+unordered path preserved candidate sets with agreement `1.0` and measured about
+`0.896x`, `0.873x`, and `0.755x` of ordered candidate generation on
+`query_vectors32`, `doc_vectors64`, and `query_batch4`. The automated
+FastPlaid policy comparison with unordered candidate windows was `ok` on all
+six CPU/CUDA rows, kept no-reference top-k agreement at `1.0`, and kept Kayak
+i8 recall at or above FastPlaid recall on every row. The refreshed envelope is
+about `67%` CPU candidate generation and `33%` GPU no-reference top-k.
+
+Reason: candidate-window rerank depends on the retained set of documents, not
+the approximate-score order used to inspect CPU candidate generation. Keeping
+candidate order explicit lets the GPU path skip ordered extraction without
+changing public candidate semantics.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet

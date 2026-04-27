@@ -265,6 +265,27 @@ class KayakPlaidApproxIndex:
         self,
         queries: np.ndarray,
     ) -> tuple[tuple[int, ...], ...]:
+        return self._i8_candidate_positions_batch(
+            queries,
+            unordered=False,
+        )
+
+    def i8_candidate_positions_batch_unordered(
+        self,
+        queries: np.ndarray,
+    ) -> tuple[tuple[int, ...], ...]:
+        """Return the same candidate set without approximate-score ordering."""
+        return self._i8_candidate_positions_batch(
+            queries,
+            unordered=True,
+        )
+
+    def _i8_candidate_positions_batch(
+        self,
+        queries: np.ndarray,
+        *,
+        unordered: bool,
+    ) -> tuple[tuple[int, ...], ...]:
         if self.config.payload != PLAID_PAYLOAD_I8:
             raise ValueError("i8 candidate positions require payload='i8'")
         normalized_queries = _as_query_tensor(queries, vector_dim=self.vector_dim)
@@ -274,7 +295,12 @@ class KayakPlaidApproxIndex:
                 full_window for _ in range(int(normalized_queries.shape[0]))
             )
         module = load_module()
-        rows = module.plaid_i8_candidate_positions_prepared_batch_address(
+        candidate_function = (
+            module.plaid_i8_candidate_positions_prepared_batch_address_unordered
+            if unordered
+            else module.plaid_i8_candidate_positions_prepared_batch_address
+        )
+        rows = candidate_function(
             int(normalized_queries.ctypes.data),
             int(normalized_queries.shape[0]),
             int(normalized_queries.shape[1]),

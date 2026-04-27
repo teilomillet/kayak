@@ -126,3 +126,29 @@ Observed:
 - focused GPU/FastPlaid tests: `49 / 49` passed
 - quiet wide breakdown status: `ok`
 - quiet wide breakdown parsed sections: `25`
+
+## Follow-Up: Workspace And Unordered Windows
+
+Added benchmark-only workspace and unordered candidate-window measurements.
+
+Latest quiet artifact:
+
+- quiet log: `.cache/kayak/bench_quiet/20260427T104620Z`
+- report:
+  `.cache/kayak/gpu_i8_candidate_generation_breakdown/policy_summary.json`
+
+Results on the policy-budget wide non-full rows:
+
+| case | ordered candidate batch s | workspace / ordered | unordered / ordered | unordered set agreement |
+| --- | ---: | ---: | ---: | ---: |
+| `query_vectors32` | `0.00024551876988711447` | `1.0120847542301457` | `0.8955583631862651` | `1.0` |
+| `doc_vectors64` | `0.00018408207623251066` | `1.2769317380880978` | `0.8733621280772922` | `1.0` |
+| `query_batch4` | `0.0002523595122390538` | `1.0342718331121212` | `0.7549527139559552` | `1.0` |
+
+Interpretation:
+
+- the reusable full workspace was falsified as a speed optimization on these
+  rows, so it remains benchmark-only
+- unordered retained candidate sets are a useful internal GPU-pipeline option
+  because rerank consumes the candidate set rather than approximate-score order
+- ordered candidate windows remain the public/default API
