@@ -49,10 +49,14 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
             selected_host_to_device_mean_seconds=0.05,
             kernel_mean_seconds=0.06,
             device_to_host_mean_seconds=0.07,
+            host_topk_mean_seconds=0.08,
             selected_position_out_of_range_count=0,
             doc_index_out_of_range_count=0,
             score_mismatch_count=0,
             score_delta_max_abs=0.0,
+            topk_position_mismatch_count=0,
+            top_k=2,
+            topk_position_count=2,
             selected_centroid_count=4,
             document_score_count=4,
             document_count=4,
@@ -63,6 +67,7 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
         self.assertTrue(payload["accumulation_agreement_ok"])
         self.assertEqual(payload["selected_centroid_count"], 4)
         self.assertEqual(payload["document_score_count"], 4)
+        self.assertEqual(payload["topk_position_count"], 2)
 
     def test_accumulation_reference_sums_query_vector_maxima(self) -> None:
         reference = _selected_posting_accumulation_reference(
@@ -80,6 +85,7 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
     def test_comparison_payload_reports_posting_denominators(self) -> None:
         comparison = comparison_payload(
             cpu_candidate_generation_mean_seconds=0.02,
+            cpu_centroid_scoring_plus_selection_seconds=0.001,
             cpu_posting_accumulation_seconds=0.01,
             gpu_parsed={
                 "extension_call_seconds": 0.006,
@@ -88,6 +94,7 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
                 "selected_host_to_device_mean_seconds": 0.003,
                 "kernel_mean_seconds": 0.004,
                 "device_to_host_mean_seconds": 0.005,
+                "host_topk_mean_seconds": 0.006,
             },
         )
 
@@ -107,12 +114,27 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
             comparison["gpu_posting_accumulation_all_measured_mean_seconds"],
             0.014,
         )
+        self.assertAlmostEqual(
+            comparison[
+                "gpu_posting_accumulation_all_measured_plus_host_topk_mean_seconds"
+            ],
+            0.02,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "projected_resident_payload_candidate_seconds_per_cpu_candidate_generation_second"
+            ],
+            0.95,
+        )
 
     def test_summary_reports_accumulation_ratios(self) -> None:
         rows = [
             _row(
                 kind="non_full",
                 all_candidate_ratio=0.2,
+                all_plus_topk_candidate_ratio=0.25,
+                projected_resident_ratio=0.3,
+                projected_cold_ratio=0.35,
                 all_posting_ratio=0.5,
                 kernel_posting_ratio=0.3,
                 visits=64,
@@ -120,6 +142,9 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
             _row(
                 kind="full",
                 all_candidate_ratio=0.4,
+                all_plus_topk_candidate_ratio=0.45,
+                projected_resident_ratio=0.5,
+                projected_cold_ratio=0.55,
                 all_posting_ratio=0.7,
                 kernel_posting_ratio=0.6,
                 visits=128,
@@ -137,6 +162,18 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
         self.assertEqual(
             summary["worst_all_measured_vs_posting_accumulation_ratio"],
             0.7,
+        )
+        self.assertEqual(
+            summary[
+                "best_non_full_all_measured_plus_host_topk_vs_candidate_generation_ratio"
+            ],
+            0.25,
+        )
+        self.assertEqual(
+            summary[
+                "best_non_full_projected_resident_payload_candidate_vs_cpu_candidate_generation_ratio"
+            ],
+            0.3,
         )
         self.assertEqual(summary["max_expanded_posting_count"], 128)
 
@@ -205,6 +242,9 @@ def _row(
     *,
     kind: str,
     all_candidate_ratio: float,
+    all_plus_topk_candidate_ratio: float,
+    projected_resident_ratio: float,
+    projected_cold_ratio: float,
     all_posting_ratio: float,
     kernel_posting_ratio: float,
     visits: int,
@@ -216,6 +256,15 @@ def _row(
         "comparison": {
             "gpu_posting_accumulation_all_measured_seconds_per_cpu_candidate_generation_second": (
                 all_candidate_ratio
+            ),
+            "gpu_posting_accumulation_all_measured_plus_host_topk_seconds_per_cpu_candidate_generation_second": (
+                all_plus_topk_candidate_ratio
+            ),
+            "projected_resident_payload_candidate_seconds_per_cpu_candidate_generation_second": (
+                projected_resident_ratio
+            ),
+            "projected_cold_payload_candidate_seconds_per_cpu_candidate_generation_second": (
+                projected_cold_ratio
             ),
             "gpu_posting_accumulation_all_measured_seconds_per_cpu_posting_accumulation_second": (
                 all_posting_ratio

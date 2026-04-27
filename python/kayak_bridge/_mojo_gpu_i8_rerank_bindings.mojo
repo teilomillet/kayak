@@ -2325,8 +2325,9 @@ def profile_i8_selected_posting_accumulation_addresses(
     var query_count = Int(py=py_request[8])
     var query_vector_count = Int(py=py_request[9])
     var centroids_per_query_vector = Int(py=py_request[10])
-    var warmup_iterations = Int(py=py_request[11])
-    var measurement_iterations = Int(py=py_request[12])
+    var top_k = Int(py=py_request[11])
+    var warmup_iterations = Int(py=py_request[12])
+    var measurement_iterations = Int(py=py_request[13])
     if centroid_doc_offsets_address == 0:
         raise Error("centroid_doc_offsets address must be non-zero")
     if centroid_doc_indices_address == 0:
@@ -2349,6 +2350,10 @@ def profile_i8_selected_posting_accumulation_addresses(
         raise Error("query_vector_count must be positive")
     if centroids_per_query_vector <= 0:
         raise Error("centroids_per_query_vector must be positive")
+    if top_k <= 0:
+        raise Error("top_k must be positive")
+    if top_k > document_count:
+        raise Error("top_k must not exceed document_count")
     if warmup_iterations < 0:
         raise Error("warmup_iterations must be non-negative")
     if measurement_iterations <= 0:
@@ -2375,6 +2380,7 @@ def profile_i8_selected_posting_accumulation_addresses(
     )
     var score_count = query_count * document_count
     var best_score_count = query_count * query_vector_count * document_count
+    var topk_position_count = query_count * top_k
     var grid_x = (score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
     var best_grid_x = (best_score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
 
@@ -2394,6 +2400,12 @@ def profile_i8_selected_posting_accumulation_addresses(
         var output_document_scores_host = ctx.enqueue_create_host_buffer[
             DType.float32
         ](score_count)
+        var output_topk_positions_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](topk_position_count)
+        var expected_topk_positions_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](topk_position_count)
 
         var centroid_doc_offsets_device = ctx.enqueue_create_buffer[
             DType.int64
@@ -2481,16 +2493,119 @@ def profile_i8_selected_posting_accumulation_addresses(
             )
             ctx.synchronize()
 
+        def output_position_already_selected(
+            query_topk_base: Int, rank: Int, document_index: Int
+        ) capturing -> Bool:
+            for selected_rank in range(rank):
+                if (
+                    Int(
+                        output_topk_positions_host[
+                            query_topk_base + selected_rank
+                        ]
+                    )
+                    == document_index
+                ):
+                    return True
+            return False
+
+        def expected_position_already_selected(
+            query_topk_base: Int, rank: Int, document_index: Int
+        ) capturing -> Bool:
+            for selected_rank in range(rank):
+                if (
+                    Int(
+                        expected_topk_positions_host[
+                            query_topk_base + selected_rank
+                        ]
+                    )
+                    == document_index
+                ):
+                    return True
+            return False
+
+        def score_position_ranks_before_float32(
+            score: Float32,
+            position: Int,
+            other_score: Float32,
+            other_position: Int,
+        ) -> Bool:
+            if score > other_score:
+                return True
+            if score < other_score:
+                return False
+            return position < other_position
+
+        def host_topk_once() capturing:
+            for query_index in range(query_count):
+                var score_base = query_index * document_count
+                var query_topk_base = query_index * top_k
+                for rank in range(top_k):
+                    var best_position = 0
+                    var best_score = Float32(-3.4028234663852886e38)
+                    var seen = False
+                    for document_index in range(document_count):
+                        if output_position_already_selected(
+                            query_topk_base, rank, document_index
+                        ):
+                            continue
+                        var score = output_document_scores_host[
+                            score_base + document_index
+                        ]
+                        if not seen or score_position_ranks_before_float32(
+                            score,
+                            document_index,
+                            best_score,
+                            best_position,
+                        ):
+                            best_score = score
+                            best_position = document_index
+                            seen = True
+                    output_topk_positions_host[query_topk_base + rank] = Int64(
+                        best_position
+                    )
+
+        def expected_topk_once() capturing:
+            for query_index in range(query_count):
+                var score_base = query_index * document_count
+                var query_topk_base = query_index * top_k
+                for rank in range(top_k):
+                    var best_position = 0
+                    var best_score = Float32(-3.4028234663852886e38)
+                    var seen = False
+                    for document_index in range(document_count):
+                        if expected_position_already_selected(
+                            query_topk_base, rank, document_index
+                        ):
+                            continue
+                        var score = py_expected_document_scores[
+                            score_base + document_index
+                        ]
+                        if not seen or score_position_ranks_before_float32(
+                            score,
+                            document_index,
+                            best_score,
+                            best_position,
+                        ):
+                            best_score = score
+                            best_position = document_index
+                            seen = True
+                    expected_topk_positions_host[
+                        query_topk_base + rank
+                    ] = Int64(best_position)
+
         host_ingest_once()
         payload_h2d_once()
         selected_h2d_once()
         accumulation_kernel_once()
         d2h_once()
+        expected_topk_once()
+        host_topk_once()
 
         for _ in range(warmup_iterations):
             selected_h2d_once()
             accumulation_kernel_once()
             d2h_once()
+            host_topk_once()
 
         var host_ingest = benchmark.run[host_ingest_once](
             max_iters=measurement_iterations
@@ -2510,6 +2625,10 @@ def profile_i8_selected_posting_accumulation_addresses(
         accumulation_kernel_once()
         var d2h = benchmark.run[d2h_once](max_iters=measurement_iterations)
         d2h_once()
+        var host_topk = benchmark.run[host_topk_once](
+            max_iters=measurement_iterations
+        )
+        host_topk_once()
 
         var selected_position_out_of_range_count = 0
         for index in range(selected_centroid_count):
@@ -2537,16 +2656,28 @@ def profile_i8_selected_posting_accumulation_addresses(
             if score_delta > Float64(0.00001):
                 score_mismatch_count += 1
 
+        var topk_position_mismatch_count = 0
+        for index in range(topk_position_count):
+            if (
+                output_topk_positions_host[index]
+                != expected_topk_positions_host[index]
+            ):
+                topk_position_mismatch_count += 1
+
         var py_result = Python.list()
         py_result.append(Python.float(host_ingest.mean()))
         py_result.append(Python.float(payload_h2d.mean()))
         py_result.append(Python.float(selected_h2d.mean()))
         py_result.append(Python.float(kernel.mean()))
         py_result.append(Python.float(d2h.mean()))
+        py_result.append(Python.float(host_topk.mean()))
         py_result.append(Python.int(selected_position_out_of_range_count))
         py_result.append(Python.int(doc_index_out_of_range_count))
         py_result.append(Python.int(score_mismatch_count))
         py_result.append(Python.float(score_delta_max_abs))
+        py_result.append(Python.int(topk_position_mismatch_count))
+        py_result.append(Python.int(top_k))
+        py_result.append(Python.int(topk_position_count))
         py_result.append(Python.int(selected_centroid_count))
         py_result.append(Python.int(score_count))
         py_result.append(Python.int(document_count))

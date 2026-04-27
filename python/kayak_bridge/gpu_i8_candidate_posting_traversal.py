@@ -480,6 +480,8 @@ def _aggregate_cpu_profiles(profiles: Sequence[dict[str, Any]]) -> dict[str, Any
         return {}
     float_fields = (
         "full_candidate_mean_seconds",
+        "centroid_scoring_mean_seconds",
+        "centroid_selection_mean_seconds",
         "posting_accumulation_mean_seconds",
         "final_topk_mean_seconds",
     )

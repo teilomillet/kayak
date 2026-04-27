@@ -34,7 +34,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Profile GPU dense accumulation of i8 selected-centroid posting "
-            "scores without candidate top-k."
+            "scores plus host candidate top-k after score readback."
         )
     )
     parser.add_argument(
@@ -152,6 +152,16 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
         print_quiet_mean(
             f"gpu_i8_candidate_posting_accumulation_{name}_all_measured",
             comparison.get("gpu_posting_accumulation_all_measured_mean_seconds"),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_host_topk",
+            comparison.get("gpu_posting_accumulation_host_topk_mean_seconds"),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_all_measured_plus_host_topk",
+            comparison.get(
+                "gpu_posting_accumulation_all_measured_plus_host_topk_mean_seconds"
+            ),
         )
 
 

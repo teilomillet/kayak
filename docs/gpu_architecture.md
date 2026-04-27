@@ -586,11 +586,18 @@ surviving implementation assigns one GPU lane to each
 `[query, query_vector, document]` score contribution, binary-searches the
 selected centroid posting lists for that document, writes a dense
 `[query_count, query_vector_count, document_count]` best-score tensor, and
-reduces it to `[query_count, document_count]` scores on device. The latest quiet
-wide run was exact on all `5 / 5` rows with `score_delta_max_abs=0.0`. On the
-three non-full rows, the all-measured GPU path was about `0.064x`, `0.121x`,
-and `0.050x` of full CPU candidate generation, and about `0.429x`, `0.621x`,
-and `0.524x` of isolated CPU posting accumulation.
+reduces it to `[query_count, document_count]` scores on device. The probe now
+also times host candidate top-k after score readback and checks top-k order
+against CPU i8. The latest quiet wide run was exact on all `5 / 5` rows with
+`score_delta_max_abs=0.0` and `topk_position_mismatch_count=0`. On the three
+non-full rows, the all-measured GPU accumulation path was about `0.049x`,
+`0.118x`, and `0.049x` of full CPU candidate generation before host top-k.
+Including host top-k, the same rows were about `0.150x`, `0.209x`, and
+`0.164x` of full CPU candidate generation. A projected resident-payload
+candidate-generation envelope, defined as CPU centroid scoring/selection plus
+GPU selected-H2D/kernel/D2H plus host top-k, was about `0.384x`, `0.293x`, and
+`0.257x` of CPU candidate generation. The cold-payload projection was about
+`0.402x`, `0.328x`, and `0.270x`.
 
 Rejected accumulation variants are also recorded. The first document-centric
 variant validated score semantics but did not expose enough parallelism. A
@@ -603,8 +610,12 @@ mismatches.
 Reason: the winning qv-doc reduce shape keeps correctness deterministic and
 beats isolated CPU posting accumulation on the measured standard rows. It still
 does repeated posting-list search and materializes a dense query-vector score
-buffer, so the next optimization should target tiled or segmented reduction
-without global atomics or nondeterministic score order.
+buffer. The new envelope also shows that host top-k is material but not the only
+remaining cost: CPU centroid scoring/selection is now comparable to, and on
+some rows larger than, the GPU selected-H2D/kernel/D2H path. The next
+optimization should therefore test GPU-side top-k or fused selected-centroid
+scoring plus accumulation only as measured probes, not as an assumed kernel
+rewrite.
 
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
@@ -868,10 +879,13 @@ evidence only justifies a measured primitive.
    accumulation.
 31. Add a benchmark-only GPU posting-accumulation/reduction probe for non-full
    rows while final candidate top-k remains on CPU. Current quiet result:
-   dense accumulation agrees exactly with the CPU score reference, but both
-   the document-centric binary-search variant and the posting-oriented atomic
-   max variant lose to isolated CPU posting accumulation on the non-full rows.
-   This validates semantics and falsifies the two obvious GPU work assignments.
+   dense accumulation agrees exactly with the CPU score and top-k references.
+   With host top-k included, non-full rows cost about `0.150x` to `0.209x` of
+   full CPU candidate generation. The resident-payload projection is about
+   `0.257x` to `0.384x`, which points next at CPU centroid scoring/selection
+   and candidate top-k, not just the accumulation kernel. The document-centric,
+   posting-oriented atomic-max, and qv-doc atomic-add variants were rejected by
+   timing or correctness evidence.
 32. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and FastPlaid scope rows after the resident ownership boundary
    exists.

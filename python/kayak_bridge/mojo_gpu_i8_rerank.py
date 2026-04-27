@@ -289,10 +289,14 @@ class MojoGpuI8SelectedPostingAccumulationResult:
     selected_host_to_device_mean_seconds: float
     kernel_mean_seconds: float
     device_to_host_mean_seconds: float
+    host_topk_mean_seconds: float
     selected_position_out_of_range_count: int
     doc_index_out_of_range_count: int
     score_mismatch_count: int
     score_delta_max_abs: float
+    topk_position_mismatch_count: int
+    top_k: int
+    topk_position_count: int
     selected_centroid_count: int
     document_score_count: int
     document_count: int
@@ -303,6 +307,7 @@ class MojoGpuI8SelectedPostingAccumulationResult:
             self.selected_position_out_of_range_count == 0
             and self.doc_index_out_of_range_count == 0
             and self.score_mismatch_count == 0
+            and self.topk_position_mismatch_count == 0
         )
 
     def to_json_ready(self) -> dict[str, object]:
@@ -320,12 +325,18 @@ class MojoGpuI8SelectedPostingAccumulationResult:
             ),
             "kernel_mean_seconds": self.kernel_mean_seconds,
             "device_to_host_mean_seconds": self.device_to_host_mean_seconds,
+            "host_topk_mean_seconds": self.host_topk_mean_seconds,
             "selected_position_out_of_range_count": (
                 self.selected_position_out_of_range_count
             ),
             "doc_index_out_of_range_count": self.doc_index_out_of_range_count,
             "score_mismatch_count": self.score_mismatch_count,
             "score_delta_max_abs": self.score_delta_max_abs,
+            "topk_position_mismatch_count": (
+                self.topk_position_mismatch_count
+            ),
+            "top_k": self.top_k,
+            "topk_position_count": self.topk_position_count,
             "accumulation_agreement_ok": self.accumulation_agreement_ok,
             "selected_centroid_count": self.selected_centroid_count,
             "document_score_count": self.document_score_count,
@@ -1156,6 +1167,7 @@ def profile_i8_selected_posting_accumulation_addresses(
         int(shape.query_count),
         int(shape.query_vector_count),
         int(selected.centroids_per_query_vector),
+        int(shape.top_k),
         int(warmup_iterations),
         int(measurement_iterations),
     ]
@@ -1165,7 +1177,7 @@ def profile_i8_selected_posting_accumulation_addresses(
     )
     extension_call_seconds = time.perf_counter() - extension_started_at
 
-    if len(raw_result) != 12:
+    if len(raw_result) != 16:
         raise RuntimeError(
             "GPU i8 selected-posting accumulation bridge returned an "
             "unexpected result shape"
@@ -1179,13 +1191,17 @@ def profile_i8_selected_posting_accumulation_addresses(
         selected_host_to_device_mean_seconds=float(raw_result[2]),
         kernel_mean_seconds=float(raw_result[3]),
         device_to_host_mean_seconds=float(raw_result[4]),
-        selected_position_out_of_range_count=int(raw_result[5]),
-        doc_index_out_of_range_count=int(raw_result[6]),
-        score_mismatch_count=int(raw_result[7]),
-        score_delta_max_abs=float(raw_result[8]),
-        selected_centroid_count=int(raw_result[9]),
-        document_score_count=int(raw_result[10]),
-        document_count=int(raw_result[11]),
+        host_topk_mean_seconds=float(raw_result[5]),
+        selected_position_out_of_range_count=int(raw_result[6]),
+        doc_index_out_of_range_count=int(raw_result[7]),
+        score_mismatch_count=int(raw_result[8]),
+        score_delta_max_abs=float(raw_result[9]),
+        topk_position_mismatch_count=int(raw_result[10]),
+        top_k=int(raw_result[11]),
+        topk_position_count=int(raw_result[12]),
+        selected_centroid_count=int(raw_result[13]),
+        document_score_count=int(raw_result[14]),
+        document_count=int(raw_result[15]),
     )
 
 

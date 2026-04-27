@@ -1,7 +1,8 @@
 """Benchmark-only GPU probe for i8 selected-posting score accumulation.
 
 This module owns report assembly for dense per-document accumulation from
-selected centroid posting lists. It does not produce candidate top-k.
+selected centroid posting lists. It times host top-k after score readback, but
+does not expose a production candidate-generation API.
 """
 
 from __future__ import annotations
@@ -81,8 +82,9 @@ def build_report(
             "summary": summary_payload(rows),
             "measurement_note": (
                 "This benchmark profiles dense GPU accumulation from selected "
-                "centroid posting lists into per-query document scores. It "
-                "keeps candidate top-k on CPU for a later primitive."
+                "centroid posting lists into per-query document scores and "
+                "times host candidate top-k after score readback. It is still "
+                "an internal primitive, not a public GPU search backend."
             ),
         },
         capability,
@@ -179,6 +181,11 @@ def run_case(
             cpu_candidate_generation_mean_seconds=(
                 cpu_candidate_timing.mean_seconds
             ),
+            cpu_centroid_scoring_plus_selection_seconds=(
+                cpu_centroid_scoring_plus_selection_seconds(
+                    cpu_candidate_profile.aggregate
+                )
+            ),
             cpu_posting_accumulation_seconds=optional_float(
                 cpu_candidate_profile.aggregate.get(
                     "posting_accumulation_mean_seconds_batch_sum"
@@ -236,6 +243,7 @@ def run_gpu_posting_accumulation_probe(
 def comparison_payload(
     *,
     cpu_candidate_generation_mean_seconds: float,
+    cpu_centroid_scoring_plus_selection_seconds: float | None,
     cpu_posting_accumulation_seconds: float | None,
     gpu_parsed: dict[str, object],
 ) -> dict[str, float | None]:
@@ -249,11 +257,29 @@ def comparison_payload(
     )
     kernel = optional_float(gpu_parsed.get("kernel_mean_seconds"))
     d2h = optional_float(gpu_parsed.get("device_to_host_mean_seconds"))
+    host_topk = optional_float(gpu_parsed.get("host_topk_mean_seconds"))
     selected_h2d_kernel_d2h = sum_optional(selected_h2d, kernel, d2h)
     all_gpu_measured = sum_optional(payload_h2d, selected_h2d, kernel, d2h)
+    all_gpu_measured_plus_host_topk = sum_optional(
+        all_gpu_measured, host_topk
+    )
+    selected_path_plus_host_topk = sum_optional(
+        selected_h2d_kernel_d2h, host_topk
+    )
+    projected_resident_payload_candidate = sum_optional(
+        cpu_centroid_scoring_plus_selection_seconds,
+        selected_path_plus_host_topk,
+    )
+    projected_cold_payload_candidate = sum_optional(
+        cpu_centroid_scoring_plus_selection_seconds,
+        all_gpu_measured_plus_host_topk,
+    )
     return {
         "cpu_i8_candidate_generation_mean_seconds": (
             cpu_candidate_generation_mean_seconds
+        ),
+        "cpu_i8_centroid_scoring_plus_selection_seconds": (
+            cpu_centroid_scoring_plus_selection_seconds
         ),
         "cpu_i8_posting_accumulation_seconds": cpu_posting_accumulation_seconds,
         "gpu_posting_accumulation_extension_call_seconds": extension_call,
@@ -262,16 +288,41 @@ def comparison_payload(
         "gpu_posting_accumulation_selected_h2d_mean_seconds": selected_h2d,
         "gpu_posting_accumulation_kernel_mean_seconds": kernel,
         "gpu_posting_accumulation_device_to_host_mean_seconds": d2h,
+        "gpu_posting_accumulation_host_topk_mean_seconds": host_topk,
         "gpu_posting_accumulation_selected_h2d_kernel_d2h_mean_seconds": (
             selected_h2d_kernel_d2h
         ),
         "gpu_posting_accumulation_all_measured_mean_seconds": all_gpu_measured,
+        "gpu_posting_accumulation_all_measured_plus_host_topk_mean_seconds": (
+            all_gpu_measured_plus_host_topk
+        ),
+        "gpu_posting_accumulation_selected_h2d_kernel_d2h_host_topk_mean_seconds": (
+            selected_path_plus_host_topk
+        ),
+        "projected_cpu_selection_gpu_accumulation_host_topk_resident_payload_seconds": (
+            projected_resident_payload_candidate
+        ),
+        "projected_cpu_selection_gpu_accumulation_host_topk_cold_payload_seconds": (
+            projected_cold_payload_candidate
+        ),
         "gpu_posting_accumulation_kernel_seconds_per_cpu_candidate_generation_second": ratio(
             kernel,
             cpu_candidate_generation_mean_seconds,
         ),
         "gpu_posting_accumulation_all_measured_seconds_per_cpu_candidate_generation_second": ratio(
             all_gpu_measured,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "gpu_posting_accumulation_all_measured_plus_host_topk_seconds_per_cpu_candidate_generation_second": ratio(
+            all_gpu_measured_plus_host_topk,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "projected_resident_payload_candidate_seconds_per_cpu_candidate_generation_second": ratio(
+            projected_resident_payload_candidate,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "projected_cold_payload_candidate_seconds_per_cpu_candidate_generation_second": ratio(
+            projected_cold_payload_candidate,
             cpu_candidate_generation_mean_seconds,
         ),
         "gpu_posting_accumulation_kernel_seconds_per_cpu_posting_accumulation_second": ratio(
@@ -287,6 +338,17 @@ def comparison_payload(
             cpu_posting_accumulation_seconds,
         ),
     }
+
+
+def cpu_centroid_scoring_plus_selection_seconds(
+    aggregate: dict[str, object],
+) -> float | None:
+    return sum_optional(
+        optional_float(aggregate.get("centroid_scoring_mean_seconds_batch_sum")),
+        optional_float(
+            aggregate.get("centroid_selection_mean_seconds_batch_sum")
+        ),
+    )
 
 
 def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
@@ -315,6 +377,42 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
     non_full_all_vs_candidate = [
         row["comparison"].get(
             "gpu_posting_accumulation_all_measured_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
+    all_plus_topk_vs_candidate = [
+        row["comparison"].get(
+            "gpu_posting_accumulation_all_measured_plus_host_topk_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_all_plus_topk_vs_candidate = [
+        row["comparison"].get(
+            "gpu_posting_accumulation_all_measured_plus_host_topk_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
+    projected_resident_vs_candidate = [
+        row["comparison"].get(
+            "projected_resident_payload_candidate_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_projected_resident_vs_candidate = [
+        row["comparison"].get(
+            "projected_resident_payload_candidate_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
+    projected_cold_vs_candidate = [
+        row["comparison"].get(
+            "projected_cold_payload_candidate_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_projected_cold_vs_candidate = [
+        row["comparison"].get(
+            "projected_cold_payload_candidate_seconds_per_cpu_candidate_generation_second"
         )
         for row in non_full_rows
     ]
@@ -353,6 +451,42 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         ),
         "worst_non_full_all_measured_vs_candidate_generation_ratio": max_float(
             non_full_all_vs_candidate
+        ),
+        "best_all_measured_plus_host_topk_vs_candidate_generation_ratio": min_float(
+            all_plus_topk_vs_candidate
+        ),
+        "worst_all_measured_plus_host_topk_vs_candidate_generation_ratio": max_float(
+            all_plus_topk_vs_candidate
+        ),
+        "best_non_full_all_measured_plus_host_topk_vs_candidate_generation_ratio": min_float(
+            non_full_all_plus_topk_vs_candidate
+        ),
+        "worst_non_full_all_measured_plus_host_topk_vs_candidate_generation_ratio": max_float(
+            non_full_all_plus_topk_vs_candidate
+        ),
+        "best_projected_resident_payload_candidate_vs_cpu_candidate_generation_ratio": min_float(
+            projected_resident_vs_candidate
+        ),
+        "worst_projected_resident_payload_candidate_vs_cpu_candidate_generation_ratio": max_float(
+            projected_resident_vs_candidate
+        ),
+        "best_non_full_projected_resident_payload_candidate_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_projected_resident_vs_candidate
+        ),
+        "worst_non_full_projected_resident_payload_candidate_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_projected_resident_vs_candidate
+        ),
+        "best_projected_cold_payload_candidate_vs_cpu_candidate_generation_ratio": min_float(
+            projected_cold_vs_candidate
+        ),
+        "worst_projected_cold_payload_candidate_vs_cpu_candidate_generation_ratio": max_float(
+            projected_cold_vs_candidate
+        ),
+        "best_non_full_projected_cold_payload_candidate_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_projected_cold_vs_candidate
+        ),
+        "worst_non_full_projected_cold_payload_candidate_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_projected_cold_vs_candidate
         ),
         "max_expanded_posting_count": max_int(expanded_posting_counts),
     }
