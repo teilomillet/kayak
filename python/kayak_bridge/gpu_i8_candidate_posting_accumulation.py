@@ -35,8 +35,10 @@ from kayak_bridge.gpu_i8_candidate_posting_traversal import (
 from kayak_bridge.gpu_i8_centroid_budget_policy import choose_policy_budget
 from kayak_bridge.mojo_gpu_i8_rerank import (
     profile_i8_selected_posting_accumulation_addresses,
+    score_i8_selected_posting_block_candidate_positions_addresses,
     score_i8_selected_posting_candidate_positions_addresses,
     score_i8_selected_posting_dense_candidate_positions_addresses,
+    score_i8_selected_posting_resident_dense_candidate_positions_addresses,
 )
 from kayak_bridge.plaid_approx import (
     KayakPlaidApproxConfig,
@@ -166,16 +168,42 @@ def run_case(
         selected=selected,
         candidate_k=case.candidate_k,
     )
+    gpu_block_candidate_probe = run_gpu_block_candidate_probe(
+        capability=capability,
+        shape=shape,
+        payload=payload,
+        selected=selected,
+        candidate_k=case.candidate_k,
+    )
+    gpu_resident_dense_candidate_probe = (
+        run_gpu_resident_dense_score_candidate_probe(
+            capability=capability,
+            shape=shape,
+            payload=payload,
+            selected=selected,
+            candidate_k=case.candidate_k,
+        )
+    )
     gpu_status = _gpu_status(gpu_probe)
     gpu_parsed = _parsed_payload(gpu_probe)
     gpu_candidate_status = _gpu_status(gpu_candidate_probe)
     gpu_candidate_parsed = _parsed_payload(gpu_candidate_probe)
     gpu_dense_candidate_status = _gpu_status(gpu_dense_candidate_probe)
     gpu_dense_candidate_parsed = _parsed_payload(gpu_dense_candidate_probe)
+    gpu_block_candidate_status = _gpu_status(gpu_block_candidate_probe)
+    gpu_block_candidate_parsed = _parsed_payload(gpu_block_candidate_probe)
+    gpu_resident_dense_candidate_status = _gpu_status(
+        gpu_resident_dense_candidate_probe
+    )
+    gpu_resident_dense_candidate_parsed = _parsed_payload(
+        gpu_resident_dense_candidate_probe
+    )
     row_status = _first_non_ok_status(
         gpu_status,
         gpu_candidate_status,
         gpu_dense_candidate_status,
+        gpu_block_candidate_status,
+        gpu_resident_dense_candidate_status,
     )
     return {
         "name": case.name,
@@ -222,6 +250,26 @@ def run_case(
                 else None
             ),
         },
+        "gpu_selected_posting_block_candidate_generation": {
+            "status": gpu_block_candidate_status,
+            "target_accelerator": capability.target_accelerator,
+            "parsed": gpu_block_candidate_parsed,
+            "error": (
+                gpu_block_candidate_probe.get("error")
+                if isinstance(gpu_block_candidate_probe, dict)
+                else None
+            ),
+        },
+        "gpu_selected_posting_resident_dense_score_candidate_generation": {
+            "status": gpu_resident_dense_candidate_status,
+            "target_accelerator": capability.target_accelerator,
+            "parsed": gpu_resident_dense_candidate_parsed,
+            "error": (
+                gpu_resident_dense_candidate_probe.get("error")
+                if isinstance(gpu_resident_dense_candidate_probe, dict)
+                else None
+            ),
+        },
         "comparison": comparison_payload(
             cpu_candidate_generation_mean_seconds=(
                 cpu_candidate_timing.mean_seconds
@@ -239,6 +287,10 @@ def run_case(
             gpu_parsed=gpu_parsed,
             gpu_candidate_parsed=gpu_candidate_parsed,
             gpu_dense_candidate_parsed=gpu_dense_candidate_parsed,
+            gpu_block_candidate_parsed=gpu_block_candidate_parsed,
+            gpu_resident_dense_candidate_parsed=(
+                gpu_resident_dense_candidate_parsed
+            ),
         ),
     }
 
@@ -371,6 +423,94 @@ def run_gpu_dense_score_candidate_probe(
     }
 
 
+def run_gpu_block_candidate_probe(
+    *,
+    capability: MojoGpuCapability,
+    shape: SpeedTrackShape,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    candidate_k: int,
+) -> dict[str, object] | None:
+    if not capability.available:
+        return None
+    try:
+        result = score_i8_selected_posting_block_candidate_positions_addresses(
+            target_accelerator=capability.target_accelerator or "",
+            shape=shape,
+            payload=payload,
+            selected=selected,
+            candidate_k=candidate_k,
+        )
+    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        return {"status": "error", "parsed": {}, "error": str(exc)}
+    parsed = {
+        "bridge_scope": "selected_centroid_posting_block_candidate_positions_addresses",
+        "payload_source": "real_kayak_i8_snapshot",
+        "vector_dim": shape.vector_dim,
+        "document_count": shape.document_count,
+        "document_vector_count": shape.document_vector_count,
+        "total_document_vector_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "query_count": shape.query_count,
+        "query_vector_count": shape.query_vector_count,
+        "candidate_k": candidate_k,
+        "validation_reference_scores_sent_to_extension": False,
+    } | result.to_json_ready()
+    status = STATUS_OK if result.candidate_generation_ok else "error"
+    return {
+        "status": status,
+        "parsed": parsed,
+        "measurements": [result.to_json_ready()],
+    }
+
+
+def run_gpu_resident_dense_score_candidate_probe(
+    *,
+    capability: MojoGpuCapability,
+    shape: SpeedTrackShape,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    candidate_k: int,
+) -> dict[str, object] | None:
+    if not capability.available:
+        return None
+    try:
+        result = (
+            score_i8_selected_posting_resident_dense_candidate_positions_addresses(
+                target_accelerator=capability.target_accelerator or "",
+                shape=shape,
+                payload=payload,
+                selected=selected,
+                candidate_k=candidate_k,
+            )
+        )
+    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        return {"status": "error", "parsed": {}, "error": str(exc)}
+    parsed = {
+        "bridge_scope": (
+            "selected_centroid_posting_resident_dense_score_candidate_positions_addresses"
+        ),
+        "payload_source": "real_kayak_i8_snapshot",
+        "vector_dim": shape.vector_dim,
+        "document_count": shape.document_count,
+        "document_vector_count": shape.document_vector_count,
+        "total_document_vector_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "query_count": shape.query_count,
+        "query_vector_count": shape.query_vector_count,
+        "candidate_k": candidate_k,
+        "validation_reference_scores_sent_to_extension": False,
+    } | result.to_json_ready()
+    status = STATUS_OK if result.candidate_generation_ok else "error"
+    return {
+        "status": status,
+        "parsed": parsed,
+        "measurements": [result.to_json_ready()],
+    }
+
+
 def comparison_payload(
     *,
     cpu_candidate_generation_mean_seconds: float,
@@ -379,9 +519,15 @@ def comparison_payload(
     gpu_parsed: dict[str, object],
     gpu_candidate_parsed: dict[str, object] | None = None,
     gpu_dense_candidate_parsed: dict[str, object] | None = None,
+    gpu_block_candidate_parsed: dict[str, object] | None = None,
+    gpu_resident_dense_candidate_parsed: dict[str, object] | None = None,
 ) -> dict[str, float | None]:
     gpu_candidate_parsed = gpu_candidate_parsed or {}
     gpu_dense_candidate_parsed = gpu_dense_candidate_parsed or {}
+    gpu_block_candidate_parsed = gpu_block_candidate_parsed or {}
+    gpu_resident_dense_candidate_parsed = (
+        gpu_resident_dense_candidate_parsed or {}
+    )
     extension_call = optional_float(gpu_parsed.get("extension_call_seconds"))
     mojo_ingest = optional_float(gpu_parsed.get("mojo_host_ingest_mean_seconds"))
     payload_h2d = optional_float(
@@ -450,6 +596,39 @@ def comparison_payload(
             "extension_plus_candidate_selection_seconds"
         )
     )
+    block_candidate_extension_call = optional_float(
+        gpu_block_candidate_parsed.get("extension_call_seconds")
+    )
+    block_candidate_host_marshalling = optional_float(
+        gpu_block_candidate_parsed.get("host_marshalling_seconds")
+    )
+    resident_dense_prepare = optional_float(
+        gpu_resident_dense_candidate_parsed.get("prepare_call_seconds")
+    )
+    resident_dense_score = optional_float(
+        gpu_resident_dense_candidate_parsed.get("score_call_seconds")
+    )
+    resident_dense_selection = optional_float(
+        gpu_resident_dense_candidate_parsed.get("candidate_selection_seconds")
+    )
+    resident_dense_score_plus_selection = optional_float(
+        gpu_resident_dense_candidate_parsed.get(
+            "score_plus_candidate_selection_seconds"
+        )
+    )
+    resident_dense_prepare_score_plus_selection = optional_float(
+        gpu_resident_dense_candidate_parsed.get(
+            "prepare_score_plus_candidate_selection_seconds"
+        )
+    )
+    projected_cpu_selection_resident_dense_candidate = sum_optional(
+        cpu_centroid_scoring_plus_selection_seconds,
+        resident_dense_score_plus_selection,
+    )
+    projected_cpu_selection_resident_dense_candidate_with_prepare = sum_optional(
+        cpu_centroid_scoring_plus_selection_seconds,
+        resident_dense_prepare_score_plus_selection,
+    )
     return {
         "cpu_i8_candidate_generation_mean_seconds": (
             cpu_candidate_generation_mean_seconds
@@ -503,6 +682,59 @@ def comparison_payload(
         ),
         "gpu_dense_score_candidate_validation_reference_scores_sent_to_extension": (
             gpu_dense_candidate_parsed.get(
+                "validation_reference_scores_sent_to_extension"
+            )
+        ),
+        "gpu_block_candidate_extension_call_seconds": (
+            block_candidate_extension_call
+        ),
+        "gpu_block_candidate_host_marshalling_seconds": (
+            block_candidate_host_marshalling
+        ),
+        "gpu_block_candidate_position_agreement": optional_float(
+            gpu_block_candidate_parsed.get("candidate_position_agreement")
+        ),
+        "gpu_block_candidate_score_delta_max_abs": optional_float(
+            gpu_block_candidate_parsed.get("candidate_score_delta_max_abs")
+        ),
+        "gpu_block_candidate_validation_reference_scores_sent_to_extension": (
+            gpu_block_candidate_parsed.get(
+                "validation_reference_scores_sent_to_extension"
+            )
+        ),
+        "gpu_resident_dense_score_candidate_prepare_call_seconds": (
+            resident_dense_prepare
+        ),
+        "gpu_resident_dense_score_candidate_score_call_seconds": (
+            resident_dense_score
+        ),
+        "gpu_resident_dense_score_candidate_selection_seconds": (
+            resident_dense_selection
+        ),
+        "gpu_resident_dense_score_candidate_score_plus_selection_seconds": (
+            resident_dense_score_plus_selection
+        ),
+        "gpu_resident_dense_score_candidate_prepare_score_plus_selection_seconds": (
+            resident_dense_prepare_score_plus_selection
+        ),
+        "projected_cpu_selection_resident_dense_score_candidate_seconds": (
+            projected_cpu_selection_resident_dense_candidate
+        ),
+        "projected_cpu_selection_resident_dense_score_candidate_with_prepare_seconds": (
+            projected_cpu_selection_resident_dense_candidate_with_prepare
+        ),
+        "gpu_resident_dense_score_candidate_position_agreement": optional_float(
+            gpu_resident_dense_candidate_parsed.get(
+                "candidate_position_agreement"
+            )
+        ),
+        "gpu_resident_dense_score_candidate_score_delta_max_abs": optional_float(
+            gpu_resident_dense_candidate_parsed.get(
+                "candidate_score_delta_max_abs"
+            )
+        ),
+        "gpu_resident_dense_score_candidate_validation_reference_scores_sent_to_extension": (
+            gpu_resident_dense_candidate_parsed.get(
                 "validation_reference_scores_sent_to_extension"
             )
         ),
@@ -580,6 +812,30 @@ def comparison_payload(
         ),
         "gpu_dense_score_candidate_extension_plus_selection_seconds_per_cpu_candidate_generation_second": ratio(
             dense_candidate_extension_plus_selection,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "gpu_block_candidate_extension_seconds_per_cpu_candidate_generation_second": ratio(
+            block_candidate_extension_call,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "gpu_resident_dense_score_candidate_score_seconds_per_cpu_candidate_generation_second": ratio(
+            resident_dense_score,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "gpu_resident_dense_score_candidate_score_plus_selection_seconds_per_cpu_candidate_generation_second": ratio(
+            resident_dense_score_plus_selection,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "gpu_resident_dense_score_candidate_prepare_score_plus_selection_seconds_per_cpu_candidate_generation_second": ratio(
+            resident_dense_prepare_score_plus_selection,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "projected_cpu_selection_resident_dense_score_candidate_seconds_per_cpu_candidate_generation_second": ratio(
+            projected_cpu_selection_resident_dense_candidate,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "projected_cpu_selection_resident_dense_score_candidate_with_prepare_seconds_per_cpu_candidate_generation_second": ratio(
+            projected_cpu_selection_resident_dense_candidate_with_prepare,
             cpu_candidate_generation_mean_seconds,
         ),
         "gpu_posting_accumulation_kernel_seconds_per_cpu_posting_accumulation_second": ratio(
@@ -727,6 +983,54 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         )
         for row in non_full_rows
     ]
+    block_candidate_vs_candidate = [
+        row["comparison"].get(
+            "gpu_block_candidate_extension_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_block_candidate_vs_candidate = [
+        row["comparison"].get(
+            "gpu_block_candidate_extension_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
+    resident_dense_candidate_vs_candidate = [
+        row["comparison"].get(
+            "gpu_resident_dense_score_candidate_score_plus_selection_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_resident_dense_candidate_vs_candidate = [
+        row["comparison"].get(
+            "gpu_resident_dense_score_candidate_score_plus_selection_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
+    projected_cpu_selection_resident_dense_candidate_vs_candidate = [
+        row["comparison"].get(
+            "projected_cpu_selection_resident_dense_score_candidate_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_projected_cpu_selection_resident_dense_candidate_vs_candidate = [
+        row["comparison"].get(
+            "projected_cpu_selection_resident_dense_score_candidate_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
+    projected_cpu_selection_resident_dense_candidate_with_prepare_vs_candidate = [
+        row["comparison"].get(
+            "projected_cpu_selection_resident_dense_score_candidate_with_prepare_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_projected_cpu_selection_resident_dense_candidate_with_prepare_vs_candidate = [
+        row["comparison"].get(
+            "projected_cpu_selection_resident_dense_score_candidate_with_prepare_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
     non_full_projected_cold_vs_candidate = [
         row["comparison"].get(
             "projected_cold_payload_candidate_seconds_per_cpu_candidate_generation_second"
@@ -864,6 +1168,54 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         ),
         "worst_non_full_dense_score_candidate_extension_plus_selection_vs_cpu_candidate_generation_ratio": max_float(
             non_full_dense_candidate_vs_candidate
+        ),
+        "best_block_candidate_extension_vs_cpu_candidate_generation_ratio": min_float(
+            block_candidate_vs_candidate
+        ),
+        "worst_block_candidate_extension_vs_cpu_candidate_generation_ratio": max_float(
+            block_candidate_vs_candidate
+        ),
+        "best_non_full_block_candidate_extension_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_block_candidate_vs_candidate
+        ),
+        "worst_non_full_block_candidate_extension_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_block_candidate_vs_candidate
+        ),
+        "best_resident_dense_score_candidate_score_plus_selection_vs_cpu_candidate_generation_ratio": min_float(
+            resident_dense_candidate_vs_candidate
+        ),
+        "worst_resident_dense_score_candidate_score_plus_selection_vs_cpu_candidate_generation_ratio": max_float(
+            resident_dense_candidate_vs_candidate
+        ),
+        "best_non_full_resident_dense_score_candidate_score_plus_selection_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_resident_dense_candidate_vs_candidate
+        ),
+        "worst_non_full_resident_dense_score_candidate_score_plus_selection_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_resident_dense_candidate_vs_candidate
+        ),
+        "best_projected_cpu_selection_resident_dense_score_candidate_vs_cpu_candidate_generation_ratio": min_float(
+            projected_cpu_selection_resident_dense_candidate_vs_candidate
+        ),
+        "worst_projected_cpu_selection_resident_dense_score_candidate_vs_cpu_candidate_generation_ratio": max_float(
+            projected_cpu_selection_resident_dense_candidate_vs_candidate
+        ),
+        "best_non_full_projected_cpu_selection_resident_dense_score_candidate_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_projected_cpu_selection_resident_dense_candidate_vs_candidate
+        ),
+        "worst_non_full_projected_cpu_selection_resident_dense_score_candidate_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_projected_cpu_selection_resident_dense_candidate_vs_candidate
+        ),
+        "best_projected_cpu_selection_resident_dense_score_candidate_with_prepare_vs_cpu_candidate_generation_ratio": min_float(
+            projected_cpu_selection_resident_dense_candidate_with_prepare_vs_candidate
+        ),
+        "worst_projected_cpu_selection_resident_dense_score_candidate_with_prepare_vs_cpu_candidate_generation_ratio": max_float(
+            projected_cpu_selection_resident_dense_candidate_with_prepare_vs_candidate
+        ),
+        "best_non_full_projected_cpu_selection_resident_dense_score_candidate_with_prepare_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_projected_cpu_selection_resident_dense_candidate_with_prepare_vs_candidate
+        ),
+        "worst_non_full_projected_cpu_selection_resident_dense_score_candidate_with_prepare_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_projected_cpu_selection_resident_dense_candidate_with_prepare_vs_candidate
         ),
         "max_expanded_posting_count": max_int(expanded_posting_counts),
     }

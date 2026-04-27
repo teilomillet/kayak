@@ -1278,6 +1278,67 @@ class GpuI8RerankContractTests(unittest.TestCase):
         )
         self.assertEqual(comparison["recall_at_k_vs_kayak_exact"], 0.75)
 
+    def test_gpu_fastplaid_compare_reports_resident_selected_boundary(
+        self,
+    ) -> None:
+        comparison = (
+            fastplaid_compare.build_gpu_resident_selected_posting_exact_rerank_vs_fastplaid_comparison(
+                resident_row={
+                    "status": "ok",
+                    "recall_at_k_vs_kayak_exact": 0.76,
+                    "parsed": {
+                        "candidate_score_count_per_window": 512,
+                        "candidate_k": 256,
+                        "topk_return_count_per_window": 20,
+                        "candidate_position_agreement_min": 1.0,
+                        "final_topk_position_agreement": 1.0,
+                        "exact_score_delta_max_abs": 0.0,
+                        "resident_candidate_seconds_per_window": 0.00016,
+                        "resident_candidate_cold_seconds_per_window": 0.00020,
+                        "exact_rerank_topk_seconds_per_window": 0.00004,
+                        "resident_selected_posting_exact_rerank_seconds_per_window": 0.00020,
+                        "resident_selected_posting_exact_rerank_cold_seconds_per_window": 0.00024,
+                        "validation_reference_scores_sent_to_extension": False,
+                    },
+                },
+                fastplaid_row={
+                    "system_name": "fastplaid",
+                    "status": "ok",
+                    "query_batch_mean_seconds": 0.004,
+                    "query_mean_seconds": 0.002,
+                },
+            )
+        )
+
+        self.assertEqual(comparison["status"], "ok")
+        self.assertEqual(comparison["candidate_score_count_per_window"], 512)
+        self.assertEqual(comparison["candidate_k"], 256)
+        self.assertIs(
+            comparison["validation_reference_scores_sent_to_extension"],
+            False,
+        )
+        self.assertAlmostEqual(
+            float(
+                comparison[
+                    "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second"
+                ]
+            ),
+            0.05,
+        )
+        self.assertAlmostEqual(
+            float(
+                comparison[
+                    "gpu_resident_selected_exact_rerank_cold_seconds_per_fastplaid_batch_second"
+                ]
+            ),
+            0.06,
+        )
+        self.assertAlmostEqual(
+            float(comparison["gpu_resident_selected_exact_rerank_exact_share"]),
+            0.2,
+        )
+        self.assertEqual(comparison["recall_at_k_vs_kayak_exact"], 0.76)
+
     def test_copy_probe_parser_keeps_timing_and_roundtrip_fields(self) -> None:
         parsed = parse_gpu_copy_probe_output(
             "status: ok\n"

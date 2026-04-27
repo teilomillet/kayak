@@ -190,6 +190,10 @@ def summarize_case_device_report(
         "gpu_hybrid_shortlist_exact_rerank_vs_fastplaid_scope_comparison",
         {},
     )
+    resident_selected_comparison = report.get(
+        "gpu_resident_selected_posting_exact_rerank_vs_fastplaid_scope_comparison",
+        {},
+    )
     candidate_seconds = _optional_float(
         comparison.get("cpu_candidate_generation_seconds_per_window")
     )
@@ -222,6 +226,19 @@ def summarize_case_device_report(
     )
     hybrid_recall = _optional_float(
         hybrid_comparison.get("recall_at_k_vs_kayak_exact")
+    )
+    resident_selected_seconds = _optional_float(
+        resident_selected_comparison.get(
+            "gpu_resident_selected_exact_rerank_seconds_per_window_total"
+        )
+    )
+    resident_selected_ratio = _optional_float(
+        resident_selected_comparison.get(
+            "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second"
+        )
+    )
+    resident_selected_recall = _optional_float(
+        resident_selected_comparison.get("recall_at_k_vs_kayak_exact")
     )
     fastplaid_recall = _optional_float(
         fastplaid.get("recall_at_k_vs_kayak_exact") if fastplaid else None
@@ -303,6 +320,49 @@ def summarize_case_device_report(
         "gpu_hybrid_shortlist_k": _optional_int(
             hybrid_comparison.get("shortlist_k")
         ),
+        "gpu_resident_selected_exact_rerank_seconds_per_window": (
+            resident_selected_seconds
+        ),
+        "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second": (
+            resident_selected_ratio
+        ),
+        "gpu_resident_selected_exact_rerank_cold_seconds_per_fastplaid_batch_second": (
+            _optional_float(
+                resident_selected_comparison.get(
+                    "gpu_resident_selected_exact_rerank_cold_seconds_per_fastplaid_batch_second"
+                )
+            )
+        ),
+        "gpu_resident_selected_exact_rerank_exact_share": _optional_float(
+            resident_selected_comparison.get(
+                "gpu_resident_selected_exact_rerank_exact_share"
+            )
+        ),
+        "gpu_resident_selected_cpu_selection_share": _optional_float(
+            resident_selected_comparison.get(
+                "gpu_resident_selected_cpu_selection_share"
+            )
+        ),
+        "gpu_resident_selected_candidate_share": _optional_float(
+            resident_selected_comparison.get(
+                "gpu_resident_selected_candidate_share"
+            )
+        ),
+        "gpu_resident_selected_recall_at_k_vs_kayak_exact": (
+            resident_selected_recall
+        ),
+        "gpu_resident_selected_recall_delta_vs_fastplaid": (
+            resident_selected_recall - fastplaid_recall
+            if resident_selected_recall is not None
+            and fastplaid_recall is not None
+            else None
+        ),
+        "gpu_resident_selected_final_topk_position_agreement": _optional_float(
+            resident_selected_comparison.get("final_topk_position_agreement")
+        ),
+        "gpu_resident_selected_candidate_position_agreement_min": _optional_float(
+            resident_selected_comparison.get("candidate_position_agreement_min")
+        ),
     }
 
 
@@ -347,6 +407,35 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         float(row["gpu_hybrid_recall_delta_vs_fastplaid"])
         for row in ok_rows
         if row["gpu_hybrid_recall_delta_vs_fastplaid"] is not None
+    ]
+    resident_selected_ratios = [
+        float(
+            row[
+                "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second"
+            ]
+        )
+        for row in ok_rows
+        if row[
+            "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second"
+        ]
+        is not None
+    ]
+    resident_selected_cold_ratios = [
+        float(
+            row[
+                "gpu_resident_selected_exact_rerank_cold_seconds_per_fastplaid_batch_second"
+            ]
+        )
+        for row in ok_rows
+        if row[
+            "gpu_resident_selected_exact_rerank_cold_seconds_per_fastplaid_batch_second"
+        ]
+        is not None
+    ]
+    resident_selected_recall_deltas = [
+        float(row["gpu_resident_selected_recall_delta_vs_fastplaid"])
+        for row in ok_rows
+        if row["gpu_resident_selected_recall_delta_vs_fastplaid"] is not None
     ]
     return {
         "row_count": len(rows),
@@ -396,6 +485,42 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         ),
         "gpu_hybrid_final_topk_position_agreement_min": _min_optional(
             row.get("gpu_hybrid_final_topk_position_agreement")
+            for row in ok_rows
+        ),
+        "mean_gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second": (
+            _mean(resident_selected_ratios)
+        ),
+        "max_gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second": (
+            max(resident_selected_ratios) if resident_selected_ratios else None
+        ),
+        "max_gpu_resident_selected_exact_rerank_cold_seconds_per_fastplaid_batch_second": (
+            max(resident_selected_cold_ratios)
+            if resident_selected_cold_ratios
+            else None
+        ),
+        "min_gpu_resident_selected_recall_delta_vs_fastplaid": (
+            min(resident_selected_recall_deltas)
+            if resident_selected_recall_deltas
+            else None
+        ),
+        "mean_gpu_resident_selected_exact_rerank_exact_share": _mean_optional(
+            row.get("gpu_resident_selected_exact_rerank_exact_share")
+            for row in ok_rows
+        ),
+        "mean_gpu_resident_selected_cpu_selection_share": _mean_optional(
+            row.get("gpu_resident_selected_cpu_selection_share")
+            for row in ok_rows
+        ),
+        "mean_gpu_resident_selected_candidate_share": _mean_optional(
+            row.get("gpu_resident_selected_candidate_share")
+            for row in ok_rows
+        ),
+        "gpu_resident_selected_final_topk_position_agreement_min": _min_optional(
+            row.get("gpu_resident_selected_final_topk_position_agreement")
+            for row in ok_rows
+        ),
+        "gpu_resident_selected_candidate_position_agreement_min": _min_optional(
+            row.get("gpu_resident_selected_candidate_position_agreement_min")
             for row in ok_rows
         ),
     }

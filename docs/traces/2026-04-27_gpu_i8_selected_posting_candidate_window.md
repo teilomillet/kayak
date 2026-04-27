@@ -115,3 +115,19 @@ The next candidate primitive should test one of:
 Any of those must keep the same contract: explicit query/document vector
 counts, `candidate_k`, no silent CPU fallback, no reference scores passed into
 the extension, and exact agreement against the CPU i8 reference.
+
+## Follow-Up
+
+This negative result was superseded by a different boundary, not by changing
+the scoring semantics. The accepted follow-up is recorded in
+`docs/traces/2026-04-27_gpu_i8_resident_selected_posting_candidate_window.md`.
+
+That follow-up keeps selected-posting metadata resident on GPU and writes dense
+scores into caller-owned NumPy `Float32` memory. On the same non-full wide
+case family, projected CPU centroid scoring/selection plus resident GPU
+selected-posting candidate generation measured `0.564x` to `0.663x` of CPU i8
+candidate generation while preserving `candidate_position_agreement = 1.0`.
+
+Reason: this trace remains useful because it falsifies the Python-list and
+serial/block-selector boundaries. The accepted primitive is the resident
+typed-output boundary.

@@ -34,6 +34,7 @@ from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
     MojoGpuI8SelectedPostingCandidateResult,
     MojoGpuI8SelectedPostingDenseCandidateResult,
     MojoGpuI8SelectedPostingDenseScoresResult,
+    MojoGpuI8SelectedPostingResidentDenseCandidateResult,
     _selected_posting_accumulation_reference,
 )
 from kayak_bridge.plaid_approx import (  # noqa: E402
@@ -132,6 +133,40 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
         self.assertEqual(payload["candidate_position_agreement"], 1.0)
         self.assertEqual(payload["position_preview"], (3, 1))
 
+    def test_resident_dense_candidate_result_reports_boundary(self) -> None:
+        result = MojoGpuI8SelectedPostingResidentDenseCandidateResult(
+            host_marshalling_seconds=0.001,
+            prepare_call_seconds=0.01,
+            score_call_seconds=0.02,
+            release_call_seconds=0.003,
+            candidate_selection_seconds=0.004,
+            validation_seconds=0.005,
+            document_score_count=8,
+            candidate_k=2,
+            candidate_position_match_count=2,
+            score_delta_max_abs=0.0,
+            candidate_score_delta_max_abs=0.0,
+            selected_position_out_of_range_count=0,
+            doc_index_out_of_range_count=0,
+            selected_centroid_count=4,
+            document_count=4,
+            positions=(3, 1),
+            scores=(1.2, 0.7),
+        )
+
+        payload = result.to_json_ready()
+
+        self.assertTrue(payload["candidate_generation_ok"])
+        self.assertAlmostEqual(
+            payload["score_plus_candidate_selection_seconds"],
+            0.024,
+        )
+        self.assertAlmostEqual(
+            payload["prepare_score_plus_candidate_selection_seconds"],
+            0.034,
+        )
+        self.assertEqual(payload["candidate_position_agreement"], 1.0)
+
     def test_accumulation_reference_sums_query_vector_maxima(self) -> None:
         reference = _selected_posting_accumulation_reference(
             payload=_payload(),
@@ -172,6 +207,23 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
                 "extension_call_seconds": 0.005,
                 "candidate_selection_seconds": 0.002,
                 "extension_plus_candidate_selection_seconds": 0.007,
+                "candidate_position_agreement": 1.0,
+                "candidate_score_delta_max_abs": 0.0,
+                "validation_reference_scores_sent_to_extension": False,
+            },
+            gpu_block_candidate_parsed={
+                "extension_call_seconds": 0.003,
+                "host_marshalling_seconds": 0.001,
+                "candidate_position_agreement": 1.0,
+                "candidate_score_delta_max_abs": 0.0,
+                "validation_reference_scores_sent_to_extension": False,
+            },
+            gpu_resident_dense_candidate_parsed={
+                "prepare_call_seconds": 0.006,
+                "score_call_seconds": 0.004,
+                "candidate_selection_seconds": 0.002,
+                "score_plus_candidate_selection_seconds": 0.006,
+                "prepare_score_plus_candidate_selection_seconds": 0.012,
                 "candidate_position_agreement": 1.0,
                 "candidate_score_delta_max_abs": 0.0,
                 "validation_reference_scores_sent_to_extension": False,
@@ -242,6 +294,54 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
             ],
             False,
         )
+        self.assertAlmostEqual(
+            comparison[
+                "gpu_block_candidate_extension_seconds_per_cpu_candidate_generation_second"
+            ],
+            0.15,
+        )
+        self.assertIs(
+            comparison[
+                "gpu_block_candidate_validation_reference_scores_sent_to_extension"
+            ],
+            False,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "gpu_resident_dense_score_candidate_score_plus_selection_seconds_per_cpu_candidate_generation_second"
+            ],
+            0.3,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "gpu_resident_dense_score_candidate_prepare_score_plus_selection_seconds_per_cpu_candidate_generation_second"
+            ],
+            0.6,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "projected_cpu_selection_resident_dense_score_candidate_seconds"
+            ],
+            0.007,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "projected_cpu_selection_resident_dense_score_candidate_seconds_per_cpu_candidate_generation_second"
+            ],
+            0.35,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "projected_cpu_selection_resident_dense_score_candidate_with_prepare_seconds_per_cpu_candidate_generation_second"
+            ],
+            0.65,
+        )
+        self.assertIs(
+            comparison[
+                "gpu_resident_dense_score_candidate_validation_reference_scores_sent_to_extension"
+            ],
+            False,
+        )
 
     def test_summary_reports_accumulation_ratios(self) -> None:
         rows = [
@@ -256,6 +356,10 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
                 projected_device_topk_cold_ratio=0.33,
                 all_posting_ratio=0.5,
                 kernel_posting_ratio=0.3,
+                block_candidate_ratio=0.27,
+                resident_dense_candidate_ratio=0.19,
+                projected_cpu_selection_resident_dense_candidate_ratio=0.23,
+                projected_cpu_selection_resident_dense_candidate_with_prepare_ratio=0.29,
                 visits=64,
             ),
             _row(
@@ -269,6 +373,10 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
                 projected_device_topk_cold_ratio=0.53,
                 all_posting_ratio=0.7,
                 kernel_posting_ratio=0.6,
+                block_candidate_ratio=0.47,
+                resident_dense_candidate_ratio=0.39,
+                projected_cpu_selection_resident_dense_candidate_ratio=0.43,
+                projected_cpu_selection_resident_dense_candidate_with_prepare_ratio=0.49,
                 visits=128,
             ),
         ]
@@ -308,6 +416,30 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
                 "best_non_full_projected_device_topk_resident_payload_candidate_vs_cpu_candidate_generation_ratio"
             ],
             0.28,
+        )
+        self.assertEqual(
+            summary[
+                "best_non_full_block_candidate_extension_vs_cpu_candidate_generation_ratio"
+            ],
+            0.27,
+        )
+        self.assertEqual(
+            summary[
+                "best_non_full_resident_dense_score_candidate_score_plus_selection_vs_cpu_candidate_generation_ratio"
+            ],
+            0.19,
+        )
+        self.assertEqual(
+            summary[
+                "best_non_full_projected_cpu_selection_resident_dense_score_candidate_vs_cpu_candidate_generation_ratio"
+            ],
+            0.23,
+        )
+        self.assertEqual(
+            summary[
+                "best_non_full_projected_cpu_selection_resident_dense_score_candidate_with_prepare_vs_cpu_candidate_generation_ratio"
+            ],
+            0.29,
         )
         self.assertEqual(summary["max_expanded_posting_count"], 128)
 
@@ -384,6 +516,10 @@ def _row(
     projected_device_topk_cold_ratio: float,
     all_posting_ratio: float,
     kernel_posting_ratio: float,
+    block_candidate_ratio: float,
+    resident_dense_candidate_ratio: float,
+    projected_cpu_selection_resident_dense_candidate_ratio: float,
+    projected_cpu_selection_resident_dense_candidate_with_prepare_ratio: float,
     visits: int,
 ) -> dict[str, object]:
     return {
@@ -417,6 +553,18 @@ def _row(
             ),
             "gpu_posting_accumulation_kernel_seconds_per_cpu_posting_accumulation_second": (
                 kernel_posting_ratio
+            ),
+            "gpu_block_candidate_extension_seconds_per_cpu_candidate_generation_second": (
+                block_candidate_ratio
+            ),
+            "gpu_resident_dense_score_candidate_score_plus_selection_seconds_per_cpu_candidate_generation_second": (
+                resident_dense_candidate_ratio
+            ),
+            "projected_cpu_selection_resident_dense_score_candidate_seconds_per_cpu_candidate_generation_second": (
+                projected_cpu_selection_resident_dense_candidate_ratio
+            ),
+            "projected_cpu_selection_resident_dense_score_candidate_with_prepare_seconds_per_cpu_candidate_generation_second": (
+                projected_cpu_selection_resident_dense_candidate_with_prepare_ratio
             ),
         },
     }

@@ -165,7 +165,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "shape-only centroid-budget policy, CPU candidate generation, and "
             "the GPU no-reference top-k primitive. The report also includes "
             "the fused centroid-posting GPU primitive as a separate internal "
-            "scope plus a fused-shortlist exact-rerank hybrid primitive. "
+            "scope, a fused-shortlist exact-rerank hybrid primitive, and a "
+            "resident selected-posting exact-rerank primitive. "
             "This is not a public backend speedup claim."
         ),
     }
@@ -295,6 +296,20 @@ def emit_quiet_means(report: dict[str, Any]) -> None:
         print_quiet_mean(
             f"{prefix}_gpu_hybrid_recall",
             row["gpu_hybrid_recall_at_k_vs_kayak_exact"],
+        )
+        print_quiet_mean(
+            f"{prefix}_gpu_resident_selected_per_window",
+            row["gpu_resident_selected_exact_rerank_seconds_per_window"],
+        )
+        print_quiet_mean(
+            f"{prefix}_gpu_resident_selected_per_fastplaid_batch",
+            row[
+                "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second"
+            ],
+        )
+        print_quiet_mean(
+            f"{prefix}_gpu_resident_selected_recall",
+            row["gpu_resident_selected_recall_at_k_vs_kayak_exact"],
         )
 
 

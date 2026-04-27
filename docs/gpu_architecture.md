@@ -476,11 +476,24 @@ batch time across the CPU/CUDA rows. The refreshed summary reports the
 remaining envelope as about `69%` CPU candidate generation and `31%` GPU
 no-reference top-k.
 
+Resident selected-posting FastPlaid finding: the same policy matrix now
+includes an internal row that starts from CPU-selected centroids, generates a
+resident GPU selected-posting candidate window, and exact-reranks that window
+with the GPU i8 address scorer. The latest quiet run was `ok` on all `6 / 6`
+CPU/CUDA FastPlaid rows, with candidate agreement `1.0` and final exact-rerank
+top-k agreement `1.0`. The resident selected-posting exact-rerank row measured
+about `0.0284x` to `0.2187x` of FastPlaid full-search batch time after
+including CPU selected-centroid scoring/selection in the headline timing. Mean
+ratio was about `0.1021x`; the cold-with-prepare max was about `0.2355x`.
+Recall matched the Kayak i8 policy row, but it did not dominate FastPlaid
+everywhere: `doc_vectors64` on CPU measured Kayak recall `0.65` versus
+FastPlaid recall `0.70`.
+
 Reason: this turns the strongest current GPU i8 evidence into a reproducible
 speed track. It still does not prove a public backend because candidate
 generation remains CPU-side and FastPlaid is timed as full search. The next
-optimization target should be candidate-generation/workspace behavior rather
-than the GPU top-k kernel.
+optimization target should be candidate coverage/quality for the selected
+centroid budget, not another low-level speed pass.
 
 Unordered candidate-window finding: the internal GPU pipeline now has an
 explicit unordered CPU candidate-window option while the public ordered
@@ -629,6 +642,30 @@ some rows larger than, the GPU selected-H2D/kernel/D2H path. The next
 optimization should therefore prefer fused selected-centroid scoring plus
 accumulation, or a genuinely parallel segmented top-k design if top-k is
 revisited, rather than another serial document scan.
+
+Resident selected-posting candidate-window finding: the selected-posting
+candidate boundary now has an explicit prepared payload handle. It keeps
+centroid posting offsets and doc ids resident on GPU, copies only selected
+centroid positions/scores for each call, writes dense document scores into
+caller-owned NumPy `Float32` memory, and performs deterministic host
+`candidate_k` selection. On all `5 / 5` wide rows, candidate positions matched
+the CPU selected-posting reference exactly with `score_delta_max_abs=0.0` and
+no CPU reference scores sent to the extension. On the three non-full rows,
+resident score plus host selection measured about `0.405x`, `0.469x`, and
+`0.454x` of full CPU candidate generation. Projected CPU centroid
+scoring/selection plus this resident selected-posting candidate boundary
+measured about `0.663x`, `0.593x`, and `0.564x` of CPU candidate generation.
+Even including handle prepare, the same projected cold path stayed below CPU at
+about `0.757x`, `0.742x`, and `0.630x`.
+
+Reason: this validates a candidate-window primitive that is both
+serving-shaped and faster than CPU i8 candidate generation on non-full rows.
+The winning change was the boundary: returning dense scores through Python
+float lists stayed correct but lost at about `1.09x` to `1.36x`, and the
+block-parallel candidate selector stayed correct but lost at about `9.11x` to
+`14.02x`. The accepted primitive is therefore resident typed-output selected
+posting, not serial/block GPU candidate selection and not Python-object dense
+score readback.
 
 Centroid-selection finding: a benchmark-only GPU probe now scores sampled i8
 centroids from the real Kayak i8 payload and selects
@@ -1058,7 +1095,23 @@ evidence only justifies a measured primitive.
    a measured win. The next target is candidate selection/readback or a
    resident/fused candidate selector, not exact rerank and not selected-posting
    accumulation itself.
-42. Only after a measured win, consider public API design.
+42. Add a resident selected-posting candidate-window handle and write dense
+   scores into caller-owned NumPy `Float32` memory. Current quiet result: exact
+   candidate agreement is preserved, resident score plus host selection costs
+   about `0.405x` to `0.469x` of CPU candidate generation on non-full rows,
+   and the projected CPU centroid-selection plus resident selected-posting
+   candidate window costs about `0.564x` to `0.663x`. This is the first
+   accepted serving-shaped selected-posting candidate primitive.
+43. Add the accepted resident selected-posting candidate boundary to the
+   FastPlaid policy comparison and exact-rerank comparison path before any
+   public API design. Current quiet result: the row preserves exact internal
+   agreement, costs about `0.0284x` to `0.2187x` of FastPlaid full-search
+   batch time across CPU/CUDA FastPlaid rows after including CPU
+   selected-centroid work, and matches the Kayak i8 policy recall. It still
+   trails FastPlaid recall on `doc_vectors64` CPU by `0.05`.
+44. Before public API design, improve or explain the remaining candidate
+   coverage gap. Current evidence says speed is good enough for the scoped
+   synthetic matrix; quality is the blocker.
 
 ## Falsification Conditions
 

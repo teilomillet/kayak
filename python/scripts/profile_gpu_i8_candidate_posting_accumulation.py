@@ -205,6 +205,54 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
                 "gpu_dense_score_candidate_extension_plus_selection_seconds_per_cpu_candidate_generation_second"
             ),
         )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_block_candidate_extension",
+            comparison.get("gpu_block_candidate_extension_call_seconds"),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_block_candidate_vs_cpu_candidate",
+            comparison.get(
+                "gpu_block_candidate_extension_seconds_per_cpu_candidate_generation_second"
+            ),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_resident_dense_candidate_score",
+            comparison.get("gpu_resident_dense_score_candidate_score_call_seconds"),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_resident_dense_candidate_selection",
+            comparison.get("gpu_resident_dense_score_candidate_selection_seconds"),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_resident_dense_candidate_score_plus_selection",
+            comparison.get(
+                "gpu_resident_dense_score_candidate_score_plus_selection_seconds"
+            ),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_resident_dense_candidate_vs_cpu_candidate",
+            comparison.get(
+                "gpu_resident_dense_score_candidate_score_plus_selection_seconds_per_cpu_candidate_generation_second"
+            ),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_projected_cpu_selection_resident_dense_candidate",
+            comparison.get(
+                "projected_cpu_selection_resident_dense_score_candidate_seconds"
+            ),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_projected_cpu_selection_resident_dense_candidate_vs_cpu_candidate",
+            comparison.get(
+                "projected_cpu_selection_resident_dense_score_candidate_seconds_per_cpu_candidate_generation_second"
+            ),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_projected_cpu_selection_resident_dense_candidate_with_prepare_vs_cpu_candidate",
+            comparison.get(
+                "projected_cpu_selection_resident_dense_score_candidate_with_prepare_seconds_per_cpu_candidate_generation_second"
+            ),
+        )
 
 
 def print_quiet_mean(section: str, value: object) -> None:

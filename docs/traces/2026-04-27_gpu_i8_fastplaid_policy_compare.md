@@ -136,3 +136,49 @@ Summary:
 Reason: candidate-window rerank only needs the retained document set. The
 unordered path is kept behind an explicit internal flag so we can use it in GPU
 pipeline profiling without changing public candidate ordering semantics.
+
+## Follow-Up: Resident Selected-Posting Exact Rerank
+
+The policy comparison now includes a resident selected-posting exact-rerank
+row. This row starts from CPU-selected centroids, uses the resident GPU
+selected-posting candidate-window primitive, then exact-reranks that candidate
+window with the GPU i8 address scorer.
+
+Latest quiet artifact:
+
+- quiet log: `.cache/kayak/bench_quiet/20260427T172856Z`
+- summary report: `.cache/kayak/gpu_i8_fastplaid_policy_compare/summary.json`
+
+The run reported status `ok` on all `6 / 6` rows:
+
+- resident selected candidate position agreement minimum: `1.0`
+- resident selected exact-rerank final top-k agreement minimum: `1.0`
+- mean resident selected exact-rerank / FastPlaid batch:
+  `0.10213825609061737`
+- max resident selected exact-rerank / FastPlaid batch:
+  `0.218733060397411`
+- max cold resident selected exact-rerank / FastPlaid batch:
+  `0.23550834938348914`
+- minimum resident selected recall delta versus FastPlaid:
+  `-0.04999999999999993`
+- mean CPU selected-centroid share:
+  `0.3432215448787619`
+- mean resident candidate scoring/selection share:
+  `0.3320694691766924`
+- mean exact-rerank share:
+  `0.3247089859445457`
+
+Interpretation:
+
+This is the first policy row in this matrix that is both much faster than
+FastPlaid full search and built from a GPU candidate-generation primitive plus
+exact rerank. The headline timing includes CPU selected-centroid work, resident
+GPU selected-posting scoring/selection, and GPU exact rerank. It still is not a
+public backend claim because the selected centroid step is CPU-side and the
+matrix is synthetic.
+
+The remaining blocker is quality, not speed. The `doc_vectors64` CPU row
+measured Kayak resident selected recall `0.65` versus FastPlaid recall `0.70`.
+Until that candidate coverage gap is closed or explained by variance, the
+correct next target is the shape-policy candidate budget/coverage, not another
+low-level kernel speed pass.

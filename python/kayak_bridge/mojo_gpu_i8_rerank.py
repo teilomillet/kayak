@@ -597,6 +597,92 @@ class MojoGpuI8SelectedPostingDenseCandidateResult:
 
 
 @dataclass(frozen=True, slots=True)
+class MojoGpuI8SelectedPostingResidentDenseCandidateResult:
+    host_marshalling_seconds: float
+    prepare_call_seconds: float
+    score_call_seconds: float
+    release_call_seconds: float
+    candidate_selection_seconds: float
+    validation_seconds: float
+    document_score_count: int
+    candidate_k: int
+    candidate_position_match_count: int
+    score_delta_max_abs: float
+    candidate_score_delta_max_abs: float
+    selected_position_out_of_range_count: int
+    doc_index_out_of_range_count: int
+    selected_centroid_count: int
+    document_count: int
+    positions: tuple[int, ...]
+    scores: tuple[float, ...]
+
+    @property
+    def score_plus_candidate_selection_seconds(self) -> float:
+        return self.score_call_seconds + self.candidate_selection_seconds
+
+    @property
+    def prepare_score_plus_candidate_selection_seconds(self) -> float:
+        return (
+            self.prepare_call_seconds
+            + self.score_call_seconds
+            + self.candidate_selection_seconds
+        )
+
+    @property
+    def candidate_position_count(self) -> int:
+        return len(self.positions)
+
+    @property
+    def candidate_position_agreement(self) -> float:
+        if not self.positions:
+            return 0.0
+        return self.candidate_position_match_count / len(self.positions)
+
+    @property
+    def candidate_generation_ok(self) -> bool:
+        return (
+            self.selected_position_out_of_range_count == 0
+            and self.doc_index_out_of_range_count == 0
+            and self.candidate_position_match_count == len(self.positions)
+            and self.score_delta_max_abs <= GPU_I8_SCORE_DELTA_TOLERANCE_FLOOR
+            and self.candidate_score_delta_max_abs
+            <= GPU_I8_SCORE_DELTA_TOLERANCE_FLOOR
+        )
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "prepare_call_seconds": self.prepare_call_seconds,
+            "score_call_seconds": self.score_call_seconds,
+            "release_call_seconds": self.release_call_seconds,
+            "candidate_selection_seconds": self.candidate_selection_seconds,
+            "score_plus_candidate_selection_seconds": (
+                self.score_plus_candidate_selection_seconds
+            ),
+            "prepare_score_plus_candidate_selection_seconds": (
+                self.prepare_score_plus_candidate_selection_seconds
+            ),
+            "validation_seconds": self.validation_seconds,
+            "document_score_count": self.document_score_count,
+            "candidate_k": self.candidate_k,
+            "candidate_position_count": self.candidate_position_count,
+            "candidate_position_match_count": self.candidate_position_match_count,
+            "candidate_position_agreement": self.candidate_position_agreement,
+            "score_delta_max_abs": self.score_delta_max_abs,
+            "candidate_score_delta_max_abs": self.candidate_score_delta_max_abs,
+            "selected_position_out_of_range_count": (
+                self.selected_position_out_of_range_count
+            ),
+            "doc_index_out_of_range_count": self.doc_index_out_of_range_count,
+            "candidate_generation_ok": self.candidate_generation_ok,
+            "selected_centroid_count": self.selected_centroid_count,
+            "document_count": self.document_count,
+            "position_preview": self.positions[:16],
+            "score_preview": self.scores[:16],
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class MojoGpuI8FusedCentroidPostingAccumulationResult:
     host_marshalling_seconds: float
     extension_call_seconds: float
@@ -2166,6 +2252,43 @@ def score_i8_selected_posting_candidate_positions_addresses(
     selected: KayakPlaidI8SelectedCentroids,
     candidate_k: int,
 ) -> MojoGpuI8SelectedPostingCandidateResult:
+    return _score_i8_selected_posting_candidate_positions_addresses(
+        target_accelerator=target_accelerator,
+        shape=shape,
+        payload=payload,
+        selected=selected,
+        candidate_k=candidate_k,
+        binding_name="score_i8_selected_posting_candidate_positions_addresses",
+    )
+
+
+def score_i8_selected_posting_block_candidate_positions_addresses(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    candidate_k: int,
+) -> MojoGpuI8SelectedPostingCandidateResult:
+    return _score_i8_selected_posting_candidate_positions_addresses(
+        target_accelerator=target_accelerator,
+        shape=shape,
+        payload=payload,
+        selected=selected,
+        candidate_k=candidate_k,
+        binding_name="score_i8_selected_posting_block_candidate_positions_addresses",
+    )
+
+
+def _score_i8_selected_posting_candidate_positions_addresses(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    candidate_k: int,
+    binding_name: str,
+) -> MojoGpuI8SelectedPostingCandidateResult:
     if candidate_k <= 0:
         raise ValueError("candidate_k must be positive")
     if candidate_k > int(shape.document_count):
@@ -2194,9 +2317,7 @@ def score_i8_selected_posting_candidate_positions_addresses(
         int(candidate_k),
     ]
     extension_started_at = time.perf_counter()
-    raw_result = module.score_i8_selected_posting_candidate_positions_addresses(
-        request
-    )
+    raw_result = getattr(module, binding_name)(request)
     extension_call_seconds = time.perf_counter() - extension_started_at
 
     if len(raw_result) != 8:
@@ -2402,6 +2523,146 @@ def score_i8_selected_posting_dense_candidate_positions_addresses(
         candidate_k=int(candidate_k),
         candidate_position_match_count=candidate_position_match_count,
         candidate_score_delta_max_abs=candidate_score_delta_max_abs,
+        positions=positions,
+        scores=scores,
+    )
+
+
+def score_i8_selected_posting_resident_dense_candidate_positions_addresses(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    candidate_k: int,
+) -> MojoGpuI8SelectedPostingResidentDenseCandidateResult:
+    if candidate_k <= 0:
+        raise ValueError("candidate_k must be positive")
+    if candidate_k > int(shape.document_count):
+        raise ValueError("candidate_k must not exceed document_count")
+    marshalling_started_at = time.perf_counter()
+    payload.validate()
+    selected.validate()
+    centroid_doc_offsets = _int64_array(payload.centroid_doc_offsets)
+    centroid_doc_indices = _int64_array(payload.centroid_doc_indices)
+    selected_positions = _int64_array(selected.positions_array())
+    selected_scores = _float32_array(selected.scores_array())
+    expected_score_count = int(shape.query_count) * int(shape.document_count)
+    dense_scores = np.empty(expected_score_count, dtype=np.float32)
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    module = load_module(target_accelerator=target_accelerator)
+    prepare_request = [
+        _array_address(centroid_doc_offsets),
+        _array_address(centroid_doc_indices),
+        int(payload.centroid_count),
+        int(payload.posting_count),
+        int(shape.document_count),
+        int(shape.query_count),
+        int(shape.query_vector_count),
+        int(selected.centroids_per_query_vector),
+    ]
+    prepare_started_at = time.perf_counter()
+    handle = int(
+        module.prepare_i8_selected_posting_session_handle(prepare_request)
+    )
+    prepare_call_seconds = time.perf_counter() - prepare_started_at
+    release_call_seconds = 0.0
+    try:
+        score_request = [
+            handle,
+            _array_address(selected_positions),
+            _array_address(selected_scores),
+            _array_address(dense_scores),
+        ]
+        score_started_at = time.perf_counter()
+        raw_result = (
+            module.score_i8_selected_posting_session_handle_dense_scores_into(
+                score_request
+            )
+        )
+        score_call_seconds = time.perf_counter() - score_started_at
+    finally:
+        release_started_at = time.perf_counter()
+        module.release_i8_selected_posting_session_handle(handle)
+        release_call_seconds = time.perf_counter() - release_started_at
+
+    if len(raw_result) != 5:
+        raise RuntimeError(
+            "GPU i8 selected-posting resident dense-score bridge returned an "
+            "unexpected result shape"
+        )
+
+    result_document_score_count = int(raw_result[0])
+    if result_document_score_count != expected_score_count:
+        raise RuntimeError(
+            "GPU i8 selected-posting resident bridge returned the wrong "
+            "document score count"
+        )
+    if int(dense_scores.size) != expected_score_count:
+        raise RuntimeError(
+            "GPU i8 selected-posting resident bridge returned the wrong "
+            "score count"
+        )
+
+    selection_started_at = time.perf_counter()
+    positions, scores = _rank_document_scores_numpy(
+        dense_scores,
+        query_count=int(shape.query_count),
+        document_count=int(shape.document_count),
+        top_k=int(candidate_k),
+    )
+    candidate_selection_seconds = time.perf_counter() - selection_started_at
+
+    validation_started_at = time.perf_counter()
+    reference = _selected_posting_accumulation_reference(
+        payload=payload,
+        selected=selected,
+    )
+    score_delta_max_abs = float(
+        np.max(
+            np.abs(
+                np.asarray(dense_scores, dtype=np.float32)
+                - reference.expected_document_scores
+            )
+        )
+    )
+    expected_positions = _rank_document_scores_by_position(
+        reference.expected_document_scores,
+        query_count=int(shape.query_count),
+        document_count=int(shape.document_count),
+        top_k=int(candidate_k),
+    )
+    candidate_position_match_count = sum(
+        1
+        for actual, expected in zip(positions, expected_positions)
+        if actual == expected
+    )
+    candidate_score_delta_max_abs = _topk_score_delta_max_abs(
+        scores,
+        reference.expected_document_scores,
+        positions,
+        document_count=int(shape.document_count),
+        top_k=int(candidate_k),
+    )
+    validation_seconds = time.perf_counter() - validation_started_at
+
+    return MojoGpuI8SelectedPostingResidentDenseCandidateResult(
+        host_marshalling_seconds=host_marshalling_seconds,
+        prepare_call_seconds=prepare_call_seconds,
+        score_call_seconds=score_call_seconds,
+        release_call_seconds=release_call_seconds,
+        candidate_selection_seconds=candidate_selection_seconds,
+        validation_seconds=validation_seconds,
+        document_score_count=result_document_score_count,
+        candidate_k=int(candidate_k),
+        candidate_position_match_count=candidate_position_match_count,
+        score_delta_max_abs=score_delta_max_abs,
+        candidate_score_delta_max_abs=candidate_score_delta_max_abs,
+        selected_position_out_of_range_count=int(raw_result[1]),
+        doc_index_out_of_range_count=int(raw_result[2]),
+        selected_centroid_count=int(raw_result[3]),
+        document_count=int(raw_result[4]),
         positions=positions,
         scores=scores,
     )

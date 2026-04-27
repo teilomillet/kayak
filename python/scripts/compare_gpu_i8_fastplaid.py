@@ -34,6 +34,14 @@ from kayak_bridge.gpu_i8_fastplaid_hybrid_scope import (  # noqa: E402
     build_hybrid_shortlist_exact_rerank_scope_row,
     build_missing_hybrid_shortlist_exact_rerank_scope_row,
 )
+from kayak_bridge.gpu_i8_fastplaid_resident_selected_metrics import (  # noqa: E402
+    STATUS_BLOCKED_GPU_RESIDENT_SELECTED_FAILED,
+    build_gpu_resident_selected_posting_exact_rerank_vs_fastplaid_comparison,
+)
+from kayak_bridge.gpu_i8_fastplaid_resident_selected_scope import (  # noqa: E402
+    build_missing_resident_selected_posting_exact_rerank_scope_row,
+    build_resident_selected_posting_exact_rerank_scope_row,
+)
 from kayak_bridge.gpu_i8_fastplaid_topk_compare import (  # noqa: E402
     build_missing_prepared_handle_topk_scope_row,
     build_prepared_handle_topk_scope_row,
@@ -253,6 +261,7 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
     prepared_handle_topk_row: dict[str, Any] | None = None
     fused_centroid_posting_row: dict[str, Any] | None = None
     hybrid_shortlist_rerank_row: dict[str, Any] | None = None
+    resident_selected_rerank_row: dict[str, Any] | None = None
     if capability.available:
         gpu_probe = run_gpu_i8_candidate_score_probe(
             shape,
@@ -275,6 +284,15 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
         )
         hybrid_shortlist_rerank_row = (
             build_hybrid_shortlist_exact_rerank_scope_row(
+                shape=shape,
+                inputs=inputs,
+                reference_positions=reference_positions,
+                capability=capability,
+                args=args,
+            )
+        )
+        resident_selected_rerank_row = (
+            build_resident_selected_posting_exact_rerank_scope_row(
                 shape=shape,
                 inputs=inputs,
                 reference_positions=reference_positions,
@@ -318,12 +336,19 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             fastplaid_row=fastplaid_row,
         )
     )
+    resident_selected_rerank_comparison = (
+        build_gpu_resident_selected_posting_exact_rerank_vs_fastplaid_comparison(
+            resident_row=resident_selected_rerank_row,
+            fastplaid_row=fastplaid_row,
+        )
+    )
     status = report_status(
         capability=capability,
         gpu_probe=gpu_probe,
         prepared_handle_topk_row=prepared_handle_topk_row,
         fused_centroid_posting_row=fused_centroid_posting_row,
         hybrid_shortlist_rerank_row=hybrid_shortlist_rerank_row,
+        resident_selected_rerank_row=resident_selected_rerank_row,
         fastplaid_row=fastplaid_row,
     )
 
@@ -371,6 +396,15 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
                     capability=capability,
                 )
             ),
+            "gpu_resident_selected_posting_exact_rerank_primitive": (
+                resident_selected_rerank_row
+                if resident_selected_rerank_row is not None
+                else build_missing_resident_selected_posting_exact_rerank_scope_row(
+                    shape=shape,
+                    candidate_k=args.candidate_k,
+                    capability=capability,
+                )
+            ),
             "gpu_vs_fastplaid_scope_comparison": comparison,
             "gpu_prepared_handle_topk_vs_fastplaid_scope_comparison": (
                 prepared_handle_topk_comparison
@@ -384,6 +418,9 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             "gpu_hybrid_shortlist_exact_rerank_vs_fastplaid_scope_comparison": (
                 hybrid_shortlist_rerank_comparison
             ),
+            "gpu_resident_selected_posting_exact_rerank_vs_fastplaid_scope_comparison": (
+                resident_selected_rerank_comparison
+            ),
             "measurement_note": (
                 "FastPlaid rows are full-search timings. The GPU row is a "
                 "benchmark-only candidate-score primitive over deterministic "
@@ -395,7 +432,11 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
                 "top-k positions from the prepared payload, but is also still "
                 "an internal primitive. The hybrid row uses fused GPU scores "
                 "only for shortlisting, then exact-reranks that shortlist with "
-                "the GPU address scorer. The no-reference top-k comparisons "
+                "the GPU address scorer. "
+                "The resident selected-posting row uses CPU-selected "
+                "centroids, a resident selected-posting GPU candidate window, "
+                "and the exact GPU address reranker. "
+                "The no-reference top-k comparisons "
                 "keep CPU reference scores out of the Mojo serving calls and "
                 "use them only for post-call validation. The positive-centroid "
                 "candidate option applies only to the address-window row and "
@@ -595,6 +636,7 @@ def report_status(
     prepared_handle_topk_row: dict[str, Any] | None,
     fused_centroid_posting_row: dict[str, Any] | None,
     hybrid_shortlist_rerank_row: dict[str, Any] | None,
+    resident_selected_rerank_row: dict[str, Any] | None,
     fastplaid_row: dict[str, Any] | None,
 ) -> str:
     if fastplaid_row is None or fastplaid_row.get("status") != STATUS_OK:
@@ -623,6 +665,11 @@ def report_status(
         or hybrid_shortlist_rerank_row.get("status") != STATUS_OK
     ):
         return STATUS_BLOCKED_GPU_HYBRID_FAILED
+    if (
+        resident_selected_rerank_row is None
+        or resident_selected_rerank_row.get("status") != STATUS_OK
+    ):
+        return STATUS_BLOCKED_GPU_RESIDENT_SELECTED_FAILED
     return STATUS_OK
 
 
@@ -741,6 +788,34 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
         if isinstance(ratio, (float, int)):
             print("== kayak_gpu_i8_hybrid_per_fastplaid_batch ==")
             print("Mean:", ratio)
+    resident = report.get("gpu_resident_selected_posting_exact_rerank_primitive")
+    if isinstance(resident, dict):
+        parsed = resident.get("parsed")
+        if isinstance(parsed, dict):
+            resident_candidate = parsed.get("resident_candidate_seconds_per_window")
+            resident_total = parsed.get(
+                "resident_selected_posting_exact_rerank_seconds_per_window"
+            )
+            exact_seconds = parsed.get("exact_rerank_topk_seconds_per_window")
+            if isinstance(resident_candidate, (float, int)):
+                print("== kayak_gpu_i8_resident_selected_candidate_per_window ==")
+                print("Mean:", resident_candidate)
+            if isinstance(exact_seconds, (float, int)):
+                print("== kayak_gpu_i8_resident_selected_exact_rerank_per_window ==")
+                print("Mean:", exact_seconds)
+            if isinstance(resident_total, (float, int)):
+                print("== kayak_gpu_i8_resident_selected_hybrid_per_window ==")
+                print("Mean:", resident_total)
+    resident_comparison = report.get(
+        "gpu_resident_selected_posting_exact_rerank_vs_fastplaid_scope_comparison"
+    )
+    if isinstance(resident_comparison, dict):
+        ratio = resident_comparison.get(
+            "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second"
+        )
+        if isinstance(ratio, (float, int)):
+            print("== kayak_gpu_i8_resident_selected_hybrid_per_fastplaid_batch ==")
+            print("Mean:", ratio)
 
 
 def exit_code(
@@ -767,6 +842,8 @@ def exit_code(
         return 7
     if status == STATUS_BLOCKED_GPU_HYBRID_FAILED:
         return 8
+    if status == STATUS_BLOCKED_GPU_RESIDENT_SELECTED_FAILED:
+        return 9
     return 5
 
 

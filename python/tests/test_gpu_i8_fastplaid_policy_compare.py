@@ -103,6 +103,15 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
                     "final_topk_position_agreement": 1.0,
                     "shortlist_k": 256,
                 },
+                "gpu_resident_selected_posting_exact_rerank_vs_fastplaid_scope_comparison": {
+                    "gpu_resident_selected_exact_rerank_seconds_per_window_total": 0.00045,
+                    "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second": 0.045,
+                    "gpu_resident_selected_exact_rerank_cold_seconds_per_fastplaid_batch_second": 0.052,
+                    "gpu_resident_selected_exact_rerank_exact_share": 0.2,
+                    "recall_at_k_vs_kayak_exact": 0.66,
+                    "final_topk_position_agreement": 1.0,
+                    "candidate_position_agreement_min": 1.0,
+                },
             },
             report_path=Path("row.json"),
         )
@@ -132,6 +141,16 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
         self.assertEqual(row["cpu_candidate_generation_share_of_envelope"], 0.6)
         self.assertEqual(row["gpu_topk_no_reference_share_of_envelope"], 0.4)
         self.assertEqual(
+            row[
+                "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second"
+            ],
+            0.045,
+        )
+        self.assertAlmostEqual(
+            row["gpu_resident_selected_recall_delta_vs_fastplaid"],
+            0.26,
+        )
+        self.assertEqual(
             policy_compare.summary_payload([row])["min_recall_delta_vs_fastplaid"],
             0.29999999999999993,
         )
@@ -156,6 +175,18 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
         self.assertEqual(
             policy_compare.summary_payload([row])[
                 "gpu_hybrid_final_topk_position_agreement_min"
+            ],
+            1.0,
+        )
+        self.assertEqual(
+            policy_compare.summary_payload([row])[
+                "max_gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second"
+            ],
+            0.045,
+        )
+        self.assertEqual(
+            policy_compare.summary_payload([row])[
+                "gpu_resident_selected_final_topk_position_agreement_min"
             ],
             1.0,
         )
