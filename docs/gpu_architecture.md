@@ -1045,11 +1045,20 @@ evidence only justifies a measured primitive.
    `192` are faster but lose recall. This rejects exact rerank as the next
    optimization target and points back to candidate-window generation.
 40. Add a serving-shaped candidate-window output for the selected-posting
-   accumulation primitive so it can feed exact rerank directly. Reason: the
-   posting-accumulation probe already shows exact agreement and a promising
-   candidate-generation ratio, but it does not yet return candidate positions
-   as a reusable pipeline primitive.
-41. Only after a measured win, consider public API design.
+   accumulation primitive so it can feed exact rerank directly. Current quiet
+   result: the boundary is correct and returns `candidate_k` positions with
+   agreement `1.0` and no CPU reference scores sent to the extension. The
+   naive Mojo host candidate loop is rejected by timing at about `18.63x` to
+   `29.39x` of CPU candidate generation on non-full rows.
+41. Add a dense-score candidate-window boundary that returns GPU accumulated
+   document scores, then performs deterministic thresholded candidate
+   selection on the host. Current quiet result: exact agreement is preserved,
+   and the non-full rows improve to about `1.10x` to `1.35x` of CPU candidate
+   generation. This is close enough to keep as a diagnostic primitive but not
+   a measured win. The next target is candidate selection/readback or a
+   resident/fused candidate selector, not exact rerank and not selected-posting
+   accumulation itself.
+42. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

@@ -175,6 +175,36 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
                 "gpu_posting_accumulation_all_measured_device_topk_mean_seconds"
             ),
         )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_selected_candidate_extension",
+            comparison.get("gpu_selected_posting_candidate_extension_call_seconds"),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_selected_candidate_vs_cpu_candidate",
+            comparison.get(
+                "gpu_selected_posting_candidate_extension_seconds_per_cpu_candidate_generation_second"
+            ),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_dense_candidate_extension",
+            comparison.get("gpu_dense_score_candidate_extension_call_seconds"),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_dense_candidate_selection",
+            comparison.get("gpu_dense_score_candidate_selection_seconds"),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_dense_candidate_extension_plus_selection",
+            comparison.get(
+                "gpu_dense_score_candidate_extension_plus_selection_seconds"
+            ),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_dense_candidate_vs_cpu_candidate",
+            comparison.get(
+                "gpu_dense_score_candidate_extension_plus_selection_seconds_per_cpu_candidate_generation_second"
+            ),
+        )
 
 
 def print_quiet_mean(section: str, value: object) -> None:

@@ -4867,6 +4867,424 @@ def profile_i8_selected_posting_accumulation_addresses(
         return py_result
 
 
+def score_i8_selected_posting_candidate_positions_addresses(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var centroid_doc_offsets_address = Int(py=py_request[0])
+    var centroid_doc_indices_address = Int(py=py_request[1])
+    var selected_positions_address = Int(py=py_request[2])
+    var selected_scores_address = Int(py=py_request[3])
+    var centroid_count = Int(py=py_request[4])
+    var posting_count = Int(py=py_request[5])
+    var document_count = Int(py=py_request[6])
+    var query_count = Int(py=py_request[7])
+    var query_vector_count = Int(py=py_request[8])
+    var centroids_per_query_vector = Int(py=py_request[9])
+    var candidate_k = Int(py=py_request[10])
+    if centroid_doc_offsets_address == 0:
+        raise Error("centroid_doc_offsets address must be non-zero")
+    if centroid_doc_indices_address == 0:
+        raise Error("centroid_doc_indices address must be non-zero")
+    if selected_positions_address == 0:
+        raise Error("selected positions address must be non-zero")
+    if selected_scores_address == 0:
+        raise Error("selected scores address must be non-zero")
+    if centroid_count <= 0:
+        raise Error("centroid_count must be positive")
+    if posting_count <= 0:
+        raise Error("posting_count must be positive")
+    if document_count <= 0:
+        raise Error("document_count must be positive")
+    if query_count <= 0:
+        raise Error("query_count must be positive")
+    if query_vector_count <= 0:
+        raise Error("query_vector_count must be positive")
+    if centroids_per_query_vector <= 0:
+        raise Error("centroids_per_query_vector must be positive")
+    if candidate_k <= 0:
+        raise Error("candidate_k must be positive")
+    if candidate_k > document_count:
+        raise Error("candidate_k must not exceed document_count")
+
+    var py_centroid_doc_offsets = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=centroid_doc_offsets_address
+    )
+    var py_centroid_doc_indices = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=centroid_doc_indices_address
+    )
+    var py_selected_positions = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=selected_positions_address
+    )
+    var py_selected_scores = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=selected_scores_address
+    )
+    var centroid_offset_count = centroid_count + 1
+    var selected_centroid_count = (
+        query_count * query_vector_count * centroids_per_query_vector
+    )
+    var score_count = query_count * document_count
+    var best_score_count = query_count * query_vector_count * document_count
+    var candidate_position_count = query_count * candidate_k
+    var grid_x = (score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
+    var best_grid_x = (best_score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
+
+    with DeviceContext() as ctx:
+        var centroid_doc_offsets_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](centroid_offset_count)
+        var centroid_doc_indices_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](posting_count)
+        var selected_positions_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](selected_centroid_count)
+        var selected_scores_host = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](selected_centroid_count)
+        var output_document_scores_host = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](score_count)
+        var output_candidate_positions_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](candidate_position_count)
+        var output_candidate_scores_host = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](candidate_position_count)
+
+        var centroid_doc_offsets_device = ctx.enqueue_create_buffer[
+            DType.int64
+        ](centroid_offset_count)
+        var centroid_doc_indices_device = ctx.enqueue_create_buffer[
+            DType.int64
+        ](posting_count)
+        var selected_positions_device = ctx.enqueue_create_buffer[DType.int64](
+            selected_centroid_count
+        )
+        var selected_scores_device = ctx.enqueue_create_buffer[DType.float32](
+            selected_centroid_count
+        )
+        var output_document_scores_device = ctx.enqueue_create_buffer[
+            DType.float32
+        ](score_count)
+        var best_scores_device = ctx.enqueue_create_buffer[DType.float32](
+            best_score_count
+        )
+        ctx.synchronize()
+
+        for index in range(centroid_offset_count):
+            centroid_doc_offsets_host[index] = py_centroid_doc_offsets[index]
+
+        for index in range(posting_count):
+            centroid_doc_indices_host[index] = py_centroid_doc_indices[index]
+
+        for index in range(selected_centroid_count):
+            selected_positions_host[index] = py_selected_positions[index]
+            selected_scores_host[index] = py_selected_scores[index]
+
+        centroid_doc_offsets_device.enqueue_copy_from(centroid_doc_offsets_host)
+        centroid_doc_indices_device.enqueue_copy_from(centroid_doc_indices_host)
+        selected_positions_device.enqueue_copy_from(selected_positions_host)
+        selected_scores_device.enqueue_copy_from(selected_scores_host)
+        ctx.synchronize()
+
+        ctx.enqueue_function[
+            accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel,
+            accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel,
+        ](
+            selected_positions_device,
+            selected_scores_device,
+            centroid_doc_offsets_device,
+            centroid_doc_indices_device,
+            best_scores_device,
+            query_vector_count,
+            centroids_per_query_vector,
+            document_count,
+            best_score_count,
+            grid_dim=best_grid_x,
+            block_dim=BLOCK_SIZE,
+        )
+        ctx.enqueue_function[
+            reduce_i8_selected_centroid_best_scores_kernel,
+            reduce_i8_selected_centroid_best_scores_kernel,
+        ](
+            best_scores_device,
+            output_document_scores_device,
+            query_vector_count,
+            document_count,
+            score_count,
+            grid_dim=grid_x,
+            block_dim=BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+        output_document_scores_device.enqueue_copy_to(
+            output_document_scores_host
+        )
+        ctx.synchronize()
+
+        def output_position_already_selected(
+            query_candidate_base: Int, rank: Int, document_index: Int
+        ) capturing -> Bool:
+            for selected_rank in range(rank):
+                if (
+                    Int(
+                        output_candidate_positions_host[
+                            query_candidate_base + selected_rank
+                        ]
+                    )
+                    == document_index
+                ):
+                    return True
+            return False
+
+        def score_position_ranks_before_float32(
+            score: Float32,
+            position: Int,
+            other_score: Float32,
+            other_position: Int,
+        ) -> Bool:
+            if score > other_score:
+                return True
+            if score < other_score:
+                return False
+            return position < other_position
+
+        for query_index in range(query_count):
+            var score_base = query_index * document_count
+            var query_candidate_base = query_index * candidate_k
+            for rank in range(candidate_k):
+                var best_position = 0
+                var best_score = Float32(-3.4028234663852886e38)
+                var seen = False
+                for document_index in range(document_count):
+                    if output_position_already_selected(
+                        query_candidate_base, rank, document_index
+                    ):
+                        continue
+                    var score = output_document_scores_host[
+                        score_base + document_index
+                    ]
+                    if not seen or score_position_ranks_before_float32(
+                        score,
+                        document_index,
+                        best_score,
+                        best_position,
+                    ):
+                        best_score = score
+                        best_position = document_index
+                        seen = True
+                output_candidate_positions_host[
+                    query_candidate_base + rank
+                ] = Int64(best_position)
+                output_candidate_scores_host[
+                    query_candidate_base + rank
+                ] = best_score
+
+        var selected_position_out_of_range_count = 0
+        for index in range(selected_centroid_count):
+            var centroid_position = selected_positions_host[index]
+            if centroid_position < 0 or centroid_position >= Int64(
+                centroid_count
+            ):
+                selected_position_out_of_range_count += 1
+
+        var doc_index_out_of_range_count = 0
+        for index in range(posting_count):
+            var doc_index = centroid_doc_indices_host[index]
+            if doc_index < 0 or doc_index >= Int64(document_count):
+                doc_index_out_of_range_count += 1
+
+        var py_positions = Python.list()
+        var py_scores = Python.list()
+        for index in range(candidate_position_count):
+            py_positions.append(
+                Python.int(output_candidate_positions_host[index])
+            )
+            py_scores.append(Python.float(output_candidate_scores_host[index]))
+
+        var py_result = Python.list()
+        py_result.append(Python.int(score_count))
+        py_result.append(Python.int(candidate_k))
+        py_result.append(py_positions)
+        py_result.append(py_scores)
+        py_result.append(Python.int(selected_position_out_of_range_count))
+        py_result.append(Python.int(doc_index_out_of_range_count))
+        py_result.append(Python.int(selected_centroid_count))
+        py_result.append(Python.int(document_count))
+        return py_result
+
+
+def score_i8_selected_posting_dense_scores_addresses(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var centroid_doc_offsets_address = Int(py=py_request[0])
+    var centroid_doc_indices_address = Int(py=py_request[1])
+    var selected_positions_address = Int(py=py_request[2])
+    var selected_scores_address = Int(py=py_request[3])
+    var centroid_count = Int(py=py_request[4])
+    var posting_count = Int(py=py_request[5])
+    var document_count = Int(py=py_request[6])
+    var query_count = Int(py=py_request[7])
+    var query_vector_count = Int(py=py_request[8])
+    var centroids_per_query_vector = Int(py=py_request[9])
+    if centroid_doc_offsets_address == 0:
+        raise Error("centroid_doc_offsets address must be non-zero")
+    if centroid_doc_indices_address == 0:
+        raise Error("centroid_doc_indices address must be non-zero")
+    if selected_positions_address == 0:
+        raise Error("selected positions address must be non-zero")
+    if selected_scores_address == 0:
+        raise Error("selected scores address must be non-zero")
+    if centroid_count <= 0:
+        raise Error("centroid_count must be positive")
+    if posting_count <= 0:
+        raise Error("posting_count must be positive")
+    if document_count <= 0:
+        raise Error("document_count must be positive")
+    if query_count <= 0:
+        raise Error("query_count must be positive")
+    if query_vector_count <= 0:
+        raise Error("query_vector_count must be positive")
+    if centroids_per_query_vector <= 0:
+        raise Error("centroids_per_query_vector must be positive")
+
+    var py_centroid_doc_offsets = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=centroid_doc_offsets_address
+    )
+    var py_centroid_doc_indices = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=centroid_doc_indices_address
+    )
+    var py_selected_positions = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=selected_positions_address
+    )
+    var py_selected_scores = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=selected_scores_address
+    )
+    var centroid_offset_count = centroid_count + 1
+    var selected_centroid_count = (
+        query_count * query_vector_count * centroids_per_query_vector
+    )
+    var score_count = query_count * document_count
+    var best_score_count = query_count * query_vector_count * document_count
+    var grid_x = (score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
+    var best_grid_x = (best_score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
+
+    with DeviceContext() as ctx:
+        var centroid_doc_offsets_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](centroid_offset_count)
+        var centroid_doc_indices_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](posting_count)
+        var selected_positions_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](selected_centroid_count)
+        var selected_scores_host = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](selected_centroid_count)
+        var output_document_scores_host = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](score_count)
+
+        var centroid_doc_offsets_device = ctx.enqueue_create_buffer[
+            DType.int64
+        ](centroid_offset_count)
+        var centroid_doc_indices_device = ctx.enqueue_create_buffer[
+            DType.int64
+        ](posting_count)
+        var selected_positions_device = ctx.enqueue_create_buffer[DType.int64](
+            selected_centroid_count
+        )
+        var selected_scores_device = ctx.enqueue_create_buffer[DType.float32](
+            selected_centroid_count
+        )
+        var output_document_scores_device = ctx.enqueue_create_buffer[
+            DType.float32
+        ](score_count)
+        var best_scores_device = ctx.enqueue_create_buffer[DType.float32](
+            best_score_count
+        )
+        ctx.synchronize()
+
+        for index in range(centroid_offset_count):
+            centroid_doc_offsets_host[index] = py_centroid_doc_offsets[index]
+
+        for index in range(posting_count):
+            centroid_doc_indices_host[index] = py_centroid_doc_indices[index]
+
+        for index in range(selected_centroid_count):
+            selected_positions_host[index] = py_selected_positions[index]
+            selected_scores_host[index] = py_selected_scores[index]
+
+        centroid_doc_offsets_device.enqueue_copy_from(centroid_doc_offsets_host)
+        centroid_doc_indices_device.enqueue_copy_from(centroid_doc_indices_host)
+        selected_positions_device.enqueue_copy_from(selected_positions_host)
+        selected_scores_device.enqueue_copy_from(selected_scores_host)
+        ctx.synchronize()
+
+        ctx.enqueue_function[
+            accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel,
+            accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel,
+        ](
+            selected_positions_device,
+            selected_scores_device,
+            centroid_doc_offsets_device,
+            centroid_doc_indices_device,
+            best_scores_device,
+            query_vector_count,
+            centroids_per_query_vector,
+            document_count,
+            best_score_count,
+            grid_dim=best_grid_x,
+            block_dim=BLOCK_SIZE,
+        )
+        ctx.enqueue_function[
+            reduce_i8_selected_centroid_best_scores_kernel,
+            reduce_i8_selected_centroid_best_scores_kernel,
+        ](
+            best_scores_device,
+            output_document_scores_device,
+            query_vector_count,
+            document_count,
+            score_count,
+            grid_dim=grid_x,
+            block_dim=BLOCK_SIZE,
+        )
+        ctx.synchronize()
+
+        output_document_scores_device.enqueue_copy_to(
+            output_document_scores_host
+        )
+        ctx.synchronize()
+
+        var selected_position_out_of_range_count = 0
+        for index in range(selected_centroid_count):
+            var centroid_position = selected_positions_host[index]
+            if centroid_position < 0 or centroid_position >= Int64(
+                centroid_count
+            ):
+                selected_position_out_of_range_count += 1
+
+        var doc_index_out_of_range_count = 0
+        for index in range(posting_count):
+            var doc_index = centroid_doc_indices_host[index]
+            if doc_index < 0 or doc_index >= Int64(document_count):
+                doc_index_out_of_range_count += 1
+
+        var py_scores = Python.list()
+        for index in range(score_count):
+            py_scores.append(Python.float(output_document_scores_host[index]))
+
+        var py_result = Python.list()
+        py_result.append(Python.int(score_count))
+        py_result.append(py_scores)
+        py_result.append(Python.int(selected_position_out_of_range_count))
+        py_result.append(Python.int(doc_index_out_of_range_count))
+        py_result.append(Python.int(selected_centroid_count))
+        py_result.append(Python.int(document_count))
+        return py_result
+
+
 @export
 def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
     try:
@@ -5030,6 +5448,22 @@ def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
             docstring=(
                 "Profile GPU accumulation of selected i8 centroid posting"
                 " scores into dense per-document scores."
+            ),
+        )
+        module.def_function[
+            score_i8_selected_posting_candidate_positions_addresses
+        ](
+            "score_i8_selected_posting_candidate_positions_addresses",
+            docstring=(
+                "Run GPU selected-posting accumulation and return candidate"
+                " positions without CPU reference scores."
+            ),
+        )
+        module.def_function[score_i8_selected_posting_dense_scores_addresses](
+            "score_i8_selected_posting_dense_scores_addresses",
+            docstring=(
+                "Run GPU selected-posting accumulation and return dense"
+                " document scores without CPU reference scores."
             ),
         )
         return module.finalize()

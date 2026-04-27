@@ -31,6 +31,9 @@ from kayak_bridge.gpu_i8_candidate_posting_accumulation import (  # noqa: E402
 )
 from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
     MojoGpuI8SelectedPostingAccumulationResult,
+    MojoGpuI8SelectedPostingCandidateResult,
+    MojoGpuI8SelectedPostingDenseCandidateResult,
+    MojoGpuI8SelectedPostingDenseScoresResult,
     _selected_posting_accumulation_reference,
 )
 from kayak_bridge.plaid_approx import (  # noqa: E402
@@ -72,6 +75,63 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
         self.assertEqual(payload["document_score_count"], 4)
         self.assertEqual(payload["topk_position_count"], 2)
 
+    def test_selected_posting_candidate_result_reports_boundary(self) -> None:
+        result = MojoGpuI8SelectedPostingCandidateResult(
+            host_marshalling_seconds=0.01,
+            extension_call_seconds=0.02,
+            document_score_count=8,
+            candidate_k=2,
+            candidate_position_match_count=2,
+            candidate_score_delta_max_abs=0.0,
+            selected_position_out_of_range_count=0,
+            doc_index_out_of_range_count=0,
+            selected_centroid_count=4,
+            document_count=4,
+            positions=(3, 1),
+            scores=(1.2, 0.7),
+        )
+
+        payload = result.to_json_ready()
+
+        self.assertTrue(payload["candidate_generation_ok"])
+        self.assertEqual(payload["candidate_position_agreement"], 1.0)
+        self.assertEqual(payload["position_preview"], (3, 1))
+        self.assertEqual(payload["score_preview"], (1.2, 0.7))
+
+    def test_dense_score_candidate_result_reports_boundary(self) -> None:
+        dense_scores = MojoGpuI8SelectedPostingDenseScoresResult(
+            host_marshalling_seconds=0.01,
+            extension_call_seconds=0.02,
+            validation_seconds=0.03,
+            document_score_count=8,
+            score_delta_max_abs=0.0,
+            selected_position_out_of_range_count=0,
+            doc_index_out_of_range_count=0,
+            selected_centroid_count=4,
+            document_count=4,
+            scores=(1.2, 0.7, 0.4, 0.1),
+        )
+        result = MojoGpuI8SelectedPostingDenseCandidateResult(
+            dense_scores=dense_scores,
+            candidate_selection_seconds=0.004,
+            candidate_validation_seconds=0.005,
+            candidate_k=2,
+            candidate_position_match_count=2,
+            candidate_score_delta_max_abs=0.0,
+            positions=(3, 1),
+            scores=(1.2, 0.7),
+        )
+
+        payload = result.to_json_ready()
+
+        self.assertTrue(payload["candidate_generation_ok"])
+        self.assertEqual(
+            payload["extension_plus_candidate_selection_seconds"],
+            0.024,
+        )
+        self.assertEqual(payload["candidate_position_agreement"], 1.0)
+        self.assertEqual(payload["position_preview"], (3, 1))
+
     def test_accumulation_reference_sums_query_vector_maxima(self) -> None:
         reference = _selected_posting_accumulation_reference(
             payload=_payload(),
@@ -100,6 +160,21 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
                 "host_topk_mean_seconds": 0.006,
                 "device_topk_kernel_mean_seconds": 0.007,
                 "device_topk_device_to_host_mean_seconds": 0.008,
+            },
+            gpu_candidate_parsed={
+                "extension_call_seconds": 0.009,
+                "host_marshalling_seconds": 0.001,
+                "candidate_position_agreement": 1.0,
+                "candidate_score_delta_max_abs": 0.0,
+                "validation_reference_scores_sent_to_extension": False,
+            },
+            gpu_dense_candidate_parsed={
+                "extension_call_seconds": 0.005,
+                "candidate_selection_seconds": 0.002,
+                "extension_plus_candidate_selection_seconds": 0.007,
+                "candidate_position_agreement": 1.0,
+                "candidate_score_delta_max_abs": 0.0,
+                "validation_reference_scores_sent_to_extension": False,
             },
         )
 
@@ -142,6 +217,30 @@ class GpuI8CandidatePostingAccumulationTests(unittest.TestCase):
                 "projected_device_topk_resident_payload_candidate_seconds_per_cpu_candidate_generation_second"
             ],
             1.15,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "gpu_selected_posting_candidate_extension_seconds_per_cpu_candidate_generation_second"
+            ],
+            0.45,
+        )
+        self.assertIs(
+            comparison[
+                "gpu_selected_posting_candidate_validation_reference_scores_sent_to_extension"
+            ],
+            False,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "gpu_dense_score_candidate_extension_plus_selection_seconds_per_cpu_candidate_generation_second"
+            ],
+            0.35,
+        )
+        self.assertIs(
+            comparison[
+                "gpu_dense_score_candidate_validation_reference_scores_sent_to_extension"
+            ],
+            False,
         )
 
     def test_summary_reports_accumulation_ratios(self) -> None:

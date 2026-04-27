@@ -35,6 +35,8 @@ from kayak_bridge.gpu_i8_candidate_posting_traversal import (
 from kayak_bridge.gpu_i8_centroid_budget_policy import choose_policy_budget
 from kayak_bridge.mojo_gpu_i8_rerank import (
     profile_i8_selected_posting_accumulation_addresses,
+    score_i8_selected_posting_candidate_positions_addresses,
+    score_i8_selected_posting_dense_candidate_positions_addresses,
 )
 from kayak_bridge.plaid_approx import (
     KayakPlaidApproxConfig,
@@ -150,11 +152,34 @@ def run_case(
         warmup_iterations=controls.warmup_iterations,
         measurement_iterations=controls.measurement_iterations,
     )
+    gpu_candidate_probe = run_gpu_posting_candidate_probe(
+        capability=capability,
+        shape=shape,
+        payload=payload,
+        selected=selected,
+        candidate_k=case.candidate_k,
+    )
+    gpu_dense_candidate_probe = run_gpu_dense_score_candidate_probe(
+        capability=capability,
+        shape=shape,
+        payload=payload,
+        selected=selected,
+        candidate_k=case.candidate_k,
+    )
     gpu_status = _gpu_status(gpu_probe)
     gpu_parsed = _parsed_payload(gpu_probe)
+    gpu_candidate_status = _gpu_status(gpu_candidate_probe)
+    gpu_candidate_parsed = _parsed_payload(gpu_candidate_probe)
+    gpu_dense_candidate_status = _gpu_status(gpu_dense_candidate_probe)
+    gpu_dense_candidate_parsed = _parsed_payload(gpu_dense_candidate_probe)
+    row_status = _first_non_ok_status(
+        gpu_status,
+        gpu_candidate_status,
+        gpu_dense_candidate_status,
+    )
     return {
         "name": case.name,
-        "status": STATUS_OK if gpu_status == STATUS_OK else gpu_status,
+        "status": row_status,
         "candidate_window_kind": candidate_window_kind(case),
         "shape": case.to_json_ready(
             vector_dim=controls.vector_dim,
@@ -177,6 +202,26 @@ def run_case(
             "parsed": gpu_parsed,
             "error": gpu_probe.get("error") if isinstance(gpu_probe, dict) else None,
         },
+        "gpu_selected_posting_candidate_generation": {
+            "status": gpu_candidate_status,
+            "target_accelerator": capability.target_accelerator,
+            "parsed": gpu_candidate_parsed,
+            "error": (
+                gpu_candidate_probe.get("error")
+                if isinstance(gpu_candidate_probe, dict)
+                else None
+            ),
+        },
+        "gpu_selected_posting_dense_score_candidate_generation": {
+            "status": gpu_dense_candidate_status,
+            "target_accelerator": capability.target_accelerator,
+            "parsed": gpu_dense_candidate_parsed,
+            "error": (
+                gpu_dense_candidate_probe.get("error")
+                if isinstance(gpu_dense_candidate_probe, dict)
+                else None
+            ),
+        },
         "comparison": comparison_payload(
             cpu_candidate_generation_mean_seconds=(
                 cpu_candidate_timing.mean_seconds
@@ -192,6 +237,8 @@ def run_case(
                 )
             ),
             gpu_parsed=gpu_parsed,
+            gpu_candidate_parsed=gpu_candidate_parsed,
+            gpu_dense_candidate_parsed=gpu_dense_candidate_parsed,
         ),
     }
 
@@ -240,13 +287,101 @@ def run_gpu_posting_accumulation_probe(
     }
 
 
+def run_gpu_posting_candidate_probe(
+    *,
+    capability: MojoGpuCapability,
+    shape: SpeedTrackShape,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    candidate_k: int,
+) -> dict[str, object] | None:
+    if not capability.available:
+        return None
+    try:
+        result = score_i8_selected_posting_candidate_positions_addresses(
+            target_accelerator=capability.target_accelerator or "",
+            shape=shape,
+            payload=payload,
+            selected=selected,
+            candidate_k=candidate_k,
+        )
+    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        return {"status": "error", "parsed": {}, "error": str(exc)}
+    parsed = {
+        "bridge_scope": "selected_centroid_posting_candidate_positions_addresses",
+        "payload_source": "real_kayak_i8_snapshot",
+        "vector_dim": shape.vector_dim,
+        "document_count": shape.document_count,
+        "document_vector_count": shape.document_vector_count,
+        "total_document_vector_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "query_count": shape.query_count,
+        "query_vector_count": shape.query_vector_count,
+        "candidate_k": candidate_k,
+        "validation_reference_scores_sent_to_extension": False,
+    } | result.to_json_ready()
+    status = STATUS_OK if result.candidate_generation_ok else "error"
+    return {
+        "status": status,
+        "parsed": parsed,
+        "measurements": [result.to_json_ready()],
+    }
+
+
+def run_gpu_dense_score_candidate_probe(
+    *,
+    capability: MojoGpuCapability,
+    shape: SpeedTrackShape,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    candidate_k: int,
+) -> dict[str, object] | None:
+    if not capability.available:
+        return None
+    try:
+        result = score_i8_selected_posting_dense_candidate_positions_addresses(
+            target_accelerator=capability.target_accelerator or "",
+            shape=shape,
+            payload=payload,
+            selected=selected,
+            candidate_k=candidate_k,
+        )
+    except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        return {"status": "error", "parsed": {}, "error": str(exc)}
+    parsed = {
+        "bridge_scope": "selected_centroid_posting_dense_score_candidate_positions_addresses",
+        "payload_source": "real_kayak_i8_snapshot",
+        "vector_dim": shape.vector_dim,
+        "document_count": shape.document_count,
+        "document_vector_count": shape.document_vector_count,
+        "total_document_vector_count": (
+            shape.document_count * shape.document_vector_count
+        ),
+        "query_count": shape.query_count,
+        "query_vector_count": shape.query_vector_count,
+        "candidate_k": candidate_k,
+        "validation_reference_scores_sent_to_extension": False,
+    } | result.to_json_ready()
+    status = STATUS_OK if result.candidate_generation_ok else "error"
+    return {
+        "status": status,
+        "parsed": parsed,
+        "measurements": [result.to_json_ready()],
+    }
+
+
 def comparison_payload(
     *,
     cpu_candidate_generation_mean_seconds: float,
     cpu_centroid_scoring_plus_selection_seconds: float | None,
     cpu_posting_accumulation_seconds: float | None,
     gpu_parsed: dict[str, object],
+    gpu_candidate_parsed: dict[str, object] | None = None,
+    gpu_dense_candidate_parsed: dict[str, object] | None = None,
 ) -> dict[str, float | None]:
+    gpu_candidate_parsed = gpu_candidate_parsed or {}
+    gpu_dense_candidate_parsed = gpu_dense_candidate_parsed or {}
     extension_call = optional_float(gpu_parsed.get("extension_call_seconds"))
     mojo_ingest = optional_float(gpu_parsed.get("mojo_host_ingest_mean_seconds"))
     payload_h2d = optional_float(
@@ -298,6 +433,23 @@ def comparison_payload(
         cpu_centroid_scoring_plus_selection_seconds,
         all_gpu_measured_device_topk,
     )
+    candidate_extension_call = optional_float(
+        gpu_candidate_parsed.get("extension_call_seconds")
+    )
+    candidate_host_marshalling = optional_float(
+        gpu_candidate_parsed.get("host_marshalling_seconds")
+    )
+    dense_candidate_extension_call = optional_float(
+        gpu_dense_candidate_parsed.get("extension_call_seconds")
+    )
+    dense_candidate_selection = optional_float(
+        gpu_dense_candidate_parsed.get("candidate_selection_seconds")
+    )
+    dense_candidate_extension_plus_selection = optional_float(
+        gpu_dense_candidate_parsed.get(
+            "extension_plus_candidate_selection_seconds"
+        )
+    )
     return {
         "cpu_i8_candidate_generation_mean_seconds": (
             cpu_candidate_generation_mean_seconds
@@ -318,6 +470,41 @@ def comparison_payload(
         ),
         "gpu_posting_accumulation_device_topk_device_to_host_mean_seconds": (
             device_topk_d2h
+        ),
+        "gpu_selected_posting_candidate_extension_call_seconds": (
+            candidate_extension_call
+        ),
+        "gpu_selected_posting_candidate_host_marshalling_seconds": (
+            candidate_host_marshalling
+        ),
+        "gpu_selected_posting_candidate_position_agreement": optional_float(
+            gpu_candidate_parsed.get("candidate_position_agreement")
+        ),
+        "gpu_selected_posting_candidate_score_delta_max_abs": optional_float(
+            gpu_candidate_parsed.get("candidate_score_delta_max_abs")
+        ),
+        "gpu_selected_posting_candidate_validation_reference_scores_sent_to_extension": (
+            gpu_candidate_parsed.get("validation_reference_scores_sent_to_extension")
+        ),
+        "gpu_dense_score_candidate_extension_call_seconds": (
+            dense_candidate_extension_call
+        ),
+        "gpu_dense_score_candidate_selection_seconds": (
+            dense_candidate_selection
+        ),
+        "gpu_dense_score_candidate_extension_plus_selection_seconds": (
+            dense_candidate_extension_plus_selection
+        ),
+        "gpu_dense_score_candidate_position_agreement": optional_float(
+            gpu_dense_candidate_parsed.get("candidate_position_agreement")
+        ),
+        "gpu_dense_score_candidate_score_delta_max_abs": optional_float(
+            gpu_dense_candidate_parsed.get("candidate_score_delta_max_abs")
+        ),
+        "gpu_dense_score_candidate_validation_reference_scores_sent_to_extension": (
+            gpu_dense_candidate_parsed.get(
+                "validation_reference_scores_sent_to_extension"
+            )
         ),
         "gpu_posting_accumulation_selected_h2d_kernel_d2h_mean_seconds": (
             selected_h2d_kernel_d2h
@@ -377,6 +564,22 @@ def comparison_payload(
         ),
         "projected_device_topk_cold_payload_candidate_seconds_per_cpu_candidate_generation_second": ratio(
             projected_cold_payload_device_topk_candidate,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "gpu_selected_posting_candidate_extension_seconds_per_cpu_candidate_generation_second": ratio(
+            candidate_extension_call,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "gpu_dense_score_candidate_extension_seconds_per_cpu_candidate_generation_second": ratio(
+            dense_candidate_extension_call,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "gpu_dense_score_candidate_selection_seconds_per_cpu_candidate_generation_second": ratio(
+            dense_candidate_selection,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "gpu_dense_score_candidate_extension_plus_selection_seconds_per_cpu_candidate_generation_second": ratio(
+            dense_candidate_extension_plus_selection,
             cpu_candidate_generation_mean_seconds,
         ),
         "gpu_posting_accumulation_kernel_seconds_per_cpu_posting_accumulation_second": ratio(
@@ -500,6 +703,30 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         )
         for row in ok_rows
     ]
+    selected_candidate_vs_candidate = [
+        row["comparison"].get(
+            "gpu_selected_posting_candidate_extension_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_selected_candidate_vs_candidate = [
+        row["comparison"].get(
+            "gpu_selected_posting_candidate_extension_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
+    dense_candidate_vs_candidate = [
+        row["comparison"].get(
+            "gpu_dense_score_candidate_extension_plus_selection_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_dense_candidate_vs_candidate = [
+        row["comparison"].get(
+            "gpu_dense_score_candidate_extension_plus_selection_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
     non_full_projected_cold_vs_candidate = [
         row["comparison"].get(
             "projected_cold_payload_candidate_seconds_per_cpu_candidate_generation_second"
@@ -614,6 +841,30 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         "worst_non_full_projected_device_topk_cold_payload_candidate_vs_cpu_candidate_generation_ratio": max_float(
             non_full_projected_device_topk_cold_vs_candidate
         ),
+        "best_selected_posting_candidate_extension_vs_cpu_candidate_generation_ratio": min_float(
+            selected_candidate_vs_candidate
+        ),
+        "worst_selected_posting_candidate_extension_vs_cpu_candidate_generation_ratio": max_float(
+            selected_candidate_vs_candidate
+        ),
+        "best_non_full_selected_posting_candidate_extension_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_selected_candidate_vs_candidate
+        ),
+        "worst_non_full_selected_posting_candidate_extension_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_selected_candidate_vs_candidate
+        ),
+        "best_dense_score_candidate_extension_plus_selection_vs_cpu_candidate_generation_ratio": min_float(
+            dense_candidate_vs_candidate
+        ),
+        "worst_dense_score_candidate_extension_plus_selection_vs_cpu_candidate_generation_ratio": max_float(
+            dense_candidate_vs_candidate
+        ),
+        "best_non_full_dense_score_candidate_extension_plus_selection_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_dense_candidate_vs_candidate
+        ),
+        "worst_non_full_dense_score_candidate_extension_plus_selection_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_dense_candidate_vs_candidate
+        ),
         "max_expanded_posting_count": max_int(expanded_posting_counts),
     }
 
@@ -628,6 +879,13 @@ def report_status(
     if all(row.get("status") == STATUS_OK for row in rows):
         return STATUS_OK
     return STATUS_BLOCKED_GPU_POSTING_ACCUMULATION_FAILED
+
+
+def _first_non_ok_status(*statuses: str) -> str:
+    for status in statuses:
+        if status != STATUS_OK:
+            return status
+    return STATUS_OK
 
 
 def _centroids_per_query_vector(
