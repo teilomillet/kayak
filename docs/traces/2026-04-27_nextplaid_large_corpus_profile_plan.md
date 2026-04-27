@@ -241,6 +241,31 @@ means `23040` candidate vectors before exact/residual materialization. The low
 candidate recall at `candidate_k=128` means quality policy still matters before
 this becomes a speed claim.
 
+Follow-up LEMB candidate-window smoke on the same encoded task:
+
+| window | centroids/qv | full candidate s/query | posting accumulation s/query | final top-k s/query | candidate vectors/query | recall vs exact@10 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `128` | `16` | `0.00018909620872383287` | `0.00007382496663203668` | `0.000016335996935813753` | `23040` | `0.6000000000000001` |
+| `256` | `16` | `0.00019265821420015076` | `0.00007370415101687142` | `0.00002473556590762288` | `46080` | `0.8` |
+| `320` | `16` | `0.00019646010150263282` | `0.00007381549443407454` | `0.000028760864563217237` | `57600` | `0.85` |
+| `355` | `16` | `0.00000008916487866445425` | `0.0000737731648105422` | `0.000028342690647433474` | `63900` | `1.0` |
+| `128` | `32` | `0.00024791384513317665` | `0.00009312850469663501` | `0.000016266306316719063` | `23040` | `0.6000000000000001` |
+| `256` | `32` | `0.00025745812547538303` | `0.00009338398005701238` | `0.000024653996643379895` | `46080` | `0.8` |
+| `320` | `32` | `0.0002622060191388931` | `0.0000931669675742376` | `0.000029087586469015795` | `57600` | `0.85` |
+
+Interpretation:
+
+- widening the candidate window improved recall, but did not reach exact recall
+  until the full corpus window on this tiny two-query slice
+- doubling selected centroids per query vector from `16` to `32` did not
+  improve recall at the same candidate window and did increase time
+- the `candidate_k=355` row is a full-window diagnostic, not a non-full
+  candidate-generation timing claim, because the current candidate function
+  short-circuits full windows
+- the next policy question is not more centroids on this slice; it is whether
+  long-document candidate coverage needs a wider or different candidate
+  generator before exact/rerank optimization matters
+
 Example smoke command:
 
 ```bash
