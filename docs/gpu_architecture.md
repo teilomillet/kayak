@@ -499,11 +499,11 @@ Candidate-window policy finding: a benchmark-only policy,
 `doc_vectors64_125pct_v0`, now widens non-full `document_vector_count >= 64`
 windows to `ceil(1.25 * input_candidate_k)`, capped by `document_count`. On the
 wide non-full FastPlaid matrix this changes only `doc_vectors64` from
-`candidate_k=256` to `candidate_k=320`. The latest quiet run was `ok` on all
+`candidate_k=256` to `candidate_k=320`. The repeated quiet run was `ok` on all
 `6 / 6` CPU/CUDA rows, with resident selected recall delta positive everywhere
-and minimum delta `0.10`. The max resident selected exact-rerank ratio was
-about `0.214x` of FastPlaid full-search batch time, with cold max about
-`0.230x`.
+and minimum delta `0.05`. The max resident selected exact-rerank ratio was
+about `0.243x` of FastPlaid full-search batch time, with cold max about
+`0.262x`.
 
 Reason: the seed-8 diagnostic falsified the i8-quantization-ceiling hypothesis:
 `candidate_k=512` reached recall `1.0`, while `candidate_k=256` was `0.65`.
@@ -1132,7 +1132,7 @@ evidence only justifies a measured primitive.
    rows. Current quiet result: `doc_vectors64_125pct_v0` widens the measured
    `doc_vectors64` row from `candidate_k=256` to `candidate_k=320`, keeps all
    resident selected agreement checks at `1.0`, improves the minimum recall
-   delta versus FastPlaid to `0.10`, and still costs at most about `0.214x` of
+   delta versus FastPlaid to `0.05`, and still costs at most about `0.243x` of
    FastPlaid full-search batch time. This should be repeated and tested on
    broader shapes before it becomes a public default.
 

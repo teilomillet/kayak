@@ -190,26 +190,27 @@ The comparison now has a benchmark-only candidate-window policy,
 except for non-full `document_vector_count >= 64` windows, where it widens the
 window to `ceil(1.25 * input_candidate_k)`.
 
-Latest quiet artifact:
+Latest quiet artifacts:
 
-- quiet log: `.cache/kayak/bench_quiet/20260427T174709Z`
+- repeated quiet log: `.cache/kayak/bench_quiet/20260427T175127Z`
 - summary report:
-  `.cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_summary.json`
+  `.cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_repeat_summary.json`
 
 The run reported status `ok` on all `6 / 6` rows:
 
 - minimum resident selected recall delta versus FastPlaid:
-  `0.09999999999999998`
+  `0.050000000000000044`
 - mean resident selected exact-rerank / FastPlaid batch:
-  `0.10740016139030102`
+  `0.11238619389244382`
 - max resident selected exact-rerank / FastPlaid batch:
-  `0.2142201863924867`
+  `0.24276467216832875`
 - max cold resident selected exact-rerank / FastPlaid batch:
-  `0.22986110341743926`
+  `0.26184393079042456`
 - candidate and final top-k agreement minima: `1.0`
 
 Reason: the fixed-seed diagnostic showed the `doc_vectors64` miss was a
 candidate-coverage issue. `candidate_k=256` returned recall `0.65`;
 `candidate_k=260` returned `0.70`; `candidate_k=320` returned `0.75`; and the
-full `512` window returned `1.0`. The `1.25x` policy keeps headroom while
-remaining much faster than FastPlaid in this matrix.
+full `512` window returned `1.0`. The repeated policy run kept positive recall
+delta on every row, but the minimum observed margin was `0.05`, so this remains
+a benchmark-track policy rather than a public default.

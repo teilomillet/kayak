@@ -40,15 +40,17 @@ Policy run:
 
 ```bash
 pixi run compare_gpu_i8_fastplaid_policy --candidate-window-policy doc_vectors64_125pct_v0 --overwrite-index-root --report-root .cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_reports --output .cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_summary.json
+bash scripts/run_bench_quiet.sh --repeats 2 --timeout-seconds 60 --force -- pixi run compare_gpu_i8_fastplaid_policy_raw --candidate-window-policy doc_vectors64_125pct_v0 --overwrite-index-root --report-root .cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_repeat_reports --output .cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_repeat_summary.json
 ```
 
 Artifacts:
 
-- quiet log: `.cache/kayak/bench_quiet/20260427T174709Z`
+- single-run quiet log: `.cache/kayak/bench_quiet/20260427T174709Z`
+- repeated quiet log: `.cache/kayak/bench_quiet/20260427T175127Z`
 - summary report:
-  `.cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_summary.json`
+  `.cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_repeat_summary.json`
 - per-row reports:
-  `.cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_reports/`
+  `.cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_repeat_reports/`
 
 ## Results
 
@@ -69,25 +71,25 @@ coverage.
 
 | case | FastPlaid device | input k | effective k | resident recall | FastPlaid recall | recall delta | resident / FastPlaid batch |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `query_vectors32` | `cpu` | `256` | `256` | `0.7` | `0.4` | `0.3` | `0.03969719585432867` |
-| `query_vectors32` | `cuda` | `256` | `256` | `0.7` | `0.4` | `0.3` | `0.2142201863924867` |
-| `doc_vectors64` | `cpu` | `256` | `320` | `0.75` | `0.65` | `0.1` | `0.030469074037036747` |
-| `doc_vectors64` | `cuda` | `256` | `320` | `0.75` | `0.65` | `0.1` | `0.14840049645844827` |
-| `query_batch4` | `cpu` | `256` | `256` | `0.7` | `0.6` | `0.1` | `0.048726117913175014` |
-| `query_batch4` | `cuda` | `256` | `256` | `0.7` | `0.55` | `0.15` | `0.16288789768633075` |
+| `query_vectors32` | `cpu` | `256` | `256` | `0.7` | `0.45` | `0.25` | `0.04245836170947288` |
+| `query_vectors32` | `cuda` | `256` | `256` | `0.7` | `0.4` | `0.3` | `0.24276467216832875` |
+| `doc_vectors64` | `cpu` | `256` | `320` | `0.75` | `0.55` | `0.2` | `0.03184824175010281` |
+| `doc_vectors64` | `cuda` | `256` | `320` | `0.75` | `0.7` | `0.05` | `0.14904418442819303` |
+| `query_batch4` | `cpu` | `256` | `256` | `0.7` | `0.575` | `0.125` | `0.0500939445281642` |
+| `query_batch4` | `cuda` | `256` | `256` | `0.7` | `0.65` | `0.05` | `0.1581077587704013` |
 
 Summary:
 
 - status: `ok`
 - rows: `6 / 6`
 - minimum resident selected recall delta versus FastPlaid:
-  `0.09999999999999998`
+  `0.050000000000000044`
 - mean resident selected exact-rerank / FastPlaid batch:
-  `0.10740016139030102`
+  `0.11238619389244382`
 - max resident selected exact-rerank / FastPlaid batch:
-  `0.2142201863924867`
+  `0.24276467216832875`
 - max cold resident selected exact-rerank / FastPlaid batch:
-  `0.22986110341743926`
+  `0.26184393079042456`
 - candidate and final top-k agreement minima: `1.0`
 
 ## Decision
@@ -95,17 +97,18 @@ Summary:
 Keep `doc_vectors64_125pct_v0` as a benchmark-only candidate-window policy and
 use it for the next FastPlaid speed/quality track.
 
-Reason: it is the first measured policy matrix where the resident selected GPU
+Reason: it is the first repeated policy matrix where the resident selected GPU
 path beats FastPlaid recall on every CPU/CUDA row while staying well under
 FastPlaid full-search time. It is still not a public backend claim because the
-matrix is synthetic and the selected-centroid step remains CPU-side.
+matrix is synthetic, the minimum observed margin is only `0.05`, and the
+selected-centroid step remains CPU-side.
 
 ## Next
 
 The next optimization target is not a wider window by default. The next target
 is variance and generality:
 
-- repeat the `doc_vectors64_125pct_v0` matrix before treating it as stable
 - test real encoded corpora or larger synthetic shape families
+- repeat more than two runs before treating the `0.05` recall margin as stable
 - then move CPU selected-centroid work to a resident GPU selector if the policy
   continues to hold
