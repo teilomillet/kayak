@@ -378,6 +378,21 @@ descending-score, lower-position tie order while reducing selection work from
 address bridge is justified because the query tensor is already contiguous and
 it avoids Python list materialization without changing candidate semantics.
 
+Candidate-generation follow-up finding: local hot-path edits after the
+no-reference top-k checkpoint did not produce a decision-quality win. A dense
+reset variant, streamed centroid top-selection variant, and direct query-pointer
+candidate bridge were all removed after quiet sweeps showed default or wide
+envelope regressions. Reserve-only preallocation was also removed because the
+measured effect was mixed and small. The final reverted-code sweeps remained
+`ok`: the default CPU-candidate-plus-no-reference-top-k envelope ranged from
+about `0.145x` to `0.671x`, and the wide envelope ranged from about `0.103x`
+to `0.510x`.
+
+Reason: the evidence now points to a missing profiling boundary, not another
+small loop edit. The next candidate-generation step should break timing and
+work counts into centroid scoring, centroid selection, posting accumulation,
+and final candidate top-k before moving any of that work onto GPU.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -587,10 +602,14 @@ evidence only justifies a measured primitive.
    Current quiet result: CPU candidates plus GPU no-reference top-k is faster
    than FastPlaid full search in this scope-limited synthetic comparison, with
    explicit recall and vector-count fields recorded.
-20. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+20. Add a dedicated non-full candidate-generation breakdown before more local
+   loop edits. Current quiet result: dense reset, streamed centroid selection,
+   direct pointer candidate scoring, and reserve-only preallocation did not
+   produce a decision-quality win across default and wide sweeps.
+21. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-21. Only after a measured win, consider public API design.
+22. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 
