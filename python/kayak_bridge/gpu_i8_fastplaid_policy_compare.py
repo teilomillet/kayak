@@ -38,6 +38,7 @@ class FastPlaidPolicyCompareControls:
     kayak_i8_positive_centroids_only: bool = False
     fastplaid_devices: tuple[str, ...] = ("cpu", "cuda")
     gpu_hybrid_shortlist_k: int | None = None
+    vary_seed_by_case: bool = True
 
     def validate(self) -> None:
         if self.vector_dim != 128:
@@ -83,7 +84,13 @@ class FastPlaidPolicyCompareControls:
             "kayak_i8_positive_centroids_only": (
                 self.kayak_i8_positive_centroids_only
             ),
+            "vary_seed_by_case": self.vary_seed_by_case,
         }
+
+    def seed_for_case(self, case_index: int) -> int:
+        if self.vary_seed_by_case:
+            return self.seed + case_index
+        return self.seed
 
 
 def parse_fastplaid_devices(value: str) -> tuple[str, ...]:
@@ -140,7 +147,7 @@ def compare_argv_for_case(
         "--top-k",
         str(controls.top_k),
         "--seed",
-        str(controls.seed + case_index),
+        str(controls.seed_for_case(case_index)),
         "--warmup-iterations",
         str(controls.warmup_iterations),
         "--measurement-iterations",
@@ -263,7 +270,7 @@ def summarize_case_device_report(
         "name": case.name,
         "status": report.get("status"),
         "fastplaid_device": fastplaid_device,
-        "seed": controls.seed + case_index,
+        "seed": controls.seed_for_case(case_index),
         "shape": report.get("shape"),
         "policy": choice.to_json_ready(),
         "candidate_window_policy": candidate_choice.to_json_ready(),

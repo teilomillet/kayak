@@ -58,6 +58,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--vector-dim", type=int, default=128)
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument(
+        "--fixed-case-seed",
+        action="store_true",
+        help=(
+            "Use the same seed for every selected case. Intended for "
+            "candidate_k sweeps where only one shape field should change."
+        ),
+    )
     parser.add_argument("--warmup-iterations", type=int, default=1)
     parser.add_argument("--measurement-iterations", type=int, default=1)
     parser.add_argument("--gpu-topk-session-iterations", type=int, default=4)
@@ -140,6 +148,7 @@ def controls_from_args(args: argparse.Namespace) -> FastPlaidPolicyCompareContro
         policy_name=args.policy_name,
         candidate_window_policy=args.candidate_window_policy,
         fastplaid_devices=tuple(args.fastplaid_devices),
+        vary_seed_by_case=not args.fixed_case_seed,
     )
     controls.validate()
     return controls
@@ -198,7 +207,7 @@ def run_case_device(
         device=fastplaid_device,
         policy_name=controls.policy_name,
         candidate_window_policy=controls.candidate_window_policy,
-        seed=controls.seed + case_index,
+        seed=controls.seed_for_case(case_index),
     )
     compare_args = fastplaid_compare.parse_args(
         compare_argv_for_case(

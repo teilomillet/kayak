@@ -112,3 +112,16 @@ is variance and generality:
 - repeat more than two runs before treating the `0.05` recall margin as stable
 - then move CPU selected-centroid work to a resident GPU selector if the policy
   continues to hold
+
+## Follow-Up
+
+The broader `candidate_window_generalization` matrix falsified
+`doc_vectors64_125pct_v0` as a general benchmark policy. It still missed
+`doc_vectors96` and `documents1024_k256` rows.
+
+Follow-up trace:
+
+- `docs/traces/2026-04-27_gpu_i8_candidate_window_policy_matrix.md`
+
+Decision update: keep `doc_vectors64_125pct_v0` as a useful narrow diagnostic,
+but use `coverage_safety_v0` for the next benchmark-policy validation step.

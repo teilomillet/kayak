@@ -111,7 +111,16 @@ WIDE_TOPK_CASES: tuple[AddressServeSweepCase, ...] = (
 )
 
 
+CANDIDATE_WINDOW_GENERALIZATION_CASES: tuple[AddressServeSweepCase, ...] = (
+    AddressServeSweepCase("doc_vectors48", 512, 48, 2, 8, 256),
+    AddressServeSweepCase("doc_vectors64", 512, 64, 2, 8, 256),
+    AddressServeSweepCase("doc_vectors96", 512, 96, 2, 8, 256),
+    AddressServeSweepCase("documents1024_k256", 1024, 16, 2, 8, 256),
+)
+
+
 CASE_SETS: dict[str, tuple[AddressServeSweepCase, ...]] = {
+    "candidate_window_generalization": CANDIDATE_WINDOW_GENERALIZATION_CASES,
     "default": DEFAULT_CASES,
     "wide_topk": WIDE_TOPK_CASES,
 }

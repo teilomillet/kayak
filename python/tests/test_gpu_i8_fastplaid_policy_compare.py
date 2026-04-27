@@ -13,6 +13,7 @@ if str(SCRIPT_ROOT) not in sys.path:
 
 from kayak_bridge.gpu_i8_address_serve_sweep import AddressServeSweepCase
 from kayak_bridge.gpu_i8_candidate_window_policy import (
+    COVERAGE_SAFETY_V0_POLICY,
     DOC_VECTORS64_125PCT_POLICY,
     choose_candidate_window,
 )
@@ -87,6 +88,60 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
 
         self.assertEqual(_arg_value(argv, "--candidate-k"), "320")
         self.assertEqual(_arg_value(argv, "--seed"), "8")
+
+    def test_coverage_safety_policy_uses_measured_shape_rules(self) -> None:
+        doc48 = AddressServeSweepCase("doc_vectors48", 512, 48, 2, 8, 256)
+        doc64 = AddressServeSweepCase("doc_vectors64", 512, 64, 2, 8, 256)
+        doc96 = AddressServeSweepCase("doc_vectors96", 512, 96, 2, 8, 256)
+        documents1024 = AddressServeSweepCase(
+            "documents1024_k256",
+            1024,
+            16,
+            2,
+            8,
+            256,
+        )
+
+        self.assertEqual(
+            choose_candidate_window(COVERAGE_SAFETY_V0_POLICY, doc48).candidate_k,
+            320,
+        )
+        self.assertEqual(
+            choose_candidate_window(COVERAGE_SAFETY_V0_POLICY, doc64).candidate_k,
+            320,
+        )
+        self.assertEqual(
+            choose_candidate_window(COVERAGE_SAFETY_V0_POLICY, doc96).candidate_k,
+            448,
+        )
+        self.assertEqual(
+            choose_candidate_window(
+                COVERAGE_SAFETY_V0_POLICY,
+                documents1024,
+            ).candidate_k,
+            1024,
+        )
+
+    def test_compare_argv_can_use_fixed_case_seed_for_k_sweeps(self) -> None:
+        case = AddressServeSweepCase("doc_vectors96_k384", 512, 96, 2, 8, 384)
+        controls = policy_compare.FastPlaidPolicyCompareControls(
+            seed=11,
+            vary_seed_by_case=False,
+        )
+
+        argv = policy_compare.compare_argv_for_case(
+            case=case,
+            case_index=3,
+            controls=controls,
+            fastplaid_device="cpu",
+            index_root=Path("indexes"),
+            output=Path("report.json"),
+            allow_missing_gpu=False,
+            require_fastplaid=False,
+            overwrite_index_root=False,
+        )
+
+        self.assertEqual(_arg_value(argv, "--seed"), "11")
 
     def test_summary_extracts_scope_metrics(self) -> None:
         case = AddressServeSweepCase("query_vectors32", 512, 16, 2, 32, 256)
