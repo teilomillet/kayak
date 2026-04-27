@@ -332,6 +332,23 @@ class GpuI8RerankContractTests(unittest.TestCase):
             (2.0, 2.0, 1.0, 1.0, 0.0, 3.0, 3.0, 2.0, 2.0, 1.0),
         )
 
+    def test_partial_document_score_ranking_preserves_boundary_tie_order(self) -> None:
+        positions, scores = _rank_document_scores_numpy(
+            np.array(
+                [
+                    [5.0, 4.0, 4.0, 4.0, 3.0],
+                    [1.0, 3.0, 2.0, 3.0, 0.0],
+                ],
+                dtype=np.float32,
+            ).ravel(),
+            query_count=2,
+            document_count=5,
+            top_k=2,
+        )
+
+        self.assertEqual(positions, (0, 1, 1, 3))
+        self.assertEqual(scores, (5.0, 4.0, 3.0, 3.0))
+
     def test_report_status_distinguishes_hardware_from_runtime(self) -> None:
         unavailable = MojoGpuCapability(
             status=GPU_STATUS_UNAVAILABLE,

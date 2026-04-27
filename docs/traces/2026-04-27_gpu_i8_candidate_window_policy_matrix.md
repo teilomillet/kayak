@@ -335,6 +335,81 @@ The new max resident/FastPlaid row is `doc_vectors48` on FastPlaid CUDA at
 candidate generation, and exact rerank are all material, so the next change
 should start with a row-local breakdown rather than a single-stage assumption.
 
+## Guarded Partial Ranking Fast Path
+
+Follow-up claim: non-full candidate ranking should use the cheaper partitioned
+path when the top-k boundary is unambiguous, and should only fall back to
+explicit score/doc ordering when extra documents tie at the threshold.
+
+Reason: `np.argpartition` cheaply identifies the top-k score set, but the
+candidate contract still requires deterministic score-descending order with
+document-id tie breaks. The guarded path keeps the fast case fast and handles
+the threshold-tie case explicitly instead of relying on partition order.
+
+Local focused check:
+
+```bash
+pixi run env PYTHONPATH=python python -c 'import numpy as np, timeit; from kayak_bridge.mojo_gpu_i8_rerank import _rank_document_scores_numpy; rng=np.random.default_rng(7); scores=rng.normal(size=1024).astype(np.float32); print(timeit.timeit(lambda: _rank_document_scores_numpy(scores, query_count=2, document_count=512, top_k=320), number=1000))'
+```
+
+Result:
+
+| version | 1000 calls on 2x512 scores, top-k 320 |
+| --- | ---: |
+| before | `0.11358778800058644` |
+| after | `0.0364334499972756` |
+
+Targeted validation:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 300 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_policy.py --case doc_vectors48:documents=512,document_vectors=48,queries=2,query_vectors=8,candidate_k=256 --candidate-window-policy coverage_safety_v0 --fastplaid-devices cuda --seed 7 --fixed-case-seed --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors48_partial_rank_fastpath_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors48_partial_rank_fastpath_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors48_partial_rank_fastpath_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T192241Z`
+
+Targeted `doc_vectors48` CUDA result:
+
+| metric | identity full-window matrix | after targeted run |
+| --- | ---: | ---: |
+| candidate selection seconds | `0.00016324400348821655` | `0.00008264500502264127` |
+| resident / FastPlaid | `0.1983504776306026` | `0.17605215330541546` |
+| recall delta vs FastPlaid | `+0.15` | `+0.15` |
+| candidate agreement min | `1.0` | `1.0` |
+| final agreement min | `1.0` | `1.0` |
+
+Full matrix validation:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 360 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_candidate_window_policies.py --candidate-window-policy coverage_safety_v0 --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_partial_rank_fastpath_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_partial_rank_fastpath_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_partial_rank_fastpath_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T192317Z`
+
+Aggregate result:
+
+| version | rows ok | min recall delta vs FastPlaid | mean resident / FastPlaid | max resident / FastPlaid | mean CPU select share | mean candidate share | mean exact share |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| identity full-window stage | `8 / 8` | `+0.09999999999999998` | `0.08421350632826388` | `0.1983504776306026` | `0.19631806264881366` | `0.18989524363318638` | `0.613786693718` |
+| guarded partial ranking fast path | `8 / 8` | `+0.050000000000000044` | `0.08161427814748465` | `0.1855417397226204` | `0.21925823643775907` | `0.1321313879906215` | `0.6486103755716195` |
+
+Decision: keep the guarded partial ranking fast path.
+
+Reason: it preserves candidate and final order agreement at `1.0`, improves
+both the targeted row and the full matrix mean/max ratios, and its correctness
+condition is covered by an explicit boundary-tie unit test.
+
+Updated interpretation: candidate ranking is no longer the largest row-local
+component. In the current worst CUDA row, CPU centroid selection is roughly
+`39%`, candidate generation is roughly `20%`, and exact rerank is roughly
+`41%` of resident selected time. The next optimization should inspect exact
+rerank and CPU centroid selection before assuming which one has more headroom.
+
 ## Decision
 
 Keep `coverage_safety_v0` as the next benchmark policy candidate.
@@ -351,9 +426,10 @@ policy.
 
 ## Next
 
-The next optimization target is now the cost of safe candidate coverage:
+The next optimization target is now the split between exact rerank and CPU
+selected-centroid work:
 
-- profile the resident selected-posting row under `coverage_safety_v0`
-- move selected-centroid scoring/selection onto the GPU only if the broader
-  policy continues to hold
+- inspect the resident exact-rerank call path for avoidable host overhead
+- inspect selected-centroid scoring/selection for vectorized or resident-device
+  alternatives
 - test larger or real encoded corpora before claiming a backend-level win

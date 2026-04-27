@@ -3297,19 +3297,23 @@ def _rank_document_scores_numpy(
     for row in score_matrix:
         partition = np.argpartition(-row, top_k - 1)[:top_k]
         threshold = float(np.min(row[partition]))
-        high_positions = doc_positions[row > threshold]
-        high_scores = row[high_positions]
-        high_order = np.lexsort((high_positions, -high_scores))
+        high_count = int(np.count_nonzero(row > threshold))
         threshold_positions = doc_positions[row == threshold]
-        threshold_slots = top_k - int(high_positions.size)
-        order = np.concatenate(
-            (
-                high_positions[high_order],
-                threshold_positions[:threshold_slots],
+        threshold_slots = top_k - high_count
+        if int(threshold_positions.size) == threshold_slots:
+            order = partition[np.lexsort((partition, -row[partition]))]
+        else:
+            high_positions = doc_positions[row > threshold]
+            high_scores = row[high_positions]
+            high_order = np.lexsort((high_positions, -high_scores))
+            order = np.concatenate(
+                (
+                    high_positions[high_order],
+                    threshold_positions[:threshold_slots],
+                )
             )
-        )
-        ranked_positions.extend(int(position) for position in order)
-        ranked_scores.extend(float(row[position]) for position in order)
+        ranked_positions.extend(order.tolist())
+        ranked_scores.extend(row[order].tolist())
     return tuple(ranked_positions), tuple(ranked_scores)
 
 
