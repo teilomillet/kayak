@@ -536,6 +536,23 @@ Reason: this keeps FastPlaid as the baseline while focusing Kayak work on the
 largest remaining measured slice. A future GPU candidate-generation primitive
 needs these resident posting tensors before any kernel claim can be tested.
 
+Candidate-generation payload finding: the benchmark-only GPU payload probe
+copies the centroid-posting tensors to device and reads them back for
+validation. The latest quiet run was `ok` on all `5 / 5` wide rows and had
+zero copy mismatches, zero posting offset violations, and zero out-of-range
+posting document ids. On the three non-full rows, H2D cost ranged from about
+`1.45%` to `3.83%` of CPU candidate-generation time, and H2D plus validation
+readback ranged from about `2.73%` to `7.36%`. The largest measured payload was
+about `204 KB`.
+
+Reason: this validates the resident-payload prerequisite but not a GPU
+candidate-generation speedup. Full-window rows are deliberately separated in
+the report because CPU candidate generation is near-zero when `candidate_k`
+equals `document_count`, making copy/CPU-candidate ratios irrelevant for the
+posting-accumulation target. The next justified step is a benchmark-only GPU
+posting-accumulation probe for the non-full rows while final candidate top-k
+stays on CPU.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -783,10 +800,16 @@ evidence only justifies a measured primitive.
 27. Expose the centroid-posting payload required for a future GPU candidate
    generation primitive. Current result: the exact i8 posting tensors are now
    visible in the payload snapshot with explicit byte counts.
-28. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+28. Profile GPU preparation of the centroid-posting payload before writing a
+   posting kernel. Current quiet result: payload copy/readback is correct on
+   all measured rows, and non-full H2D plus validation readback costs about
+   `2.73%` to `7.36%` of CPU candidate-generation time.
+29. Add a benchmark-only GPU posting-accumulation probe for non-full rows while
+   final candidate top-k remains on CPU.
+30. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-29. Only after a measured win, consider public API design.
+31. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

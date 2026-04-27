@@ -1774,6 +1774,159 @@ def score_i8_prepared_payload_session_addresses_multi_window(
         return py_result
 
 
+def profile_i8_candidate_generation_payload_addresses(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var centroid_token_indices_address = Int(py=py_request[0])
+    var centroid_doc_offsets_address = Int(py=py_request[1])
+    var centroid_doc_indices_address = Int(py=py_request[2])
+    var centroid_count = Int(py=py_request[3])
+    var posting_count = Int(py=py_request[4])
+    var document_count = Int(py=py_request[5])
+    var warmup_iterations = Int(py=py_request[6])
+    var measurement_iterations = Int(py=py_request[7])
+    if centroid_token_indices_address == 0:
+        raise Error("centroid_token_indices address must be non-zero")
+    if centroid_doc_offsets_address == 0:
+        raise Error("centroid_doc_offsets address must be non-zero")
+    if centroid_doc_indices_address == 0:
+        raise Error("centroid_doc_indices address must be non-zero")
+    if centroid_count <= 0:
+        raise Error("centroid_count must be positive")
+    if posting_count <= 0:
+        raise Error("posting_count must be positive")
+    if document_count <= 0:
+        raise Error("document_count must be positive")
+    if warmup_iterations < 0:
+        raise Error("warmup_iterations must be non-negative")
+    if measurement_iterations <= 0:
+        raise Error("measurement_iterations must be positive")
+
+    var py_centroid_token_indices = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=centroid_token_indices_address
+    )
+    var py_centroid_doc_offsets = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=centroid_doc_offsets_address
+    )
+    var py_centroid_doc_indices = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=centroid_doc_indices_address
+    )
+    var offset_count = centroid_count + 1
+
+    with DeviceContext() as ctx:
+        var token_indices_host = ctx.enqueue_create_host_buffer[DType.int64](
+            centroid_count
+        )
+        var doc_offsets_host = ctx.enqueue_create_host_buffer[DType.int64](
+            offset_count
+        )
+        var doc_indices_host = ctx.enqueue_create_host_buffer[DType.int64](
+            posting_count
+        )
+        var token_indices_readback = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](centroid_count)
+        var doc_offsets_readback = ctx.enqueue_create_host_buffer[DType.int64](
+            offset_count
+        )
+        var doc_indices_readback = ctx.enqueue_create_host_buffer[DType.int64](
+            posting_count
+        )
+        var token_indices_device = ctx.enqueue_create_buffer[DType.int64](
+            centroid_count
+        )
+        var doc_offsets_device = ctx.enqueue_create_buffer[DType.int64](
+            offset_count
+        )
+        var doc_indices_device = ctx.enqueue_create_buffer[DType.int64](
+            posting_count
+        )
+        ctx.synchronize()
+
+        def host_ingest_once() capturing raises:
+            for index in range(centroid_count):
+                token_indices_host[index] = py_centroid_token_indices[index]
+
+            for index in range(offset_count):
+                doc_offsets_host[index] = py_centroid_doc_offsets[index]
+
+            for index in range(posting_count):
+                doc_indices_host[index] = py_centroid_doc_indices[index]
+
+        def h2d_once() capturing raises:
+            token_indices_device.enqueue_copy_from(token_indices_host)
+            doc_offsets_device.enqueue_copy_from(doc_offsets_host)
+            doc_indices_device.enqueue_copy_from(doc_indices_host)
+            ctx.synchronize()
+
+        def d2h_once() capturing raises:
+            token_indices_device.enqueue_copy_to(token_indices_readback)
+            doc_offsets_device.enqueue_copy_to(doc_offsets_readback)
+            doc_indices_device.enqueue_copy_to(doc_indices_readback)
+            ctx.synchronize()
+
+        host_ingest_once()
+        h2d_once()
+        d2h_once()
+
+        for _ in range(warmup_iterations):
+            host_ingest_once()
+            h2d_once()
+            d2h_once()
+
+        var host_ingest = benchmark.run[host_ingest_once](
+            max_iters=measurement_iterations
+        )
+        host_ingest_once()
+        var h2d = benchmark.run[h2d_once](max_iters=measurement_iterations)
+        h2d_once()
+        var d2h = benchmark.run[d2h_once](max_iters=measurement_iterations)
+        d2h_once()
+
+        var mismatch_count = 0
+        for index in range(centroid_count):
+            if (
+                token_indices_readback[index]
+                != py_centroid_token_indices[index]
+            ):
+                mismatch_count += 1
+
+        for index in range(offset_count):
+            if doc_offsets_readback[index] != py_centroid_doc_offsets[index]:
+                mismatch_count += 1
+
+        for index in range(posting_count):
+            if doc_indices_readback[index] != py_centroid_doc_indices[index]:
+                mismatch_count += 1
+
+        var monotonic_offset_violation_count = 0
+        if doc_offsets_readback[0] != 0:
+            monotonic_offset_violation_count += 1
+        for index in range(1, offset_count):
+            if doc_offsets_readback[index] < doc_offsets_readback[index - 1]:
+                monotonic_offset_violation_count += 1
+        if doc_offsets_readback[offset_count - 1] != Int64(posting_count):
+            monotonic_offset_violation_count += 1
+
+        var doc_index_out_of_range_count = 0
+        for index in range(posting_count):
+            var doc_index = doc_indices_readback[index]
+            if doc_index < 0 or doc_index >= Int64(document_count):
+                doc_index_out_of_range_count += 1
+
+        var py_result = Python.list()
+        py_result.append(Python.float(host_ingest.mean()))
+        py_result.append(Python.float(h2d.mean()))
+        py_result.append(Python.float(d2h.mean()))
+        py_result.append(Python.int(mismatch_count))
+        py_result.append(Python.int(monotonic_offset_violation_count))
+        py_result.append(Python.int(doc_index_out_of_range_count))
+        py_result.append(Python.int(centroid_count))
+        py_result.append(Python.int(posting_count))
+        py_result.append(Python.int(document_count))
+        return py_result
+
+
 @export
 def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
     try:
@@ -1861,6 +2014,13 @@ def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
             docstring=(
                 "Score different typed-address GPU i8 windows after one"
                 " in-call prepared-index device copy."
+            ),
+        )
+        module.def_function[profile_i8_candidate_generation_payload_addresses](
+            "profile_i8_candidate_generation_payload_addresses",
+            docstring=(
+                "Profile typed-address GPU preparation for i8 candidate"
+                " generation centroid-posting payload tensors."
             ),
         )
         return module.finalize()

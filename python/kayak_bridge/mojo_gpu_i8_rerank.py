@@ -167,6 +167,58 @@ class MojoGpuI8AddressTopKNoReferenceResult:
 
 
 @dataclass(frozen=True, slots=True)
+class MojoGpuI8CandidateGenerationPayloadResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    mojo_host_ingest_mean_seconds: float
+    host_to_device_mean_seconds: float
+    device_to_host_mean_seconds: float
+    copy_mismatch_count: int
+    offset_violation_count: int
+    doc_index_out_of_range_count: int
+    centroid_count: int
+    posting_count: int
+    document_count: int
+    byte_counts: dict[str, int]
+
+    @property
+    def total_payload_bytes(self) -> int:
+        return sum(self.byte_counts.values())
+
+    @property
+    def payload_agreement_ok(self) -> bool:
+        return self.copy_mismatch_count == 0
+
+    @property
+    def posting_invariants_ok(self) -> bool:
+        return (
+            self.offset_violation_count == 0
+            and self.doc_index_out_of_range_count == 0
+        )
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "mojo_host_ingest_mean_seconds": (
+                self.mojo_host_ingest_mean_seconds
+            ),
+            "host_to_device_mean_seconds": self.host_to_device_mean_seconds,
+            "device_to_host_mean_seconds": self.device_to_host_mean_seconds,
+            "copy_mismatch_count": self.copy_mismatch_count,
+            "offset_violation_count": self.offset_violation_count,
+            "doc_index_out_of_range_count": self.doc_index_out_of_range_count,
+            "payload_agreement_ok": self.payload_agreement_ok,
+            "posting_invariants_ok": self.posting_invariants_ok,
+            "centroid_count": self.centroid_count,
+            "posting_count": self.posting_count,
+            "document_count": self.document_count,
+            "byte_counts": self.byte_counts,
+            "total_payload_bytes": self.total_payload_bytes,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class MojoGpuI8AddressResidentSessionResult:
     host_marshalling_seconds: float
     extension_call_seconds: float
@@ -786,6 +838,64 @@ def profile_i8_prepared_payload_session_addresses(
         score_delta_max_abs=float(raw_result[4]),
         candidate_score_count=int(raw_result[5]),
         scores=scores,
+    )
+
+
+def profile_i8_candidate_generation_payload_addresses(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    payload: KayakPlaidI8PayloadSnapshot,
+    warmup_iterations: int,
+    measurement_iterations: int,
+) -> MojoGpuI8CandidateGenerationPayloadResult:
+    if warmup_iterations < 0:
+        raise ValueError("warmup_iterations must be non-negative")
+    if measurement_iterations <= 0:
+        raise ValueError("measurement_iterations must be positive")
+
+    marshalling_started_at = time.perf_counter()
+    centroid_token_indices = _int64_array(payload.centroid_token_indices)
+    centroid_doc_offsets = _int64_array(payload.centroid_doc_offsets)
+    centroid_doc_indices = _int64_array(payload.centroid_doc_indices)
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    module = load_module(target_accelerator=target_accelerator)
+    request = [
+        _array_address(centroid_token_indices),
+        _array_address(centroid_doc_offsets),
+        _array_address(centroid_doc_indices),
+        int(payload.centroid_count),
+        int(payload.posting_count),
+        int(shape.document_count),
+        int(warmup_iterations),
+        int(measurement_iterations),
+    ]
+    extension_started_at = time.perf_counter()
+    raw_result = module.profile_i8_candidate_generation_payload_addresses(
+        request
+    )
+    extension_call_seconds = time.perf_counter() - extension_started_at
+
+    if len(raw_result) != 9:
+        raise RuntimeError(
+            "GPU i8 candidate-generation payload bridge returned an "
+            "unexpected result shape"
+        )
+
+    return MojoGpuI8CandidateGenerationPayloadResult(
+        host_marshalling_seconds=host_marshalling_seconds,
+        extension_call_seconds=extension_call_seconds,
+        mojo_host_ingest_mean_seconds=float(raw_result[0]),
+        host_to_device_mean_seconds=float(raw_result[1]),
+        device_to_host_mean_seconds=float(raw_result[2]),
+        copy_mismatch_count=int(raw_result[3]),
+        offset_violation_count=int(raw_result[4]),
+        doc_index_out_of_range_count=int(raw_result[5]),
+        centroid_count=int(raw_result[6]),
+        posting_count=int(raw_result[7]),
+        document_count=int(raw_result[8]),
+        byte_counts=payload.candidate_generation_byte_counts(),
     )
 
 
