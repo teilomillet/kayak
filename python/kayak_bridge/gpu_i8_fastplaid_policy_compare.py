@@ -159,6 +159,10 @@ def summarize_case_device_report(
         "gpu_prepared_handle_topk_no_reference_vs_fastplaid_scope_comparison",
         {},
     )
+    fused_comparison = report.get(
+        "gpu_fused_centroid_posting_vs_fastplaid_scope_comparison",
+        {},
+    )
     candidate_seconds = _optional_float(
         comparison.get("cpu_candidate_generation_seconds_per_window")
     )
@@ -169,6 +173,20 @@ def summarize_case_device_report(
         comparison.get(
             "cpu_candidate_generation_plus_gpu_topk_seconds_per_window"
         )
+    )
+    fused_device_seconds = _optional_float(
+        fused_comparison.get("gpu_fused_device_topk_seconds_per_window")
+    )
+    fused_device_ratio = _optional_float(
+        fused_comparison.get(
+            "gpu_fused_device_topk_seconds_per_fastplaid_batch_second"
+        )
+    )
+    fused_recall = _optional_float(
+        fused_comparison.get("recall_at_k_vs_kayak_exact")
+    )
+    fastplaid_recall = _optional_float(
+        fastplaid.get("recall_at_k_vs_kayak_exact") if fastplaid else None
     )
     return {
         "name": case.name,
@@ -185,9 +203,7 @@ def summarize_case_device_report(
         "kayak_i8_recall_at_k_vs_kayak_exact": _optional_float(
             kayak_i8.get("recall_at_k_vs_kayak_exact") if kayak_i8 else None
         ),
-        "fastplaid_recall_at_k_vs_kayak_exact": _optional_float(
-            fastplaid.get("recall_at_k_vs_kayak_exact") if fastplaid else None
-        ),
+        "fastplaid_recall_at_k_vs_kayak_exact": fastplaid_recall,
         "fastplaid_query_batch_mean_seconds": _optional_float(
             fastplaid.get("query_batch_mean_seconds") if fastplaid else None
         ),
@@ -214,6 +230,24 @@ def summarize_case_device_report(
         "topk_position_agreement": _optional_float(
             comparison.get("topk_position_agreement")
         ),
+        "gpu_fused_device_topk_seconds_per_window": fused_device_seconds,
+        "gpu_fused_device_topk_seconds_per_fastplaid_batch_second": (
+            fused_device_ratio
+        ),
+        "gpu_fused_device_topk_seconds_per_host_topk_second": _optional_float(
+            fused_comparison.get(
+                "gpu_fused_device_topk_seconds_per_host_topk_second"
+            )
+        ),
+        "gpu_fused_recall_at_k_vs_kayak_exact": fused_recall,
+        "gpu_fused_recall_delta_vs_fastplaid": (
+            fused_recall - fastplaid_recall
+            if fused_recall is not None and fastplaid_recall is not None
+            else None
+        ),
+        "gpu_fused_device_topk_position_agreement": _optional_float(
+            fused_comparison.get("device_topk_position_agreement")
+        ),
     }
 
 
@@ -238,6 +272,17 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         if row["kayak_i8_recall_at_k_vs_kayak_exact"] is not None
         and row["fastplaid_recall_at_k_vs_kayak_exact"] is not None
     ]
+    fused_ratios = [
+        float(row["gpu_fused_device_topk_seconds_per_fastplaid_batch_second"])
+        for row in ok_rows
+        if row["gpu_fused_device_topk_seconds_per_fastplaid_batch_second"]
+        is not None
+    ]
+    fused_recall_deltas = [
+        float(row["gpu_fused_recall_delta_vs_fastplaid"])
+        for row in ok_rows
+        if row["gpu_fused_recall_delta_vs_fastplaid"] is not None
+    ]
     return {
         "row_count": len(rows),
         "ok_row_count": len(ok_rows),
@@ -258,6 +303,19 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         ),
         "topk_position_agreement_min": _min_optional(
             row.get("topk_position_agreement") for row in ok_rows
+        ),
+        "mean_gpu_fused_device_topk_seconds_per_fastplaid_batch_second": (
+            _mean(fused_ratios)
+        ),
+        "max_gpu_fused_device_topk_seconds_per_fastplaid_batch_second": (
+            max(fused_ratios) if fused_ratios else None
+        ),
+        "min_gpu_fused_recall_delta_vs_fastplaid": (
+            min(fused_recall_deltas) if fused_recall_deltas else None
+        ),
+        "gpu_fused_device_topk_position_agreement_min": _min_optional(
+            row.get("gpu_fused_device_topk_position_agreement")
+            for row in ok_rows
         ),
     }
 

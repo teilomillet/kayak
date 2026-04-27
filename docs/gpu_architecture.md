@@ -709,9 +709,20 @@ rows, the device-top-k score call measured about `0.200x`, `0.277x`, and
 handle score path, it measured about `0.853x`, `0.871x`, and `0.657x`.
 
 Reason: this validates the profile-guided top-k direction and falsifies only
-the old serial device-top-k design, not device top-k as a category. The host
-destructive top-k path should remain as a reference until the new device path is
-also reflected in the FastPlaid scope matrix.
+the old serial device-top-k design, not device top-k as a category.
+
+Fused FastPlaid-scope finding: adding the fused centroid-posting device-top-k
+row to the policy FastPlaid matrix preserved exact agreement with the CPU fused
+reference, but rejected the fused approximate score as a final search output.
+On the six wide policy rows, fused device top-k measured about `0.0041x` to
+`0.0301x` of FastPlaid full-search time, but recall was only `0.0` to `0.1`
+against Kayak exact. FastPlaid recall on the same rows was `0.35` to `0.65`,
+and the address-window Kayak envelope remained at `0.65` to `0.7`.
+
+Reason: the bottleneck shifted from mechanics to quality. The fused
+centroid-posting score is useful as a fast GPU shortlist signal, but the current
+evidence rejects using it as the final top-k scorer. The next primitive should
+combine fused GPU shortlist generation with exact candidate rerank.
 
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
@@ -1018,10 +1029,14 @@ evidence only justifies a measured primitive.
    rows, and the non-full score path costs about `0.657x` to `0.871x` of the
    host-top-k prepared score path, or about `0.154x` to `0.277x` of full CPU
    candidate generation.
-38. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
-   CPU top-k, and FastPlaid scope rows after the resident ownership boundary
-   exists.
-39. Only after a measured win, consider public API design.
+38. Reflect fused device top-k in the FastPlaid policy matrix. Current quiet
+   result: fused device top-k is fast (`0.0041x` to `0.0301x` FastPlaid
+   full-search time) but recall is too low (`0.0` to `0.1`) to promote as final
+   search output.
+39. Test fused GPU shortlist generation plus exact candidate rerank. This is
+   the next measurable attempt to keep address-window recall while removing CPU
+   candidate-generation cost.
+40. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

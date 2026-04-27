@@ -1177,6 +1177,60 @@ class GpuI8RerankContractTests(unittest.TestCase):
             0.02,
         )
 
+    def test_gpu_fastplaid_compare_reports_fused_device_topk_boundary(
+        self,
+    ) -> None:
+        comparison = (
+            fastplaid_compare.build_gpu_fused_centroid_posting_vs_fastplaid_comparison(
+                fused_row={
+                    "status": "ok",
+                    "recall_at_k_vs_kayak_exact": 0.8,
+                    "parsed": {
+                        "candidate_score_count_per_window": 1024,
+                        "topk_return_count_per_window": 20,
+                        "topk_position_agreement": 1.0,
+                        "device_topk_position_agreement": 1.0,
+                        "topk_score_delta_max_abs": 0.000061,
+                        "device_topk_score_delta_max_abs": 0.000061,
+                        "score_extension_call_seconds_per_window": 0.00012,
+                        "device_topk_score_extension_call_seconds_per_window": 0.00009,
+                        "validation_reference_scores_sent_to_extension": False,
+                    },
+                },
+                fastplaid_row={
+                    "system_name": "fastplaid",
+                    "status": "ok",
+                    "query_batch_mean_seconds": 0.003,
+                    "query_mean_seconds": 0.0015,
+                },
+            )
+        )
+
+        self.assertEqual(comparison["status"], "ok")
+        self.assertEqual(comparison["candidate_score_count_per_window"], 1024)
+        self.assertEqual(comparison["topk_return_count_per_window"], 20)
+        self.assertIs(
+            comparison["validation_reference_scores_sent_to_extension"],
+            False,
+        )
+        self.assertAlmostEqual(
+            float(
+                comparison[
+                    "gpu_fused_device_topk_seconds_per_fastplaid_batch_second"
+                ]
+            ),
+            0.03,
+        )
+        self.assertAlmostEqual(
+            float(
+                comparison[
+                    "gpu_fused_device_topk_seconds_per_host_topk_second"
+                ]
+            ),
+            0.75,
+        )
+        self.assertEqual(comparison["recall_at_k_vs_kayak_exact"], 0.8)
+
     def test_copy_probe_parser_keeps_timing_and_roundtrip_fields(self) -> None:
         parsed = parse_gpu_copy_probe_output(
             "status: ok\n"

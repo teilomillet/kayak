@@ -8,6 +8,7 @@ from typing import Any
 STATUS_OK = "ok"
 STATUS_PARTIAL_GPU_UNAVAILABLE = "partial_gpu_unavailable"
 STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED = "blocked_gpu_prepared_topk_failed"
+STATUS_BLOCKED_GPU_FUSED_HANDLE_FAILED = "blocked_gpu_fused_centroid_posting_failed"
 STATUS_BLOCKED_FASTPLAID_UNAVAILABLE = "blocked_fastplaid_unavailable"
 
 
@@ -87,6 +88,76 @@ def build_gpu_prepared_topk_no_reference_vs_fastplaid_comparison(
             "checked after the serving-shaped top-k call returns."
         ),
     )
+
+
+def build_gpu_fused_centroid_posting_vs_fastplaid_comparison(
+    *,
+    fused_row: dict[str, Any] | None,
+    fastplaid_row: dict[str, Any] | None,
+) -> dict[str, Any]:
+    parsed = _parsed_payload(fused_row)
+    status = fused_centroid_posting_comparison_status(fused_row, fastplaid_row)
+    fastplaid_batch = _fastplaid_float(fastplaid_row, "query_batch_mean_seconds")
+    fastplaid_query = _fastplaid_float(fastplaid_row, "query_mean_seconds")
+    host_topk = _optional_float(
+        parsed.get("score_extension_call_seconds_per_window")
+    )
+    device_topk = _optional_float(
+        parsed.get("device_topk_score_extension_call_seconds_per_window")
+    )
+    candidate_score_count = _optional_float(
+        parsed.get("candidate_score_count_per_window")
+    )
+    topk_return_count = _optional_float(parsed.get("topk_return_count_per_window"))
+    return {
+        "status": status,
+        "scope": "gpu_fused_centroid_posting_topk_vs_fastplaid_full_search",
+        "scope_warning": (
+            "This is still not a public backend comparison: FastPlaid is timed "
+            "as full search, while the Kayak GPU row measures the internal "
+            "prepared fused centroid-posting rerank/top-k primitive."
+        ),
+        "candidate_score_count_per_window": (
+            int(candidate_score_count)
+            if candidate_score_count is not None
+            else None
+        ),
+        "topk_return_count_per_window": (
+            int(topk_return_count) if topk_return_count is not None else None
+        ),
+        "topk_position_agreement": _optional_float(
+            parsed.get("topk_position_agreement")
+        ),
+        "device_topk_position_agreement": _optional_float(
+            parsed.get("device_topk_position_agreement")
+        ),
+        "score_delta_max_abs": _optional_float(parsed.get("topk_score_delta_max_abs")),
+        "device_topk_score_delta_max_abs": _optional_float(
+            parsed.get("device_topk_score_delta_max_abs")
+        ),
+        "validation_reference_scores_sent_to_extension": parsed.get(
+            "validation_reference_scores_sent_to_extension"
+        ),
+        "gpu_fused_host_topk_seconds_per_window": host_topk,
+        "gpu_fused_device_topk_seconds_per_window": device_topk,
+        "gpu_fused_device_topk_seconds_per_host_topk_second": _ratio(
+            device_topk,
+            host_topk,
+        ),
+        "fastplaid_query_batch_mean_seconds": fastplaid_batch,
+        "fastplaid_query_mean_seconds": fastplaid_query,
+        "gpu_fused_host_topk_seconds_per_fastplaid_batch_second": _ratio(
+            host_topk,
+            fastplaid_batch,
+        ),
+        "gpu_fused_device_topk_seconds_per_fastplaid_batch_second": _ratio(
+            device_topk,
+            fastplaid_batch,
+        ),
+        "recall_at_k_vs_kayak_exact": _optional_float(
+            fused_row.get("recall_at_k_vs_kayak_exact") if fused_row else None
+        ),
+    }
 
 
 def _build_gpu_prepared_topk_vs_fastplaid_comparison(
@@ -201,6 +272,19 @@ def prepared_topk_no_reference_comparison_status(
         return STATUS_PARTIAL_GPU_UNAVAILABLE
     if prepared_handle_topk_row.get("no_reference_status") != STATUS_OK:
         return STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED
+    return STATUS_OK
+
+
+def fused_centroid_posting_comparison_status(
+    fused_row: dict[str, Any] | None,
+    fastplaid_row: dict[str, Any] | None,
+) -> str:
+    if fastplaid_row is None or fastplaid_row.get("status") != STATUS_OK:
+        return STATUS_BLOCKED_FASTPLAID_UNAVAILABLE
+    if fused_row is None:
+        return STATUS_PARTIAL_GPU_UNAVAILABLE
+    if fused_row.get("status") != STATUS_OK:
+        return STATUS_BLOCKED_GPU_FUSED_HANDLE_FAILED
     return STATUS_OK
 
 

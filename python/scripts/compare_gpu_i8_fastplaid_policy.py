@@ -161,8 +161,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "measurement_note": (
             "FastPlaid rows are full-search timings. Kayak policy rows use a "
             "shape-only centroid-budget policy, CPU candidate generation, and "
-            "the GPU no-reference top-k primitive. This is an internal scope "
-            "comparison, not a public backend speedup claim."
+            "the GPU no-reference top-k primitive. The report also includes "
+            "the fused centroid-posting GPU primitive as a separate internal "
+            "scope. This is not a public backend speedup claim."
         ),
     }
 
@@ -251,10 +252,18 @@ def emit_quiet_means(report: dict[str, Any]) -> None:
             row["gpu_topk_no_reference_seconds_per_window"],
         )
         print_quiet_mean(
+            f"{prefix}_gpu_fused_device_topk_per_window",
+            row["gpu_fused_device_topk_seconds_per_window"],
+        )
+        print_quiet_mean(
             f"{prefix}_envelope_per_fastplaid_batch",
             row[
                 "cpu_candidate_generation_plus_gpu_topk_no_reference_seconds_per_fastplaid_batch_second"
             ],
+        )
+        print_quiet_mean(
+            f"{prefix}_gpu_fused_device_topk_per_fastplaid_batch",
+            row["gpu_fused_device_topk_seconds_per_fastplaid_batch_second"],
         )
         print_quiet_mean(
             f"{prefix}_kayak_recall",
@@ -263,6 +272,10 @@ def emit_quiet_means(report: dict[str, Any]) -> None:
         print_quiet_mean(
             f"{prefix}_fastplaid_recall",
             row["fastplaid_recall_at_k_vs_kayak_exact"],
+        )
+        print_quiet_mean(
+            f"{prefix}_gpu_fused_recall",
+            row["gpu_fused_recall_at_k_vs_kayak_exact"],
         )
 
 

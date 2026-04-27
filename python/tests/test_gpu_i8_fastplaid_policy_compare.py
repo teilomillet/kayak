@@ -86,6 +86,13 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
                     "cpu_candidate_generation_plus_gpu_topk_seconds_per_fastplaid_batch_second": 0.1,
                     "topk_position_agreement": 1.0,
                 },
+                "gpu_fused_centroid_posting_vs_fastplaid_scope_comparison": {
+                    "gpu_fused_device_topk_seconds_per_window": 0.0003,
+                    "gpu_fused_device_topk_seconds_per_fastplaid_batch_second": 0.03,
+                    "gpu_fused_device_topk_seconds_per_host_topk_second": 0.75,
+                    "recall_at_k_vs_kayak_exact": 0.6,
+                    "device_topk_position_agreement": 1.0,
+                },
             },
             report_path=Path("row.json"),
         )
@@ -101,6 +108,11 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
             ],
             0.1,
         )
+        self.assertEqual(
+            row["gpu_fused_device_topk_seconds_per_fastplaid_batch_second"],
+            0.03,
+        )
+        self.assertAlmostEqual(row["gpu_fused_recall_delta_vs_fastplaid"], 0.2)
         self.assertEqual(row["cpu_candidate_generation_share_of_envelope"], 0.6)
         self.assertEqual(row["gpu_topk_no_reference_share_of_envelope"], 0.4)
         self.assertEqual(
@@ -112,6 +124,12 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
                 "mean_cpu_candidate_generation_share_of_envelope"
             ],
             0.6,
+        )
+        self.assertEqual(
+            policy_compare.summary_payload([row])[
+                "max_gpu_fused_device_topk_seconds_per_fastplaid_batch_second"
+            ],
+            0.03,
         )
 
 

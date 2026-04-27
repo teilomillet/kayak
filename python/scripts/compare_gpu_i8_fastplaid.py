@@ -22,12 +22,18 @@ from kayak_bridge.gpu_i8_candidate_score import (  # noqa: E402
     GPU_CANDIDATE_SCORE_STATUS_OK,
     run_gpu_i8_candidate_score_probe,
 )
+from kayak_bridge.gpu_i8_fastplaid_fused_scope import (  # noqa: E402
+    build_fused_centroid_posting_scope_row,
+    build_missing_fused_centroid_posting_scope_row,
+)
 from kayak_bridge.gpu_i8_fastplaid_topk_compare import (  # noqa: E402
     build_missing_prepared_handle_topk_scope_row,
     build_prepared_handle_topk_scope_row,
 )
 from kayak_bridge.gpu_i8_fastplaid_topk_metrics import (  # noqa: E402
+    STATUS_BLOCKED_GPU_FUSED_HANDLE_FAILED,
     STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED,
+    build_gpu_fused_centroid_posting_vs_fastplaid_comparison,
     build_gpu_prepared_topk_no_reference_vs_fastplaid_comparison,
     build_gpu_prepared_topk_vs_fastplaid_comparison,
 )
@@ -219,6 +225,7 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
     capability = probe_mojo_gpu(args.gpu_query_command)
     gpu_probe: dict[str, object] | None = None
     prepared_handle_topk_row: dict[str, Any] | None = None
+    fused_centroid_posting_row: dict[str, Any] | None = None
     if capability.available:
         gpu_probe = run_gpu_i8_candidate_score_probe(
             shape,
@@ -226,6 +233,13 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             target_accelerator=capability.target_accelerator,
         )
         prepared_handle_topk_row = build_prepared_handle_topk_scope_row(
+            shape=shape,
+            inputs=inputs,
+            reference_positions=reference_positions,
+            capability=capability,
+            args=args,
+        )
+        fused_centroid_posting_row = build_fused_centroid_posting_scope_row(
             shape=shape,
             inputs=inputs,
             reference_positions=reference_positions,
@@ -256,10 +270,17 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             fastplaid_row=fastplaid_row,
         )
     )
+    fused_centroid_posting_comparison = (
+        build_gpu_fused_centroid_posting_vs_fastplaid_comparison(
+            fused_row=fused_centroid_posting_row,
+            fastplaid_row=fastplaid_row,
+        )
+    )
     status = report_status(
         capability=capability,
         gpu_probe=gpu_probe,
         prepared_handle_topk_row=prepared_handle_topk_row,
+        fused_centroid_posting_row=fused_centroid_posting_row,
         fastplaid_row=fastplaid_row,
     )
 
@@ -289,6 +310,15 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
                     capability=capability,
                 )
             ),
+            "gpu_fused_centroid_posting_topk_primitive": (
+                fused_centroid_posting_row
+                if fused_centroid_posting_row is not None
+                else build_missing_fused_centroid_posting_scope_row(
+                    shape=shape,
+                    candidate_k=args.candidate_k,
+                    capability=capability,
+                )
+            ),
             "gpu_vs_fastplaid_scope_comparison": comparison,
             "gpu_prepared_handle_topk_vs_fastplaid_scope_comparison": (
                 prepared_handle_topk_comparison
@@ -296,16 +326,23 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             "gpu_prepared_handle_topk_no_reference_vs_fastplaid_scope_comparison": (
                 prepared_handle_topk_no_reference_comparison
             ),
+            "gpu_fused_centroid_posting_vs_fastplaid_scope_comparison": (
+                fused_centroid_posting_comparison
+            ),
             "measurement_note": (
                 "FastPlaid rows are full-search timings. The GPU row is a "
                 "benchmark-only candidate-score primitive over deterministic "
                 "flat i8 tensors. The prepared-handle top-k GPU row uses real "
                 "Kayak i8 payload snapshots and CPU-provided candidate "
                 "windows, but is still an internal rerank boundary rather than "
-                "a full search backend. The no-reference top-k comparison "
-                "keeps CPU reference scores out of the Mojo serving call and "
-                "uses them only for post-call validation. The positive-centroid "
-                "candidate option is benchmark-only and explicitly opt-in. "
+                "a full search backend. The fused centroid-posting row keeps "
+                "candidate generation inside the GPU primitive and returns "
+                "top-k positions from the prepared payload, but is also still "
+                "an internal primitive. The no-reference top-k comparisons "
+                "keep CPU reference scores out of the Mojo serving calls and "
+                "use them only for post-call validation. The positive-centroid "
+                "candidate option applies only to the address-window row and "
+                "is benchmark-only and explicitly opt-in. "
                 "Ratios across those scopes are profiling context only, not "
                 "production search speedup claims."
             ),
@@ -498,6 +535,7 @@ def report_status(
     capability: MojoGpuCapability,
     gpu_probe: dict[str, object] | None,
     prepared_handle_topk_row: dict[str, Any] | None,
+    fused_centroid_posting_row: dict[str, Any] | None,
     fastplaid_row: dict[str, Any] | None,
 ) -> str:
     if fastplaid_row is None or fastplaid_row.get("status") != STATUS_OK:
@@ -516,6 +554,11 @@ def report_status(
         return STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED
     if prepared_handle_topk_row.get("no_reference_status") != STATUS_OK:
         return STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED
+    if (
+        fused_centroid_posting_row is None
+        or fused_centroid_posting_row.get("status") != STATUS_OK
+    ):
+        return STATUS_BLOCKED_GPU_FUSED_HANDLE_FAILED
     return STATUS_OK
 
 
@@ -584,6 +627,30 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
                     "== kayak_cpu_candidates_gpu_i8_topk_no_reference_per_window =="
                 )
                 print("Mean:", no_reference_envelope)
+    fused = report.get("gpu_fused_centroid_posting_topk_primitive")
+    if isinstance(fused, dict):
+        parsed = fused.get("parsed")
+        if isinstance(parsed, dict):
+            host_topk = parsed.get("score_extension_call_seconds_per_window")
+            device_topk = parsed.get(
+                "device_topk_score_extension_call_seconds_per_window"
+            )
+            if isinstance(host_topk, (float, int)):
+                print("== kayak_gpu_i8_fused_host_topk_per_window ==")
+                print("Mean:", host_topk)
+            if isinstance(device_topk, (float, int)):
+                print("== kayak_gpu_i8_fused_device_topk_per_window ==")
+                print("Mean:", device_topk)
+    fused_comparison = report.get(
+        "gpu_fused_centroid_posting_vs_fastplaid_scope_comparison"
+    )
+    if isinstance(fused_comparison, dict):
+        ratio = fused_comparison.get(
+            "gpu_fused_device_topk_seconds_per_fastplaid_batch_second"
+        )
+        if isinstance(ratio, (float, int)):
+            print("== kayak_gpu_i8_fused_device_topk_per_fastplaid_batch ==")
+            print("Mean:", ratio)
 
 
 def exit_code(
@@ -606,6 +673,8 @@ def exit_code(
         return 4
     if status == STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED:
         return 6
+    if status == STATUS_BLOCKED_GPU_FUSED_HANDLE_FAILED:
+        return 7
     return 5
 
 
