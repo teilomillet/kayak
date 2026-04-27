@@ -1140,9 +1140,10 @@ evidence only justifies a measured primitive.
    `python/scripts/profile_task_plaid_i8_candidate_generation.py` profiles
    real-task PLAID i8 candidate-generation substeps, posting visits, touched
    documents, candidate vector counts, and candidate payload estimates. This
-   is not a full MS MARCO/LoCo result yet. It exists to keep the next
-   optimization aimed at candidate generation, pruning, and materialization
-   rather than isolated MaxSim kernels.
+   is paired with local MS MARCO and LEMB task builders, but it is not a full
+   MS MARCO/LoCo result yet. It exists to keep the next optimization aimed at
+   candidate generation, pruning, and materialization rather than isolated
+   MaxSim kernels.
 
 ## Falsification Conditions
 

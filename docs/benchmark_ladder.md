@@ -110,6 +110,8 @@ Current status:
 
 Current scaffold:
 - `python/scripts/profile_task_plaid_i8_candidate_generation.py`
+- `python/scripts/build_msmarco_passage_task_json.py`
+- `python/scripts/build_lemb_narrativeqa_task_json.py`
 
 Target families:
 - MS MARCO passage full corpus
@@ -178,8 +180,16 @@ pixi run bench_browsecomp_plus_gold_ceiling_comparison
 Corpus-scale scaffold on an already encoded task JSON:
 
 ```bash
+PYTHONPATH=python python python/scripts/build_msmarco_passage_task_json.py \
+  --collection /data/msmarco/collection.tsv \
+  --queries /data/msmarco/queries.dev.tsv \
+  --qrels /data/msmarco/qrels.dev.tsv \
+  --document-limit 10000 \
+  --query-limit 16 \
+  --output .cache/kayak/msmarco_passage_smoke/python_task.json
+
 PYTHONPATH=python python python/scripts/profile_task_plaid_i8_candidate_generation.py \
-  --task .cache/kayak/browsecomp_plus_real_subset/python_task_gold.json \
+  --task .cache/kayak/msmarco_passage_smoke/python_task.json \
   --query-limit 4 \
   --candidate-k 256 \
   --emit-quiet-mean

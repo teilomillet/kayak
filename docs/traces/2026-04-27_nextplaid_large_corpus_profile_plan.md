@@ -149,6 +149,10 @@ Added:
 - `python/kayak_bridge/plaid_task_candidate_profile.py`
 - `python/scripts/profile_task_plaid_i8_candidate_generation.py`
 - `python/tests/test_plaid_task_candidate_profile.py`
+- `python/kayak_bridge/msmarco_passage_task.py`
+- `python/scripts/build_msmarco_passage_task_json.py`
+- `python/scripts/build_lemb_narrativeqa_task_json.py`
+- `python/tests/test_msmarco_passage_task.py`
 
 What it measures:
 
@@ -167,12 +171,25 @@ What it does not claim:
 - it is not a NextPlaid benchmark adapter
 - it is not a public Kayak backend
 
+Corpus materialization scaffolds:
+
+- MS MARCO passage local builder consumes official `collection.tsv`,
+  `queries.tsv`, and qrels files. It does not download the corpus. With a
+  document limit, it can still force selected positive documents into the
+  subset so candidate recall is measurable on smoke runs. The script guards
+  accidental no-limit JSON builds because full MS MARCO should move to a
+  streaming snapshot path.
+- LEMB/NarrativeQA builder exposes the existing long-document Hugging Face
+  loader as an encoded task JSON command.
+
 Validation run:
 
-- helper tests:
-  `pixi run env PYTHONPATH=python python -m unittest python/tests/test_plaid_task_candidate_profile.py`
+- helper and MS MARCO local parser tests:
+  `pixi run env PYTHONPATH=python python -m unittest python/tests/test_plaid_task_candidate_profile.py python/tests/test_msmarco_passage_task.py`
+  passed `7 / 7`
 - syntax:
-  `pixi run env PYTHONPATH=python python -m py_compile python/kayak_bridge/plaid_task_candidate_profile.py python/scripts/profile_task_plaid_i8_candidate_generation.py`
+  `pixi run env PYTHONPATH=python python -m py_compile python/kayak_bridge/plaid_task_candidate_profile.py python/kayak_bridge/msmarco_passage_task.py python/scripts/profile_task_plaid_i8_candidate_generation.py python/scripts/build_msmarco_passage_task_json.py python/scripts/build_lemb_narrativeqa_task_json.py`
+  passed
 - in-memory Mojo smoke:
   one synthetic encoded task with `8` documents, `4` document vectors per
   document, `1` query, `3` query vectors, dim128, `candidate_k=4`, and
@@ -187,8 +204,16 @@ Observed smoke result:
 Example smoke command:
 
 ```bash
+PYTHONPATH=python python python/scripts/build_msmarco_passage_task_json.py \
+  --collection /data/msmarco/collection.tsv \
+  --queries /data/msmarco/queries.dev.tsv \
+  --qrels /data/msmarco/qrels.dev.tsv \
+  --document-limit 10000 \
+  --query-limit 16 \
+  --output .cache/kayak/msmarco_passage_smoke/python_task.json
+
 PYTHONPATH=python python python/scripts/profile_task_plaid_i8_candidate_generation.py \
-  --task .cache/kayak/browsecomp_plus_real_subset/python_task_gold.json \
+  --task .cache/kayak/msmarco_passage_smoke/python_task.json \
   --query-limit 4 \
   --candidate-k 256 \
   --emit-quiet-mean
