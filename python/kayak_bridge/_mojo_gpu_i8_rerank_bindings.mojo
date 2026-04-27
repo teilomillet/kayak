@@ -1,8 +1,9 @@
 import std.benchmark as benchmark
-from std.gpu import global_idx
+from std.gpu import barrier, block_idx, global_idx, thread_idx
 from std.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.gpu.memory import AddressSpace
 from std.math import abs
-from std.memory import alloc
+from std.memory import alloc, stack_allocation
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
@@ -493,6 +494,79 @@ def select_i8_document_topk_kernel(
         topk_scores[topk_base + rank] = best_score
 
 
+def select_i8_document_topk_block_kernel(
+    document_scores: UnsafePointer[Float32, MutAnyOrigin],
+    topk_positions: UnsafePointer[Int64, MutAnyOrigin],
+    topk_scores: UnsafePointer[Float32, MutAnyOrigin],
+    query_count: Int,
+    document_count: Int,
+    top_k: Int,
+):
+    var query_index = Int(block_idx.x)
+    var lane = Int(thread_idx.x)
+    if query_index >= query_count:
+        return
+
+    var shared_scores = stack_allocation[
+        BLOCK_SIZE,
+        DType.float32,
+        address_space=AddressSpace.SHARED,
+    ]()
+    var shared_positions = stack_allocation[
+        BLOCK_SIZE,
+        DType.int64,
+        address_space=AddressSpace.SHARED,
+    ]()
+    var score_base = query_index * document_count
+    var topk_base = query_index * top_k
+
+    for rank in range(top_k):
+        var best_position = 0
+        var best_score = Float32(-3.4028234663852886e38)
+        var seen = False
+        var document_index = lane
+        while document_index < document_count:
+            if not document_position_already_selected_device(
+                topk_positions, topk_base, rank, document_index
+            ):
+                var score = document_scores[score_base + document_index]
+                if not seen or score_position_ranks_before_float32_device(
+                    score,
+                    document_index,
+                    best_score,
+                    best_position,
+                ):
+                    best_score = score
+                    best_position = document_index
+                    seen = True
+            document_index += BLOCK_SIZE
+
+        shared_scores[lane] = best_score
+        shared_positions[lane] = Int64(best_position)
+        barrier()
+
+        var active = BLOCK_SIZE
+        while active > 1:
+            var half = active // 2
+            if lane < half:
+                var other = lane + half
+                if score_position_ranks_before_float32_device(
+                    shared_scores[other],
+                    Int(shared_positions[other]),
+                    shared_scores[lane],
+                    Int(shared_positions[lane]),
+                ):
+                    shared_scores[lane] = shared_scores[other]
+                    shared_positions[lane] = shared_positions[other]
+            active = half
+            barrier()
+
+        if lane == 0:
+            topk_positions[topk_base + rank] = shared_positions[0]
+            topk_scores[topk_base + rank] = shared_scores[0]
+        barrier()
+
+
 def accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel(
     selected_centroid_positions: UnsafePointer[Int64, MutAnyOrigin],
     selected_centroid_scores: UnsafePointer[Float32, MutAnyOrigin],
@@ -846,6 +920,8 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
     var selected_scores_device: DeviceBuffer[DType.float32]
     var best_scores_device: DeviceBuffer[DType.float32]
     var document_scores_device: DeviceBuffer[DType.float32]
+    var device_topk_positions_device: DeviceBuffer[DType.int64]
+    var device_topk_scores_device: DeviceBuffer[DType.float32]
     var query_host: HostBuffer[DType.float32]
     var document_scores_host: HostBuffer[DType.float32]
     var topk_positions_host: HostBuffer[DType.int64]
@@ -957,6 +1033,12 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
         self.document_scores_device = self.ctx.enqueue_create_buffer[
             DType.float32
         ](self.document_score_count)
+        self.device_topk_positions_device = self.ctx.enqueue_create_buffer[
+            DType.int64
+        ](self.topk_position_count)
+        self.device_topk_scores_device = self.ctx.enqueue_create_buffer[
+            DType.float32
+        ](self.topk_position_count)
         self.query_host = self.ctx.enqueue_create_host_buffer[DType.float32](
             self.query_value_count
         )
@@ -1110,6 +1192,29 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
         self.document_scores_device.enqueue_copy_to(self.document_scores_host)
         self.ctx.synchronize()
 
+    def run_device_topk_block_kernel(mut self) raises:
+        self.ctx.enqueue_function[
+            select_i8_document_topk_block_kernel,
+            select_i8_document_topk_block_kernel,
+        ](
+            self.document_scores_device,
+            self.device_topk_positions_device,
+            self.device_topk_scores_device,
+            self.query_count,
+            self.document_count,
+            self.top_k,
+            grid_dim=self.query_count,
+            block_dim=BLOCK_SIZE,
+        )
+        self.ctx.synchronize()
+
+    def copy_device_topk_to_host(mut self) raises:
+        self.device_topk_positions_device.enqueue_copy_to(
+            self.topk_positions_host
+        )
+        self.device_topk_scores_device.enqueue_copy_to(self.topk_scores_host)
+        self.ctx.synchronize()
+
     def run_window(
         mut self,
         py_query_values: UnsafePointer[Float32, MutAnyOrigin],
@@ -1123,6 +1228,20 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
         self.ctx.synchronize()
         self.copy_document_scores_to_host()
         self.host_topk_destructive()
+
+    def run_window_device_topk(
+        mut self,
+        py_query_values: UnsafePointer[Float32, MutAnyOrigin],
+    ) raises:
+        self.ingest_query(py_query_values)
+        self.copy_query_to_device()
+        self.enqueue_centroid_score_kernel()
+        self.enqueue_centroid_selection_kernel()
+        self.enqueue_accumulation_kernel()
+        self.enqueue_reduction_kernel()
+        self.ctx.synchronize()
+        self.run_device_topk_block_kernel()
+        self.copy_device_topk_to_host()
 
     def topk_position_already_selected(
         self, query_topk_base: Int, rank: Int, document_index: Int
@@ -1198,6 +1317,25 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
         py_query_values: UnsafePointer[Float32, MutAnyOrigin],
     ) raises -> PythonObject:
         self.run_window(py_query_values)
+
+        var py_positions = Python.list()
+        var py_scores = Python.list()
+        for index in range(self.topk_position_count):
+            py_positions.append(Python.int(self.topk_positions_host[index]))
+            py_scores.append(Python.float(self.topk_scores_host[index]))
+
+        var py_result = Python.list()
+        py_result.append(Python.int(self.document_score_count))
+        py_result.append(Python.int(self.top_k))
+        py_result.append(py_positions)
+        py_result.append(py_scores)
+        return py_result
+
+    def score_topk_device_no_reference(
+        mut self,
+        py_query_values: UnsafePointer[Float32, MutAnyOrigin],
+    ) raises -> PythonObject:
+        self.run_window_device_topk(py_query_values)
 
         var py_positions = Python.list()
         var py_scores = Python.list()
@@ -1669,6 +1807,27 @@ def score_i8_fused_centroid_posting_session_handle_topk_no_reference(
         unsafe_from_address=query_address
     )
     return session[].score_topk_no_reference(py_query_values)
+
+
+def score_i8_fused_centroid_posting_session_handle_topk_device_no_reference(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var handle = Int(py=py_request[0])
+    var query_address = Int(py=py_request[1])
+    if handle == 0:
+        raise Error(
+            "prepared GPU i8 fused centroid-posting handle must be non-zero"
+        )
+    if query_address == 0:
+        raise Error("query address must be non-zero")
+
+    var session = UnsafePointer[
+        PreparedGpuI8FusedCentroidPostingSession, MutAnyOrigin
+    ](unsafe_from_address=handle)
+    var py_query_values = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=query_address
+    )
+    return session[].score_topk_device_no_reference(py_query_values)
 
 
 def profile_i8_fused_centroid_posting_session_handle_topk_no_reference(
@@ -4764,6 +4923,15 @@ def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
             docstring=(
                 "Run one fused GPU i8 centroid-posting score call and return"
                 " top-k positions without CPU reference inputs."
+            ),
+        )
+        module.def_function[
+            score_i8_fused_centroid_posting_session_handle_topk_device_no_reference
+        ](
+            "score_i8_fused_centroid_posting_session_handle_topk_device_no_reference",
+            docstring=(
+                "Run one fused GPU i8 centroid-posting score call and return"
+                " device-selected top-k positions without CPU reference inputs."
             ),
         )
         module.def_function[

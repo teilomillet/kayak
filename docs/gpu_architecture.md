@@ -700,6 +700,19 @@ Reason: this narrows the next kernel experiment. The earlier one-lane device
 document top-k remains rejected, so any top-k follow-up should be a parallel
 device selection design with host destructive top-k retained as the reference.
 
+Block-parallel device top-k finding: an alternate prepared-handle score path
+now keeps document scores on device, runs one block per query to select final
+top-k, and reads back only `[query_count, top_k]` positions and scores. It
+preserved exact top-k positions on all `5 / 5` wide rows. On the three non-full
+rows, the device-top-k score call measured about `0.200x`, `0.277x`, and
+`0.154x` of full CPU candidate generation. Against the host-top-k prepared
+handle score path, it measured about `0.853x`, `0.871x`, and `0.657x`.
+
+Reason: this validates the profile-guided top-k direction and falsifies only
+the old serial device-top-k design, not device top-k as a category. The host
+destructive top-k path should remain as a reference until the new device path is
+also reflected in the FastPlaid scope matrix.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -1000,10 +1013,15 @@ evidence only justifies a measured primitive.
    host top-k costs about `31.8us`, `31.8us`, and `63.7us`, making final
    document top-k the next measured target except where `doc_vectors64` also
    shows material selected-posting work.
-37. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+37. Add a block-parallel device document top-k alternate for the prepared fused
+   handle. Current quiet result: exact top-k agreement is preserved on all wide
+   rows, and the non-full score path costs about `0.657x` to `0.871x` of the
+   host-top-k prepared score path, or about `0.154x` to `0.277x` of full CPU
+   candidate generation.
+38. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and FastPlaid scope rows after the resident ownership boundary
    exists.
-38. Only after a measured win, consider public API design.
+39. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

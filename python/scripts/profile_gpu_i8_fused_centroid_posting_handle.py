@@ -156,6 +156,12 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
             comparison.get("gpu_fused_handle_score_extension_call_mean_seconds"),
         )
         print_quiet_mean(
+            f"gpu_i8_fused_centroid_posting_handle_{name}_device_topk_score_extension",
+            comparison.get(
+                "gpu_fused_handle_device_topk_score_extension_call_mean_seconds"
+            ),
+        )
+        print_quiet_mean(
             f"gpu_i8_fused_centroid_posting_handle_{name}_score_host_plus_extension",
             comparison.get(
                 "gpu_fused_handle_score_host_plus_extension_mean_seconds"

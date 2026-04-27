@@ -227,6 +227,18 @@ def run_gpu_handle_probe(
             )
             for _ in range(measurement_iterations)
         ]
+        for _ in range(warmup_iterations):
+            handle.score_topk_device_without_reference(
+                queries=queries,
+                reference_document_scores=reference_scores,
+            )
+        device_results = [
+            handle.score_topk_device_without_reference(
+                queries=queries,
+                reference_document_scores=reference_scores,
+            )
+            for _ in range(measurement_iterations)
+        ]
         profile_result = handle.profile_topk_without_reference(
             queries=queries,
             reference_document_scores=reference_scores,
@@ -282,11 +294,31 @@ def run_gpu_handle_probe(
             result.topk_score_delta_max_abs for result in results
         ),
         "document_score_count": results[-1].document_score_count,
+        "device_topk_score_extension_call_mean_seconds": _mean(
+            result.extension_call_seconds for result in device_results
+        ),
+        "device_topk_score_extension_call_min_seconds": min(
+            result.extension_call_seconds for result in device_results
+        ),
+        "device_topk_score_extension_call_max_seconds": max(
+            result.extension_call_seconds for result in device_results
+        ),
+        "device_topk_position_agreement_min": min(
+            result.topk_position_agreement for result in device_results
+        ),
+        "device_topk_position_mismatch_max": max(
+            result.topk_position_count - result.topk_position_match_count
+            for result in device_results
+        ),
+        "device_topk_score_delta_max_abs": max(
+            result.topk_score_delta_max_abs for result in device_results
+        ),
         "profile": profile_result.to_json_ready(),
     }
     status = (
         STATUS_OK
         if parsed["topk_position_mismatch_max"] == 0
+        and parsed["device_topk_position_mismatch_max"] == 0
         else "error"
     )
     return {
@@ -307,6 +339,9 @@ def comparison_payload(
     )
     score_extension = optional_float(
         gpu_parsed.get("score_extension_call_mean_seconds")
+    )
+    device_topk_score_extension = optional_float(
+        gpu_parsed.get("device_topk_score_extension_call_mean_seconds")
     )
     score_host_marshalling = optional_float(
         gpu_parsed.get("score_host_marshalling_mean_seconds")
@@ -348,6 +383,9 @@ def comparison_payload(
             score_host_marshalling
         ),
         "gpu_fused_handle_score_extension_call_mean_seconds": score_extension,
+        "gpu_fused_handle_device_topk_score_extension_call_mean_seconds": (
+            device_topk_score_extension
+        ),
         "gpu_fused_handle_score_host_plus_extension_mean_seconds": (
             score_host_plus_extension
         ),
@@ -365,6 +403,14 @@ def comparison_payload(
         "gpu_fused_handle_score_extension_seconds_per_cpu_centroid_selection_posting_topk_second": ratio(
             score_extension,
             cpu_centroid_selection_posting_topk_seconds,
+        ),
+        "gpu_fused_handle_device_topk_score_extension_seconds_per_cpu_candidate_generation_second": ratio(
+            device_topk_score_extension,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "gpu_fused_handle_device_topk_score_extension_seconds_per_host_topk_score_extension_second": ratio(
+            device_topk_score_extension,
+            score_extension,
         ),
         "gpu_fused_handle_profile_kernel_chain_mean_seconds": (
             profile_kernel_chain
@@ -400,6 +446,18 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         )
         for row in non_full_rows
     ]
+    non_full_device_score_vs_candidate = [
+        row["comparison"].get(
+            "gpu_fused_handle_device_topk_score_extension_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
+    non_full_device_score_vs_host_score = [
+        row["comparison"].get(
+            "gpu_fused_handle_device_topk_score_extension_seconds_per_host_topk_score_extension_second"
+        )
+        for row in non_full_rows
+    ]
     return {
         "case_count": len(rows),
         "ok_case_count": len(ok_rows),
@@ -424,6 +482,18 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         ),
         "worst_non_full_score_extension_vs_cpu_centroid_selection_posting_topk_ratio": max_float(
             non_full_score_vs_slice
+        ),
+        "best_non_full_device_topk_score_extension_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_device_score_vs_candidate
+        ),
+        "worst_non_full_device_topk_score_extension_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_device_score_vs_candidate
+        ),
+        "best_non_full_device_topk_score_extension_vs_host_topk_score_extension_ratio": min_float(
+            non_full_device_score_vs_host_score
+        ),
+        "worst_non_full_device_topk_score_extension_vs_host_topk_score_extension_ratio": max_float(
+            non_full_device_score_vs_host_score
         ),
     }
 

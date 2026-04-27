@@ -91,6 +91,7 @@ class GpuI8FusedCentroidPostingHandleTests(unittest.TestCase):
                 "prepare_extension_call_seconds": 0.03,
                 "score_host_marshalling_mean_seconds": 0.004,
                 "score_extension_call_mean_seconds": 0.05,
+                "device_topk_score_extension_call_mean_seconds": 0.04,
                 "profile": {
                     "centroid_score_kernel_mean_seconds": 0.01,
                     "centroid_selection_kernel_mean_seconds": 0.02,
@@ -120,6 +121,18 @@ class GpuI8FusedCentroidPostingHandleTests(unittest.TestCase):
                 "gpu_fused_handle_score_extension_seconds_per_cpu_centroid_selection_posting_topk_second"
             ],
             0.5,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "gpu_fused_handle_device_topk_score_extension_seconds_per_cpu_candidate_generation_second"
+            ],
+            0.2,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "gpu_fused_handle_device_topk_score_extension_seconds_per_host_topk_score_extension_second"
+            ],
+            0.8,
         )
         self.assertAlmostEqual(
             comparison["gpu_fused_handle_profile_kernel_chain_mean_seconds"],
@@ -153,6 +166,12 @@ class GpuI8FusedCentroidPostingHandleTests(unittest.TestCase):
                 "worst_non_full_score_extension_vs_cpu_centroid_selection_posting_topk_ratio"
             ],
             0.4,
+        )
+        self.assertAlmostEqual(
+            summary[
+                "best_non_full_device_topk_score_extension_vs_cpu_candidate_generation_ratio"
+            ],
+            0.2,
         )
 
     def test_report_status_distinguishes_missing_gpu_from_failed_probe(self) -> None:
@@ -207,6 +226,12 @@ def _row(
             ),
             "gpu_fused_handle_score_extension_seconds_per_cpu_centroid_selection_posting_topk_second": (
                 slice_ratio
+            ),
+            "gpu_fused_handle_device_topk_score_extension_seconds_per_cpu_candidate_generation_second": (
+                candidate_ratio - 0.1
+            ),
+            "gpu_fused_handle_device_topk_score_extension_seconds_per_host_topk_score_extension_second": (
+                0.8
             ),
         },
     }
