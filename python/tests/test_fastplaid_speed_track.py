@@ -310,6 +310,45 @@ class FastPlaidSpeedTrackTests(unittest.TestCase):
         self.assertGreaterEqual(int(snapshot.token_codes.max()), 0)
         self.assertLessEqual(int(snapshot.token_codes.min()), 0)
 
+    def test_kayak_plaid_i8_selected_centroids_export_vector_budget(
+        self,
+    ) -> None:
+        documents = np.zeros((2, 2, 128), dtype=np.float32)
+        documents[0, 0, 0] = 1.0
+        documents[0, 1, 1] = -0.5
+        documents[1, 0, 2] = 0.25
+        documents[1, 1, 3] = -1.0
+        queries = np.zeros((1, 2, 128), dtype=np.float32)
+        queries[0, 0, 0] = 1.0
+        queries[0, 1, 3] = -1.0
+        index = KayakPlaidApproxIndex.build(
+            doc_ids=("doc-a", "doc-b"),
+            documents=documents,
+            config=KayakPlaidApproxConfig(
+                centroid_count=2,
+                centroids_per_query_vector=1,
+                candidate_k=2,
+                payload="i8",
+            ),
+            final_k=2,
+        )
+
+        selected = index.i8_selected_centroids_batch(queries)
+
+        self.assertEqual(selected.query_count, 1)
+        self.assertEqual(selected.query_vector_count, 2)
+        self.assertEqual(selected.centroids_per_query_vector, 1)
+        self.assertEqual(selected.selected_centroid_count_per_query, 2)
+        self.assertEqual(selected.selected_centroid_count_total, 2)
+        self.assertEqual(len(selected.positions_by_query), 1)
+        self.assertEqual(len(selected.positions_by_query[0]), 2)
+        self.assertEqual(len(selected.scores_by_query[0]), 2)
+        self.assertEqual(selected.positions_array().shape, (1, 2))
+        self.assertEqual(selected.scores_array().shape, (1, 2))
+        for position in selected.positions_by_query[0]:
+            self.assertGreaterEqual(position, 0)
+            self.assertLess(position, index.centroid_count)
+
     def test_script_emits_kayak_only_smoke_report(self) -> None:
         temp_root = Path(tempfile.mkdtemp())
         output_path = temp_root / "summary.json"

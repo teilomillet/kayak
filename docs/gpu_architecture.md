@@ -553,6 +553,16 @@ posting-accumulation target. The next justified step is a benchmark-only GPU
 posting-accumulation probe for the non-full rows while final candidate top-k
 stays on CPU.
 
+Selected-centroid boundary finding: the CPU i8 lane now exposes the selected
+centroid positions and matching proxy scores per query, flattened in
+query-vector-major order. This is an internal benchmark boundary, not a public
+API. It lets a future GPU posting-accumulation probe consume the exact same
+centroid decisions as the CPU reference.
+
+Reason: centroid selection and posting traversal must stay separable while the
+GPU candidate-generation primitive is being validated. Otherwise a kernel
+mistake could be hidden behind a different centroid-selection policy.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -804,12 +814,15 @@ evidence only justifies a measured primitive.
    posting kernel. Current quiet result: payload copy/readback is correct on
    all measured rows, and non-full H2D plus validation readback costs about
    `2.73%` to `7.36%` of CPU candidate-generation time.
-29. Add a benchmark-only GPU posting-accumulation probe for non-full rows while
+29. Expose selected centroid ids and proxy scores as the fixed input contract
+   for a future GPU posting-accumulation probe. Current result: Python tests
+   validate the explicit query vector and centroid budget shapes.
+30. Add a benchmark-only GPU posting-accumulation probe for non-full rows while
    final candidate top-k remains on CPU.
-30. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+31. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-31. Only after a measured win, consider public API design.
+32. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

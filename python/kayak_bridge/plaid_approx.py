@@ -108,6 +108,53 @@ class KayakPlaidI8PayloadSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class KayakPlaidI8SelectedCentroids:
+    """Selected centroid ids and scores for benchmark-only GPU probes."""
+
+    positions_by_query: tuple[tuple[int, ...], ...]
+    scores_by_query: tuple[tuple[float, ...], ...]
+    query_count: int
+    query_vector_count: int
+    centroids_per_query_vector: int
+
+    def validate(self) -> None:
+        if self.query_count <= 0:
+            raise ValueError("query_count must be positive")
+        if self.query_vector_count <= 0:
+            raise ValueError("query_vector_count must be positive")
+        if self.centroids_per_query_vector <= 0:
+            raise ValueError("centroids_per_query_vector must be positive")
+        if len(self.positions_by_query) != self.query_count:
+            raise ValueError("selected centroid position rows must match query_count")
+        if len(self.scores_by_query) != self.query_count:
+            raise ValueError("selected centroid score rows must match query_count")
+        expected = self.selected_centroid_count_per_query
+        for positions, scores in zip(self.positions_by_query, self.scores_by_query):
+            if len(positions) != expected:
+                raise ValueError(
+                    "selected centroid positions must match query vectors * budget"
+                )
+            if len(scores) != expected:
+                raise ValueError(
+                    "selected centroid scores must match query vectors * budget"
+                )
+
+    @property
+    def selected_centroid_count_per_query(self) -> int:
+        return self.query_vector_count * self.centroids_per_query_vector
+
+    @property
+    def selected_centroid_count_total(self) -> int:
+        return self.query_count * self.selected_centroid_count_per_query
+
+    def positions_array(self) -> np.ndarray:
+        return np.ascontiguousarray(self.positions_by_query, dtype=INDEX_OFFSET_DTYPE)
+
+    def scores_array(self) -> np.ndarray:
+        return np.ascontiguousarray(self.scores_by_query, dtype=VECTOR_DTYPE)
+
+
+@dataclass(frozen=True, slots=True)
 class KayakPlaidApproxIndex:
     """Prepared Mojo PLAID approximation index with explicit payload semantics."""
 
@@ -382,6 +429,45 @@ class KayakPlaidApproxIndex:
             self._prepared_index,
         )
         return tuple(tuple(float(score) for score in row) for row in rows)
+
+    def i8_selected_centroids_batch(
+        self,
+        queries: np.ndarray,
+        *,
+        centroids_per_query_vector: int | None = None,
+    ) -> KayakPlaidI8SelectedCentroids:
+        if self.config.payload != PLAID_PAYLOAD_I8:
+            raise ValueError("i8 selected centroids require payload='i8'")
+        normalized_queries = _as_query_tensor(queries, vector_dim=self.vector_dim)
+        centroid_budget = (
+            self.config.centroids_per_query_vector
+            if centroids_per_query_vector is None
+            else int(centroids_per_query_vector)
+        )
+        _require_positive("centroids_per_query_vector", centroid_budget)
+        module = load_module()
+        rows = module.plaid_i8_selected_centroids_prepared_batch_address(
+            int(normalized_queries.ctypes.data),
+            int(normalized_queries.shape[0]),
+            int(normalized_queries.shape[1]),
+            centroid_budget,
+            self._prepared_index,
+        )
+        if len(rows) != 2:
+            raise RuntimeError("selected centroid export returned invalid shape")
+        selected = KayakPlaidI8SelectedCentroids(
+            positions_by_query=tuple(
+                tuple(int(position) for position in row) for row in rows[0]
+            ),
+            scores_by_query=tuple(
+                tuple(float(score) for score in row) for row in rows[1]
+            ),
+            query_count=int(normalized_queries.shape[0]),
+            query_vector_count=int(normalized_queries.shape[1]),
+            centroids_per_query_vector=centroid_budget,
+        )
+        selected.validate()
+        return selected
 
     def i8_payload_snapshot(self) -> KayakPlaidI8PayloadSnapshot:
         if self.config.payload != PLAID_PAYLOAD_I8:
