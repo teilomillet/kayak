@@ -290,6 +290,57 @@ Interpretation:
   long-document candidate coverage needs a wider or different candidate
   generator before exact/rerank optimization matters
 
+LEMB 8-query sweep:
+
+Command:
+
+```bash
+pixi run env PYTHONPATH=python python python/scripts/build_lemb_narrativeqa_task_json.py \
+  --query-limit 8 \
+  --output .cache/kayak/lemb_narrativeqa_q8/python_task.json
+
+pixi run env PYTHONPATH=python python python/scripts/sweep_task_plaid_i8_candidate_generation.py \
+  --task .cache/kayak/lemb_narrativeqa_q8/python_task.json \
+  --query-limit 8 \
+  --candidate-k 128 \
+  --candidate-k 256 \
+  --candidate-k 320 \
+  --candidate-k 355 \
+  --centroids-per-query-vector 16 \
+  --centroids-per-query-vector 32 \
+  --measurement-iterations 2 \
+  --emit-quiet-mean \
+  --output .cache/kayak/lemb_narrativeqa_q8/plaid_i8_candidate_sweep.json
+```
+
+Artifact:
+
+- `.cache/kayak/lemb_narrativeqa_q8/plaid_i8_candidate_sweep.json`
+
+Result:
+
+| window | centroids/qv | full candidate s/query | posting accumulation s/query | final top-k s/query | candidate vectors/query | recall vs exact@10 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `128` | `16` | `0.0001922000484607046` | `0.00007940219487953449` | `0.000019177012056901223` | `23040` | `0.6375000000000001` |
+| `256` | `16` | `0.00020208386306747348` | `0.00008035657848181775` | `0.000025913055759778397` | `46080` | `0.8250000000000001` |
+| `320` | `16` | `0.00020341048046864236` | `0.00007988722730938275` | `0.000028895386383257007` | `57600` | `0.9375000000000001` |
+| `355` | `16` | `0.00000008974478124253368` | `0.00007995513954938462` | `0.000029780368732971222` | `63900` | `1.0` |
+| `128` | `32` | `0.00025522160320680127` | `0.00009966128495545903` | `0.000016998011902738085` | `23040` | `0.65` |
+| `256` | `32` | `0.00026392140761615846` | `0.00010029017157037523` | `0.000025901202930713874` | `46080` | `0.8250000000000001` |
+| `320` | `32` | `0.0002669514987591312` | `0.00009967418653626703` | `0.000028924060293579526` | `57600` | `0.9375000000000001` |
+| `355` | `32` | `0.00000009052217084618913` | `0.0001009920899119679` | `0.000029688344058692924` | `63900` | `1.0` |
+
+Interpretation:
+
+- the 8-query sweep confirms the 2-query signal: window width is the active
+  recall lever on this LEMB slice, while more selected centroids adds cost and
+  little or no recall
+- `candidate_k=320` gets close to exact (`0.9375`) without full-window
+  fallback; `candidate_k=355` is exact because it includes all documents
+- the sweep runner currently rebuilds the prepared i8 index per row; future
+  repeated sweeps should reuse prepared indexes per centroid budget before
+  using setup time as evidence
+
 Example smoke command:
 
 ```bash
