@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from datetime import UTC, datetime
 import json
 from pathlib import Path
 import sys
+import time
 from typing import Any, Sequence
 
 
@@ -14,10 +16,16 @@ if str(PYTHON_ROOT) not in sys.path:
     sys.path.append(str(PYTHON_ROOT))
 
 from kayak_bridge.json_task_loader import load_task_json  # noqa: E402
-from kayak_bridge.late_ops import MOJO_EXACT_CPU_BACKEND  # noqa: E402
+from kayak_bridge.late_ops import MOJO_EXACT_CPU_BACKEND, search  # noqa: E402
 from kayak_bridge.plaid_task_candidate_profile import (  # noqa: E402
     PlaidTaskCandidateProfileControls,
-    profile_task_plaid_i8_candidate_generation,
+    build_late_index_from_task,
+    build_late_queries_from_task,
+    profile_prepared_task_plaid_i8_candidate_generation,
+)
+from kayak_bridge.plaid_approx import (  # noqa: E402
+    KayakPlaidApproxConfig,
+    KayakPlaidApproxIndex,
 )
 
 
@@ -61,12 +69,65 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def build_report(args: argparse.Namespace) -> dict[str, Any]:
     task = load_task_json(str(args.task))
+    final_k = int(task["k"])
+    candidate_windows = dedupe_ints(args.candidate_windows)
+    centroid_budgets = dedupe_ints(args.centroid_budgets)
+
+    started_at = time.perf_counter()
+    late_index = build_late_index_from_task(task)
+    late_queries = build_late_queries_from_task(task)
+    selected_queries = (
+        late_queries
+        if args.query_limit is None
+        else late_queries[: args.query_limit]
+    )
+    index_build_seconds = time.perf_counter() - started_at
+
+    if not selected_queries:
+        raise ValueError("task must provide at least one selected query")
+
+    prepare_started_at = time.perf_counter()
+    base_plaid_index = KayakPlaidApproxIndex.from_late_index(
+        late_index,
+        config=KayakPlaidApproxConfig(
+            centroid_count=args.centroid_count,
+            centroids_per_query_vector=centroid_budgets[0],
+            candidate_k=max(candidate_windows),
+            payload="i8",
+        ),
+        final_k=final_k,
+    )
+    plaid_prepare_seconds = time.perf_counter() - prepare_started_at
+    exact_doc_ids_by_query = None
+    if not args.skip_exact_reference:
+        exact_doc_ids_by_query = [
+            tuple(
+                hit.doc_id
+                for hit in search(
+                    late_query,
+                    late_index,
+                    k=final_k,
+                    backend=args.exact_backend,
+                )
+            )
+            for late_query in selected_queries
+        ]
+
     reports = []
-    for centroid_budget in dedupe_ints(args.centroid_budgets):
-        for candidate_k in dedupe_ints(args.candidate_windows):
-            report = profile_task_plaid_i8_candidate_generation(
+    for centroid_budget in centroid_budgets:
+        for candidate_k in candidate_windows:
+            row_config = KayakPlaidApproxConfig(
+                centroid_count=args.centroid_count,
+                centroids_per_query_vector=centroid_budget,
+                candidate_k=candidate_k,
+                payload="i8",
+            )
+            report = profile_prepared_task_plaid_i8_candidate_generation(
                 task,
-                PlaidTaskCandidateProfileControls(
+                late_index=late_index,
+                selected_queries=selected_queries,
+                plaid_index=replace(base_plaid_index, config=row_config),
+                controls=PlaidTaskCandidateProfileControls(
                     centroid_count=args.centroid_count,
                     centroids_per_query_vector=centroid_budget,
                     candidate_k=candidate_k,
@@ -75,6 +136,9 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
                     exact_reference=not args.skip_exact_reference,
                     exact_backend=args.exact_backend,
                 ),
+                index_build_seconds=index_build_seconds,
+                plaid_prepare_seconds=plaid_prepare_seconds,
+                exact_doc_ids_by_query=exact_doc_ids_by_query,
             )
             reports.append(
                 {
@@ -95,18 +159,22 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "task_path": str(args.task),
         "controls": {
             "centroid_count": args.centroid_count,
-            "centroids_per_query_vector": dedupe_ints(args.centroid_budgets),
-            "candidate_k": dedupe_ints(args.candidate_windows),
+            "centroids_per_query_vector": centroid_budgets,
+            "candidate_k": candidate_windows,
             "query_limit": args.query_limit,
             "measurement_iterations": args.measurement_iterations,
             "exact_reference": not args.skip_exact_reference,
             "exact_backend": args.exact_backend,
+            "exact_reference_cached": exact_doc_ids_by_query is not None,
         },
         "rows": reports,
         "measurement_note": (
-            "Each row rebuilds the internal PLAID i8 prepared index. Use row "
-            "aggregates for candidate-generation policy comparisons; use the "
-            "per-row prepare time only as setup context."
+            "The sweep builds the public task index and internal PLAID i8 "
+            "prepared index once, then reuses that prepared payload across "
+            "candidate-window and centroid-budget rows. Row aggregates are "
+            "the candidate-generation policy evidence; setup timings are "
+            "shared context. Exact-reference top-k doc ids are also cached "
+            "once per selected query when exact reference is enabled."
         ),
     }
 

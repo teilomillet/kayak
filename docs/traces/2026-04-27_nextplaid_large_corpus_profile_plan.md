@@ -337,9 +337,23 @@ Interpretation:
   little or no recall
 - `candidate_k=320` gets close to exact (`0.9375`) without full-window
   fallback; `candidate_k=355` is exact because it includes all documents
-- the sweep runner currently rebuilds the prepared i8 index per row; future
-  repeated sweeps should reuse prepared indexes per centroid budget before
-  using setup time as evidence
+- the initial sweep runner rebuilt the prepared i8 index per row; that was a
+  harness limitation, not a search-policy result
+
+Harness update after the q8 run:
+
+- `python/scripts/sweep_task_plaid_i8_candidate_generation.py` now builds the
+  public task index and internal PLAID i8 prepared index once, then reuses that
+  prepared payload across candidate-window and centroid-budget rows
+- exact-reference top-k doc ids are cached once per selected query when exact
+  reference is enabled
+- rerunning the q8 sweep wrote
+  `.cache/kayak/lemb_narrativeqa_q8/plaid_i8_candidate_sweep_cached.json`
+  with `exact_reference_cached: true`
+- the recall pattern was unchanged: `0.6375`, `0.825`, `0.9375`, and `1.0`
+  across windows `128`, `256`, `320`, and full-window `355` for the
+  `16`-centroid budget; the `32`-centroid budget again did not materially
+  improve recall
 
 Example smoke command:
 

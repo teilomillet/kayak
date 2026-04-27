@@ -163,6 +163,47 @@ def profile_task_plaid_i8_candidate_generation(
     )
     plaid_prepare_seconds = time.perf_counter() - plaid_started_at
 
+    return profile_prepared_task_plaid_i8_candidate_generation(
+        task,
+        late_index=late_index,
+        selected_queries=selected_queries,
+        plaid_index=plaid_index,
+        controls=controls,
+        index_build_seconds=index_build_seconds,
+        plaid_prepare_seconds=plaid_prepare_seconds,
+    )
+
+
+def profile_prepared_task_plaid_i8_candidate_generation(
+    task: Mapping[str, Any],
+    *,
+    late_index: LateIndex,
+    selected_queries: Sequence[LateQuery],
+    plaid_index: KayakPlaidApproxIndex,
+    controls: PlaidTaskCandidateProfileControls,
+    index_build_seconds: float = 0.0,
+    plaid_prepare_seconds: float = 0.0,
+    exact_doc_ids_by_query: Sequence[Sequence[str]] | None = None,
+) -> dict[str, Any]:
+    final_k = int(task["k"])
+    controls.validate(final_k=final_k)
+    if plaid_index.config.candidate_k != controls.candidate_k:
+        raise ValueError("prepared PLAID index config must match candidate_k")
+    if (
+        plaid_index.config.centroids_per_query_vector
+        != controls.centroids_per_query_vector
+    ):
+        raise ValueError(
+            "prepared PLAID index config must match centroids_per_query_vector"
+        )
+    if not selected_queries:
+        raise ValueError("task must provide at least one selected query")
+    if (
+        exact_doc_ids_by_query is not None
+        and len(exact_doc_ids_by_query) != len(selected_queries)
+    ):
+        raise ValueError("exact_doc_ids_by_query must match selected query count")
+
     profile_rows = [
         profile_query(
             late_index=late_index,
@@ -171,6 +212,11 @@ def profile_task_plaid_i8_candidate_generation(
             query_index=query_index,
             final_k=final_k,
             controls=controls,
+            exact_doc_ids=(
+                None
+                if exact_doc_ids_by_query is None
+                else exact_doc_ids_by_query[query_index]
+            ),
         )
         for query_index, late_query in enumerate(selected_queries)
     ]
@@ -226,6 +272,7 @@ def profile_query(
     query_index: int,
     final_k: int,
     controls: PlaidTaskCandidateProfileControls,
+    exact_doc_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     query_matrix = np.expand_dims(
         late_query.as_vector_matrix().astype(VECTOR_DTYPE, copy=False),
@@ -276,15 +323,17 @@ def profile_query(
         "profile": profile,
     }
     if controls.exact_reference:
-        exact_hits = search(
-            late_query,
-            late_index,
-            k=final_k,
-            backend=controls.exact_backend,
-        )
+        if exact_doc_ids is None:
+            exact_hits = search(
+                late_query,
+                late_index,
+                k=final_k,
+                backend=controls.exact_backend,
+            )
+            exact_doc_ids = [hit.doc_id for hit in exact_hits]
         row["candidate_recall_at_k_vs_exact"] = candidate_recall_at_k(
             candidate_doc_ids,
-            [hit.doc_id for hit in exact_hits],
+            exact_doc_ids,
             k=final_k,
         )
     return row
