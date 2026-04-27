@@ -197,6 +197,81 @@ exact-rerank dominated, while the `1024`-document full-window rows are
 candidate-generation dominated. The next optimization should therefore be
 chosen from the row being targeted, not from the matrix mean alone.
 
+## Full-Window Ranking Fast Path
+
+Follow-up claim: when `candidate_k == document_count`, the dense selected-posting
+candidate scorer still needs to preserve score order, but it should not use the
+partial-top-k path.
+
+Reason: the old helper used `argpartition` plus threshold handling even though a
+full window needs a complete score ordering. A stable descending `argsort`
+preserves the existing tie-break by document id and avoids the extra partition
+work.
+
+Local focused check:
+
+```bash
+pixi run env PYTHONPATH=python python -c 'import numpy as np, timeit; from kayak_bridge.mojo_gpu_i8_rerank import _rank_document_scores_numpy; rng=np.random.default_rng(7); scores=rng.normal(size=2048).astype(np.float32); print(timeit.timeit(lambda: _rank_document_scores_numpy(scores, query_count=2, document_count=1024, top_k=1024), number=1000))'
+```
+
+Result:
+
+| version | 1000 calls on 2x1024 full-window scores |
+| --- | ---: |
+| before | `0.320596072000626` |
+| after | `0.05686295300256461` |
+
+Targeted validation:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 300 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_policy.py --case documents1024_k256:documents=1024,document_vectors=16,queries=2,query_vectors=8,candidate_k=256 --candidate-window-policy coverage_safety_v0 --fastplaid-devices cuda --seed 10 --fixed-case-seed --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/documents1024_full_window_rank_fastpath_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/documents1024_full_window_rank_fastpath_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/documents1024_full_window_rank_fastpath_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T190542Z`
+
+Targeted `documents1024_k256` CUDA result:
+
+| metric | before reusable-session matrix | after targeted run |
+| --- | ---: | ---: |
+| candidate selection seconds | `0.0003908500002580695` | `0.00010980500519508496` |
+| resident / FastPlaid | `0.35583497335955816` | `0.25730388724538644` |
+| recall delta vs FastPlaid | `+0.5` | `+0.75` |
+| candidate agreement min | `1.0` | `1.0` |
+| final agreement min | `1.0` | `1.0` |
+
+Full matrix validation:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 360 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_candidate_window_policies.py --candidate-window-policy coverage_safety_v0 --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_full_window_rank_fastpath_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_full_window_rank_fastpath_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_full_window_rank_fastpath_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T190618Z`
+
+Aggregate result:
+
+| version | rows ok | min recall delta vs FastPlaid | mean resident / FastPlaid | max resident / FastPlaid | mean candidate share |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| reusable selected-posting session | `8 / 8` | `+0.050000000000000044` | `0.12560525946839413` | `0.35583497335955816` | `0.314886390062308` |
+| full-window ranking fast path | `8 / 8` | `+0.050000000000000044` | `0.12108878426361634` | `0.28820741786941106` | `0.2565679072911855` |
+
+Decision: keep the fast path.
+
+Reason: it preserves candidate and final order agreement, improves the worst
+matrix row, and is limited to the shape where the old partial-top-k algorithm
+was provably doing unnecessary work.
+
+Updated interpretation: after this change, the `documents1024` full-window rows
+are CPU selected-centroid dominated, while the `doc_vectors96` rows remain
+exact-rerank dominated. The next optimization should target CPU selected
+centroids only if the goal is reducing the previous worst row; otherwise the
+vector-heavy rows require exact-rerank work.
+
 ## Decision
 
 Keep `coverage_safety_v0` as the next benchmark policy candidate.

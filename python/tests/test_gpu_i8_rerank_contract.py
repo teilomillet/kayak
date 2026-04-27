@@ -53,6 +53,7 @@ from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
     MojoGpuI8AddressTopKResult,
     MojoGpuI8PreparedSessionResult,
     MojoGpuI8RerankBridgeResult,
+    _rank_document_scores_numpy,
 )
 from kayak_bridge.gpu_i8_rerank_contract import (  # noqa: E402
     GPU_RERANK_STATUS_BACKEND_INTEGRATION_MISSING,
@@ -309,6 +310,26 @@ class GpuI8RerankContractTests(unittest.TestCase):
         self.assertEqual(
             ranked,
             ((8, 9), (1, 2)),
+        )
+
+    def test_full_document_score_ranking_preserves_score_then_doc_order(self) -> None:
+        positions, scores = _rank_document_scores_numpy(
+            np.array(
+                [
+                    [1.0, 2.0, 2.0, 0.0, 1.0],
+                    [3.0, 3.0, 1.0, 2.0, 2.0],
+                ],
+                dtype=np.float32,
+            ).ravel(),
+            query_count=2,
+            document_count=5,
+            top_k=5,
+        )
+
+        self.assertEqual(positions, (1, 2, 0, 4, 3, 0, 1, 3, 4, 2))
+        self.assertEqual(
+            scores,
+            (2.0, 2.0, 1.0, 1.0, 0.0, 3.0, 3.0, 2.0, 2.0, 1.0),
         )
 
     def test_report_status_distinguishes_hardware_from_runtime(self) -> None:

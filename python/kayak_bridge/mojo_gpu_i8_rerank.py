@@ -3282,6 +3282,15 @@ def _rank_document_scores_numpy(
     if int(score_array.size) != expected_count:
         raise ValueError("scores shape does not match document scores")
     score_matrix = score_array.reshape(query_count, document_count)
+    if top_k == document_count:
+        ranked_positions: list[int] = []
+        ranked_scores: list[float] = []
+        for row in score_matrix:
+            order = np.argsort(-row, kind="stable")
+            ranked_positions.extend(order.tolist())
+            ranked_scores.extend(row[order].tolist())
+        return tuple(ranked_positions), tuple(ranked_scores)
+
     doc_positions = np.arange(document_count, dtype=np.int64)
     ranked_positions: list[int] = []
     ranked_scores: list[float] = []
