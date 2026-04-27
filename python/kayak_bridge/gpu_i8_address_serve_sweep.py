@@ -205,6 +205,7 @@ def comparison_payload(
     multi_window_parsed: dict[str, object] | None = None,
     prepared_handle_parsed: dict[str, object] | None = None,
     prepared_handle_topk_parsed: dict[str, object] | None = None,
+    prepared_handle_topk_no_reference_parsed: dict[str, object] | None = None,
 ) -> dict[str, float | None]:
     gpu_extension_call = optional_float(gpu_parsed.get("extension_call_seconds"))
     resident = resident_parsed if resident_parsed is not None else {}
@@ -228,6 +229,16 @@ def comparison_payload(
     )
     prepared_handle_topk_per_window = optional_float(
         prepared_handle_topk.get("score_extension_call_seconds_per_window")
+    )
+    prepared_handle_topk_no_reference = (
+        prepared_handle_topk_no_reference_parsed
+        if prepared_handle_topk_no_reference_parsed is not None
+        else {}
+    )
+    prepared_handle_topk_no_reference_per_window = optional_float(
+        prepared_handle_topk_no_reference.get(
+            "score_extension_call_seconds_per_window"
+        )
     )
     cpu_candidate_plus_score = (
         cpu_candidate_generation_mean_seconds + cpu_score_mean_seconds
@@ -255,6 +266,12 @@ def comparison_payload(
     cpu_multi_window_candidate_plus_prepared_handle_topk = sum_optional(
         cpu_multi_window_candidate_generation_mean_seconds_per_window,
         prepared_handle_topk_per_window,
+    )
+    cpu_multi_window_candidate_plus_prepared_handle_topk_no_reference = (
+        sum_optional(
+            cpu_multi_window_candidate_generation_mean_seconds_per_window,
+            prepared_handle_topk_no_reference_per_window,
+        )
     )
     return {
         "cpu_i8_candidate_generation_mean_seconds": (
@@ -286,6 +303,9 @@ def comparison_payload(
         "gpu_address_prepared_handle_topk_extension_call_seconds_per_window": (
             prepared_handle_topk_per_window
         ),
+        "gpu_address_prepared_handle_topk_no_reference_extension_call_seconds_per_window": (
+            prepared_handle_topk_no_reference_per_window
+        ),
         "cpu_candidate_generation_plus_gpu_address_serve_seconds": (
             cpu_candidate_plus_gpu_score
         ),
@@ -300,6 +320,9 @@ def comparison_payload(
         ),
         "cpu_multi_window_candidate_generation_plus_gpu_prepared_handle_topk_seconds_per_window": (
             cpu_multi_window_candidate_plus_prepared_handle_topk
+        ),
+        "cpu_multi_window_candidate_generation_plus_gpu_prepared_handle_topk_no_reference_seconds_per_window": (
+            cpu_multi_window_candidate_plus_prepared_handle_topk_no_reference
         ),
         "gpu_address_serve_extension_call_seconds_per_cpu_score_second": ratio(
             gpu_extension_call,
@@ -321,9 +344,21 @@ def comparison_payload(
             prepared_handle_topk_per_window,
             cpu_multi_window_score_mean_seconds_per_window,
         ),
+        "gpu_address_prepared_handle_topk_no_reference_seconds_per_cpu_multi_window_score_second": ratio(
+            prepared_handle_topk_no_reference_per_window,
+            cpu_multi_window_score_mean_seconds_per_window,
+        ),
         "gpu_address_prepared_handle_topk_seconds_per_prepared_handle_score_second": ratio(
             prepared_handle_topk_per_window,
             prepared_handle_per_window,
+        ),
+        "gpu_address_prepared_handle_topk_no_reference_seconds_per_prepared_handle_score_second": ratio(
+            prepared_handle_topk_no_reference_per_window,
+            prepared_handle_per_window,
+        ),
+        "gpu_address_prepared_handle_topk_no_reference_seconds_per_validating_topk_second": ratio(
+            prepared_handle_topk_no_reference_per_window,
+            prepared_handle_topk_per_window,
         ),
         "cpu_candidate_plus_gpu_address_serve_seconds_per_cpu_candidate_plus_score_second": ratio(
             cpu_candidate_plus_gpu_score,
@@ -343,6 +378,10 @@ def comparison_payload(
         ),
         "cpu_multi_window_candidate_plus_gpu_prepared_handle_topk_seconds_per_cpu_multi_window_candidate_plus_score_second": ratio(
             cpu_multi_window_candidate_plus_prepared_handle_topk,
+            cpu_multi_window_candidate_plus_score,
+        ),
+        "cpu_multi_window_candidate_plus_gpu_prepared_handle_topk_no_reference_seconds_per_cpu_multi_window_candidate_plus_score_second": ratio(
+            cpu_multi_window_candidate_plus_prepared_handle_topk_no_reference,
             cpu_multi_window_candidate_plus_score,
         ),
     }
@@ -426,6 +465,30 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         )
         for row in ok_rows
     ]
+    prepared_handle_topk_no_reference_ratios = [
+        row["comparison"].get(
+            "gpu_address_prepared_handle_topk_no_reference_seconds_per_cpu_multi_window_score_second"
+        )
+        for row in ok_rows
+    ]
+    prepared_handle_topk_no_reference_envelope_ratios = [
+        row["comparison"].get(
+            "cpu_multi_window_candidate_plus_gpu_prepared_handle_topk_no_reference_seconds_per_cpu_multi_window_candidate_plus_score_second"
+        )
+        for row in ok_rows
+    ]
+    prepared_handle_topk_no_reference_vs_score_ratios = [
+        row["comparison"].get(
+            "gpu_address_prepared_handle_topk_no_reference_seconds_per_prepared_handle_score_second"
+        )
+        for row in ok_rows
+    ]
+    prepared_handle_topk_no_reference_vs_validating_ratios = [
+        row["comparison"].get(
+            "gpu_address_prepared_handle_topk_no_reference_seconds_per_validating_topk_second"
+        )
+        for row in ok_rows
+    ]
     return {
         "case_count": len(rows),
         "ok_case_count": len(ok_rows),
@@ -478,6 +541,30 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         ),
         "worst_prepared_handle_topk_vs_score_ratio": max_float(
             prepared_handle_topk_vs_score_ratios
+        ),
+        "best_prepared_handle_topk_no_reference_gpu_ratio": min_float(
+            prepared_handle_topk_no_reference_ratios
+        ),
+        "worst_prepared_handle_topk_no_reference_gpu_ratio": max_float(
+            prepared_handle_topk_no_reference_ratios
+        ),
+        "best_candidate_plus_prepared_handle_topk_no_reference_ratio": (
+            min_float(prepared_handle_topk_no_reference_envelope_ratios)
+        ),
+        "worst_candidate_plus_prepared_handle_topk_no_reference_ratio": (
+            max_float(prepared_handle_topk_no_reference_envelope_ratios)
+        ),
+        "best_prepared_handle_topk_no_reference_vs_score_ratio": min_float(
+            prepared_handle_topk_no_reference_vs_score_ratios
+        ),
+        "worst_prepared_handle_topk_no_reference_vs_score_ratio": max_float(
+            prepared_handle_topk_no_reference_vs_score_ratios
+        ),
+        "best_prepared_handle_topk_no_reference_vs_validating_ratio": (
+            min_float(prepared_handle_topk_no_reference_vs_validating_ratios)
+        ),
+        "worst_prepared_handle_topk_no_reference_vs_validating_ratio": (
+            max_float(prepared_handle_topk_no_reference_vs_validating_ratios)
         ),
     }
 

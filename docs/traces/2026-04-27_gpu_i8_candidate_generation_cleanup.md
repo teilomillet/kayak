@@ -189,3 +189,16 @@ Observed:
 - final wide quiet sweep status: `ok`
 - final default quiet sweep status: `ok`
 - final FastPlaid CPU and CUDA comparisons status: `ok`
+
+## Follow-Up
+
+[2026-04-27 GPU I8 No-Reference Top-K And FastPlaid Context](2026-04-27_gpu_i8_no_reference_topk_and_fastplaid.md)
+added the no-reference top-k serving row and the Python bridge full-window
+candidate shortcut, then added typed-address query ingestion for non-full
+candidate windows. On the same wide `candidate1024` shape, the updated
+CPU-candidates-plus-GPU-no-reference-top-k boundary measured about
+`0.000166s/window` against FastPlaid CUDA full search at about
+`0.002212s/batch`. On the wide non-full-window cases, candidate generation
+fell to about `0.000923s/window` for `query_vectors32`,
+`0.000427s/window` for `doc_vectors64`, and `0.000774s/window` for
+`query_batch4`.

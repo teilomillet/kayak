@@ -143,6 +143,30 @@ class MojoGpuI8AddressTopKResult:
 
 
 @dataclass(frozen=True, slots=True)
+class MojoGpuI8AddressTopKNoReferenceResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    candidate_score_count: int
+    top_k: int
+    positions: tuple[int, ...]
+    scores: tuple[float, ...]
+
+    @property
+    def topk_position_count(self) -> int:
+        return len(self.positions)
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "candidate_score_count": self.candidate_score_count,
+            "top_k": self.top_k,
+            "topk_position_count": self.topk_position_count,
+            "score_count": len(self.scores),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class MojoGpuI8AddressResidentSessionResult:
     host_marshalling_seconds: float
     extension_call_seconds: float
@@ -348,6 +372,67 @@ class MojoGpuI8AddressSessionHandle:
             candidate_score_count=int(raw_result[1]),
             top_k=int(raw_result[2]),
             topk_position_match_count=topk_position_match_count,
+            positions=positions,
+            scores=scores,
+        )
+
+    def score_topk_without_reference(
+        self,
+        *,
+        queries: np.ndarray,
+        candidate_positions_by_query: Sequence[Sequence[int]],
+        top_k: int,
+    ) -> MojoGpuI8AddressTopKNoReferenceResult:
+        if self._closed or self.handle == 0:
+            raise RuntimeError("GPU i8 address session handle is closed")
+        if top_k <= 0:
+            raise ValueError("top_k must be positive")
+        if top_k > self.candidate_k:
+            raise ValueError("top_k must not exceed candidate_k")
+
+        marshalling_started_at = time.perf_counter()
+        query_values = _float32_array(queries)
+        expected_query_values = (
+            int(self.shape.query_count)
+            * int(self.shape.query_vector_count)
+            * int(self.shape.vector_dim)
+        )
+        if query_values.size != expected_query_values:
+            raise ValueError("queries shape must match the prepared handle shape")
+        candidate_positions = _flatten_int_rows_array(
+            candidate_positions_by_query,
+            expected_rows=int(self.shape.query_count),
+            expected_cols=int(self.candidate_k),
+            name="candidate_positions_by_query",
+        )
+        host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+        module = load_module(target_accelerator=self.target_accelerator)
+        request = [
+            int(self.handle),
+            _array_address(query_values),
+            _array_address(candidate_positions),
+            int(top_k),
+        ]
+        extension_started_at = time.perf_counter()
+        raw_result = module.score_i8_address_session_handle_topk_no_reference(
+            request
+        )
+        extension_call_seconds = time.perf_counter() - extension_started_at
+
+        if len(raw_result) != 4:
+            raise RuntimeError(
+                "GPU i8 address session no-reference top-k returned an "
+                "unexpected result shape"
+            )
+
+        positions = tuple(int(value) for value in raw_result[2])
+        scores = tuple(float(value) for value in raw_result[3])
+        return MojoGpuI8AddressTopKNoReferenceResult(
+            host_marshalling_seconds=host_marshalling_seconds,
+            extension_call_seconds=extension_call_seconds,
+            candidate_score_count=int(raw_result[0]),
+            top_k=int(raw_result[1]),
             positions=positions,
             scores=scores,
         )

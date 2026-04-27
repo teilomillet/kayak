@@ -15,6 +15,7 @@ from kayak_bridge.gpu_device_capability import MojoGpuCapability
 from kayak_bridge.gpu_i8_address_resident_windows import (
     build_query_windows,
     reshape_windows,
+    run_cross_call_prepared_handle_topk_no_reference_probe,
     run_cross_call_prepared_handle_topk_probe,
     timing_payload_per_window,
 )
@@ -110,6 +111,16 @@ def build_prepared_handle_topk_scope_row(
         warmup_iterations=args.warmup_iterations,
         measurement_iterations=args.measurement_iterations,
     )
+    candidate_position_windows = reshape_windows(
+        multi_candidate_positions,
+        window_count=controls.resident_session_iterations,
+        query_count=shape.query_count,
+    )
+    reference_score_windows = reshape_windows(
+        multi_reference_scores,
+        window_count=controls.resident_session_iterations,
+        query_count=shape.query_count,
+    )
     probe = run_cross_call_prepared_handle_topk_probe(
         case=case,
         shape=shape,
@@ -117,18 +128,21 @@ def build_prepared_handle_topk_scope_row(
         capability=capability,
         query_windows=query_windows,
         payload=index.i8_payload_snapshot(),
-        candidate_positions=reshape_windows(
-            multi_candidate_positions,
-            window_count=controls.resident_session_iterations,
-            query_count=shape.query_count,
-        ),
-        reference_scores=reshape_windows(
-            multi_reference_scores,
-            window_count=controls.resident_session_iterations,
-            query_count=shape.query_count,
-        ),
+        candidate_positions=candidate_position_windows,
+        reference_scores=reference_score_windows,
+    )
+    no_reference_probe = run_cross_call_prepared_handle_topk_no_reference_probe(
+        case=case,
+        shape=shape,
+        controls=controls,
+        capability=capability,
+        query_windows=query_windows,
+        payload=index.i8_payload_snapshot(),
+        candidate_positions=candidate_position_windows,
+        reference_scores=reference_score_windows,
     )
     parsed = _parsed_payload(probe)
+    no_reference_parsed = _parsed_payload(no_reference_probe)
     candidate_per_window = (
         candidate_timing.mean_seconds / float(controls.resident_session_iterations)
     )
@@ -185,8 +199,29 @@ def build_prepared_handle_topk_scope_row(
             candidate_generation_per_window=candidate_per_window,
             cpu_score_per_window=score_per_window,
         ),
+        "no_reference_status": (
+            no_reference_probe.get("status")
+            if isinstance(no_reference_probe, dict)
+            else STATUS_PARTIAL_GPU_UNAVAILABLE
+        ),
+        "no_reference_parsed": no_reference_parsed,
+        "no_reference_derived": prepared_handle_topk_derived_metrics(
+            parsed=no_reference_parsed,
+            candidate_generation_per_window=candidate_per_window,
+            cpu_score_per_window=score_per_window,
+        ),
         "error": probe.get("error") if isinstance(probe, dict) else None,
+        "no_reference_error": (
+            no_reference_probe.get("error")
+            if isinstance(no_reference_probe, dict)
+            else None
+        ),
         "measurements": probe.get("measurements") if isinstance(probe, dict) else None,
+        "no_reference_measurements": (
+            no_reference_probe.get("measurements")
+            if isinstance(no_reference_probe, dict)
+            else None
+        ),
     }
 
 
@@ -210,6 +245,13 @@ def build_missing_prepared_handle_topk_scope_row(
         "shape": _shape_payload(shape, candidate_k=candidate_k),
         "parsed": {},
         "derived": prepared_handle_topk_derived_metrics(
+            parsed={},
+            candidate_generation_per_window=None,
+            cpu_score_per_window=None,
+        ),
+        "no_reference_status": STATUS_PARTIAL_GPU_UNAVAILABLE,
+        "no_reference_parsed": {},
+        "no_reference_derived": prepared_handle_topk_derived_metrics(
             parsed={},
             candidate_generation_per_window=None,
             cpu_score_per_window=None,
@@ -249,4 +291,3 @@ def _shape_payload(shape: SpeedTrackShape, *, candidate_k: int) -> dict[str, int
 def _parsed_payload(row: dict[str, object] | None) -> dict[str, object]:
     parsed = None if row is None else row.get("parsed")
     return parsed if isinstance(parsed, dict) else {}
-

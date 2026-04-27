@@ -207,6 +207,27 @@ class FastPlaidSpeedTrackTests(unittest.TestCase):
             index.search_batch_positions(queries, final_k=2)[0],
         )
 
+    def test_kayak_plaid_i8_full_window_candidate_positions_batch_rows(
+        self,
+    ) -> None:
+        documents = np.zeros((3, 2, 128), dtype=np.float32)
+        queries = np.zeros((2, 1, 128), dtype=np.float32)
+        index = KayakPlaidApproxIndex.build(
+            doc_ids=("doc-a", "doc-b", "doc-c"),
+            documents=documents,
+            config=KayakPlaidApproxConfig(
+                centroid_count=3,
+                centroids_per_query_vector=2,
+                candidate_k=3,
+                payload="i8",
+            ),
+            final_k=2,
+        )
+
+        candidate_positions = index.i8_candidate_positions_batch(queries)
+
+        self.assertEqual(candidate_positions, ((0, 1, 2), (0, 1, 2)))
+
     def test_kayak_plaid_i8_full_window_ties_keep_lower_positions(
         self,
     ) -> None:

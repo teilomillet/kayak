@@ -28,6 +28,7 @@ from kayak_bridge.gpu_i8_fastplaid_topk_compare import (  # noqa: E402
 )
 from kayak_bridge.gpu_i8_fastplaid_topk_metrics import (  # noqa: E402
     STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED,
+    build_gpu_prepared_topk_no_reference_vs_fastplaid_comparison,
     build_gpu_prepared_topk_vs_fastplaid_comparison,
 )
 from kayak_bridge.plaid_approx import KayakPlaidApproxConfig  # noqa: E402
@@ -227,6 +228,12 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             fastplaid_row=fastplaid_row,
         )
     )
+    prepared_handle_topk_no_reference_comparison = (
+        build_gpu_prepared_topk_no_reference_vs_fastplaid_comparison(
+            prepared_handle_topk_row=prepared_handle_topk_row,
+            fastplaid_row=fastplaid_row,
+        )
+    )
     status = report_status(
         capability=capability,
         gpu_probe=gpu_probe,
@@ -264,14 +271,20 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             "gpu_prepared_handle_topk_vs_fastplaid_scope_comparison": (
                 prepared_handle_topk_comparison
             ),
+            "gpu_prepared_handle_topk_no_reference_vs_fastplaid_scope_comparison": (
+                prepared_handle_topk_no_reference_comparison
+            ),
             "measurement_note": (
                 "FastPlaid rows are full-search timings. The GPU row is a "
                 "benchmark-only candidate-score primitive over deterministic "
                 "flat i8 tensors. The prepared-handle top-k GPU row uses real "
                 "Kayak i8 payload snapshots and CPU-provided candidate "
                 "windows, but is still an internal rerank boundary rather than "
-                "a full search backend. Ratios across those scopes are "
-                "profiling context only, not production search speedup claims."
+                "a full search backend. The no-reference top-k comparison "
+                "keeps CPU reference scores out of the Mojo serving call and "
+                "uses them only for post-call validation. Ratios across those "
+                "scopes are profiling context only, not production search "
+                "speedup claims."
             ),
         },
         capability,
@@ -474,6 +487,8 @@ def report_status(
         or prepared_handle_topk_row.get("status") != STATUS_OK
     ):
         return STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED
+    if prepared_handle_topk_row.get("no_reference_status") != STATUS_OK:
+        return STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED
     return STATUS_OK
 
 
@@ -512,6 +527,14 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
             if isinstance(topk_per_window, (float, int)):
                 print("== kayak_gpu_i8_prepared_handle_topk_per_window ==")
                 print("Mean:", topk_per_window)
+        no_reference_parsed = topk.get("no_reference_parsed")
+        if isinstance(no_reference_parsed, dict):
+            no_ref = no_reference_parsed.get(
+                "score_extension_call_seconds_per_window"
+            )
+            if isinstance(no_ref, (float, int)):
+                print("== kayak_gpu_i8_prepared_handle_topk_no_reference ==")
+                print("Mean:", no_ref)
         comparison = report.get(
             "gpu_prepared_handle_topk_vs_fastplaid_scope_comparison"
         )
@@ -522,6 +545,18 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
             if isinstance(envelope, (float, int)):
                 print("== kayak_cpu_candidates_gpu_i8_topk_per_window ==")
                 print("Mean:", envelope)
+        no_reference_comparison = report.get(
+            "gpu_prepared_handle_topk_no_reference_vs_fastplaid_scope_comparison"
+        )
+        if isinstance(no_reference_comparison, dict):
+            no_reference_envelope = no_reference_comparison.get(
+                "cpu_candidate_generation_plus_gpu_topk_seconds_per_window"
+            )
+            if isinstance(no_reference_envelope, (float, int)):
+                print(
+                    "== kayak_cpu_candidates_gpu_i8_topk_no_reference_per_window =="
+                )
+                print("Mean:", no_reference_envelope)
 
 
 def exit_code(

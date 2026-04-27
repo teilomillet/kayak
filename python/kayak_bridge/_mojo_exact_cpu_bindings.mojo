@@ -55,6 +55,7 @@ struct PreparedPackedIndex(Movable, Writable):
             ")",
         )
 
+
 def decode_string_list(py_values: PythonObject) raises -> List[String]:
     var values = List[String]()
 
@@ -82,7 +83,9 @@ def decode_float_vector(py_values: PythonObject) raises -> List[VectorScalar]:
     return values^
 
 
-def decode_float_vectors(py_values: PythonObject) raises -> List[List[VectorScalar]]:
+def decode_float_vectors(
+    py_values: PythonObject,
+) raises -> List[List[VectorScalar]]:
     var vectors = List[List[VectorScalar]]()
 
     for index in range(len(py_values)):
@@ -104,7 +107,9 @@ def decode_query(py_query_vectors: PythonObject) raises -> EncodedQuery:
     return EncodedQuery(decode_float_vectors(py_query_vectors))
 
 
-def decode_queries(py_query_batch_vectors: PythonObject) raises -> List[EncodedQuery]:
+def decode_queries(
+    py_query_batch_vectors: PythonObject,
+) raises -> List[EncodedQuery]:
     var queries = List[EncodedQuery]()
 
     for index in range(len(py_query_batch_vectors)):
@@ -117,11 +122,43 @@ def decode_flat_query(py_query_values: PythonObject) raises -> FlatQueryDim128:
     return FlatQueryDim128(decode_float_values(py_query_values), 128)
 
 
-def decode_flat_queries(py_query_batch_values: PythonObject) raises -> List[FlatQueryDim128]:
+def decode_flat_queries(
+    py_query_batch_values: PythonObject,
+) raises -> List[FlatQueryDim128]:
     var queries = List[FlatQueryDim128]()
 
     for index in range(len(py_query_batch_values)):
         queries.append(decode_flat_query(py_query_batch_values[index]))
+
+    return queries^
+
+
+def decode_flat_queries_from_float32_address(
+    query_values_address: Int,
+    query_count: Int,
+    query_vector_count: Int,
+) raises -> List[FlatQueryDim128]:
+    if query_values_address == 0:
+        raise Error("query_values address must be non-zero")
+    if query_count < 0:
+        raise Error("query_count must not be negative")
+    if query_vector_count <= 0:
+        raise Error("query_vector_count must be positive")
+
+    var query_values = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=query_values_address
+    )
+    var query_value_count = query_vector_count * 128
+    var queries = List[FlatQueryDim128]()
+    queries.reserve(query_count)
+
+    for query_index in range(query_count):
+        var values = List[VectorScalar]()
+        values.reserve(query_value_count)
+        var query_base = query_index * query_value_count
+        for offset in range(query_value_count):
+            values.append(VectorScalar(query_values[query_base + offset]))
+        queries.append(FlatQueryDim128(values^, 128))
 
     return queries^
 
@@ -199,7 +236,7 @@ def scores_to_python(read scores: List[ScoreScalar]) raises -> PythonObject:
 
 
 def scores_batch_to_python(
-    read scores_by_query: List[List[ScoreScalar]]
+    read scores_by_query: List[List[ScoreScalar]],
 ) raises -> PythonObject:
     var py_scores_by_query = Python.list()
 
@@ -222,7 +259,7 @@ def hits_to_python(read hits: List[SearchHit]) raises -> PythonObject:
 
 
 def hits_batch_to_python(
-    read hits_by_query: List[List[SearchHit]]
+    read hits_by_query: List[List[SearchHit]],
 ) raises -> PythonObject:
     var py_hits_by_query = Python.list()
 
@@ -242,7 +279,7 @@ def positions_to_python(read positions: List[Int]) raises -> PythonObject:
 
 
 def positions_batch_to_python(
-    read positions_by_query: List[List[Int]]
+    read positions_by_query: List[List[Int]],
 ) raises -> PythonObject:
     var py_positions_by_query = Python.list()
 
@@ -270,7 +307,9 @@ def int8_values_to_python(read values: List[Int8]) raises -> PythonObject:
     return py_values
 
 
-def scalar_values_to_python(read values: List[ScoreScalar]) raises -> PythonObject:
+def scalar_values_to_python(
+    read values: List[ScoreScalar],
+) raises -> PythonObject:
     var py_values = Python.list()
 
     for value in values:
@@ -303,7 +342,9 @@ def prepare_packed_index_from_storage(
     var root = Path(String(py=py_root))
     var vector_dim = Int(py=py_vector_dim)
     if vector_dim != 128:
-        raise Error("prepared packed storage path currently requires vector_dim=128")
+        raise Error(
+            "prepared packed storage path currently requires vector_dim=128"
+        )
 
     var token_values = List[VectorScalar]()
     var token_value_parts_path = root / "token_values.parts.tsv"
@@ -363,7 +404,9 @@ def plaid_approx_prepared_posting_count(
     var prepared_index = py_prepared_index.downcast_value_ptr[
         PreparedPlaidApproxIndex
     ]()
-    return Python.int(plaid_approx_prepared_posting_count_value(prepared_index[]))
+    return Python.int(
+        plaid_approx_prepared_posting_count_value(prepared_index[])
+    )
 
 
 def plaid_approx_i8_prepared_posting_count(
@@ -372,7 +415,9 @@ def plaid_approx_i8_prepared_posting_count(
     var prepared_index = py_prepared_index.downcast_value_ptr[
         PreparedPlaidApproxI8Index
     ]()
-    return Python.int(plaid_approx_i8_prepared_posting_count_value(prepared_index[]))
+    return Python.int(
+        plaid_approx_i8_prepared_posting_count_value(prepared_index[])
+    )
 
 
 def plaid_i8_prepared_doc_offsets(
@@ -475,7 +520,9 @@ def exact_scores_prepared_packed_batch(
 
     for query in queries:
         if query.vector_dim != prepared_index[].index.vector_dim:
-            raise Error("all queries must share the prepared index vector dimension")
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
 
         scores_by_query.append(
             exact_scores_for_hybrid_flat_only_index_dim128(
@@ -523,7 +570,9 @@ def search_prepared_packed_batch(
 
     for query in queries:
         if query.vector_dim != prepared_index[].index.vector_dim:
-            raise Error("all queries must share the prepared index vector dimension")
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
 
         hits_by_query.append(
             search_exact_hybrid_flat_only_dim128(
@@ -605,7 +654,9 @@ def search_plaid_approx_prepared_batch(
 
     for query in queries:
         if query.vector_dim != prepared_index[].index.vector_dim:
-            raise Error("all queries must share the prepared index vector dimension")
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
 
         positions_by_query.append(
             plaid_search_positions_for_query(
@@ -641,7 +692,9 @@ def search_plaid_approx_prepared_hits_batch(
 
     for query in queries:
         if query.vector_dim != prepared_index[].index.vector_dim:
-            raise Error("all queries must share the prepared index vector dimension")
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
 
         hits_by_query.append(
             plaid_search_hits_for_query(
@@ -677,7 +730,9 @@ def search_plaid_approx_i8_prepared_batch(
 
     for query in queries:
         if query.vector_dim != prepared_index[].vector_dim:
-            raise Error("all queries must share the prepared index vector dimension")
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
 
         positions_by_query.append(
             plaid_i8_search_positions_for_query(
@@ -713,7 +768,9 @@ def search_plaid_approx_i8_prepared_hits_batch(
 
     for query in queries:
         if query.vector_dim != prepared_index[].vector_dim:
-            raise Error("all queries must share the prepared index vector dimension")
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
 
         hits_by_query.append(
             plaid_i8_search_hits_for_query(
@@ -747,7 +804,53 @@ def plaid_i8_candidate_positions_prepared_batch(
 
     for query in queries:
         if query.vector_dim != prepared_index[].vector_dim:
-            raise Error("all queries must share the prepared index vector dimension")
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            plaid_i8_candidate_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def plaid_i8_candidate_positions_prepared_batch_address(
+    py_query_values_address: PythonObject,
+    py_query_count: PythonObject,
+    py_query_vector_count: PythonObject,
+    py_centroids_per_query_vector: PythonObject,
+    py_candidate_k: PythonObject,
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_query_values_address)
+    var query_count = Int(py=py_query_count)
+    var query_vector_count = Int(py=py_query_vector_count)
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_centroids_per_query_vector)
+    var candidate_k = Int(py=py_candidate_k)
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
 
         positions_by_query.append(
             plaid_i8_candidate_positions_for_query(
@@ -780,7 +883,9 @@ def plaid_i8_candidate_scores_prepared_batch(
     for query_index in range(len(queries)):
         var query = queries[query_index].copy()
         if query.vector_dim != prepared_index[].vector_dim:
-            raise Error("all queries must share the prepared index vector dimension")
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
 
         var candidate_positions = decode_int_list(
             py_candidate_positions_batch[query_index]
@@ -801,17 +906,25 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojo_exact_cpu_bindings")
         _ = module.add_type[PreparedPackedIndex]("PreparedPackedIndex")
-        _ = module.add_type[PreparedPlaidApproxIndex]("PreparedPlaidApproxIndex")
+        _ = module.add_type[PreparedPlaidApproxIndex](
+            "PreparedPlaidApproxIndex"
+        )
         _ = module.add_type[PreparedPlaidApproxI8Index](
             "PreparedPlaidApproxI8Index"
         )
         module.def_function[exact_scores_packed](
             "exact_scores_packed",
-            docstring="Score a packed late-interaction index with the exact CPU backend.",
+            docstring=(
+                "Score a packed late-interaction index with the exact CPU"
+                " backend."
+            ),
         )
         module.def_function[prepare_packed_index](
             "prepare_packed_index",
-            docstring="Decode and retain a packed index inside a Mojo-backed Python object.",
+            docstring=(
+                "Decode and retain a packed index inside a Mojo-backed Python"
+                " object."
+            ),
         )
         module.def_function[prepare_packed_index_from_storage](
             "prepare_packed_index_from_storage",
@@ -819,11 +932,17 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         )
         module.def_function[prepare_plaid_approx_hybrid_flat_dim128](
             "prepare_plaid_approx_hybrid_flat_dim128",
-            docstring="Prepare a sampled-centroid PLAID-style approximation index in Mojo.",
+            docstring=(
+                "Prepare a sampled-centroid PLAID-style approximation index in"
+                " Mojo."
+            ),
         )
         module.def_function[prepare_plaid_approx_i8_hybrid_flat_dim128](
             "prepare_plaid_approx_i8_hybrid_flat_dim128",
-            docstring="Prepare an int8 sampled-centroid PLAID-style approximation index in Mojo.",
+            docstring=(
+                "Prepare an int8 sampled-centroid PLAID-style approximation"
+                " index in Mojo."
+            ),
         )
         module.def_function[plaid_approx_prepared_posting_count](
             "plaid_approx_prepared_posting_count",
@@ -831,7 +950,9 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         )
         module.def_function[plaid_approx_i8_prepared_posting_count](
             "plaid_approx_i8_prepared_posting_count",
-            docstring="Return the prepared int8 PLAID-style index posting count.",
+            docstring=(
+                "Return the prepared int8 PLAID-style index posting count."
+            ),
         )
         module.def_function[plaid_i8_prepared_doc_offsets](
             "plaid_i8_prepared_doc_offsets",
@@ -847,7 +968,10 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         )
         module.def_function[exact_scores_packed_batch](
             "exact_scores_packed_batch",
-            docstring="Score a packed late-interaction index for a whole batch of queries.",
+            docstring=(
+                "Score a packed late-interaction index for a whole batch of"
+                " queries."
+            ),
         )
         module.def_function[exact_scores_prepared_packed](
             "exact_scores_prepared_packed",
@@ -855,7 +979,10 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         )
         module.def_function[exact_scores_prepared_packed_batch](
             "exact_scores_prepared_packed_batch",
-            docstring="Score a prepared packed late-interaction index for a whole batch of queries.",
+            docstring=(
+                "Score a prepared packed late-interaction index for a whole"
+                " batch of queries."
+            ),
         )
         module.def_function[search_prepared_packed](
             "search_prepared_packed",
@@ -863,7 +990,10 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         )
         module.def_function[search_prepared_packed_batch](
             "search_prepared_packed_batch",
-            docstring="Search a prepared packed late-interaction index for a whole batch of queries.",
+            docstring=(
+                "Search a prepared packed late-interaction index for a whole"
+                " batch of queries."
+            ),
         )
         module.def_function[exact_scores_hybrid_flat_dim128](
             "exact_scores_hybrid_flat_dim128",
@@ -871,31 +1001,60 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         )
         module.def_function[exact_scores_hybrid_flat_dim128_with_flat_query](
             "exact_scores_hybrid_flat_dim128_with_flat_query",
-            docstring="Score a hybrid flat dim128 index with a flat dim128 query.",
+            docstring=(
+                "Score a hybrid flat dim128 index with a flat dim128 query."
+            ),
         )
         module.def_function[search_plaid_approx_prepared_batch](
             "search_plaid_approx_prepared_batch",
-            docstring="Search a prepared sampled-centroid PLAID-style approximation index.",
+            docstring=(
+                "Search a prepared sampled-centroid PLAID-style approximation"
+                " index."
+            ),
         )
         module.def_function[search_plaid_approx_prepared_hits_batch](
             "search_plaid_approx_prepared_hits_batch",
-            docstring="Search a prepared sampled-centroid PLAID-style approximation index and return hits.",
+            docstring=(
+                "Search a prepared sampled-centroid PLAID-style approximation"
+                " index and return hits."
+            ),
         )
         module.def_function[search_plaid_approx_i8_prepared_batch](
             "search_plaid_approx_i8_prepared_batch",
-            docstring="Search a prepared int8 sampled-centroid PLAID-style approximation index.",
+            docstring=(
+                "Search a prepared int8 sampled-centroid PLAID-style"
+                " approximation index."
+            ),
         )
         module.def_function[search_plaid_approx_i8_prepared_hits_batch](
             "search_plaid_approx_i8_prepared_hits_batch",
-            docstring="Search a prepared int8 sampled-centroid PLAID-style approximation index and return hits.",
+            docstring=(
+                "Search a prepared int8 sampled-centroid PLAID-style"
+                " approximation index and return hits."
+            ),
         )
         module.def_function[plaid_i8_candidate_positions_prepared_batch](
             "plaid_i8_candidate_positions_prepared_batch",
-            docstring="Generate int8 PLAID candidate document positions without reranking.",
+            docstring=(
+                "Generate int8 PLAID candidate document positions without"
+                " reranking."
+            ),
+        )
+        module.def_function[
+            plaid_i8_candidate_positions_prepared_batch_address
+        ](
+            "plaid_i8_candidate_positions_prepared_batch_address",
+            docstring=(
+                "Generate int8 PLAID candidate positions from a contiguous"
+                " float32 query tensor address."
+            ),
         )
         module.def_function[plaid_i8_candidate_scores_prepared_batch](
             "plaid_i8_candidate_scores_prepared_batch",
-            docstring="Score provided candidate positions with the prepared int8 reranker.",
+            docstring=(
+                "Score provided candidate positions with the prepared int8"
+                " reranker."
+            ),
         )
         return module.finalize()
     except e:

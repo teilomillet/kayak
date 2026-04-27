@@ -44,7 +44,60 @@ def build_gpu_prepared_topk_vs_fastplaid_comparison(
     prepared_handle_topk_row: dict[str, Any] | None,
     fastplaid_row: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    parsed = _parsed_payload(prepared_handle_topk_row)
+    return _build_gpu_prepared_topk_vs_fastplaid_comparison(
+        prepared_handle_topk_row=prepared_handle_topk_row,
+        fastplaid_row=fastplaid_row,
+        parsed=_parsed_payload(prepared_handle_topk_row),
+        status=prepared_topk_comparison_status(
+            prepared_handle_topk_row,
+            fastplaid_row,
+        ),
+        scope="gpu_prepared_handle_topk_rerank_boundary_vs_fastplaid_full_search",
+        scope_warning=(
+            "This is still not an apples-to-apples backend comparison: "
+            "FastPlaid is timed as full search, while the Kayak GPU row starts "
+            "after CPU candidate generation and measures an internal explicit "
+            "prepared-handle rerank/top-k return boundary."
+        ),
+    )
+
+
+def build_gpu_prepared_topk_no_reference_vs_fastplaid_comparison(
+    *,
+    prepared_handle_topk_row: dict[str, Any] | None,
+    fastplaid_row: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return _build_gpu_prepared_topk_vs_fastplaid_comparison(
+        prepared_handle_topk_row=prepared_handle_topk_row,
+        fastplaid_row=fastplaid_row,
+        parsed=_no_reference_parsed_payload(prepared_handle_topk_row),
+        status=prepared_topk_no_reference_comparison_status(
+            prepared_handle_topk_row,
+            fastplaid_row,
+        ),
+        scope=(
+            "gpu_prepared_handle_topk_no_reference_rerank_boundary_vs_"
+            "fastplaid_full_search"
+        ),
+        scope_warning=(
+            "This is still not an apples-to-apples backend comparison: "
+            "FastPlaid is timed as full search, while the Kayak GPU row starts "
+            "after CPU candidate generation. This no-reference row does not "
+            "pass CPU reference scores into the Mojo extension; correctness is "
+            "checked after the serving-shaped top-k call returns."
+        ),
+    )
+
+
+def _build_gpu_prepared_topk_vs_fastplaid_comparison(
+    *,
+    prepared_handle_topk_row: dict[str, Any] | None,
+    fastplaid_row: dict[str, Any] | None,
+    parsed: dict[str, object],
+    status: str,
+    scope: str,
+    scope_warning: str,
+) -> dict[str, Any]:
     fastplaid_batch = _fastplaid_float(fastplaid_row, "query_batch_mean_seconds")
     fastplaid_query = _fastplaid_float(fastplaid_row, "query_mean_seconds")
     topk_per_window = _optional_float(
@@ -74,17 +127,9 @@ def build_gpu_prepared_topk_vs_fastplaid_comparison(
     )
 
     return {
-        "status": prepared_topk_comparison_status(
-            prepared_handle_topk_row,
-            fastplaid_row,
-        ),
-        "scope": "gpu_prepared_handle_topk_rerank_boundary_vs_fastplaid_full_search",
-        "scope_warning": (
-            "This is still not an apples-to-apples backend comparison: "
-            "FastPlaid is timed as full search, while the Kayak GPU row starts "
-            "after CPU candidate generation and measures an internal explicit "
-            "prepared-handle rerank/top-k return boundary."
-        ),
+        "status": status,
+        "scope": scope,
+        "scope_warning": scope_warning,
         "candidate_score_count_per_window": (
             int(candidate_score_count)
             if candidate_score_count is not None
@@ -99,6 +144,9 @@ def build_gpu_prepared_topk_vs_fastplaid_comparison(
         "score_delta_max_abs": _optional_float(parsed.get("score_delta_max_abs")),
         "score_delta_tolerance": _optional_float(
             parsed.get("score_delta_tolerance")
+        ),
+        "validation_reference_scores_sent_to_extension": parsed.get(
+            "validation_reference_scores_sent_to_extension"
         ),
         "gpu_prepared_handle_topk_seconds_per_window": topk_per_window,
         "cpu_candidate_generation_seconds_per_window": cpu_candidate_per_window,
@@ -143,8 +191,26 @@ def prepared_topk_comparison_status(
     return STATUS_OK
 
 
+def prepared_topk_no_reference_comparison_status(
+    prepared_handle_topk_row: dict[str, Any] | None,
+    fastplaid_row: dict[str, Any] | None,
+) -> str:
+    if fastplaid_row is None or fastplaid_row.get("status") != STATUS_OK:
+        return STATUS_BLOCKED_FASTPLAID_UNAVAILABLE
+    if prepared_handle_topk_row is None:
+        return STATUS_PARTIAL_GPU_UNAVAILABLE
+    if prepared_handle_topk_row.get("no_reference_status") != STATUS_OK:
+        return STATUS_BLOCKED_GPU_PREPARED_TOPK_FAILED
+    return STATUS_OK
+
+
 def _parsed_payload(row: dict[str, object] | None) -> dict[str, object]:
     parsed = None if row is None else row.get("parsed")
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _no_reference_parsed_payload(row: dict[str, object] | None) -> dict[str, object]:
+    parsed = None if row is None else row.get("no_reference_parsed")
     return parsed if isinstance(parsed, dict) else {}
 
 

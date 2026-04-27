@@ -268,10 +268,16 @@ class KayakPlaidApproxIndex:
         if self.config.payload != PLAID_PAYLOAD_I8:
             raise ValueError("i8 candidate positions require payload='i8'")
         normalized_queries = _as_query_tensor(queries, vector_dim=self.vector_dim)
-        query_values = _flat_query_values_by_query(normalized_queries)
+        if self.config.candidate_k >= self.document_count:
+            full_window = tuple(range(self.document_count))
+            return tuple(
+                full_window for _ in range(int(normalized_queries.shape[0]))
+            )
         module = load_module()
-        rows = module.plaid_i8_candidate_positions_prepared_batch(
-            query_values,
+        rows = module.plaid_i8_candidate_positions_prepared_batch_address(
+            int(normalized_queries.ctypes.data),
+            int(normalized_queries.shape[0]),
+            int(normalized_queries.shape[1]),
             self.config.centroids_per_query_vector,
             self.config.candidate_k,
             self._prepared_index,

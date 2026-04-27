@@ -4,7 +4,7 @@ Status: measured scaffold, benchmark-only GPU score probes, and an internal
 GPU-targeted Python/Mojo extension probe; no production GPU backend integration
 yet.
 
-Date: `2026-04-26`
+Date: `2026-04-27`
 
 ## Verified Local Facts
 
@@ -323,6 +323,24 @@ optimization targets are the measured candidate-generation envelope and an
 internal search boundary around the explicit handle, not immediate public API
 surface area.
 
+No-reference top-k finding: the prepared handle now has a serving-shaped top-k
+call that does not pass CPU reference scores into the Mojo extension. CPU scores
+are used only after the call to validate returned positions. The default quiet
+sweep preserved `topk_position_agreement=1.0` on all six cases, and the wide
+sweep preserved `topk_position_agreement=1.0` on all five cases. On the default
+sweep, no-reference top-k ranged from about `0.145x` to `0.264x` of CPU
+same-candidate scoring; the candidate-generation-plus-no-reference-top-k
+envelope ranged from about `0.146x` to `0.636x` of CPU candidate generation
+plus CPU scoring. On the wide sweep, no-reference top-k ranged from about
+`0.104x` to `0.225x` of CPU same-candidate scoring; the full envelope ranged
+from about `0.105x` to `0.511x`.
+
+Reason: this removes validation-only input from the serving call without hiding
+correctness. The result also falsifies a narrow optimization hypothesis:
+removing reference-score input halves host marshalling on some rows, but total
+extension-call time is within noise of the validating top-k path on the measured
+shapes.
+
 Wide top-k finding: `profile_gpu_i8_address_serve_wide_topk` adds explicit
 larger candidate-window and vector-count cases without changing the default
 sweep. The quiet run on `nvidia:sm_89` preserved `topk_position_agreement=1.0`
@@ -339,32 +357,37 @@ original small windows, while the tolerance finding keeps correctness evidence
 visible instead of hiding a widened threshold.
 
 Candidate-generation cleanup finding: CPU candidate generation was the next
-visible limiter after GPU scoring moved behind an explicit prepared handle. Two
-CPU-side changes improved that boundary without adding GPU abstraction: full
-candidate windows now return all document positions directly, and
+visible limiter after GPU scoring moved behind an explicit prepared handle.
+Four CPU-side changes improved that boundary without adding GPU abstraction:
+full candidate windows now return all document positions directly in Mojo,
 `top_positions_by_score` uses a bounded worst-first heap instead of repeated
-full scans. The latest wide quiet run reduced the non-full-window candidate
-generation cases materially: `doc_vectors64` moved to about `0.000514s/window`,
-`query_vectors32` to about `0.001288s/window`, and `query_batch4` to about
-`0.000964s/window`. Full-window cases stayed near `0.000335s/window`
-(`candidate512`) and `0.000574s/window` (`candidate1024`) because they skip the
-proxy sort entirely.
+full scans, the Python bridge skips the Mojo candidate-generation call entirely
+when `candidate_k >= document_count`, and non-full candidate generation can
+ingest contiguous `float32` query tensors by typed address instead of Python
+lists. The latest wide quiet run
+measured full-window candidate generation at about `0.00000103s/window`
+(`candidate512`) and `0.00000147s/window` (`candidate1024`). The remaining
+non-full-window candidate-generation cases measured about `0.000427s/window`
+(`doc_vectors64`), `0.000923s/window` (`query_vectors32`), and
+`0.000774s/window` (`query_batch4`).
 
 Reason: candidate-window identity is exact when `candidate_k >= document_count`,
 so proxy sorting cannot improve correctness. The heap keeps the prior
 descending-score, lower-position tie order while reducing selection work from
-`O(k * n)` to bounded heap maintenance plus ordered extraction.
+`O(k * n)` to bounded heap maintenance plus ordered extraction. The typed
+address bridge is justified because the query tensor is already contiguous and
+it avoids Python list materialization without changing candidate semantics.
 
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
-comparison measured CPU candidate generation plus GPU prepared-handle top-k at
-about `0.000784s/window` against FastPlaid CPU full search at about
-`0.008555s/batch`, and about `0.000793s/window` against FastPlaid CUDA full
-search at about `0.002271s/batch`. This remains a scope comparison, not a
+comparison measured CPU candidate generation plus GPU no-reference top-k at
+about `0.000166s/window` against FastPlaid CPU full search at about
+`0.007614s/batch`, and about `0.000166s/window` against FastPlaid CUDA full
+search at about `0.002212s/batch`. This remains a scope comparison, not a
 public backend claim, because Kayak starts from CPU-provided candidate windows
 and FastPlaid is timed as full search. On this synthetic shape, Kayak i8 recall
-was `1.0`; the observed FastPlaid recall was `0.5` on CPU and about `0.45` on
+was `1.0`; the observed FastPlaid recall was `0.4` on CPU and about `0.45` on
 CUDA.
 
 Reason: the comparison is now strong enough to justify building an internal
@@ -432,6 +455,9 @@ The report intentionally keeps these surfaces separate:
 - Kayak GPU i8: benchmark-only candidate-score primitive
 - Kayak GPU i8 prepared-handle top-k: real Kayak i8 payload, CPU-provided
   candidate windows, explicit GPU handle, top-k positions/scores returned
+- Kayak GPU i8 prepared-handle no-reference top-k: the same boundary, but CPU
+  reference scores are not passed into the Mojo serving call and are used only
+  for post-call validation
 
 Reason: FastPlaid search includes indexing, candidate generation, approximate
 search, and top-k output. The Kayak GPU rows now include both a deterministic
@@ -443,15 +469,14 @@ primitive is integrated into a complete search path.
 
 Wide FastPlaid finding: on the explicit `1024 x 16` documents,
 `2 x 8` queries, `candidate_k=1024` shape, the prepared-handle top-k boundary
-remained correct with `topk_position_agreement=1.0`. The isolated GPU top-k
-boundary was about `0.028x` of CPU FastPlaid full-search batch time and about
-`0.088x` of CUDA FastPlaid full-search batch time. Once CPU candidate
-generation is included, the envelope was about `0.605x` of CPU FastPlaid but
-about `1.865x` of CUDA FastPlaid.
+remained correct with `topk_position_agreement=1.0`. The latest no-reference
+top-k comparison measured the CPU-candidates-plus-GPU-top-k envelope at about
+`0.0218x` of CPU FastPlaid full-search batch time and about `0.0752x` of CUDA
+FastPlaid full-search batch time.
 
-Reason: the wide comparison shows the current isolated rerank primitive is
-useful, while also showing that CPU candidate generation is the limiter when
-the external baseline is already GPU-backed.
+Reason: the wide comparison shows the current internal rerank/top-k boundary is
+competitive on this explicit synthetic shape, while still requiring a complete
+search-path integration before any public backend speedup claim.
 
 Required fields for every FastPlaid comparison row:
 
@@ -549,18 +574,23 @@ evidence only justifies a measured primitive.
    of CPU same-candidate scoring, top-k order agreement is `1.0` in all six
    cases, and top-k return is faster than returning all candidate scores on
    every swept case.
-17. Reduce CPU candidate-generation overhead before adding more GPU
+17. Add a no-reference top-k serving call and validate it outside the Mojo
+   extension. Current quiet result: no-reference top-k preserves
+   `topk_position_agreement=1.0` on the default and wide sweeps, while total
+   extension-call timing remains within noise of the validating top-k path.
+18. Reduce CPU candidate-generation overhead before adding more GPU
    abstraction. Current quiet result: full-window candidate generation skips
-   proxy sorting, and bounded heap selection improves the non-full-window wide
-   cases while preserving top-k agreement.
-18. Compare the same wide candidate1024 shape against FastPlaid CPU and CUDA.
-   Current quiet result: CPU candidates plus GPU top-k is faster than FastPlaid
-   full search in this scope-limited synthetic comparison, with explicit recall
-   and vector-count fields recorded.
-19. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+   proxy sorting and Python-to-Mojo candidate generation, while bounded heap
+   selection and typed-address query ingestion improve the non-full-window wide
+   cases.
+19. Compare the same wide candidate1024 shape against FastPlaid CPU and CUDA.
+   Current quiet result: CPU candidates plus GPU no-reference top-k is faster
+   than FastPlaid full search in this scope-limited synthetic comparison, with
+   explicit recall and vector-count fields recorded.
+20. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-20. Only after a measured win, consider public API design.
+21. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

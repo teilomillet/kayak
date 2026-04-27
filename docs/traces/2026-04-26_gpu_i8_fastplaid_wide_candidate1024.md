@@ -105,6 +105,15 @@ measured about `0.000793s/window` against FastPlaid CUDA full search at about
 `0.002271s/batch`. This remains a scope-limited comparison, not a public GPU
 backend claim.
 
+Later follow-up:
+[2026-04-27 GPU I8 No-Reference Top-K And FastPlaid Context](2026-04-27_gpu_i8_no_reference_topk_and_fastplaid.md)
+removed validation-score input from the top-k serving call and added the Python
+bridge full-window shortcut plus typed-address query ingestion for non-full
+candidate windows. On the same wide `candidate1024` shape, the updated
+CPU-candidates-plus-GPU-no-reference-top-k boundary measured about
+`0.000166s/window` against FastPlaid CUDA full search at about
+`0.002212s/batch`.
+
 ## Validation
 
 Ran:
