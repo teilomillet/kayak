@@ -617,6 +617,23 @@ optimization should therefore test GPU-side top-k or fused selected-centroid
 scoring plus accumulation only as measured probes, not as an assumed kernel
 rewrite.
 
+Centroid-selection finding: a benchmark-only GPU probe now scores sampled i8
+centroids from the real Kayak i8 payload and selects
+`centroids_per_query_vector` ids per query vector on host. The first repeated
+scan host selector was rejected because it preserved positions but made the
+resident path slower than CPU centroid scoring/selection on the non-full rows.
+The retained heap-backed selector preserved exact selected centroid positions
+on all `5 / 5` wide rows, with selected-score deltas below the explicit
+`0.0001` tolerance. On the three non-full rows, the resident-payload path was
+about `0.407x`, `0.656x`, and `0.540x` of CPU centroid scoring plus selection,
+and about `0.099x`, `0.077x`, and `0.057x` of full CPU candidate generation.
+
+Reason: this validates centroid scoring/selection as a useful GPU candidate
+primitive, but only behind the measured internal boundary. The current probe
+still reads all centroid scores back to host and would then upload selected
+centroid ids/scores for posting accumulation, so the next real optimization is
+a fused device-resident selected-centroid-to-accumulation probe.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -886,10 +903,16 @@ evidence only justifies a measured primitive.
    and candidate top-k, not just the accumulation kernel. The document-centric,
    posting-oriented atomic-max, and qv-doc atomic-add variants were rejected by
    timing or correctness evidence.
-32. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+32. Add a benchmark-only GPU centroid-selection probe. Current quiet result:
+   selected centroid positions agree exactly on all wide rows; after rejecting
+   the repeated-scan host selector, the heap-backed resident path costs about
+   `0.407x` to `0.656x` of CPU centroid scoring plus selection on non-full
+   rows. This points next at fusing centroid selection with accumulation to
+   avoid centroid-score readback and selected-centroid upload.
+33. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and FastPlaid scope rows after the resident ownership boundary
    exists.
-33. Only after a measured win, consider public API design.
+34. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

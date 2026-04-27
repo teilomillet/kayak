@@ -20,6 +20,7 @@ from .plaid_approx import (
 )
 
 from .cache_paths import PYTHON_MOJO_CACHE, REPO_ROOT, configure_local_caches
+from .gpu_i8_score_agreement import GPU_I8_SCORE_DELTA_TOLERANCE_FLOOR
 from .mojo_exact_cpu import (
     _compiled_extension_suffix,
     _detect_mojo_command,
@@ -218,6 +219,79 @@ class MojoGpuI8CandidateGenerationPayloadResult:
             "document_count": self.document_count,
             "byte_counts": self.byte_counts,
             "total_payload_bytes": self.total_payload_bytes,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class MojoGpuI8CentroidSelectionResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    mojo_host_ingest_mean_seconds: float
+    payload_host_to_device_mean_seconds: float
+    query_host_to_device_mean_seconds: float
+    kernel_mean_seconds: float
+    device_to_host_mean_seconds: float
+    host_selection_mean_seconds: float
+    centroid_token_out_of_range_count: int
+    selected_position_mismatch_count: int
+    selected_score_mismatch_count: int
+    selected_score_delta_max_abs: float
+    selected_centroid_count: int
+    centroid_score_count: int
+    centroid_count: int
+    query_count: int
+    query_vector_count: int
+    centroids_per_query_vector: int
+
+    @property
+    def selected_score_delta_tolerance(self) -> float:
+        return GPU_I8_SCORE_DELTA_TOLERANCE_FLOOR
+
+    @property
+    def selection_agreement_ok(self) -> bool:
+        return (
+            self.centroid_token_out_of_range_count == 0
+            and self.selected_position_mismatch_count == 0
+            and self.selected_score_delta_max_abs
+            <= self.selected_score_delta_tolerance
+        )
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "mojo_host_ingest_mean_seconds": (
+                self.mojo_host_ingest_mean_seconds
+            ),
+            "payload_host_to_device_mean_seconds": (
+                self.payload_host_to_device_mean_seconds
+            ),
+            "query_host_to_device_mean_seconds": (
+                self.query_host_to_device_mean_seconds
+            ),
+            "kernel_mean_seconds": self.kernel_mean_seconds,
+            "device_to_host_mean_seconds": self.device_to_host_mean_seconds,
+            "host_selection_mean_seconds": self.host_selection_mean_seconds,
+            "centroid_token_out_of_range_count": (
+                self.centroid_token_out_of_range_count
+            ),
+            "selected_position_mismatch_count": (
+                self.selected_position_mismatch_count
+            ),
+            "selected_score_mismatch_count": (
+                self.selected_score_mismatch_count
+            ),
+            "selected_score_delta_max_abs": self.selected_score_delta_max_abs,
+            "selected_score_delta_tolerance": (
+                self.selected_score_delta_tolerance
+            ),
+            "selection_agreement_ok": self.selection_agreement_ok,
+            "selected_centroid_count": self.selected_centroid_count,
+            "centroid_score_count": self.centroid_score_count,
+            "centroid_count": self.centroid_count,
+            "query_count": self.query_count,
+            "query_vector_count": self.query_vector_count,
+            "centroids_per_query_vector": self.centroids_per_query_vector,
         }
 
 
@@ -1054,6 +1128,86 @@ def profile_i8_candidate_generation_payload_addresses(
         posting_count=int(raw_result[7]),
         document_count=int(raw_result[8]),
         byte_counts=payload.candidate_generation_byte_counts(),
+    )
+
+
+def profile_i8_centroid_selection_addresses(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    queries: np.ndarray,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    warmup_iterations: int,
+    measurement_iterations: int,
+) -> MojoGpuI8CentroidSelectionResult:
+    if warmup_iterations < 0:
+        raise ValueError("warmup_iterations must be non-negative")
+    if measurement_iterations <= 0:
+        raise ValueError("measurement_iterations must be positive")
+
+    marshalling_started_at = time.perf_counter()
+    query_values = _float32_array(queries)
+    expected_query_values = (
+        int(shape.query_count)
+        * int(shape.query_vector_count)
+        * int(shape.vector_dim)
+    )
+    if query_values.size != expected_query_values:
+        raise ValueError("queries shape must match the profile shape")
+    token_codes = _int8_array(payload.token_codes)
+    token_scales = _float32_array(payload.token_scales)
+    centroid_token_indices = _int64_array(payload.centroid_token_indices)
+    selected_positions = _int64_array(selected.positions_array())
+    selected_scores = _float32_array(selected.scores_array())
+    if selected_positions.size != selected_scores.size:
+        raise ValueError("selected centroid positions and scores must align")
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    module = load_module(target_accelerator=target_accelerator)
+    request = [
+        _array_address(query_values),
+        _array_address(token_codes),
+        _array_address(token_scales),
+        _array_address(centroid_token_indices),
+        _array_address(selected_positions),
+        _array_address(selected_scores),
+        int(payload.total_vector_count),
+        int(payload.centroid_count),
+        int(shape.query_count),
+        int(shape.query_vector_count),
+        int(selected.centroids_per_query_vector),
+        int(warmup_iterations),
+        int(measurement_iterations),
+    ]
+    extension_started_at = time.perf_counter()
+    raw_result = module.profile_i8_centroid_selection_addresses(request)
+    extension_call_seconds = time.perf_counter() - extension_started_at
+
+    if len(raw_result) != 16:
+        raise RuntimeError(
+            "GPU i8 centroid selection bridge returned an unexpected result shape"
+        )
+
+    return MojoGpuI8CentroidSelectionResult(
+        host_marshalling_seconds=host_marshalling_seconds,
+        extension_call_seconds=extension_call_seconds,
+        mojo_host_ingest_mean_seconds=float(raw_result[0]),
+        payload_host_to_device_mean_seconds=float(raw_result[1]),
+        query_host_to_device_mean_seconds=float(raw_result[2]),
+        kernel_mean_seconds=float(raw_result[3]),
+        device_to_host_mean_seconds=float(raw_result[4]),
+        host_selection_mean_seconds=float(raw_result[5]),
+        centroid_token_out_of_range_count=int(raw_result[6]),
+        selected_position_mismatch_count=int(raw_result[7]),
+        selected_score_mismatch_count=int(raw_result[8]),
+        selected_score_delta_max_abs=float(raw_result[9]),
+        selected_centroid_count=int(raw_result[10]),
+        centroid_score_count=int(raw_result[11]),
+        centroid_count=int(raw_result[12]),
+        query_count=int(raw_result[13]),
+        query_vector_count=int(raw_result[14]),
+        centroids_per_query_vector=int(raw_result[15]),
     )
 
 

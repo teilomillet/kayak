@@ -94,6 +94,42 @@ def reduce_i8_candidate_score_kernel_dynamic(
     score_out[score_index] = total
 
 
+def score_i8_centroid_scores_kernel(
+    query_values: UnsafePointer[Float32, MutAnyOrigin],
+    token_codes: UnsafePointer[Int8, MutAnyOrigin],
+    token_scales: UnsafePointer[Float32, MutAnyOrigin],
+    centroid_token_indices: UnsafePointer[Int64, MutAnyOrigin],
+    output_centroid_scores: UnsafePointer[Float32, MutAnyOrigin],
+    query_vector_count: Int,
+    centroid_count: Int,
+    centroid_score_count: Int,
+):
+    var score_index = Int(global_idx.x)
+    if score_index >= centroid_score_count:
+        return
+
+    var query_vector_global = score_index // centroid_count
+    var centroid_index = score_index - query_vector_global * centroid_count
+    var query_index = query_vector_global // query_vector_count
+    var query_vector_index = (
+        query_vector_global - query_index * query_vector_count
+    )
+    var token_index = Int(centroid_token_indices[centroid_index])
+    var query_offset = (
+        query_index * query_vector_count * VECTOR_DIM
+        + query_vector_index * VECTOR_DIM
+    )
+    var token_offset = token_index * VECTOR_DIM
+    var dot = Float32(0.0)
+
+    for dim_index in range(VECTOR_DIM):
+        dot += query_values[query_offset + dim_index] * Float32(
+            Int(token_codes[token_offset + dim_index])
+        )
+
+    output_centroid_scores[score_index] = dot * token_scales[token_index]
+
+
 def expand_i8_selected_centroid_postings_kernel(
     selected_centroid_positions: UnsafePointer[Int64, MutAnyOrigin],
     selected_centroid_scores: UnsafePointer[Float32, MutAnyOrigin],
@@ -2311,6 +2347,400 @@ def profile_i8_selected_posting_traversal_addresses(
         return py_result
 
 
+def profile_i8_centroid_selection_addresses(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var token_codes_address = Int(py=py_request[1])
+    var token_scales_address = Int(py=py_request[2])
+    var centroid_token_indices_address = Int(py=py_request[3])
+    var expected_selected_positions_address = Int(py=py_request[4])
+    var expected_selected_scores_address = Int(py=py_request[5])
+    var total_vector_count = Int(py=py_request[6])
+    var centroid_count = Int(py=py_request[7])
+    var query_count = Int(py=py_request[8])
+    var query_vector_count = Int(py=py_request[9])
+    var centroids_per_query_vector = Int(py=py_request[10])
+    var warmup_iterations = Int(py=py_request[11])
+    var measurement_iterations = Int(py=py_request[12])
+    if query_values_address == 0:
+        raise Error("query values address must be non-zero")
+    if token_codes_address == 0:
+        raise Error("token codes address must be non-zero")
+    if token_scales_address == 0:
+        raise Error("token scales address must be non-zero")
+    if centroid_token_indices_address == 0:
+        raise Error("centroid token indices address must be non-zero")
+    if expected_selected_positions_address == 0:
+        raise Error("expected selected positions address must be non-zero")
+    if expected_selected_scores_address == 0:
+        raise Error("expected selected scores address must be non-zero")
+    if total_vector_count <= 0:
+        raise Error("total_vector_count must be positive")
+    if centroid_count <= 0:
+        raise Error("centroid_count must be positive")
+    if query_count <= 0:
+        raise Error("query_count must be positive")
+    if query_vector_count <= 0:
+        raise Error("query_vector_count must be positive")
+    if centroids_per_query_vector <= 0:
+        raise Error("centroids_per_query_vector must be positive")
+    if centroids_per_query_vector > centroid_count:
+        raise Error("centroids_per_query_vector must not exceed centroid_count")
+    if warmup_iterations < 0:
+        raise Error("warmup_iterations must be non-negative")
+    if measurement_iterations <= 0:
+        raise Error("measurement_iterations must be positive")
+
+    var py_query_values = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=query_values_address
+    )
+    var py_token_codes = UnsafePointer[Int8, MutAnyOrigin](
+        unsafe_from_address=token_codes_address
+    )
+    var py_token_scales = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=token_scales_address
+    )
+    var py_centroid_token_indices = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=centroid_token_indices_address
+    )
+    var py_expected_selected_positions = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=expected_selected_positions_address
+    )
+    var py_expected_selected_scores = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=expected_selected_scores_address
+    )
+
+    var query_value_count = query_count * query_vector_count * VECTOR_DIM
+    var token_code_count = total_vector_count * VECTOR_DIM
+    var centroid_score_count = query_count * query_vector_count * centroid_count
+    var selected_centroid_count = (
+        query_count * query_vector_count * centroids_per_query_vector
+    )
+    var grid_x = (centroid_score_count + BLOCK_SIZE - 1) // BLOCK_SIZE
+
+    with DeviceContext() as ctx:
+        var query_values_host = ctx.enqueue_create_host_buffer[DType.float32](
+            query_value_count
+        )
+        var token_codes_host = ctx.enqueue_create_host_buffer[DType.int8](
+            token_code_count
+        )
+        var token_scales_host = ctx.enqueue_create_host_buffer[DType.float32](
+            total_vector_count
+        )
+        var centroid_token_indices_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](centroid_count)
+        var output_centroid_scores_host = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](centroid_score_count)
+        var output_selected_positions_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](selected_centroid_count)
+        var output_selected_scores_host = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](selected_centroid_count)
+        var selection_heap_positions_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](centroids_per_query_vector)
+        var selection_heap_scores_host = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](centroids_per_query_vector)
+
+        var query_values_device = ctx.enqueue_create_buffer[DType.float32](
+            query_value_count
+        )
+        var token_codes_device = ctx.enqueue_create_buffer[DType.int8](
+            token_code_count
+        )
+        var token_scales_device = ctx.enqueue_create_buffer[DType.float32](
+            total_vector_count
+        )
+        var centroid_token_indices_device = ctx.enqueue_create_buffer[
+            DType.int64
+        ](centroid_count)
+        var output_centroid_scores_device = ctx.enqueue_create_buffer[
+            DType.float32
+        ](centroid_score_count)
+        ctx.synchronize()
+
+        def host_ingest_once() capturing raises:
+            for index in range(query_value_count):
+                query_values_host[index] = py_query_values[index]
+
+            for index in range(token_code_count):
+                token_codes_host[index] = py_token_codes[index]
+
+            for index in range(total_vector_count):
+                token_scales_host[index] = py_token_scales[index]
+
+            for index in range(centroid_count):
+                centroid_token_indices_host[index] = py_centroid_token_indices[
+                    index
+                ]
+
+        def payload_h2d_once() capturing raises:
+            token_codes_device.enqueue_copy_from(token_codes_host)
+            token_scales_device.enqueue_copy_from(token_scales_host)
+            centroid_token_indices_device.enqueue_copy_from(
+                centroid_token_indices_host
+            )
+            ctx.synchronize()
+
+        def query_h2d_once() capturing raises:
+            query_values_device.enqueue_copy_from(query_values_host)
+            ctx.synchronize()
+
+        def centroid_score_kernel_once() capturing raises:
+            ctx.enqueue_function[
+                score_i8_centroid_scores_kernel,
+                score_i8_centroid_scores_kernel,
+            ](
+                query_values_device,
+                token_codes_device,
+                token_scales_device,
+                centroid_token_indices_device,
+                output_centroid_scores_device,
+                query_vector_count,
+                centroid_count,
+                centroid_score_count,
+                grid_dim=grid_x,
+                block_dim=BLOCK_SIZE,
+            )
+            ctx.synchronize()
+
+        def d2h_once() capturing raises:
+            output_centroid_scores_device.enqueue_copy_to(
+                output_centroid_scores_host
+            )
+            ctx.synchronize()
+
+        def score_position_ranks_before_float32(
+            score: Float32,
+            position: Int,
+            other_score: Float32,
+            other_position: Int,
+        ) -> Bool:
+            if score > other_score:
+                return True
+            if score < other_score:
+                return False
+            return position < other_position
+
+        def score_position_is_worse_float32(
+            score: Float32,
+            position: Int,
+            other_score: Float32,
+            other_position: Int,
+        ) -> Bool:
+            if score < other_score:
+                return True
+            if score > other_score:
+                return False
+            return position > other_position
+
+        def swap_selection_heap_entries(lhs: Int, rhs: Int) capturing:
+            var position_value = selection_heap_positions_host[lhs]
+            selection_heap_positions_host[lhs] = selection_heap_positions_host[
+                rhs
+            ]
+            selection_heap_positions_host[rhs] = position_value
+
+            var score_value = selection_heap_scores_host[lhs]
+            selection_heap_scores_host[lhs] = selection_heap_scores_host[rhs]
+            selection_heap_scores_host[rhs] = score_value
+
+        def sift_up_selection_heap(position: Int) capturing:
+            var cursor = position
+            while cursor > 0:
+                var parent = (cursor - 1) // 2
+                if not score_position_is_worse_float32(
+                    selection_heap_scores_host[cursor],
+                    Int(selection_heap_positions_host[cursor]),
+                    selection_heap_scores_host[parent],
+                    Int(selection_heap_positions_host[parent]),
+                ):
+                    break
+
+                swap_selection_heap_entries(cursor, parent)
+                cursor = parent
+
+        def sift_down_selection_heap(position: Int, heap_size: Int) capturing:
+            var cursor = position
+            while True:
+                var left = cursor * 2 + 1
+                if left >= heap_size:
+                    break
+
+                var next = left
+                var right = left + 1
+                if right < heap_size and score_position_is_worse_float32(
+                    selection_heap_scores_host[right],
+                    Int(selection_heap_positions_host[right]),
+                    selection_heap_scores_host[left],
+                    Int(selection_heap_positions_host[left]),
+                ):
+                    next = right
+
+                if not score_position_is_worse_float32(
+                    selection_heap_scores_host[next],
+                    Int(selection_heap_positions_host[next]),
+                    selection_heap_scores_host[cursor],
+                    Int(selection_heap_positions_host[cursor]),
+                ):
+                    break
+
+                swap_selection_heap_entries(cursor, next)
+                cursor = next
+
+        def insert_selection_heap(
+            position: Int, score: Float32, heap_size: Int
+        ) capturing -> Int:
+            if heap_size < centroids_per_query_vector:
+                selection_heap_positions_host[heap_size] = Int64(position)
+                selection_heap_scores_host[heap_size] = score
+                sift_up_selection_heap(heap_size)
+                return heap_size + 1
+
+            if not score_position_ranks_before_float32(
+                score,
+                position,
+                selection_heap_scores_host[0],
+                Int(selection_heap_positions_host[0]),
+            ):
+                return heap_size
+
+            selection_heap_positions_host[0] = Int64(position)
+            selection_heap_scores_host[0] = score
+            sift_down_selection_heap(0, heap_size)
+            return heap_size
+
+        def pop_selection_heap(heap_size: Int) capturing -> Int:
+            var next_size = heap_size - 1
+            selection_heap_positions_host[0] = selection_heap_positions_host[
+                next_size
+            ]
+            selection_heap_scores_host[0] = selection_heap_scores_host[
+                next_size
+            ]
+            if next_size > 0:
+                sift_down_selection_heap(0, next_size)
+            return next_size
+
+        def host_select_once() capturing:
+            for query_index in range(query_count):
+                for query_vector_index in range(query_vector_count):
+                    var score_base = (
+                        query_index * query_vector_count * centroid_count
+                        + query_vector_index * centroid_count
+                    )
+                    var selected_base = (
+                        query_index
+                        * query_vector_count
+                        * centroids_per_query_vector
+                        + query_vector_index * centroids_per_query_vector
+                    )
+                    var heap_size = 0
+                    for centroid_index in range(centroid_count):
+                        heap_size = insert_selection_heap(
+                            centroid_index,
+                            output_centroid_scores_host[
+                                score_base + centroid_index
+                            ],
+                            heap_size,
+                        )
+
+                    while heap_size > 0:
+                        var output_offset = selected_base + heap_size - 1
+                        output_selected_positions_host[
+                            output_offset
+                        ] = selection_heap_positions_host[0]
+                        output_selected_scores_host[
+                            output_offset
+                        ] = selection_heap_scores_host[0]
+                        heap_size = pop_selection_heap(heap_size)
+
+        host_ingest_once()
+        payload_h2d_once()
+        query_h2d_once()
+        centroid_score_kernel_once()
+        d2h_once()
+        host_select_once()
+
+        for _ in range(warmup_iterations):
+            query_h2d_once()
+            centroid_score_kernel_once()
+            d2h_once()
+            host_select_once()
+
+        var host_ingest = benchmark.run[host_ingest_once](
+            max_iters=measurement_iterations
+        )
+        host_ingest_once()
+        var payload_h2d = benchmark.run[payload_h2d_once](
+            max_iters=measurement_iterations
+        )
+        payload_h2d_once()
+        var query_h2d = benchmark.run[query_h2d_once](
+            max_iters=measurement_iterations
+        )
+        query_h2d_once()
+        var kernel = benchmark.run[centroid_score_kernel_once](
+            max_iters=measurement_iterations
+        )
+        centroid_score_kernel_once()
+        var d2h = benchmark.run[d2h_once](max_iters=measurement_iterations)
+        d2h_once()
+        var host_selection = benchmark.run[host_select_once](
+            max_iters=measurement_iterations
+        )
+        host_select_once()
+
+        var centroid_token_out_of_range_count = 0
+        for centroid_index in range(centroid_count):
+            var token_index = centroid_token_indices_host[centroid_index]
+            if token_index < 0 or token_index >= Int64(total_vector_count):
+                centroid_token_out_of_range_count += 1
+
+        var selected_position_mismatch_count = 0
+        var selected_score_mismatch_count = 0
+        var selected_score_delta_max_abs = Float64(0.0)
+        for index in range(selected_centroid_count):
+            if (
+                output_selected_positions_host[index]
+                != py_expected_selected_positions[index]
+            ):
+                selected_position_mismatch_count += 1
+            var score_delta = abs(
+                Float64(output_selected_scores_host[index])
+                - Float64(py_expected_selected_scores[index])
+            )
+            if score_delta > selected_score_delta_max_abs:
+                selected_score_delta_max_abs = score_delta
+            if score_delta > Float64(0.0001):
+                selected_score_mismatch_count += 1
+
+        var py_result = Python.list()
+        py_result.append(Python.float(host_ingest.mean()))
+        py_result.append(Python.float(payload_h2d.mean()))
+        py_result.append(Python.float(query_h2d.mean()))
+        py_result.append(Python.float(kernel.mean()))
+        py_result.append(Python.float(d2h.mean()))
+        py_result.append(Python.float(host_selection.mean()))
+        py_result.append(Python.int(centroid_token_out_of_range_count))
+        py_result.append(Python.int(selected_position_mismatch_count))
+        py_result.append(Python.int(selected_score_mismatch_count))
+        py_result.append(Python.float(selected_score_delta_max_abs))
+        py_result.append(Python.int(selected_centroid_count))
+        py_result.append(Python.int(centroid_score_count))
+        py_result.append(Python.int(centroid_count))
+        py_result.append(Python.int(query_count))
+        py_result.append(Python.int(query_vector_count))
+        py_result.append(Python.int(centroids_per_query_vector))
+        return py_result
+
+
 def profile_i8_selected_posting_accumulation_addresses(
     py_request: PythonObject,
 ) raises -> PythonObject:
@@ -2785,6 +3215,13 @@ def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
             docstring=(
                 "Profile GPU traversal of selected i8 centroid posting lists"
                 " without document score accumulation."
+            ),
+        )
+        module.def_function[profile_i8_centroid_selection_addresses](
+            "profile_i8_centroid_selection_addresses",
+            docstring=(
+                "Profile GPU scoring of i8 sampled centroids plus host"
+                " centroid top-k selection."
             ),
         )
         module.def_function[profile_i8_selected_posting_accumulation_addresses](
