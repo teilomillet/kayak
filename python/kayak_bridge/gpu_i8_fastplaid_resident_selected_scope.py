@@ -161,6 +161,7 @@ def run_resident_selected_posting_exact_rerank_probe(
 
     exact_handle = None
     selected_posting_handle = None
+    use_identity_candidate_window = candidate_k == int(shape.document_count)
     release_seconds = 0.0
     selected_posting_release_seconds = 0.0
     try:
@@ -170,12 +171,13 @@ def run_resident_selected_posting_exact_rerank_probe(
             candidate_k=candidate_k,
             payload=payload,
         )
-        selected_posting_handle = prepare_i8_selected_posting_session_handle(
-            target_accelerator=capability.target_accelerator or "",
-            shape=shape,
-            payload=payload,
-            centroids_per_query_vector=centroids_per_query_vector,
-        )
+        if not use_identity_candidate_window:
+            selected_posting_handle = prepare_i8_selected_posting_session_handle(
+                target_accelerator=capability.target_accelerator or "",
+                shape=shape,
+                payload=payload,
+                centroids_per_query_vector=centroids_per_query_vector,
+            )
         for _ in range(warmup_iterations):
             _run_resident_selected_window(
                 exact_handle=exact_handle,
@@ -198,7 +200,8 @@ def run_resident_selected_posting_exact_rerank_probe(
             )
             for window_index in range(len(query_windows))
         ]
-        selected_posting_release_seconds += selected_posting_handle.close()
+        if selected_posting_handle is not None:
+            selected_posting_release_seconds += selected_posting_handle.close()
         release_seconds += exact_handle.close()
     except Exception as exc:  # pragma: no cover - exercised by GPU environments.
         if selected_posting_handle is not None:
@@ -221,6 +224,8 @@ def run_resident_selected_posting_exact_rerank_probe(
         exact_prepare_seconds=exact_handle.prepare_extension_call_seconds,
         selected_posting_prepare_seconds=(
             selected_posting_handle.prepare_extension_call_seconds
+            if selected_posting_handle is not None
+            else 0.0
         ),
         selected_posting_release_seconds=selected_posting_release_seconds,
         release_seconds=release_seconds,
@@ -238,28 +243,37 @@ def run_resident_selected_posting_exact_rerank_probe(
 def _run_resident_selected_window(
     *,
     exact_handle: Any,
-    selected_posting_handle: Any,
+    selected_posting_handle: Any | None,
     index: KayakPlaidApproxIndex,
     queries: np.ndarray,
     shape: SpeedTrackShape,
     candidate_k: int,
     centroids_per_query_vector: int,
 ) -> dict[str, Any]:
-    selected_started_at = time.perf_counter()
-    selected = index.i8_selected_centroids_batch(
-        queries,
-        centroids_per_query_vector=centroids_per_query_vector,
-    )
-    cpu_selected_centroids_seconds = time.perf_counter() - selected_started_at
-    candidate_result = selected_posting_handle.score_dense_candidate_positions(
-        selected=selected,
-        candidate_k=candidate_k,
-    )
-    candidate_positions = position_rows(
-        candidate_result.positions,
-        query_count=shape.query_count,
-        row_width=candidate_k,
-    )
+    candidate_generation_kind = "selected_posting_dense_scores"
+    candidate_result = None
+    if candidate_k == int(shape.document_count):
+        cpu_selected_centroids_seconds = 0.0
+        candidate_generation_kind = "identity_full_window"
+        candidate_positions = _identity_candidate_positions_by_query(shape)
+    else:
+        if selected_posting_handle is None:
+            raise RuntimeError("selected-posting handle is required")
+        selected_started_at = time.perf_counter()
+        selected = index.i8_selected_centroids_batch(
+            queries,
+            centroids_per_query_vector=centroids_per_query_vector,
+        )
+        cpu_selected_centroids_seconds = time.perf_counter() - selected_started_at
+        candidate_result = selected_posting_handle.score_dense_candidate_positions(
+            selected=selected,
+            candidate_k=candidate_k,
+        )
+        candidate_positions = position_rows(
+            candidate_result.positions,
+            query_count=shape.query_count,
+            row_width=candidate_k,
+        )
     exact_result = exact_handle.score_topk_without_reference(
         queries=queries,
         candidate_positions_by_query=candidate_positions,
@@ -283,6 +297,7 @@ def _run_resident_selected_window(
         if actual == expected
     )
     return {
+        "candidate_generation_kind": candidate_generation_kind,
         "candidate_result": candidate_result,
         "exact_result": exact_result,
         "candidate_positions": candidate_positions,
@@ -313,17 +328,12 @@ def _parsed_payload_from_results(
     warmup_iterations: int,
 ) -> dict[str, object]:
     window_count = len(results)
-    resident_total = sum(
-        result["candidate_result"].score_plus_candidate_selection_seconds
-        for result in results
+    resident_total = sum(_candidate_hot_seconds(result) for result in results)
+    resident_cold_total = (
+        sum(_candidate_cold_seconds(result) for result in results)
+        + selected_posting_prepare_seconds
+        + selected_posting_release_seconds
     )
-    resident_cold_total = sum(
-        result["candidate_result"].prepare_call_seconds
-        + result["candidate_result"].score_call_seconds
-        + result["candidate_result"].candidate_selection_seconds
-        + result["candidate_result"].release_call_seconds
-        for result in results
-    ) + selected_posting_prepare_seconds + selected_posting_release_seconds
     selected_total = sum(
         float(result["cpu_selected_centroids_seconds"]) for result in results
     )
@@ -353,11 +363,11 @@ def _parsed_payload_from_results(
         "candidate_score_count_per_window": shape.query_count * candidate_k,
         "candidate_score_count_total": window_count * shape.query_count * candidate_k,
         "candidate_position_agreement_min": min(
-            (
-                float(result["candidate_result"].candidate_position_agreement)
-                for result in results
-            ),
+            (_candidate_position_agreement(result) for result in results),
             default=0.0,
+        ),
+        "candidate_generation_kind": (
+            results[0]["candidate_generation_kind"] if results else None
         ),
         "centroids_per_query_vector": centroids_per_query_vector,
         "cpu_selected_centroids_seconds_per_window": selected_total
@@ -422,7 +432,7 @@ def _parsed_payload(row: dict[str, object] | None) -> dict[str, object]:
 
 def _window_to_json_ready(result: dict[str, Any]) -> dict[str, object]:
     return {
-        "candidate_generation": result["candidate_result"].to_json_ready(),
+        "candidate_generation": _candidate_generation_to_json_ready(result),
         "cpu_selected_centroids_seconds": result[
             "cpu_selected_centroids_seconds"
         ],
@@ -432,4 +442,63 @@ def _window_to_json_ready(result: dict[str, Any]) -> dict[str, object]:
         "final_topk_position_match_count": result[
             "final_topk_position_match_count"
         ],
+    }
+
+
+def _identity_candidate_positions_by_query(
+    shape: SpeedTrackShape,
+) -> tuple[tuple[int, ...], ...]:
+    row = tuple(range(int(shape.document_count)))
+    return tuple(row for _ in range(int(shape.query_count)))
+
+
+def _candidate_hot_seconds(result: dict[str, Any]) -> float:
+    candidate_result = result.get("candidate_result")
+    if candidate_result is None:
+        return 0.0
+    return float(candidate_result.score_plus_candidate_selection_seconds)
+
+
+def _candidate_cold_seconds(result: dict[str, Any]) -> float:
+    candidate_result = result.get("candidate_result")
+    if candidate_result is None:
+        return 0.0
+    return float(
+        candidate_result.prepare_call_seconds
+        + candidate_result.score_call_seconds
+        + candidate_result.candidate_selection_seconds
+        + candidate_result.release_call_seconds
+    )
+
+
+def _candidate_position_agreement(result: dict[str, Any]) -> float:
+    candidate_result = result.get("candidate_result")
+    if candidate_result is None:
+        return 1.0
+    return float(candidate_result.candidate_position_agreement)
+
+
+def _candidate_generation_to_json_ready(result: dict[str, Any]) -> dict[str, object]:
+    candidate_result = result.get("candidate_result")
+    if candidate_result is not None:
+        payload = candidate_result.to_json_ready()
+        payload["candidate_generation_kind"] = result["candidate_generation_kind"]
+        return payload
+    candidate_positions = result["candidate_positions"]
+    candidate_position_count = sum(len(row) for row in candidate_positions)
+    return {
+        "candidate_generation_kind": result["candidate_generation_kind"],
+        "candidate_generation_ok": True,
+        "candidate_k": len(candidate_positions[0]) if candidate_positions else 0,
+        "candidate_position_agreement": 1.0,
+        "candidate_position_count": candidate_position_count,
+        "candidate_position_match_count": candidate_position_count,
+        "candidate_selection_seconds": 0.0,
+        "document_score_count": candidate_position_count,
+        "host_marshalling_seconds": 0.0,
+        "prepare_call_seconds": 0.0,
+        "prepare_score_plus_candidate_selection_seconds": 0.0,
+        "release_call_seconds": 0.0,
+        "score_call_seconds": 0.0,
+        "score_plus_candidate_selection_seconds": 0.0,
     }

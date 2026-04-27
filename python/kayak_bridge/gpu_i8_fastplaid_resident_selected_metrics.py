@@ -84,6 +84,9 @@ def build_gpu_resident_selected_posting_exact_rerank_vs_fastplaid_comparison(
         "gpu_resident_selected_candidate_cold_seconds_per_window": (
             candidate_cold_seconds
         ),
+        "gpu_resident_selected_candidate_generation_kind": parsed.get(
+            "candidate_generation_kind"
+        ),
         "gpu_resident_selected_candidate_prepare_seconds": (
             selected_posting_prepare_seconds
         ),

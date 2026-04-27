@@ -272,6 +272,69 @@ exact-rerank dominated. The next optimization should target CPU selected
 centroids only if the goal is reducing the previous worst row; otherwise the
 vector-heavy rows require exact-rerank work.
 
+## Identity Full-Window Candidate Stage
+
+Follow-up claim: when a coverage policy expands `candidate_k` to
+`document_count`, the candidate stage should become an identity stage.
+
+Reason: a full candidate window contains every document, so selected-centroid
+generation and selected-posting approximate scoring cannot change exact-rerank
+coverage. Keeping that work only measures a redundant stage. The exact rerank
+still runs on the same full document set and remains checked against CPU i8
+order.
+
+Targeted validation:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 300 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_policy.py --case documents1024_k256:documents=1024,document_vectors=16,queries=2,query_vectors=8,candidate_k=256 --candidate-window-policy coverage_safety_v0 --fastplaid-devices cuda --seed 10 --fixed-case-seed --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/documents1024_identity_full_window_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/documents1024_identity_full_window_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/documents1024_identity_full_window_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T191612Z`
+
+Targeted `documents1024_k256` CUDA result:
+
+| metric | full-window ranking fast path | identity full-window stage |
+| --- | ---: | ---: |
+| candidate generation kind | selected posting | identity full window |
+| resident / FastPlaid | `0.25730388724538644` | `0.07397499279760904` |
+| CPU selected-centroid share | `0.44839039693805993` | `0.0` |
+| candidate share | `0.26290440330278986` | `0.0` |
+| exact share | `0.28870519975915016` | `1.0` |
+| final agreement min | `1.0` | `1.0` |
+
+Full matrix validation:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 360 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_candidate_window_policies.py --candidate-window-policy coverage_safety_v0 --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_identity_full_window_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_identity_full_window_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_identity_full_window_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T191639Z`
+
+Aggregate result:
+
+| version | rows ok | min recall delta vs FastPlaid | mean resident / FastPlaid | max resident / FastPlaid | mean CPU select share | mean candidate share | mean exact share |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| full-window ranking fast path | `8 / 8` | `+0.050000000000000044` | `0.12108878426361634` | `0.28820741786941106` | `0.30834912065328457` | `0.2565679072911855` | `0.4350829720555299` |
+| identity full-window stage | `8 / 8` | `+0.09999999999999998` | `0.08421350632826388` | `0.1983504776306026` | `0.19631806264881366` | `0.18989524363318638` | `0.613786693718` |
+
+Decision: keep the identity full-window stage.
+
+Reason: it removes provably redundant work, keeps candidate and final agreement
+at `1.0`, improves the full matrix mean and max ratios, and makes the report
+explicitly label full-window rows as `identity_full_window`.
+
+Updated interpretation: the previous worst row is no longer the bottleneck.
+The new max resident/FastPlaid row is `doc_vectors48` on FastPlaid CUDA at
+`0.1983504776306026`. That row is not dominated by one stage: CPU selection,
+candidate generation, and exact rerank are all material, so the next change
+should start with a row-local breakdown rather than a single-stage assumption.
+
 ## Decision
 
 Keep `coverage_safety_v0` as the next benchmark policy candidate.

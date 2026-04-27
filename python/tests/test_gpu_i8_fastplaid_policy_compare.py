@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from kayak_bridge.cache_paths import REPO_ROOT
 
@@ -18,6 +19,9 @@ from kayak_bridge.gpu_i8_candidate_window_policy import (
     choose_candidate_window,
 )
 from kayak_bridge import gpu_i8_fastplaid_policy_compare as policy_compare
+from kayak_bridge import (
+    gpu_i8_fastplaid_resident_selected_scope as resident_selected_scope,
+)
 
 
 class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
@@ -193,6 +197,7 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
                     "gpu_resident_selected_exact_rerank_cold_seconds_per_fastplaid_batch_second": 0.052,
                     "gpu_resident_selected_candidate_prepare_seconds": 0.00007,
                     "gpu_resident_selected_candidate_release_seconds": 0.00001,
+                    "gpu_resident_selected_candidate_generation_kind": "identity_full_window",
                     "gpu_resident_selected_exact_rerank_exact_share": 0.2,
                     "recall_at_k_vs_kayak_exact": 0.66,
                     "final_topk_position_agreement": 1.0,
@@ -242,6 +247,10 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
             row["gpu_resident_selected_candidate_release_seconds"],
             0.00001,
         )
+        self.assertEqual(
+            row["gpu_resident_selected_candidate_generation_kind"],
+            "identity_full_window",
+        )
         self.assertAlmostEqual(
             row["gpu_resident_selected_recall_delta_vs_fastplaid"],
             0.26,
@@ -285,6 +294,60 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
                 "gpu_resident_selected_final_topk_position_agreement_min"
             ],
             1.0,
+        )
+
+    def test_identity_full_window_candidate_generation_reports_zero_stage(self) -> None:
+        shape = SimpleNamespace(
+            document_count=3,
+            query_count=2,
+            query_vector_count=4,
+            top_k=2,
+            vector_dim=128,
+        )
+        exact_result = SimpleNamespace(
+            extension_call_seconds=0.4,
+            positions=(2, 1, 0, 1),
+            to_json_ready=lambda: {"extension_call_seconds": 0.4},
+        )
+        result = {
+            "candidate_generation_kind": "identity_full_window",
+            "candidate_result": None,
+            "candidate_positions": ((0, 1, 2), (0, 1, 2)),
+            "cpu_selected_centroids_seconds": 0.0,
+            "exact_result": exact_result,
+            "exact_score_delta_max_abs": 0.0,
+            "final_topk_position_count": 4,
+            "final_topk_position_match_count": 4,
+        }
+
+        parsed = resident_selected_scope._parsed_payload_from_results(
+            shape=shape,
+            results=[result],
+            candidate_k=3,
+            centroids_per_query_vector=24,
+            exact_prepare_seconds=0.1,
+            selected_posting_prepare_seconds=0.0,
+            selected_posting_release_seconds=0.0,
+            release_seconds=0.2,
+            warmup_iterations=1,
+        )
+        window = resident_selected_scope._window_to_json_ready(result)
+
+        self.assertEqual(parsed["candidate_generation_kind"], "identity_full_window")
+        self.assertEqual(parsed["resident_candidate_seconds_per_window"], 0.0)
+        self.assertEqual(parsed["cpu_selected_centroids_seconds_per_window"], 0.0)
+        self.assertEqual(parsed["candidate_position_agreement_min"], 1.0)
+        self.assertEqual(
+            parsed["resident_selected_posting_exact_rerank_seconds_per_window"],
+            0.4,
+        )
+        self.assertEqual(
+            window["candidate_generation"]["candidate_generation_kind"],
+            "identity_full_window",
+        )
+        self.assertEqual(
+            window["candidate_generation"]["candidate_position_count"],
+            6,
         )
 
 
