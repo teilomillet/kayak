@@ -167,6 +167,68 @@ class FastPlaidSpeedTrackTests(unittest.TestCase):
             index.search_batch_positions(queries, final_k=2)[0],
         )
 
+    def test_kayak_plaid_i8_full_window_candidate_positions_skip_proxy_sort(
+        self,
+    ) -> None:
+        documents = np.zeros((3, 2, 128), dtype=np.float32)
+        documents[0, 0, 0] = 1.0
+        documents[1, 0, 1] = 1.0
+        documents[2, 0, 0] = 1.0
+        documents[2, 0, 1] = 1.0
+        queries = np.zeros((1, 2, 128), dtype=np.float32)
+        queries[0, 0, 0] = 1.0
+        queries[0, 1, 1] = 1.0
+        index = KayakPlaidApproxIndex.build(
+            doc_ids=("doc-a", "doc-b", "doc-c"),
+            documents=documents,
+            config=KayakPlaidApproxConfig(
+                centroid_count=3,
+                centroids_per_query_vector=2,
+                candidate_k=3,
+                payload="i8",
+            ),
+            final_k=2,
+        )
+
+        candidate_positions = index.i8_candidate_positions_batch(queries)
+        scores = index.i8_score_candidate_positions_batch(
+            queries,
+            candidate_positions,
+        )
+        ranked_offsets = sorted(
+            range(len(candidate_positions[0])),
+            key=lambda offset: scores[0][offset],
+            reverse=True,
+        )
+
+        self.assertEqual(candidate_positions, ((0, 1, 2),))
+        self.assertEqual(
+            tuple(candidate_positions[0][offset] for offset in ranked_offsets[:2]),
+            index.search_batch_positions(queries, final_k=2)[0],
+        )
+
+    def test_kayak_plaid_i8_full_window_ties_keep_lower_positions(
+        self,
+    ) -> None:
+        documents = np.zeros((3, 1, 128), dtype=np.float32)
+        queries = np.zeros((1, 1, 128), dtype=np.float32)
+        index = KayakPlaidApproxIndex.build(
+            doc_ids=("doc-a", "doc-b", "doc-c"),
+            documents=documents,
+            config=KayakPlaidApproxConfig(
+                centroid_count=3,
+                centroids_per_query_vector=2,
+                candidate_k=3,
+                payload="i8",
+            ),
+            final_k=3,
+        )
+
+        self.assertEqual(
+            index.search_batch_positions(queries, final_k=3)[0],
+            (0, 1, 2),
+        )
+
     def test_kayak_plaid_i8_payload_snapshot_exposes_flat_buffers(self) -> None:
         documents = np.zeros((2, 2, 128), dtype=np.float32)
         documents[0, 0, 0] = 1.0

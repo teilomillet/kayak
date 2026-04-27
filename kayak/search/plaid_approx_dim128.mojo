@@ -4,7 +4,9 @@ from std.format import Writable, Writer
 from kayak.contracts import FlatQueryDim128
 from kayak.index import HybridFlatDim128Index
 from kayak.numeric import ScoreScalar, min_score_scalar, zero_score_scalar
-from kayak.scoring import exact_score_for_hybrid_flat_document_dim128_with_flat_query
+from kayak.scoring import (
+    exact_score_for_hybrid_flat_document_dim128_with_flat_query,
+)
 from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
 from kayak.scoring.dot128_flat import dot_product_dim128_flat_pair_at
 
@@ -116,7 +118,9 @@ def build_centroid_doc_presence(
             var centroid_index = nearest_sampled_centroid_for_token(
                 index, token_index, centroid_token_indices
             )
-            presence[(centroid_index * index.document_count) + document_index] = 1
+            presence[
+                (centroid_index * index.document_count) + document_index
+            ] = 1
 
     return presence^
 
@@ -186,37 +190,174 @@ def plaid_approx_prepared_posting_count_value(
     return len(prepared_index.centroid_doc_indices)
 
 
-def top_positions_by_score(read scores: List[ScoreScalar], k: Int) raises -> List[Int]:
+def score_position_is_worse(
+    score: ScoreScalar,
+    position: Int,
+    other_score: ScoreScalar,
+    other_position: Int,
+) -> Bool:
+    if score < other_score:
+        return True
+    if score > other_score:
+        return False
+    return position > other_position
+
+
+def score_position_ranks_before(
+    score: ScoreScalar,
+    position: Int,
+    other_score: ScoreScalar,
+    other_position: Int,
+) -> Bool:
+    if score > other_score:
+        return True
+    if score < other_score:
+        return False
+    return position < other_position
+
+
+def swap_score_position_entries(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+    lhs: Int,
+    rhs: Int,
+):
+    var position_value = positions[lhs]
+    positions[lhs] = positions[rhs]
+    positions[rhs] = position_value
+
+    var score_value = scores[lhs]
+    scores[lhs] = scores[rhs]
+    scores[rhs] = score_value
+
+
+def sift_up_worst_first_score_position(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+    position: Int,
+):
+    var cursor = position
+    while cursor > 0:
+        var parent = (cursor - 1) // 2
+        if not score_position_is_worse(
+            scores[cursor],
+            positions[cursor],
+            scores[parent],
+            positions[parent],
+        ):
+            break
+
+        swap_score_position_entries(positions, scores, cursor, parent)
+        cursor = parent
+
+
+def sift_down_worst_first_score_position(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+    position: Int,
+):
+    var cursor = position
+    while True:
+        var left = cursor * 2 + 1
+        if left >= len(scores):
+            break
+
+        var next = left
+        var right = left + 1
+        if right < len(scores) and score_position_is_worse(
+            scores[right],
+            positions[right],
+            scores[left],
+            positions[left],
+        ):
+            next = right
+
+        if not score_position_is_worse(
+            scores[next],
+            positions[next],
+            scores[cursor],
+            positions[cursor],
+        ):
+            break
+
+        swap_score_position_entries(positions, scores, cursor, next)
+        cursor = next
+
+
+def insert_top_score_position(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+    position: Int,
+    score: ScoreScalar,
+    limit: Int,
+):
+    if len(scores) < limit:
+        positions.append(position)
+        scores.append(score)
+        sift_up_worst_first_score_position(positions, scores, len(scores) - 1)
+        return
+
+    # The heap root is the worst retained result. Equal scores keep the lower
+    # original position so tie behavior matches the previous selection path.
+    if not score_position_ranks_before(
+        score, position, scores[0], positions[0]
+    ):
+        return
+
+    positions[0] = position
+    scores[0] = score
+    sift_down_worst_first_score_position(positions, scores, 0)
+
+
+def pop_worst_score_position(
+    mut positions: List[Int], mut scores: List[ScoreScalar]
+) -> Int:
+    var worst_position = positions[0]
+    var last_offset = len(positions) - 1
+    positions[0] = positions[last_offset]
+    scores[0] = scores[last_offset]
+    _ = positions.pop()
+    _ = scores.pop()
+
+    if len(scores) > 0:
+        sift_down_worst_first_score_position(positions, scores, 0)
+
+    return worst_position
+
+
+def top_positions_by_score(
+    read scores: List[ScoreScalar], k: Int
+) raises -> List[Int]:
     require_positive_int("k", k)
 
     var selected = List[Int]()
     if len(scores) == 0:
         return selected^
 
-    var used = List[Int]()
-    for _ in range(len(scores)):
-        used.append(0)
-
     var limit = k
     if limit > len(scores):
         limit = len(scores)
 
-    for _ in range(limit):
-        var best_index = -1
-        var best_score = min_score_scalar()
-        for index in range(len(scores)):
-            if used[index] != 0:
-                continue
-            var score = scores[index]
-            if best_index == -1 or score > best_score:
-                best_index = index
-                best_score = score
+    var heap_positions = List[Int]()
+    heap_positions.reserve(limit)
+    var heap_scores = List[ScoreScalar]()
+    heap_scores.reserve(limit)
+    for position in range(len(scores)):
+        insert_top_score_position(
+            heap_positions, heap_scores, position, scores[position], limit
+        )
 
-        if best_index == -1:
-            break
+    var ascending_positions = List[Int]()
+    ascending_positions.reserve(limit)
+    while len(heap_positions) > 0:
+        ascending_positions.append(
+            pop_worst_score_position(heap_positions, heap_scores)
+        )
 
-        used[best_index] = 1
-        selected.append(best_index)
+    for offset in range(len(ascending_positions)):
+        selected.append(
+            ascending_positions[len(ascending_positions) - offset - 1]
+        )
 
     return selected^
 
@@ -230,7 +371,9 @@ def score_query_vector_against_sampled_centroids(
     var query_offset = query_vector_index * COLBERT_VECTOR_DIM
 
     for centroid_index in range(prepared_index.centroid_count):
-        var centroid_token_index = prepared_index.centroid_token_indices[centroid_index]
+        var centroid_token_index = prepared_index.centroid_token_indices[
+            centroid_index
+        ]
         var centroid_offset = centroid_token_index * COLBERT_VECTOR_DIM
         centroid_scores.append(
             dot_product_dim128_flat_pair_at(
@@ -341,7 +484,9 @@ def plaid_rerank_candidate_hits_for_query(
         )
         insert_descending(
             hits,
-            SearchHit(prepared_index.index.doc_ids[document_index].copy(), score),
+            SearchHit(
+                prepared_index.index.doc_ids[document_index].copy(), score
+            ),
             final_k,
         )
 

@@ -313,22 +313,23 @@ cases preserved CPU i8 score agreement.
 Top-k return finding: the prepared handle can return only `[query_count,
 top_k]` positions and scores after Mojo-side host top-k selection. The latest
 quiet sweep preserved `topk_position_agreement=1.0` for all six cases. Top-k
-return ratios ranged from about `0.159x` to `0.300x` of CPU same-candidate
+return ratios ranged from about `0.162x` to `0.309x` of CPU same-candidate
 scoring, and the CPU-candidate-generation-plus-top-k envelope ranged from about
-`0.649x` to `0.804x` of CPU candidate generation plus CPU scoring. Returning
+`0.412x` to `0.750x` of CPU candidate generation plus CPU scoring. Returning
 top-k was faster than returning all candidate scores on every swept case.
 
 Reason: this keeps measured evidence ahead of abstraction. The next
-optimization target is a wider candidate-window top-k sweep after the explicit
-handle, not immediate dim128 kernel rewrites.
+optimization targets are the measured candidate-generation envelope and an
+internal search boundary around the explicit handle, not immediate public API
+surface area.
 
 Wide top-k finding: `profile_gpu_i8_address_serve_wide_topk` adds explicit
 larger candidate-window and vector-count cases without changing the default
 sweep. The quiet run on `nvidia:sm_89` preserved `topk_position_agreement=1.0`
 on all five cases. Prepared-handle top-k ratios ranged from about `0.104x` to
-`0.228x` of CPU same-candidate scoring, and the
-CPU-candidate-generation-plus-top-k envelope ranged from about `0.586x` to
-`0.755x` of CPU candidate generation plus CPU scoring. The first wide run also
+`0.232x` of CPU same-candidate scoring, and the
+CPU-candidate-generation-plus-top-k envelope ranged from about `0.331x` to
+`0.560x` of CPU candidate generation plus CPU scoring. The first wide run also
 debunked the fixed `1.0e-4` absolute score-delta threshold for
 `query_vector_count=32`; GPU i8 score agreement now reports an explicit
 vector-count-aware tolerance field.
@@ -336,6 +337,39 @@ vector-count-aware tolerance field.
 Reason: the wider run validates the prepared-handle top-k boundary beyond the
 original small windows, while the tolerance finding keeps correctness evidence
 visible instead of hiding a widened threshold.
+
+Candidate-generation cleanup finding: CPU candidate generation was the next
+visible limiter after GPU scoring moved behind an explicit prepared handle. Two
+CPU-side changes improved that boundary without adding GPU abstraction: full
+candidate windows now return all document positions directly, and
+`top_positions_by_score` uses a bounded worst-first heap instead of repeated
+full scans. The latest wide quiet run reduced the non-full-window candidate
+generation cases materially: `doc_vectors64` moved to about `0.000514s/window`,
+`query_vectors32` to about `0.001288s/window`, and `query_batch4` to about
+`0.000964s/window`. Full-window cases stayed near `0.000335s/window`
+(`candidate512`) and `0.000574s/window` (`candidate1024`) because they skip the
+proxy sort entirely.
+
+Reason: candidate-window identity is exact when `candidate_k >= document_count`,
+so proxy sorting cannot improve correctness. The heap keeps the prior
+descending-score, lower-position tie order while reducing selection work from
+`O(k * n)` to bounded heap maintenance plus ordered extraction.
+
+FastPlaid comparison finding: on the explicit wide `candidate1024` shape
+(`document_count=1024`, `document_vector_count=16`, `query_count=2`,
+`query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
+comparison measured CPU candidate generation plus GPU prepared-handle top-k at
+about `0.000784s/window` against FastPlaid CPU full search at about
+`0.008555s/batch`, and about `0.000793s/window` against FastPlaid CUDA full
+search at about `0.002271s/batch`. This remains a scope comparison, not a
+public backend claim, because Kayak starts from CPU-provided candidate windows
+and FastPlaid is timed as full search. On this synthetic shape, Kayak i8 recall
+was `1.0`; the observed FastPlaid recall was `0.5` on CPU and about `0.45` on
+CUDA.
+
+Reason: the comparison is now strong enough to justify building an internal
+search boundary around the primitive, but not strong enough to claim a public
+GPU backend speedup.
 
 ## Primitive 5: Measurement Contract
 
@@ -511,14 +545,22 @@ evidence only justifies a measured primitive.
    GPU scoring is faster than CPU candidate generation plus CPU score in all
    six swept cases.
 16. Return only top-k positions and scores from the explicit handle. Current
-   quiet result: top-k return ratios range from about `0.159x` to `0.300x`
+   quiet result: top-k return ratios range from about `0.162x` to `0.309x`
    of CPU same-candidate scoring, top-k order agreement is `1.0` in all six
    cases, and top-k return is faster than returning all candidate scores on
    every swept case.
-17. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+17. Reduce CPU candidate-generation overhead before adding more GPU
+   abstraction. Current quiet result: full-window candidate generation skips
+   proxy sorting, and bounded heap selection improves the non-full-window wide
+   cases while preserving top-k agreement.
+18. Compare the same wide candidate1024 shape against FastPlaid CPU and CUDA.
+   Current quiet result: CPU candidates plus GPU top-k is faster than FastPlaid
+   full search in this scope-limited synthetic comparison, with explicit recall
+   and vector-count fields recorded.
+19. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-18. Only after a measured win, consider public API design.
+20. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

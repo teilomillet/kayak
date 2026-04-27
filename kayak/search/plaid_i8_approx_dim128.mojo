@@ -5,7 +5,12 @@ from std.sys.info import simd_width_of
 
 from kayak.contracts import FlatQueryDim128
 from kayak.index import HybridFlatDim128Index
-from kayak.numeric import ScoreScalar, VectorScalar, min_score_scalar, zero_score_scalar
+from kayak.numeric import (
+    ScoreScalar,
+    VectorScalar,
+    min_score_scalar,
+    zero_score_scalar,
+)
 from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
 
 from .hit import SearchHit
@@ -105,7 +110,7 @@ def quantize_i8_value(value: VectorScalar, scale: ScoreScalar) -> Int8:
 
 
 def quantized_token_scales_dim128(
-    read index: HybridFlatDim128Index
+    read index: HybridFlatDim128Index,
 ) -> List[ScoreScalar]:
     var token_scales = List[ScoreScalar]()
 
@@ -129,7 +134,9 @@ def quantized_token_codes_dim128(
         var scale = token_scales[token_index]
         for dim_index in range(COLBERT_VECTOR_DIM):
             token_codes.append(
-                quantize_i8_value(index.token_values[token_offset + dim_index], scale)
+                quantize_i8_value(
+                    index.token_values[token_offset + dim_index], scale
+                )
             )
 
     return token_codes^
@@ -190,9 +197,10 @@ def dot_query_vector_with_i8_token_dim128(
     if COLBERT_VECTOR_DIM % width != 0:
         var total = Float64(0.0)
         for dim_index in range(COLBERT_VECTOR_DIM):
-            total += (
-                Float64(query.token_values[query_offset + dim_index])
-                * Float64(Int(prepared_index.token_codes[token_offset + dim_index]))
+            total += Float64(
+                query.token_values[query_offset + dim_index]
+            ) * Float64(
+                Int(prepared_index.token_codes[token_offset + dim_index])
             )
 
         return ScoreScalar(
@@ -204,10 +212,9 @@ def dot_query_vector_with_i8_token_dim128(
     var code_ptr = prepared_index.token_codes.unsafe_ptr() + token_offset
 
     for dim_index in range(0, COLBERT_VECTOR_DIM, width):
-        accum += (
-            (query_ptr + dim_index).load[width=width]()
-            * (code_ptr + dim_index).load[width=width]().cast[DType.float32]()
-        )
+        accum += (query_ptr + dim_index).load[width=width]() * (
+            code_ptr + dim_index
+        ).load[width=width]().cast[DType.float32]()
 
     return ScoreScalar(
         accum.reduce_add()[0] * prepared_index.token_scales[token_index]
@@ -258,19 +265,27 @@ def best_i8_score_for_query_vector_in_document_dim128(
             var query_values = (query_ptr + dim_index).load[width=width]()
             accum0 += (
                 query_values
-                * (code_ptr0 + dim_index).load[width=width]().cast[DType.float32]()
+                * (code_ptr0 + dim_index)
+                .load[width=width]()
+                .cast[DType.float32]()
             )
             accum1 += (
                 query_values
-                * (code_ptr1 + dim_index).load[width=width]().cast[DType.float32]()
+                * (code_ptr1 + dim_index)
+                .load[width=width]()
+                .cast[DType.float32]()
             )
             accum2 += (
                 query_values
-                * (code_ptr2 + dim_index).load[width=width]().cast[DType.float32]()
+                * (code_ptr2 + dim_index)
+                .load[width=width]()
+                .cast[DType.float32]()
             )
             accum3 += (
                 query_values
-                * (code_ptr3 + dim_index).load[width=width]().cast[DType.float32]()
+                * (code_ptr3 + dim_index)
+                .load[width=width]()
+                .cast[DType.float32]()
             )
 
         var score0 = ScoreScalar(
@@ -279,17 +294,20 @@ def best_i8_score_for_query_vector_in_document_dim128(
         if score0 > best_score:
             best_score = score0
         var score1 = ScoreScalar(
-            accum1.reduce_add()[0] * prepared_index.token_scales[token_index + 1]
+            accum1.reduce_add()[0]
+            * prepared_index.token_scales[token_index + 1]
         )
         if score1 > best_score:
             best_score = score1
         var score2 = ScoreScalar(
-            accum2.reduce_add()[0] * prepared_index.token_scales[token_index + 2]
+            accum2.reduce_add()[0]
+            * prepared_index.token_scales[token_index + 2]
         )
         if score2 > best_score:
             best_score = score2
         var score3 = ScoreScalar(
-            accum3.reduce_add()[0] * prepared_index.token_scales[token_index + 3]
+            accum3.reduce_add()[0]
+            * prepared_index.token_scales[token_index + 3]
         )
         if score3 > best_score:
             best_score = score3
@@ -337,6 +355,13 @@ def plaid_i8_candidate_positions_for_query(
         "centroids_per_query_vector", centroids_per_query_vector
     )
     require_positive_int("candidate_k", candidate_k)
+
+    if candidate_k >= prepared_index.document_count:
+        var all_positions = List[Int]()
+        all_positions.reserve(prepared_index.document_count)
+        for document_index in range(prepared_index.document_count):
+            all_positions.append(document_index)
+        return all_positions^
 
     var document_scores = List[ScoreScalar]()
     for _ in range(prepared_index.document_count):
@@ -456,7 +481,9 @@ def plaid_i8_rerank_candidate_hits_for_query(
             hits,
             SearchHit(
                 prepared_index.doc_ids[document_index].copy(),
-                plaid_i8_score_for_document(query, prepared_index, document_index),
+                plaid_i8_score_for_document(
+                    query, prepared_index, document_index
+                ),
             ),
             final_k,
         )
@@ -471,7 +498,9 @@ def plaid_i8_search_all_documents_for_query(
 ) raises -> List[Int]:
     var scores = List[ScoreScalar]()
     for document_index in range(prepared_index.document_count):
-        scores.append(plaid_i8_score_for_document(query, prepared_index, document_index))
+        scores.append(
+            plaid_i8_score_for_document(query, prepared_index, document_index)
+        )
 
     return top_positions_by_score(scores, final_k)
 
@@ -483,7 +512,9 @@ def plaid_i8_search_all_document_hits_for_query(
 ) raises -> List[SearchHit]:
     var scores = List[ScoreScalar]()
     for document_index in range(prepared_index.document_count):
-        scores.append(plaid_i8_score_for_document(query, prepared_index, document_index))
+        scores.append(
+            plaid_i8_score_for_document(query, prepared_index, document_index)
+        )
 
     return top_k_hits(prepared_index.doc_ids, scores, final_k)
 

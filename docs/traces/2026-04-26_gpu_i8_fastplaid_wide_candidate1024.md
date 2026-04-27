@@ -98,6 +98,13 @@ Reason: the isolated GPU top-k boundary is not the end-to-end limiter on the
 CUDA FastPlaid comparison; CPU candidate generation dominates the current
 candidate-window envelope.
 
+Follow-up: [2026-04-27 GPU I8 Candidate-Generation Cleanup](2026-04-27_gpu_i8_candidate_generation_cleanup.md)
+added a full-window candidate shortcut and bounded heap selection. On the same
+wide `candidate1024` shape, the updated CPU-candidates-plus-GPU-top-k boundary
+measured about `0.000793s/window` against FastPlaid CUDA full search at about
+`0.002271s/batch`. This remains a scope-limited comparison, not a public GPU
+backend claim.
+
 ## Validation
 
 Ran:

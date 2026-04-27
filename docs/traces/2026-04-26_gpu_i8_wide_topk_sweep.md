@@ -134,6 +134,12 @@ after score readback inside the Mojo extension. The next implementation target
 should remove avoidable score readback or introduce a real internal search
 boundary, then compare again.
 
+Follow-up: [2026-04-27 GPU I8 Candidate-Generation Cleanup](2026-04-27_gpu_i8_candidate_generation_cleanup.md)
+reduced the candidate-generation envelope before changing more GPU code. The
+updated wide sweep kept `topk_position_agreement=1.0` and reduced the
+CPU-candidate-plus-GPU-top-k ratio range to about `0.331x` through `0.560x` of
+CPU candidate generation plus CPU scoring.
+
 ## Validation
 
 Ran:
