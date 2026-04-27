@@ -130,6 +130,22 @@ Agreement minima for `coverage_safety_v0`:
 - candidate positions: `1.0`
 - final top-k positions: `1.0`
 
+Original `wide_topk` non-full validation:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 300 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_candidate_window_policies.py --case-set wide_topk --candidate-window-policy input --candidate-window-policy coverage_safety_v0 --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/wide_topk_input_vs_coverage_safety_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/wide_topk_input_vs_coverage_safety_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/wide_topk_input_vs_coverage_safety_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T184333Z`
+
+| policy | rows ok | min recall delta vs FastPlaid | mean resident / FastPlaid | max resident / FastPlaid | negative rows |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `input` | `6 / 6` | `~0.0` | `0.09688456479341993` | `0.20682108635153335` | `0` |
+| `coverage_safety_v0` | `6 / 6` | `+0.050000000000000044` | `0.11243990380894976` | `0.25440229610377485` | `0` |
+
 ## Decision
 
 Keep `coverage_safety_v0` as the next benchmark policy candidate.
