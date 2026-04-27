@@ -201,6 +201,46 @@ Observed smoke result:
 - profiled query count: `1`
 - candidate recall versus exact: `0.5`
 
+LEMB/NarrativeQA smoke after adding the builders:
+
+```bash
+pixi run env PYTHONPATH=python python python/scripts/build_lemb_narrativeqa_task_json.py \
+  --query-limit 2 \
+  --output .cache/kayak/lemb_narrativeqa_smoke/python_task.json
+
+pixi run env PYTHONPATH=python python python/scripts/profile_task_plaid_i8_candidate_generation.py \
+  --task .cache/kayak/lemb_narrativeqa_smoke/python_task.json \
+  --query-limit 2 \
+  --candidate-k 128 \
+  --centroid-count 128 \
+  --centroids-per-query-vector 16 \
+  --measurement-iterations 2 \
+  --emit-quiet-mean \
+  --output .cache/kayak/lemb_narrativeqa_smoke/plaid_i8_candidate_profile.json
+```
+
+Observed LEMB smoke:
+
+- task: `355` documents, nominal `180` document vectors, `2` queries, nominal
+  `32` query vectors, dim128
+- PLAID i8 prepare: `0.5917064509994816s`
+- candidate-generation payload: `103008` bytes
+- posting count: `12619`
+- full candidate generation mean: `0.00018909620872383287s/query`
+- posting accumulation mean: `0.00007382496663203668s/query`
+- final candidate top-k mean: `0.000016335996935813753s/query`
+- candidate document vectors at `candidate_k=128`: `23040`
+- Kayak i8 candidate payload estimate: `3041280` bytes/query
+- NextPlaid-style 4-bit residual estimate: `1474560` bytes/query
+- candidate recall versus exact@10: mean `0.6000000000000001`
+
+Interpretation: this is only a two-query smoke, but it is already more useful
+than toy tensors for the current question. It shows the measurement surface is
+capturing long-document vector pressure: `128` candidates at `180` vectors/doc
+means `23040` candidate vectors before exact/residual materialization. The low
+candidate recall at `candidate_k=128` means quality policy still matters before
+this becomes a speed claim.
+
 Example smoke command:
 
 ```bash
