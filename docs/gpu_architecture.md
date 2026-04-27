@@ -549,9 +549,7 @@ Reason: this validates the resident-payload prerequisite but not a GPU
 candidate-generation speedup. Full-window rows are deliberately separated in
 the report because CPU candidate generation is near-zero when `candidate_k`
 equals `document_count`, making copy/CPU-candidate ratios irrelevant for the
-posting-accumulation target. The next justified step is a benchmark-only GPU
-posting-accumulation probe for the non-full rows while final candidate top-k
-stays on CPU.
+posting-accumulation target.
 
 Selected-centroid boundary finding: the CPU i8 lane now exposes the selected
 centroid positions and matching proxy scores per query, flattened in
@@ -562,6 +560,25 @@ centroid decisions as the CPU reference.
 Reason: centroid selection and posting traversal must stay separable while the
 GPU candidate-generation primitive is being validated. Otherwise a kernel
 mistake could be hidden behind a different centroid-selection policy.
+
+Selected-posting traversal finding: a benchmark-only GPU probe now expands the
+selected centroid posting lists into `(doc_index, centroid_score)` visits and
+checks the expanded stream against a deterministic CPU reference. The latest
+quiet wide run was `ok` on all `5 / 5` rows with zero doc mismatches, zero
+out-of-range doc ids, and `score_delta_max_abs=0.0`. On the three non-full
+rows, the measured GPU payload H2D plus selected H2D plus kernel plus
+validation D2H path was about `0.117x`, `0.272x`, and `0.087x` of full CPU
+candidate-generation time. Against the isolated CPU posting-accumulation
+substep, selected H2D plus kernel plus D2H was about `0.630x`, `1.238x`, and
+`0.783x`.
+
+Reason: this validates the selected-posting traversal shape contract and shows
+that the posting stream is large enough to benefit from GPU parallelism on some
+rows. It also falsifies a plain expand-and-readback design as the final
+candidate-generation primitive: the `doc_vectors64` row loses versus isolated
+CPU posting accumulation, so the next GPU step should fuse traversal with
+per-document accumulation/reduction instead of materializing the whole visit
+stream as the production boundary.
 
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
@@ -817,12 +834,20 @@ evidence only justifies a measured primitive.
 29. Expose selected centroid ids and proxy scores as the fixed input contract
    for a future GPU posting-accumulation probe. Current result: Python tests
    validate the explicit query vector and centroid budget shapes.
-30. Add a benchmark-only GPU posting-accumulation probe for non-full rows while
-   final candidate top-k remains on CPU.
-31. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
-   CPU top-k, and end-to-end times after the resident ownership boundary
+30. Add a benchmark-only GPU selected-posting traversal probe before score
+   accumulation. Current quiet result: traversal agrees exactly with the CPU
+   reference stream on all wide rows; non-full all-measured traversal costs
+   about `0.087x` to `0.272x` of full CPU candidate generation, but the
+   isolated posting path loses on the `doc_vectors64` row versus CPU posting
+   accumulation.
+31. Add a benchmark-only GPU posting-accumulation/reduction probe for non-full
+   rows while final candidate top-k remains on CPU. Reason: the traversal probe
+   says materializing the whole visit stream is not enough; the next evidence
+   needs fused per-document accumulation.
+32. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+   CPU top-k, and FastPlaid scope rows after the resident ownership boundary
    exists.
-32. Only after a measured win, consider public API design.
+33. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

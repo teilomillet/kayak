@@ -94,6 +94,32 @@ def reduce_i8_candidate_score_kernel_dynamic(
     score_out[score_index] = total
 
 
+def expand_i8_selected_centroid_postings_kernel(
+    selected_centroid_positions: UnsafePointer[Int64, MutAnyOrigin],
+    selected_centroid_scores: UnsafePointer[Float32, MutAnyOrigin],
+    centroid_doc_offsets: UnsafePointer[Int64, MutAnyOrigin],
+    centroid_doc_indices: UnsafePointer[Int64, MutAnyOrigin],
+    selected_posting_offsets: UnsafePointer[Int64, MutAnyOrigin],
+    output_doc_indices: UnsafePointer[Int64, MutAnyOrigin],
+    output_scores: UnsafePointer[Float32, MutAnyOrigin],
+    selected_centroid_count: Int,
+):
+    var selected_index = Int(global_idx.x)
+    if selected_index >= selected_centroid_count:
+        return
+
+    var centroid_position = Int(selected_centroid_positions[selected_index])
+    var posting_start = Int(centroid_doc_offsets[centroid_position])
+    var posting_stop = Int(centroid_doc_offsets[centroid_position + 1])
+    var output_start = Int(selected_posting_offsets[selected_index])
+    var selected_score = selected_centroid_scores[selected_index]
+
+    for posting_index in range(posting_start, posting_stop):
+        var output_index = output_start + posting_index - posting_start
+        output_doc_indices[output_index] = centroid_doc_indices[posting_index]
+        output_scores[output_index] = selected_score
+
+
 struct PreparedGpuI8AddressSession(Movable):
     var ctx: DeviceContext
     var codes_device: DeviceBuffer[DType.int8]
@@ -1927,6 +1953,269 @@ def profile_i8_candidate_generation_payload_addresses(
         return py_result
 
 
+def profile_i8_selected_posting_traversal_addresses(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var centroid_doc_offsets_address = Int(py=py_request[0])
+    var centroid_doc_indices_address = Int(py=py_request[1])
+    var selected_positions_address = Int(py=py_request[2])
+    var selected_scores_address = Int(py=py_request[3])
+    var selected_posting_offsets_address = Int(py=py_request[4])
+    var expected_doc_indices_address = Int(py=py_request[5])
+    var expected_scores_address = Int(py=py_request[6])
+    var centroid_count = Int(py=py_request[7])
+    var posting_count = Int(py=py_request[8])
+    var document_count = Int(py=py_request[9])
+    var selected_centroid_count = Int(py=py_request[10])
+    var expanded_posting_count = Int(py=py_request[11])
+    var warmup_iterations = Int(py=py_request[12])
+    var measurement_iterations = Int(py=py_request[13])
+    if centroid_doc_offsets_address == 0:
+        raise Error("centroid_doc_offsets address must be non-zero")
+    if centroid_doc_indices_address == 0:
+        raise Error("centroid_doc_indices address must be non-zero")
+    if selected_positions_address == 0:
+        raise Error("selected positions address must be non-zero")
+    if selected_scores_address == 0:
+        raise Error("selected scores address must be non-zero")
+    if selected_posting_offsets_address == 0:
+        raise Error("selected posting offsets address must be non-zero")
+    if expected_doc_indices_address == 0:
+        raise Error("expected doc indices address must be non-zero")
+    if expected_scores_address == 0:
+        raise Error("expected scores address must be non-zero")
+    if centroid_count <= 0:
+        raise Error("centroid_count must be positive")
+    if posting_count <= 0:
+        raise Error("posting_count must be positive")
+    if document_count <= 0:
+        raise Error("document_count must be positive")
+    if selected_centroid_count <= 0:
+        raise Error("selected_centroid_count must be positive")
+    if expanded_posting_count <= 0:
+        raise Error("expanded_posting_count must be positive")
+    if warmup_iterations < 0:
+        raise Error("warmup_iterations must be non-negative")
+    if measurement_iterations <= 0:
+        raise Error("measurement_iterations must be positive")
+
+    var py_centroid_doc_offsets = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=centroid_doc_offsets_address
+    )
+    var py_centroid_doc_indices = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=centroid_doc_indices_address
+    )
+    var py_selected_positions = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=selected_positions_address
+    )
+    var py_selected_scores = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=selected_scores_address
+    )
+    var py_selected_posting_offsets = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=selected_posting_offsets_address
+    )
+    var py_expected_doc_indices = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=expected_doc_indices_address
+    )
+    var py_expected_scores = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=expected_scores_address
+    )
+    var centroid_offset_count = centroid_count + 1
+    var selected_offset_count = selected_centroid_count + 1
+    var grid_x = (selected_centroid_count + BLOCK_SIZE - 1) // BLOCK_SIZE
+
+    with DeviceContext() as ctx:
+        var centroid_doc_offsets_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](centroid_offset_count)
+        var centroid_doc_indices_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](posting_count)
+        var selected_positions_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](selected_centroid_count)
+        var selected_scores_host = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](selected_centroid_count)
+        var selected_posting_offsets_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](selected_offset_count)
+        var output_doc_indices_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](expanded_posting_count)
+        var output_scores_host = ctx.enqueue_create_host_buffer[DType.float32](
+            expanded_posting_count
+        )
+
+        var centroid_doc_offsets_device = ctx.enqueue_create_buffer[
+            DType.int64
+        ](centroid_offset_count)
+        var centroid_doc_indices_device = ctx.enqueue_create_buffer[
+            DType.int64
+        ](posting_count)
+        var selected_positions_device = ctx.enqueue_create_buffer[DType.int64](
+            selected_centroid_count
+        )
+        var selected_scores_device = ctx.enqueue_create_buffer[DType.float32](
+            selected_centroid_count
+        )
+        var selected_posting_offsets_device = ctx.enqueue_create_buffer[
+            DType.int64
+        ](selected_offset_count)
+        var output_doc_indices_device = ctx.enqueue_create_buffer[DType.int64](
+            expanded_posting_count
+        )
+        var output_scores_device = ctx.enqueue_create_buffer[DType.float32](
+            expanded_posting_count
+        )
+        ctx.synchronize()
+
+        def host_ingest_once() capturing raises:
+            for index in range(centroid_offset_count):
+                centroid_doc_offsets_host[index] = py_centroid_doc_offsets[
+                    index
+                ]
+
+            for index in range(posting_count):
+                centroid_doc_indices_host[index] = py_centroid_doc_indices[
+                    index
+                ]
+
+            for index in range(selected_centroid_count):
+                selected_positions_host[index] = py_selected_positions[index]
+                selected_scores_host[index] = py_selected_scores[index]
+
+            for index in range(selected_offset_count):
+                selected_posting_offsets_host[
+                    index
+                ] = py_selected_posting_offsets[index]
+
+        def payload_h2d_once() capturing raises:
+            centroid_doc_offsets_device.enqueue_copy_from(
+                centroid_doc_offsets_host
+            )
+            centroid_doc_indices_device.enqueue_copy_from(
+                centroid_doc_indices_host
+            )
+            ctx.synchronize()
+
+        def selected_h2d_once() capturing raises:
+            selected_positions_device.enqueue_copy_from(selected_positions_host)
+            selected_scores_device.enqueue_copy_from(selected_scores_host)
+            selected_posting_offsets_device.enqueue_copy_from(
+                selected_posting_offsets_host
+            )
+            ctx.synchronize()
+
+        def traversal_kernel_once() capturing raises:
+            ctx.enqueue_function[
+                expand_i8_selected_centroid_postings_kernel,
+                expand_i8_selected_centroid_postings_kernel,
+            ](
+                selected_positions_device,
+                selected_scores_device,
+                centroid_doc_offsets_device,
+                centroid_doc_indices_device,
+                selected_posting_offsets_device,
+                output_doc_indices_device,
+                output_scores_device,
+                selected_centroid_count,
+                grid_dim=grid_x,
+                block_dim=BLOCK_SIZE,
+            )
+            ctx.synchronize()
+
+        def d2h_once() capturing raises:
+            output_doc_indices_device.enqueue_copy_to(output_doc_indices_host)
+            output_scores_device.enqueue_copy_to(output_scores_host)
+            ctx.synchronize()
+
+        host_ingest_once()
+        payload_h2d_once()
+        selected_h2d_once()
+        traversal_kernel_once()
+        d2h_once()
+
+        for _ in range(warmup_iterations):
+            selected_h2d_once()
+            traversal_kernel_once()
+            d2h_once()
+
+        var host_ingest = benchmark.run[host_ingest_once](
+            max_iters=measurement_iterations
+        )
+        host_ingest_once()
+        var payload_h2d = benchmark.run[payload_h2d_once](
+            max_iters=measurement_iterations
+        )
+        payload_h2d_once()
+        var selected_h2d = benchmark.run[selected_h2d_once](
+            max_iters=measurement_iterations
+        )
+        selected_h2d_once()
+        var kernel = benchmark.run[traversal_kernel_once](
+            max_iters=measurement_iterations
+        )
+        traversal_kernel_once()
+        var d2h = benchmark.run[d2h_once](max_iters=measurement_iterations)
+        d2h_once()
+
+        var selected_position_out_of_range_count = 0
+        for index in range(selected_centroid_count):
+            var centroid_position = selected_positions_host[index]
+            if centroid_position < 0 or centroid_position >= Int64(
+                centroid_count
+            ):
+                selected_position_out_of_range_count += 1
+
+        var selected_offset_violation_count = 0
+        if selected_posting_offsets_host[0] != 0:
+            selected_offset_violation_count += 1
+        for index in range(1, selected_offset_count):
+            if (
+                selected_posting_offsets_host[index]
+                < selected_posting_offsets_host[index - 1]
+            ):
+                selected_offset_violation_count += 1
+        if selected_posting_offsets_host[selected_offset_count - 1] != Int64(
+            expanded_posting_count
+        ):
+            selected_offset_violation_count += 1
+
+        var doc_mismatch_count = 0
+        var doc_index_out_of_range_count = 0
+        var score_delta_max_abs = Float64(0.0)
+        for index in range(expanded_posting_count):
+            var doc_index = output_doc_indices_host[index]
+            if doc_index != py_expected_doc_indices[index]:
+                doc_mismatch_count += 1
+            if doc_index < 0 or doc_index >= Int64(document_count):
+                doc_index_out_of_range_count += 1
+
+            var score_delta = abs(
+                Float64(output_scores_host[index])
+                - Float64(py_expected_scores[index])
+            )
+            if score_delta > score_delta_max_abs:
+                score_delta_max_abs = score_delta
+
+        var py_result = Python.list()
+        py_result.append(Python.float(host_ingest.mean()))
+        py_result.append(Python.float(payload_h2d.mean()))
+        py_result.append(Python.float(selected_h2d.mean()))
+        py_result.append(Python.float(kernel.mean()))
+        py_result.append(Python.float(d2h.mean()))
+        py_result.append(Python.int(selected_position_out_of_range_count))
+        py_result.append(Python.int(selected_offset_violation_count))
+        py_result.append(Python.int(doc_mismatch_count))
+        py_result.append(Python.int(doc_index_out_of_range_count))
+        py_result.append(Python.float(score_delta_max_abs))
+        py_result.append(Python.int(selected_centroid_count))
+        py_result.append(Python.int(expanded_posting_count))
+        py_result.append(Python.int(document_count))
+        return py_result
+
+
 @export
 def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
     try:
@@ -2021,6 +2310,13 @@ def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
             docstring=(
                 "Profile typed-address GPU preparation for i8 candidate"
                 " generation centroid-posting payload tensors."
+            ),
+        )
+        module.def_function[profile_i8_selected_posting_traversal_addresses](
+            "profile_i8_selected_posting_traversal_addresses",
+            docstring=(
+                "Profile GPU traversal of selected i8 centroid posting lists"
+                " without document score accumulation."
             ),
         )
         return module.finalize()

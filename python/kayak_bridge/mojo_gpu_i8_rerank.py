@@ -14,7 +14,10 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from .plaid_approx import KayakPlaidI8PayloadSnapshot
+from .plaid_approx import (
+    KayakPlaidI8PayloadSnapshot,
+    KayakPlaidI8SelectedCentroids,
+)
 
 from .cache_paths import PYTHON_MOJO_CACHE, REPO_ROOT, configure_local_caches
 from .mojo_exact_cpu import (
@@ -216,6 +219,82 @@ class MojoGpuI8CandidateGenerationPayloadResult:
             "byte_counts": self.byte_counts,
             "total_payload_bytes": self.total_payload_bytes,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class MojoGpuI8SelectedPostingTraversalResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    mojo_host_ingest_mean_seconds: float
+    payload_host_to_device_mean_seconds: float
+    selected_host_to_device_mean_seconds: float
+    kernel_mean_seconds: float
+    device_to_host_mean_seconds: float
+    selected_position_out_of_range_count: int
+    selected_offset_violation_count: int
+    doc_mismatch_count: int
+    doc_index_out_of_range_count: int
+    score_delta_max_abs: float
+    selected_centroid_count: int
+    expanded_posting_count: int
+    document_count: int
+
+    @property
+    def traversal_agreement_ok(self) -> bool:
+        return (
+            self.selected_position_out_of_range_count == 0
+            and self.selected_offset_violation_count == 0
+            and self.doc_mismatch_count == 0
+            and self.doc_index_out_of_range_count == 0
+            and self.score_delta_max_abs == 0.0
+        )
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "mojo_host_ingest_mean_seconds": (
+                self.mojo_host_ingest_mean_seconds
+            ),
+            "payload_host_to_device_mean_seconds": (
+                self.payload_host_to_device_mean_seconds
+            ),
+            "selected_host_to_device_mean_seconds": (
+                self.selected_host_to_device_mean_seconds
+            ),
+            "kernel_mean_seconds": self.kernel_mean_seconds,
+            "device_to_host_mean_seconds": self.device_to_host_mean_seconds,
+            "selected_position_out_of_range_count": (
+                self.selected_position_out_of_range_count
+            ),
+            "selected_offset_violation_count": (
+                self.selected_offset_violation_count
+            ),
+            "doc_mismatch_count": self.doc_mismatch_count,
+            "doc_index_out_of_range_count": self.doc_index_out_of_range_count,
+            "score_delta_max_abs": self.score_delta_max_abs,
+            "traversal_agreement_ok": self.traversal_agreement_ok,
+            "selected_centroid_count": self.selected_centroid_count,
+            "expanded_posting_count": self.expanded_posting_count,
+            "document_count": self.document_count,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class _SelectedPostingTraversalReference:
+    selected_positions: np.ndarray
+    selected_scores: np.ndarray
+    selected_posting_offsets: np.ndarray
+    expected_doc_indices: np.ndarray
+    expected_scores: np.ndarray
+
+    @property
+    def selected_centroid_count(self) -> int:
+        return int(self.selected_positions.size)
+
+    @property
+    def expanded_posting_count(self) -> int:
+        return int(self.expected_doc_indices.size)
 
 
 @dataclass(frozen=True, slots=True)
@@ -899,6 +978,80 @@ def profile_i8_candidate_generation_payload_addresses(
     )
 
 
+def profile_i8_selected_posting_traversal_addresses(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    warmup_iterations: int,
+    measurement_iterations: int,
+) -> MojoGpuI8SelectedPostingTraversalResult:
+    if warmup_iterations < 0:
+        raise ValueError("warmup_iterations must be non-negative")
+    if measurement_iterations <= 0:
+        raise ValueError("measurement_iterations must be positive")
+
+    marshalling_started_at = time.perf_counter()
+    centroid_doc_offsets = _int64_array(payload.centroid_doc_offsets)
+    centroid_doc_indices = _int64_array(payload.centroid_doc_indices)
+    reference = _selected_posting_traversal_reference(
+        payload=payload,
+        selected=selected,
+    )
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    if reference.expanded_posting_count <= 0:
+        raise ValueError("selected posting traversal requires at least one visit")
+
+    module = load_module(target_accelerator=target_accelerator)
+    request = [
+        _array_address(centroid_doc_offsets),
+        _array_address(centroid_doc_indices),
+        _array_address(reference.selected_positions),
+        _array_address(reference.selected_scores),
+        _array_address(reference.selected_posting_offsets),
+        _array_address(reference.expected_doc_indices),
+        _array_address(reference.expected_scores),
+        int(payload.centroid_count),
+        int(payload.posting_count),
+        int(shape.document_count),
+        int(reference.selected_centroid_count),
+        int(reference.expanded_posting_count),
+        int(warmup_iterations),
+        int(measurement_iterations),
+    ]
+    extension_started_at = time.perf_counter()
+    raw_result = module.profile_i8_selected_posting_traversal_addresses(
+        request
+    )
+    extension_call_seconds = time.perf_counter() - extension_started_at
+
+    if len(raw_result) != 13:
+        raise RuntimeError(
+            "GPU i8 selected-posting traversal bridge returned an "
+            "unexpected result shape"
+        )
+
+    return MojoGpuI8SelectedPostingTraversalResult(
+        host_marshalling_seconds=host_marshalling_seconds,
+        extension_call_seconds=extension_call_seconds,
+        mojo_host_ingest_mean_seconds=float(raw_result[0]),
+        payload_host_to_device_mean_seconds=float(raw_result[1]),
+        selected_host_to_device_mean_seconds=float(raw_result[2]),
+        kernel_mean_seconds=float(raw_result[3]),
+        device_to_host_mean_seconds=float(raw_result[4]),
+        selected_position_out_of_range_count=int(raw_result[5]),
+        selected_offset_violation_count=int(raw_result[6]),
+        doc_mismatch_count=int(raw_result[7]),
+        doc_index_out_of_range_count=int(raw_result[8]),
+        score_delta_max_abs=float(raw_result[9]),
+        selected_centroid_count=int(raw_result[10]),
+        expanded_posting_count=int(raw_result[11]),
+        document_count=int(raw_result[12]),
+    )
+
+
 def score_i8_prepared_payload_session_addresses(
     *,
     target_accelerator: str,
@@ -1223,6 +1376,61 @@ def _int64_array(values: Any) -> np.ndarray:
 
 def _array_address(values: np.ndarray) -> int:
     return int(values.ctypes.data)
+
+
+def _selected_posting_traversal_reference(
+    *,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+) -> _SelectedPostingTraversalReference:
+    payload.validate()
+    selected.validate()
+    selected_positions = _int64_array(selected.positions_array())
+    selected_scores = _float32_array(selected.scores_array())
+    if selected_positions.size != selected_scores.size:
+        raise ValueError("selected centroid positions and scores must align")
+
+    centroid_doc_offsets = _int64_array(payload.centroid_doc_offsets)
+    centroid_doc_indices = _int64_array(payload.centroid_doc_indices)
+    selected_posting_offsets = np.empty(selected_positions.size + 1, dtype=np.int64)
+    selected_posting_offsets[0] = 0
+    for selected_index, centroid_position in enumerate(selected_positions):
+        centroid = int(centroid_position)
+        if centroid < 0 or centroid >= payload.centroid_count:
+            raise ValueError("selected centroid position out of range")
+        posting_start = int(centroid_doc_offsets[centroid])
+        posting_stop = int(centroid_doc_offsets[centroid + 1])
+        selected_posting_offsets[selected_index + 1] = (
+            selected_posting_offsets[selected_index] + posting_stop - posting_start
+        )
+
+    expanded_posting_count = int(selected_posting_offsets[-1])
+    expected_doc_indices = np.empty(expanded_posting_count, dtype=np.int64)
+    expected_scores = np.empty(expanded_posting_count, dtype=np.float32)
+    for selected_index, centroid_position in enumerate(selected_positions):
+        centroid = int(centroid_position)
+        posting_start = int(centroid_doc_offsets[centroid])
+        posting_stop = int(centroid_doc_offsets[centroid + 1])
+        output_start = int(selected_posting_offsets[selected_index])
+        output_stop = int(selected_posting_offsets[selected_index + 1])
+        expected_doc_indices[output_start:output_stop] = centroid_doc_indices[
+            posting_start:posting_stop
+        ]
+        expected_scores[output_start:output_stop] = selected_scores[selected_index]
+
+    return _SelectedPostingTraversalReference(
+        selected_positions=selected_positions,
+        selected_scores=selected_scores,
+        selected_posting_offsets=np.ascontiguousarray(
+            selected_posting_offsets,
+            dtype=np.int64,
+        ),
+        expected_doc_indices=np.ascontiguousarray(
+            expected_doc_indices,
+            dtype=np.int64,
+        ),
+        expected_scores=np.ascontiguousarray(expected_scores, dtype=np.float32),
+    )
 
 
 def _flatten_int_rows(
