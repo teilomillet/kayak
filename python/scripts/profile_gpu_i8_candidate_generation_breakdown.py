@@ -228,6 +228,8 @@ def aggregate_profiles(profiles: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "unordered_candidate_set_agreement",
         "centroid_scoring_mean_seconds",
         "centroid_selection_mean_seconds",
+        "unordered_centroid_selection_mean_seconds",
+        "centroid_selection_set_agreement",
         "posting_accumulation_mean_seconds",
         "final_topk_mean_seconds",
         "unordered_final_topk_mean_seconds",
@@ -270,7 +272,20 @@ def aggregate_profiles(profiles: Sequence[dict[str, Any]]) -> dict[str, Any]:
             full,
         )
     )
-    for field in float_fields[5:]:
+    aggregate[
+        "unordered_centroid_selection_mean_seconds_per_centroid_selection_second"
+    ] = ratio(
+        aggregate["unordered_centroid_selection_mean_seconds_batch_sum"],
+        aggregate["centroid_selection_mean_seconds_batch_sum"],
+    )
+    for field in (
+        "centroid_scoring_mean_seconds",
+        "centroid_selection_mean_seconds",
+        "unordered_centroid_selection_mean_seconds",
+        "posting_accumulation_mean_seconds",
+        "final_topk_mean_seconds",
+        "unordered_final_topk_mean_seconds",
+    ):
         aggregate[f"{field}_per_full_candidate_second"] = ratio(
             aggregate[f"{field}_batch_sum"],
             full,
@@ -346,6 +361,26 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         if row.get("aggregate")
         and int(row["aggregate"]["query_count"]) > 0
     ]
+    centroid_selection_ratios = [
+        float(
+            row["aggregate"][
+                "unordered_centroid_selection_mean_seconds_per_centroid_selection_second"
+            ]
+        )
+        for row in ok_rows
+        if row.get("aggregate")
+        and row["aggregate"][
+            "unordered_centroid_selection_mean_seconds_per_centroid_selection_second"
+        ]
+        is not None
+    ]
+    centroid_selection_agreements = [
+        float(row["aggregate"]["centroid_selection_set_agreement_batch_sum"])
+        / float(row["aggregate"]["query_count"])
+        for row in ok_rows
+        if row.get("aggregate")
+        and int(row["aggregate"]["query_count"]) > 0
+    ]
     unordered_topk_ratios = [
         float(
             row["aggregate"][
@@ -398,6 +433,21 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
             if unordered_candidate_agreements
             else None
         ),
+        "best_unordered_centroid_selection_seconds_per_centroid_selection_second": (
+            min(centroid_selection_ratios)
+            if centroid_selection_ratios
+            else None
+        ),
+        "worst_unordered_centroid_selection_seconds_per_centroid_selection_second": (
+            max(centroid_selection_ratios)
+            if centroid_selection_ratios
+            else None
+        ),
+        "min_centroid_selection_set_agreement": (
+            min(centroid_selection_agreements)
+            if centroid_selection_agreements
+            else None
+        ),
         "best_unordered_final_topk_seconds_per_final_topk_second": (
             min(unordered_topk_ratios) if unordered_topk_ratios else None
         ),
@@ -416,6 +466,7 @@ def emit_quiet_means(report: dict[str, Any]) -> None:
             "unordered_candidate_mean_seconds_batch_sum",
             "centroid_scoring_mean_seconds_batch_sum",
             "centroid_selection_mean_seconds_batch_sum",
+            "unordered_centroid_selection_mean_seconds_batch_sum",
             "posting_accumulation_mean_seconds_batch_sum",
             "final_topk_mean_seconds_batch_sum",
             "unordered_final_topk_mean_seconds_batch_sum",

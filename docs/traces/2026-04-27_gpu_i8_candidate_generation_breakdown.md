@@ -152,3 +152,31 @@ Interpretation:
 - unordered retained candidate sets are a useful internal GPU-pipeline option
   because rerank consumes the candidate set rather than approximate-score order
 - ordered candidate windows remain the public/default API
+
+## Follow-Up: Unordered Centroid Selection
+
+Added profiler-only unordered centroid selection timing beside production
+ordered centroid selection.
+
+Latest quiet artifact:
+
+- quiet log: `.cache/kayak/bench_quiet/20260427T114436Z`
+- report:
+  `.cache/kayak/gpu_i8_candidate_generation_breakdown/policy_summary.json`
+
+Results on the policy-budget wide non-full rows:
+
+| case | ordered centroid selection batch s | unordered centroid selection batch s | unordered / ordered | selected-centroid set agreement |
+| --- | ---: | ---: | ---: | ---: |
+| `query_vectors32` | `0.00006311464033333333` | `0.00005180759246654202` | `0.8208490485396996` | `1.0` |
+| `doc_vectors64` | `0.00003402051376902037` | `0.000026276291781698382` | `0.7723661071111159` | `1.0` |
+| `query_batch4` | `0.000042994682830950205` | `0.00003594988325960807` | `0.8361471905946738` | `1.0` |
+
+Interpretation:
+
+- unordered centroid selection is a valid measured substep because it preserves
+  the same selected-centroid sets in this profile
+- it remains profiler-only because the full policy comparison with the hot-path
+  change did not improve the scoped FastPlaid envelope
+- production candidate generation therefore still uses ordered centroid
+  positions; only retained candidate windows use the internal unordered option

@@ -80,6 +80,35 @@ The fused centroid scoring/selection variant was also removed before commit.
 It preserved the intended work but made the non-full policy candidate path
 slower in the quiet profile.
 
+Unordered centroid selection was measured but not promoted. It preserved the
+selected-centroid set in the candidate-generation breakdown and was faster as
+an isolated substep, but a full FastPlaid policy comparison did not confirm an
+end-to-end envelope improvement.
+
+Artifacts:
+
+- candidate breakdown quiet log: `.cache/kayak/bench_quiet/20260427T114436Z`
+- FastPlaid policy quiet log with hot-path unordered centroid selection:
+  `.cache/kayak/bench_quiet/20260427T114041Z`
+
+Latest policy-budget breakdown, after restoring production centroid selection:
+
+| case | ordered candidate batch s | unordered candidate batch s | unordered / ordered | unordered centroid selection / ordered centroid selection | set agreement |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `query_vectors32` | `0.0002470551531272893` | `0.00021484063226374743` | `0.8696059545580734` | `0.8208490485396996` | `1.0` |
+| `doc_vectors64` | `0.0001852820134791447` | `0.00015366722621421117` | `0.8293693668841089` | `0.7723661071111159` | `1.0` |
+| `query_batch4` | `0.00025705754796460467` | `0.00019225225989148183` | `0.7478957977065659` | `0.8361471905946738` | `1.0` |
+
+The rejected hot-path FastPlaid policy run stayed correct but did not improve
+the scoped envelope:
+
+- status: `ok`, `6 / 6` rows
+- minimum top-k position agreement: `1.0`
+- minimum Kayak recall delta versus FastPlaid: `0.0`
+- mean scoped envelope / FastPlaid batch: `0.1044423715919968`
+- mean CPU candidate-generation share of scoped envelope:
+  `0.6925531844894505`
+
 Reason: both ideas added hot-path complexity without decision-quality speed
 evidence.
 

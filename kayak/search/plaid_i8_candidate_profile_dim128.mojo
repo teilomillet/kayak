@@ -51,16 +51,47 @@ def build_i8_centroid_positions_by_query_vector(
     read centroid_scores_by_query_vector: List[List[ScoreScalar]],
     centroids_per_query_vector: Int,
 ) raises -> List[List[Int]]:
+    return build_i8_centroid_positions_by_query_vector_with_order(
+        centroid_scores_by_query_vector,
+        centroids_per_query_vector,
+        True,
+    )
+
+
+def build_i8_centroid_positions_by_query_vector_unordered(
+    read centroid_scores_by_query_vector: List[List[ScoreScalar]],
+    centroids_per_query_vector: Int,
+) raises -> List[List[Int]]:
+    return build_i8_centroid_positions_by_query_vector_with_order(
+        centroid_scores_by_query_vector,
+        centroids_per_query_vector,
+        False,
+    )
+
+
+def build_i8_centroid_positions_by_query_vector_with_order(
+    read centroid_scores_by_query_vector: List[List[ScoreScalar]],
+    centroids_per_query_vector: Int,
+    ordered_output: Bool,
+) raises -> List[List[Int]]:
     var positions_by_query_vector = List[List[Int]]()
     positions_by_query_vector.reserve(len(centroid_scores_by_query_vector))
 
     for query_vector_index in range(len(centroid_scores_by_query_vector)):
-        positions_by_query_vector.append(
-            top_positions_by_score(
-                centroid_scores_by_query_vector[query_vector_index],
-                centroids_per_query_vector,
+        if ordered_output:
+            positions_by_query_vector.append(
+                top_positions_by_score(
+                    centroid_scores_by_query_vector[query_vector_index],
+                    centroids_per_query_vector,
+                )
             )
-        )
+        else:
+            positions_by_query_vector.append(
+                top_unordered_positions_by_score(
+                    centroid_scores_by_query_vector[query_vector_index],
+                    centroids_per_query_vector,
+                )
+            )
 
     return positions_by_query_vector^
 
@@ -206,6 +237,23 @@ def candidate_position_sets_equal(
     return True
 
 
+def centroid_position_sets_equal(
+    read left: List[List[Int]], read right: List[List[Int]], centroid_count: Int
+) -> Bool:
+    if len(left) != len(right):
+        return False
+
+    for query_vector_index in range(len(left)):
+        if not candidate_position_sets_equal(
+            left[query_vector_index],
+            right[query_vector_index],
+            centroid_count,
+        ):
+            return False
+
+    return True
+
+
 def profile_plaid_i8_candidate_generation_for_query(
     read query: FlatQueryDim128,
     read prepared_index: PreparedPlaidApproxI8Index,
@@ -227,6 +275,18 @@ def profile_plaid_i8_candidate_generation_for_query(
             centroid_scores_by_query_vector, centroids_per_query_vector
         )
     )
+    var unordered_centroid_positions_by_query_vector = (
+        build_i8_centroid_positions_by_query_vector_unordered(
+            centroid_scores_by_query_vector, centroids_per_query_vector
+        )
+    )
+    if not centroid_position_sets_equal(
+        centroid_positions_by_query_vector,
+        unordered_centroid_positions_by_query_vector,
+        prepared_index.centroid_count,
+    ):
+        raise Error("unordered centroid selection must match ordered set")
+    var centroid_selection_set_agreement = Float64(1.0)
     var accumulation = accumulate_i8_candidate_document_scores_from_centroids(
         prepared_index,
         centroid_scores_by_query_vector,
@@ -314,6 +374,17 @@ def profile_plaid_i8_candidate_generation_for_query(
         for positions in positions_by_query_vector:
             centroid_selection_sink += len(positions)
 
+    var unordered_centroid_selection_sink = 0
+
+    def unordered_centroid_selection_once() capturing raises:
+        var positions_by_query_vector = (
+            build_i8_centroid_positions_by_query_vector_unordered(
+                centroid_scores_by_query_vector, centroids_per_query_vector
+            )
+        )
+        for positions in positions_by_query_vector:
+            unordered_centroid_selection_sink += len(positions)
+
     var posting_accumulation_sink = zero_score_scalar()
 
     def posting_accumulation_once() capturing:
@@ -357,6 +428,9 @@ def profile_plaid_i8_candidate_generation_for_query(
     var centroid_selection_report = benchmark.run[centroid_selection_once](
         max_iters=measurement_iterations
     )
+    var unordered_centroid_selection_report = benchmark.run[
+        unordered_centroid_selection_once
+    ](max_iters=measurement_iterations)
     var posting_accumulation_report = benchmark.run[posting_accumulation_once](
         max_iters=measurement_iterations
     )
@@ -375,6 +449,8 @@ def profile_plaid_i8_candidate_generation_for_query(
         unordered_candidate_set_agreement,
         centroid_scoring_report.mean(),
         centroid_selection_report.mean(),
+        unordered_centroid_selection_report.mean(),
+        centroid_selection_set_agreement,
         posting_accumulation_report.mean(),
         final_topk_report.mean(),
         unordered_final_topk_report.mean(),
@@ -394,6 +470,7 @@ def profile_plaid_i8_candidate_generation_for_query(
         + Float64(workspace_full_candidate_sink)
         + Float64(unordered_candidate_sink)
         + Float64(centroid_selection_sink)
+        + Float64(unordered_centroid_selection_sink)
         + Float64(final_topk_sink)
         + Float64(unordered_final_topk_sink)
         + Float64(centroid_scoring_sink)

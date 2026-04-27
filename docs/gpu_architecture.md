@@ -494,6 +494,19 @@ the approximate-score order used to inspect CPU candidate generation. Keeping
 candidate order explicit lets the GPU path skip ordered extraction without
 changing public candidate semantics.
 
+Unordered centroid-selection finding: unordered selection of centroid positions
+was added to the candidate-generation profiler as a falsifiable substep. The
+latest policy-budget breakdown preserved selected-centroid sets with agreement
+`1.0` and measured unordered centroid selection at about `0.821x`, `0.772x`,
+and `0.836x` of ordered centroid selection on `query_vectors32`,
+`doc_vectors64`, and `query_batch4`. A full FastPlaid policy comparison with
+unordered centroid selection in the hot path stayed correct but did not improve
+the scoped envelope, so the production candidate path was restored to ordered
+centroid selection.
+
+Reason: substep speed is not enough evidence for a hot-path change. The
+retained evidence is the measurement boundary, not the rejected runtime change.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -728,10 +741,15 @@ evidence only justifies a measured primitive.
    scoped CPU-candidate-plus-GPU-top-k envelope between about `0.025x` and
    `0.195x` of FastPlaid full-search batch time, and with CPU candidate
    generation taking about `69%` of the remaining envelope.
-25. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+25. Add internal unordered candidate windows and profiler-only unordered
+   centroid-selection timing. Current quiet result: unordered candidate windows
+   preserve candidate sets and improve the useful non-full policy rows, while
+   unordered centroid selection is retained only as profiler evidence because
+   the full policy comparison did not confirm an envelope win.
+26. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-26. Only after a measured win, consider public API design.
+27. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

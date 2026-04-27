@@ -386,6 +386,16 @@ def i8_candidate_generation_profile_to_python(
     )
     append_profile_float(
         py_result,
+        "unordered_centroid_selection_mean_seconds",
+        profile.unordered_centroid_selection_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "centroid_selection_set_agreement",
+        profile.centroid_selection_set_agreement,
+    )
+    append_profile_float(
+        py_result,
         "posting_accumulation_mean_seconds",
         profile.posting_accumulation_mean_seconds,
     )

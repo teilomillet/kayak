@@ -36,6 +36,8 @@ struct PlaidI8CandidateGenerationProfile(Movable):
     var unordered_candidate_set_agreement: Float64
     var centroid_scoring_mean_seconds: Float64
     var centroid_selection_mean_seconds: Float64
+    var unordered_centroid_selection_mean_seconds: Float64
+    var centroid_selection_set_agreement: Float64
     var posting_accumulation_mean_seconds: Float64
     var final_topk_mean_seconds: Float64
     var unordered_final_topk_mean_seconds: Float64
@@ -62,6 +64,8 @@ struct PlaidI8CandidateGenerationProfile(Movable):
         unordered_candidate_set_agreement: Float64,
         centroid_scoring_mean_seconds: Float64,
         centroid_selection_mean_seconds: Float64,
+        unordered_centroid_selection_mean_seconds: Float64,
+        centroid_selection_set_agreement: Float64,
         posting_accumulation_mean_seconds: Float64,
         final_topk_mean_seconds: Float64,
         unordered_final_topk_mean_seconds: Float64,
@@ -92,6 +96,10 @@ struct PlaidI8CandidateGenerationProfile(Movable):
         )
         self.centroid_scoring_mean_seconds = centroid_scoring_mean_seconds
         self.centroid_selection_mean_seconds = centroid_selection_mean_seconds
+        self.unordered_centroid_selection_mean_seconds = (
+            unordered_centroid_selection_mean_seconds
+        )
+        self.centroid_selection_set_agreement = centroid_selection_set_agreement
         self.posting_accumulation_mean_seconds = (
             posting_accumulation_mean_seconds
         )

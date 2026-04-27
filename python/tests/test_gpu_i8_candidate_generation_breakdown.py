@@ -46,6 +46,12 @@ class CandidateGenerationBreakdownTests(unittest.TestCase):
             ],
             0.5,
         )
+        self.assertEqual(
+            aggregate[
+                "unordered_centroid_selection_mean_seconds_per_centroid_selection_second"
+            ],
+            0.5,
+        )
 
     def test_summary_reports_workspace_envelope(self) -> None:
         rows = [
@@ -84,6 +90,16 @@ class CandidateGenerationBreakdownTests(unittest.TestCase):
         )
         self.assertEqual(
             summary[
+                "best_unordered_centroid_selection_seconds_per_centroid_selection_second"
+            ],
+            0.5,
+        )
+        self.assertEqual(
+            summary["min_centroid_selection_set_agreement"],
+            1.0,
+        )
+        self.assertEqual(
+            summary[
                 "best_unordered_final_topk_seconds_per_final_topk_second"
             ],
             0.4,
@@ -101,6 +117,8 @@ def _profile(
         "unordered_candidate_set_agreement": agreement,
         "centroid_scoring_mean_seconds": 0.2,
         "centroid_selection_mean_seconds": 0.3,
+        "unordered_centroid_selection_mean_seconds": 0.15,
+        "centroid_selection_set_agreement": agreement,
         "posting_accumulation_mean_seconds": 0.4,
         "final_topk_mean_seconds": 0.5,
         "unordered_final_topk_mean_seconds": 0.25,
@@ -127,8 +145,10 @@ def _aggregate(*, full: float, workspace: float) -> dict[str, float | int]:
         ),
         "unordered_final_topk_mean_seconds_per_final_topk_second": 0.4,
         "unordered_candidate_mean_seconds_per_full_candidate_second": 0.5,
+        "unordered_centroid_selection_mean_seconds_per_centroid_selection_second": 0.5,
         "workspace_candidate_position_agreement_batch_sum": 2.0,
         "unordered_candidate_set_agreement_batch_sum": 2.0,
+        "centroid_selection_set_agreement_batch_sum": 2.0,
         "query_count": 2,
     }
 
