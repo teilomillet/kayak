@@ -462,6 +462,18 @@ Reason: this is strong enough to automate same-shape FastPlaid comparisons for
 the shape rule, but not strong enough to make it a public default. The policy
 is still benchmark-only and must be treated as a falsifiable hypothesis.
 
+Shape-policy FastPlaid finding: the shape-rule policy is now compared against
+FastPlaid CPU and CUDA through an automated matrix instead of manual selected
+commands. The wide non-full policy run was `ok` on all `6 / 6` rows. Kayak i8
+recall matched or exceeded FastPlaid recall on every row, no-reference GPU
+top-k agreement was `1.0`, and CPU candidate generation plus GPU no-reference
+top-k measured between about `0.026x` and `0.203x` of FastPlaid full-search
+batch time across the CPU/CUDA rows.
+
+Reason: this turns the strongest current GPU i8 evidence into a reproducible
+speed track. It still does not prove a public backend because candidate
+generation remains CPU-side and FastPlaid is timed as full search.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -529,6 +541,7 @@ pixi run compare_gpu_i8_fastplaid
 pixi run compare_gpu_i8_fastplaid_cuda
 pixi run compare_gpu_i8_fastplaid_wide_candidate1024
 pixi run compare_gpu_i8_fastplaid_wide_candidate1024_cuda
+pixi run compare_gpu_i8_fastplaid_policy
 ```
 
 The report intentionally keeps these surfaces separate:
@@ -690,10 +703,14 @@ evidence only justifies a measured primitive.
    recall on all measured default and wide non-full cases while reducing the
    candidate-generation-plus-score envelope to about `0.87x` of static32; a
    tiny smoke shape falsifies broader generalization.
-24. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+24. Automate the shape-policy FastPlaid CPU/CUDA comparison. Current quiet
+   result: the wide non-full matrix is `ok` on all `6 / 6` rows, with the
+   scoped CPU-candidate-plus-GPU-top-k envelope between about `0.026x` and
+   `0.203x` of FastPlaid full-search batch time.
+25. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-25. Only after a measured win, consider public API design.
+26. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 
