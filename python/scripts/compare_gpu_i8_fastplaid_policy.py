@@ -226,6 +226,14 @@ def emit_quiet_means(report: dict[str, Any]) -> None:
             ],
         )
         print_quiet_mean(
+            f"{prefix}_cpu_candidate_generation_per_window",
+            row["cpu_candidate_generation_seconds_per_window"],
+        )
+        print_quiet_mean(
+            f"{prefix}_gpu_topk_no_reference_per_window",
+            row["gpu_topk_no_reference_seconds_per_window"],
+        )
+        print_quiet_mean(
             f"{prefix}_envelope_per_fastplaid_batch",
             row[
                 "cpu_candidate_generation_plus_gpu_topk_no_reference_seconds_per_fastplaid_batch_second"

@@ -467,12 +467,16 @@ FastPlaid CPU and CUDA through an automated matrix instead of manual selected
 commands. The wide non-full policy run was `ok` on all `6 / 6` rows. Kayak i8
 recall matched or exceeded FastPlaid recall on every row, no-reference GPU
 top-k agreement was `1.0`, and CPU candidate generation plus GPU no-reference
-top-k measured between about `0.026x` and `0.203x` of FastPlaid full-search
-batch time across the CPU/CUDA rows.
+top-k measured between about `0.025x` and `0.195x` of FastPlaid full-search
+batch time across the CPU/CUDA rows. The refreshed summary reports the
+remaining envelope as about `69%` CPU candidate generation and `31%` GPU
+no-reference top-k.
 
 Reason: this turns the strongest current GPU i8 evidence into a reproducible
 speed track. It still does not prove a public backend because candidate
-generation remains CPU-side and FastPlaid is timed as full search.
+generation remains CPU-side and FastPlaid is timed as full search. The next
+optimization target should be candidate-generation/workspace behavior rather
+than the GPU top-k kernel.
 
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
@@ -705,8 +709,9 @@ evidence only justifies a measured primitive.
    tiny smoke shape falsifies broader generalization.
 24. Automate the shape-policy FastPlaid CPU/CUDA comparison. Current quiet
    result: the wide non-full matrix is `ok` on all `6 / 6` rows, with the
-   scoped CPU-candidate-plus-GPU-top-k envelope between about `0.026x` and
-   `0.203x` of FastPlaid full-search batch time.
+   scoped CPU-candidate-plus-GPU-top-k envelope between about `0.025x` and
+   `0.195x` of FastPlaid full-search batch time, and with CPU candidate
+   generation taking about `69%` of the remaining envelope.
 25. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.

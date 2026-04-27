@@ -40,7 +40,7 @@ bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 90 --force -- pixi
 
 Artifacts:
 
-- quiet log: `.cache/kayak/bench_quiet/20260427T101718Z`
+- quiet log: `.cache/kayak/bench_quiet/20260427T102324Z`
 - summary report: `.cache/kayak/gpu_i8_fastplaid_policy_compare/summary.json`
 - per-row reports:
   `.cache/kayak/gpu_i8_fastplaid_policy_compare/reports/`
@@ -52,17 +52,21 @@ The automated wide non-full policy comparison reported status `ok` on all
 
 | case | FastPlaid device | seed | cpqv | Kayak i8 recall | FastPlaid recall | CPU candidates + GPU no-ref top-k/window s | FastPlaid batch s | envelope / FastPlaid |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `query_vectors32` | `cpu` | `7` | `4` | `0.7` | `0.35` | `0.0005739230001040596` | `0.012004799999886018` | `0.047807793558369054` |
-| `query_vectors32` | `cuda` | `7` | `4` | `0.7` | `0.35` | `0.0005675255000596735` | `0.00279079499978252` | `0.20335621215599836` |
-| `doc_vectors64` | `cpu` | `8` | `16` | `0.65` | `0.65` | `0.0006448097499855976` | `0.025001087999953597` | `0.02579126756350741` |
-| `doc_vectors64` | `cuda` | `8` | `16` | `0.65` | `0.65` | `0.0006448880000675672` | `0.005050237999967067` | `0.12769457599261116` |
-| `query_batch4` | `cpu` | `9` | `8` | `0.7` | `0.6499999999999999` | `0.0006851874999824759` | `0.012477330999900005` | `0.05491458870394374` |
-| `query_batch4` | `cuda` | `9` | `8` | `0.7` | `0.6` | `0.0006857959999138075` | `0.004178883000122369` | `0.16410988292654413` |
+| `query_vectors32` | `cpu` | `7` | `4` | `0.7` | `0.4` | `0.0005641172500645553` | `0.013735887000166258` | `0.04106886217524411` |
+| `query_vectors32` | `cuda` | `7` | `4` | `0.7` | `0.4` | `0.0005653894999113618` | `0.002906660999997257` | `0.19451511542346883` |
+| `doc_vectors64` | `cpu` | `8` | `16` | `0.65` | `0.65` | `0.0006445645000212608` | `0.02580610900031388` | `0.02497720597915094` |
+| `doc_vectors64` | `cuda` | `8` | `16` | `0.65` | `0.6` | `0.0006411607499785532` | `0.005982657999993535` | `0.107169881677884` |
+| `query_batch4` | `cpu` | `9` | `8` | `0.7` | `0.625` | `0.0006956447499533169` | `0.01236659400001372` | `0.056251927568136` |
+| `query_batch4` | `cuda` | `9` | `8` | `0.7` | `0.625` | `0.000692231499783702` | `0.00447700899985648` | `0.15461918879454856` |
 
 Summary:
 
-- mean envelope / FastPlaid batch: `0.1039457201501623`
-- max envelope / FastPlaid batch: `0.20335621215599836`
+- mean envelope / FastPlaid batch: `0.09643369693640541`
+- max envelope / FastPlaid batch: `0.19451511542346883`
+- mean CPU candidate-generation share of envelope:
+  `0.6942162036037187`
+- mean GPU no-reference top-k share of envelope:
+  `0.3057837963962813`
 - minimum Kayak i8 recall delta versus FastPlaid: `0.0`
 - minimum no-reference top-k position agreement: `1.0`
 
@@ -76,6 +80,9 @@ Verified:
 - Kayak i8 recall matched or exceeded FastPlaid recall on every automated row
 - CPU candidate generation plus GPU no-reference top-k stayed faster than
   FastPlaid full search in the scoped comparison
+- CPU candidate generation is now the larger measured share of the remaining
+  envelope, so candidate generation/workspace behavior should be optimized
+  before the GPU no-reference top-k kernel
 
 Not claimed:
 

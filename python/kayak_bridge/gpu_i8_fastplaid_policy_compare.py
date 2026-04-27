@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Iterable, Sequence
 
 from kayak_bridge.gpu_i8_address_serve_sweep import AddressServeSweepCase
 from kayak_bridge.gpu_i8_centroid_budget_policy import choose_policy_budget
@@ -142,6 +142,17 @@ def summarize_case_device_report(
         "gpu_prepared_handle_topk_no_reference_vs_fastplaid_scope_comparison",
         {},
     )
+    candidate_seconds = _optional_float(
+        comparison.get("cpu_candidate_generation_seconds_per_window")
+    )
+    gpu_topk_seconds = _optional_float(
+        comparison.get("gpu_prepared_handle_topk_seconds_per_window")
+    )
+    envelope_seconds = _optional_float(
+        comparison.get(
+            "cpu_candidate_generation_plus_gpu_topk_seconds_per_window"
+        )
+    )
     return {
         "name": case.name,
         "status": report.get("status"),
@@ -159,12 +170,10 @@ def summarize_case_device_report(
         "fastplaid_query_batch_mean_seconds": _optional_float(
             fastplaid.get("query_batch_mean_seconds") if fastplaid else None
         ),
+        "cpu_candidate_generation_seconds_per_window": candidate_seconds,
+        "gpu_topk_no_reference_seconds_per_window": gpu_topk_seconds,
         "cpu_candidate_generation_plus_gpu_topk_no_reference_seconds_per_window": (
-            _optional_float(
-                comparison.get(
-                    "cpu_candidate_generation_plus_gpu_topk_seconds_per_window"
-                )
-            )
+            envelope_seconds
         ),
         "cpu_candidate_generation_plus_gpu_topk_no_reference_seconds_per_fastplaid_batch_second": (
             _optional_float(
@@ -172,6 +181,14 @@ def summarize_case_device_report(
                     "cpu_candidate_generation_plus_gpu_topk_seconds_per_fastplaid_batch_second"
                 )
             )
+        ),
+        "cpu_candidate_generation_share_of_envelope": _ratio(
+            candidate_seconds,
+            envelope_seconds,
+        ),
+        "gpu_topk_no_reference_share_of_envelope": _ratio(
+            gpu_topk_seconds,
+            envelope_seconds,
         ),
         "topk_position_agreement": _optional_float(
             comparison.get("topk_position_agreement")
@@ -203,6 +220,14 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
     return {
         "row_count": len(rows),
         "ok_row_count": len(ok_rows),
+        "mean_cpu_candidate_generation_share_of_envelope": _mean_optional(
+            row.get("cpu_candidate_generation_share_of_envelope")
+            for row in ok_rows
+        ),
+        "mean_gpu_topk_no_reference_share_of_envelope": _mean_optional(
+            row.get("gpu_topk_no_reference_share_of_envelope")
+            for row in ok_rows
+        ),
         "mean_envelope_seconds_per_fastplaid_batch_second": _mean(ratios),
         "max_envelope_seconds_per_fastplaid_batch_second": (
             max(ratios) if ratios else None
@@ -244,10 +269,25 @@ def _mean(values: Sequence[float]) -> float | None:
     return sum(values) / float(len(values))
 
 
-def _min_optional(values: Sequence[object]) -> float | None:
+def _mean_optional(values: Iterable[object]) -> float | None:
+    floats = [
+        float(value)
+        for value in values
+        if isinstance(value, (float, int))
+    ]
+    return _mean(floats)
+
+
+def _min_optional(values: Iterable[object]) -> float | None:
     floats = [
         float(value)
         for value in values
         if isinstance(value, (float, int))
     ]
     return min(floats) if floats else None
+
+
+def _ratio(numerator: float | None, denominator: float | None) -> float | None:
+    if numerator is None or denominator is None or denominator <= 0.0:
+        return None
+    return numerator / denominator
