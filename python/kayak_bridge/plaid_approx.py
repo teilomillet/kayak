@@ -62,6 +62,9 @@ class KayakPlaidI8PayloadSnapshot:
     doc_offsets: np.ndarray
     token_codes: np.ndarray
     token_scales: np.ndarray
+    centroid_token_indices: np.ndarray
+    centroid_doc_offsets: np.ndarray
+    centroid_doc_indices: np.ndarray
     document_count: int
     total_vector_count: int
     vector_dim: int
@@ -79,6 +82,29 @@ class KayakPlaidI8PayloadSnapshot:
             raise ValueError("token_codes shape must be total_vector_count * 128")
         if self.token_scales.shape != (self.total_vector_count,):
             raise ValueError("token_scales shape must be total_vector_count")
+        if self.centroid_token_indices.ndim != 1:
+            raise ValueError("centroid_token_indices must be a flat array")
+        if self.centroid_doc_offsets.shape != (
+            int(self.centroid_token_indices.shape[0]) + 1,
+        ):
+            raise ValueError("centroid_doc_offsets shape must be centroid_count + 1")
+        if self.centroid_doc_indices.ndim != 1:
+            raise ValueError("centroid_doc_indices must be a flat array")
+
+    @property
+    def centroid_count(self) -> int:
+        return int(self.centroid_token_indices.shape[0])
+
+    @property
+    def posting_count(self) -> int:
+        return int(self.centroid_doc_indices.shape[0])
+
+    def candidate_generation_byte_counts(self) -> dict[str, int]:
+        return {
+            "centroid_token_indices": int(self.centroid_token_indices.nbytes),
+            "centroid_doc_offsets": int(self.centroid_doc_offsets.nbytes),
+            "centroid_doc_indices": int(self.centroid_doc_indices.nbytes),
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -373,6 +399,24 @@ class KayakPlaidApproxIndex:
             token_scales=np.asarray(
                 module.plaid_i8_prepared_token_scales(self._prepared_index),
                 dtype=VECTOR_DTYPE,
+            ),
+            centroid_token_indices=np.asarray(
+                module.plaid_i8_prepared_centroid_token_indices(
+                    self._prepared_index
+                ),
+                dtype=INDEX_OFFSET_DTYPE,
+            ),
+            centroid_doc_offsets=np.asarray(
+                module.plaid_i8_prepared_centroid_doc_offsets(
+                    self._prepared_index
+                ),
+                dtype=INDEX_OFFSET_DTYPE,
+            ),
+            centroid_doc_indices=np.asarray(
+                module.plaid_i8_prepared_centroid_doc_indices(
+                    self._prepared_index
+                ),
+                dtype=INDEX_OFFSET_DTYPE,
             ),
             document_count=self.document_count,
             total_vector_count=sum(self.document_vector_counts),

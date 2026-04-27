@@ -298,6 +298,15 @@ class FastPlaidSpeedTrackTests(unittest.TestCase):
         self.assertEqual(snapshot.token_scales.shape, (4,))
         self.assertEqual(snapshot.token_codes.dtype, np.int8)
         self.assertEqual(snapshot.token_scales.dtype, np.float32)
+        self.assertEqual(snapshot.centroid_token_indices.shape, (2,))
+        self.assertEqual(snapshot.centroid_doc_offsets.shape, (3,))
+        self.assertEqual(snapshot.centroid_doc_indices.dtype, np.int64)
+        self.assertEqual(snapshot.centroid_count, 2)
+        self.assertGreaterEqual(snapshot.posting_count, 2)
+        self.assertGreater(
+            snapshot.candidate_generation_byte_counts()["centroid_doc_indices"],
+            0,
+        )
         self.assertGreaterEqual(int(snapshot.token_codes.max()), 0)
         self.assertLessEqual(int(snapshot.token_codes.min()), 0)
 

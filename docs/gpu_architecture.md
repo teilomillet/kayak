@@ -522,6 +522,20 @@ Reason: candidate-window size and score-floor pruning are policy levers, not
 free optimizations. They must be validated by recall and envelope measurements
 before they can become defaults.
 
+Next-priority finding: the current scoped policy envelope is still dominated by
+CPU candidate generation, not GPU top-k/readback. The latest policy comparison
+reports about `69%` CPU candidate generation and about `31%` GPU
+no-reference top-k on average, with per-row candidate shares from about `57%`
+to `82%`. The next enabling change exposes the i8 centroid-posting tensors
+inside `KayakPlaidI8PayloadSnapshot`: centroid token indices, centroid
+document offsets, and centroid document indices. On the wide non-full policy
+rows, that candidate-generation payload is about `63 KB`, `204 KB`, and
+`64 KB`.
+
+Reason: this keeps FastPlaid as the baseline while focusing Kayak work on the
+largest remaining measured slice. A future GPU candidate-generation primitive
+needs these resident posting tensors before any kernel claim can be tested.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -766,10 +780,13 @@ evidence only justifies a measured primitive.
    lose recall on the wide non-full rows, and positive centroid postings
    preserve recall but do not improve the scoped envelope. Neither is promoted
    to a default.
-27. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+27. Expose the centroid-posting payload required for a future GPU candidate
+   generation primitive. Current result: the exact i8 posting tensors are now
+   visible in the payload snapshot with explicit byte counts.
+28. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-28. Only after a measured win, consider public API design.
+29. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

@@ -585,6 +585,33 @@ def plaid_i8_prepared_token_scales(
     return scalar_values_to_python(prepared_index[].token_scales)
 
 
+def plaid_i8_prepared_centroid_token_indices(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    return int_values_to_python(prepared_index[].centroid_token_indices)
+
+
+def plaid_i8_prepared_centroid_doc_offsets(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    return int_values_to_python(prepared_index[].centroid_doc_offsets)
+
+
+def plaid_i8_prepared_centroid_doc_indices(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    return int_values_to_python(prepared_index[].centroid_doc_indices)
+
+
 def exact_scores_packed(
     py_query_vectors: PythonObject,
     py_doc_ids: PythonObject,
@@ -1230,6 +1257,18 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         module.def_function[plaid_i8_prepared_token_scales](
             "plaid_i8_prepared_token_scales",
             docstring="Return prepared int8 PLAID token scales.",
+        )
+        module.def_function[plaid_i8_prepared_centroid_token_indices](
+            "plaid_i8_prepared_centroid_token_indices",
+            docstring="Return prepared int8 PLAID centroid token indices.",
+        )
+        module.def_function[plaid_i8_prepared_centroid_doc_offsets](
+            "plaid_i8_prepared_centroid_doc_offsets",
+            docstring="Return prepared int8 PLAID centroid posting offsets.",
+        )
+        module.def_function[plaid_i8_prepared_centroid_doc_indices](
+            "plaid_i8_prepared_centroid_doc_indices",
+            docstring="Return prepared int8 PLAID centroid posting indices.",
         )
         module.def_function[exact_scores_packed_batch](
             "exact_scores_packed_batch",
