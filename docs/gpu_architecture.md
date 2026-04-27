@@ -663,6 +663,26 @@ as the CPU path. It also shows why the next boundary must be explicit prepared
 GPU payload ownership: hidden payload copies are still large enough to change
 the conclusion on `doc_vectors64`.
 
+Prepared fused handle finding: the fused centroid-posting primitive now has an
+explicit benchmark-only prepare/score/release handle. It copies the i8 token
+codes, token scales, centroid token ids, posting offsets, and posting document
+ids once at prepare time, then scores query batches without a CPU reference in
+the extension call. The score call still returns host top-k after document-score
+readback; this is intentional because the previous one-lane device document
+top-k was rejected by timing. On all `5 / 5` wide rows, top-k positions matched
+the CPU selected-posting reference exactly, with maximum score delta
+`0.00006103515625`. On the three non-full rows, the serving-shaped score call
+measured about `0.236x`, `0.318x`, and `0.242x` of full CPU candidate
+generation. Against the CPU centroid-selection/posting/top-k slice, it measured
+about `0.416x`, `0.631x`, and `0.572x`.
+
+Reason: this validates the ownership boundary required for a real internal
+serving primitive without adding a hidden global cache or a public GPU search
+API. The prepared-handle score call is slower than the earlier in-call resident
+envelope, which is useful evidence that the next optimization should profile
+inside the score call rather than assume the remaining cost is a specific
+kernel or transfer.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -947,10 +967,16 @@ evidence only justifies a measured primitive.
    The non-full resident path costs about `0.200x` to `0.282x` of full CPU
    candidate generation and about `0.353x` to `0.541x` of the CPU
    centroid-selection/posting/top-k slice.
-34. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+34. Move the fused primitive behind an explicit benchmark-only prepared handle
+   with separate prepare, score, and release calls. Current quiet result: the
+   prepared-handle score call preserves exact top-k positions on all wide rows
+   and costs about `0.236x` to `0.318x` of full CPU candidate generation on
+   non-full rows, or about `0.416x` to `0.631x` of the CPU
+   centroid-selection/posting/top-k slice.
+35. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and FastPlaid scope rows after the resident ownership boundary
    exists.
-35. Only after a measured win, consider public API design.
+36. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

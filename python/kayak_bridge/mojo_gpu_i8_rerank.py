@@ -531,6 +531,185 @@ class MojoGpuI8FusedCentroidPostingAccumulationResult:
 
 
 @dataclass(frozen=True, slots=True)
+class MojoGpuI8FusedCentroidPostingTopKResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    document_score_count: int
+    top_k: int
+    topk_position_match_count: int
+    topk_score_delta_max_abs: float
+    positions: tuple[int, ...]
+    scores: tuple[float, ...]
+
+    @property
+    def topk_position_count(self) -> int:
+        return len(self.positions)
+
+    @property
+    def topk_position_agreement(self) -> float:
+        if not self.positions:
+            return 0.0
+        return self.topk_position_match_count / len(self.positions)
+
+    @property
+    def topk_agreement_ok(self) -> bool:
+        return self.topk_position_match_count == len(self.positions)
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "document_score_count": self.document_score_count,
+            "top_k": self.top_k,
+            "topk_position_count": self.topk_position_count,
+            "topk_position_match_count": self.topk_position_match_count,
+            "topk_position_agreement": self.topk_position_agreement,
+            "topk_agreement_ok": self.topk_agreement_ok,
+            "topk_score_delta_max_abs": self.topk_score_delta_max_abs,
+            "positions": self.positions,
+            "scores": self.scores,
+        }
+
+
+@dataclass(slots=True)
+class MojoGpuI8FusedCentroidPostingSessionHandle:
+    target_accelerator: str
+    handle: int
+    shape: Any
+    centroids_per_query_vector: int
+    top_k: int
+    prepare_host_marshalling_seconds: float
+    prepare_extension_call_seconds: float
+    _closed: bool = False
+
+    def score_topk_without_reference(
+        self,
+        *,
+        queries: np.ndarray,
+        reference_document_scores: np.ndarray,
+    ) -> MojoGpuI8FusedCentroidPostingTopKResult:
+        if self._closed or self.handle == 0:
+            raise RuntimeError("GPU i8 fused centroid-posting handle is closed")
+
+        marshalling_started_at = time.perf_counter()
+        query_values = _float32_array(queries)
+        expected_query_values = (
+            int(self.shape.query_count)
+            * int(self.shape.query_vector_count)
+            * int(self.shape.vector_dim)
+        )
+        if query_values.size != expected_query_values:
+            raise ValueError("queries shape must match the prepared handle shape")
+        reference_scores = _float32_array(reference_document_scores)
+        expected_score_count = int(self.shape.query_count) * int(
+            self.shape.document_count
+        )
+        if reference_scores.size != expected_score_count:
+            raise ValueError(
+                "reference_document_scores must match query_count * document_count"
+            )
+        host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+        module = load_module(target_accelerator=self.target_accelerator)
+        request = [
+            int(self.handle),
+            _array_address(query_values),
+        ]
+        extension_started_at = time.perf_counter()
+        raw_result = (
+            module.score_i8_fused_centroid_posting_session_handle_topk_no_reference(
+                request
+            )
+        )
+        extension_call_seconds = time.perf_counter() - extension_started_at
+
+        if len(raw_result) != 4:
+            raise RuntimeError(
+                "GPU i8 fused centroid-posting top-k returned an unexpected "
+                "result shape"
+            )
+
+        positions = tuple(int(value) for value in raw_result[2])
+        scores = tuple(float(value) for value in raw_result[3])
+        result_top_k = int(raw_result[1])
+        result_document_score_count = int(raw_result[0])
+        expected_topk_count = int(self.shape.query_count) * result_top_k
+        if result_document_score_count != expected_score_count:
+            raise RuntimeError(
+                "GPU i8 fused centroid-posting top-k returned the wrong "
+                "document score count"
+            )
+        if len(positions) != expected_topk_count or len(scores) != expected_topk_count:
+            raise RuntimeError(
+                "GPU i8 fused centroid-posting top-k returned the wrong "
+                "top-k count"
+            )
+        expected_positions = _rank_document_scores_by_position(
+            reference_scores,
+            query_count=int(self.shape.query_count),
+            document_count=int(self.shape.document_count),
+            top_k=result_top_k,
+        )
+        topk_position_match_count = sum(
+            1
+            for actual, expected in zip(positions, expected_positions)
+            if actual == expected
+        )
+        score_delta_max_abs = _topk_score_delta_max_abs(
+            scores,
+            reference_scores,
+            expected_positions,
+            document_count=int(self.shape.document_count),
+            top_k=result_top_k,
+        )
+        return MojoGpuI8FusedCentroidPostingTopKResult(
+            host_marshalling_seconds=host_marshalling_seconds,
+            extension_call_seconds=extension_call_seconds,
+            document_score_count=result_document_score_count,
+            top_k=result_top_k,
+            topk_position_match_count=topk_position_match_count,
+            topk_score_delta_max_abs=score_delta_max_abs,
+            positions=positions,
+            scores=scores,
+        )
+
+    def close(self) -> float:
+        if self._closed or self.handle == 0:
+            return 0.0
+        module = load_module(target_accelerator=self.target_accelerator)
+        extension_started_at = time.perf_counter()
+        module.release_i8_fused_centroid_posting_session_handle(
+            int(self.handle)
+        )
+        extension_call_seconds = time.perf_counter() - extension_started_at
+        self.handle = 0
+        self._closed = True
+        return extension_call_seconds
+
+    def __enter__(self) -> "MojoGpuI8FusedCentroidPostingSessionHandle":
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        self.close()
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "handle_open": not self._closed,
+            "prepare_host_marshalling_seconds": (
+                self.prepare_host_marshalling_seconds
+            ),
+            "prepare_extension_call_seconds": self.prepare_extension_call_seconds,
+            "document_count": int(self.shape.document_count),
+            "document_vector_count": int(self.shape.document_vector_count),
+            "query_count": int(self.shape.query_count),
+            "query_vector_count": int(self.shape.query_vector_count),
+            "centroids_per_query_vector": self.centroids_per_query_vector,
+            "top_k": self.top_k,
+            "vector_dim": int(self.shape.vector_dim),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class _SelectedPostingTraversalReference:
     selected_positions: np.ndarray
     selected_scores: np.ndarray
@@ -907,6 +1086,67 @@ def prepare_i8_address_session_handle(
         handle=handle,
         shape=shape,
         candidate_k=int(candidate_k),
+        prepare_host_marshalling_seconds=host_marshalling_seconds,
+        prepare_extension_call_seconds=extension_call_seconds,
+    )
+
+
+def prepare_i8_fused_centroid_posting_session_handle(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    payload: KayakPlaidI8PayloadSnapshot,
+    centroids_per_query_vector: int,
+    top_k: int,
+) -> MojoGpuI8FusedCentroidPostingSessionHandle:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    if top_k > int(shape.document_count):
+        raise ValueError("top_k must not exceed document_count")
+    if centroids_per_query_vector <= 0:
+        raise ValueError("centroids_per_query_vector must be positive")
+
+    marshalling_started_at = time.perf_counter()
+    token_codes = _int8_array(payload.token_codes)
+    token_scales = _float32_array(payload.token_scales)
+    centroid_token_indices = _int64_array(payload.centroid_token_indices)
+    centroid_doc_offsets = _int64_array(payload.centroid_doc_offsets)
+    centroid_doc_indices = _int64_array(payload.centroid_doc_indices)
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    module = load_module(target_accelerator=target_accelerator)
+    request = [
+        _array_address(token_codes),
+        _array_address(token_scales),
+        _array_address(centroid_token_indices),
+        _array_address(centroid_doc_offsets),
+        _array_address(centroid_doc_indices),
+        int(payload.total_vector_count),
+        int(payload.centroid_count),
+        int(payload.posting_count),
+        int(shape.document_count),
+        int(shape.query_count),
+        int(shape.query_vector_count),
+        int(centroids_per_query_vector),
+        int(top_k),
+    ]
+    extension_started_at = time.perf_counter()
+    raw_handle = module.prepare_i8_fused_centroid_posting_session_handle(
+        request
+    )
+    extension_call_seconds = time.perf_counter() - extension_started_at
+
+    handle = int(raw_handle)
+    if handle == 0:
+        raise RuntimeError(
+            "GPU i8 fused centroid-posting session returned a null handle"
+        )
+    return MojoGpuI8FusedCentroidPostingSessionHandle(
+        target_accelerator=target_accelerator,
+        handle=handle,
+        shape=shape,
+        centroids_per_query_vector=int(centroids_per_query_vector),
+        top_k=int(top_k),
         prepare_host_marshalling_seconds=host_marshalling_seconds,
         prepare_extension_call_seconds=extension_call_seconds,
     )
@@ -1902,6 +2142,70 @@ def _int64_array(values: Any) -> np.ndarray:
 
 def _array_address(values: np.ndarray) -> int:
     return int(values.ctypes.data)
+
+
+def selected_posting_accumulation_reference_scores(
+    *,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+) -> np.ndarray:
+    """Return flat CPU i8 document scores for selected-centroid accumulation."""
+
+    return _selected_posting_accumulation_reference(
+        payload=payload,
+        selected=selected,
+    ).expected_document_scores
+
+
+def _rank_document_scores_by_position(
+    reference_scores: np.ndarray,
+    *,
+    query_count: int,
+    document_count: int,
+    top_k: int,
+) -> tuple[int, ...]:
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    if top_k > document_count:
+        raise ValueError("top_k must not exceed document_count")
+    expected_count = query_count * document_count
+    if int(reference_scores.size) != expected_count:
+        raise ValueError("reference_scores shape does not match document scores")
+
+    positions: list[int] = []
+    for query_index in range(query_count):
+        query_base = query_index * document_count
+        ranked = sorted(
+            range(document_count),
+            key=lambda position: (
+                -float(reference_scores[query_base + position]),
+                position,
+            ),
+        )
+        positions.extend(ranked[:top_k])
+    return tuple(positions)
+
+
+def _topk_score_delta_max_abs(
+    scores: Sequence[float],
+    reference_scores: np.ndarray,
+    positions: Sequence[int],
+    *,
+    document_count: int,
+    top_k: int,
+) -> float:
+    if len(scores) != len(positions):
+        raise ValueError("top-k scores and positions must align")
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    delta_max = 0.0
+    for index, (score, position) in enumerate(zip(scores, positions)):
+        query_index = index // top_k
+        reference_index = query_index * document_count + int(position)
+        delta = abs(float(score) - float(reference_scores[reference_index]))
+        if delta > delta_max:
+            delta_max = delta
+    return delta_max
 
 
 def _selected_posting_traversal_reference(
