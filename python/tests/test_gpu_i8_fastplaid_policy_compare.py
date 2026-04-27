@@ -30,6 +30,7 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
         controls = policy_compare.FastPlaidPolicyCompareControls(
             policy_name="shape_rule_v0",
             seed=7,
+            kayak_i8_positive_centroids_only=True,
         )
 
         argv = policy_compare.compare_argv_for_case(
@@ -54,6 +55,7 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
         self.assertIn("--allow-missing-gpu", argv)
         self.assertIn("--require-fastplaid", argv)
         self.assertIn("--overwrite-index-root", argv)
+        self.assertIn("--kayak-i8-positive-centroids-only", argv)
 
     def test_summary_extracts_scope_metrics(self) -> None:
         case = AddressServeSweepCase("query_vectors32", 512, 16, 2, 32, 256)
@@ -90,6 +92,7 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
 
         self.assertEqual(row["policy"]["centroids_per_query_vector"], 4)
         self.assertEqual(row["kayak_i8_candidate_order"], "unordered")
+        self.assertIs(row["kayak_i8_positive_centroids_only"], False)
         self.assertEqual(row["kayak_i8_recall_at_k_vs_kayak_exact"], 0.7)
         self.assertEqual(row["fastplaid_recall_at_k_vs_kayak_exact"], 0.4)
         self.assertEqual(

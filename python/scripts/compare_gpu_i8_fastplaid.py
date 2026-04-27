@@ -110,6 +110,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--kayak-i8-positive-centroids-only",
+        action="store_true",
+        help=(
+            "Benchmark-only: generate unordered i8 candidate windows from "
+            "positive selected centroid postings only."
+        ),
+    )
+    parser.add_argument(
         "--fastplaid-device",
         default="cpu",
         help='FastPlaid device string, e.g. "cpu", "cuda", or an empty auto value.',
@@ -187,6 +195,11 @@ def build_shape(args: argparse.Namespace) -> SpeedTrackShape:
         raise ValueError("candidate_k must be greater than or equal to top_k")
     if args.gpu_topk_session_iterations <= 0:
         raise ValueError("gpu_topk_session_iterations must be positive")
+    if (
+        args.kayak_i8_positive_centroids_only
+        and args.kayak_i8_candidate_order != "unordered"
+    ):
+        raise ValueError("positive centroid candidates require unordered order")
     return shape
 
 
@@ -291,9 +304,10 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
                 "windows, but is still an internal rerank boundary rather than "
                 "a full search backend. The no-reference top-k comparison "
                 "keeps CPU reference scores out of the Mojo serving call and "
-                "uses them only for post-call validation. Ratios across those "
-                "scopes are profiling context only, not production search "
-                "speedup claims."
+                "uses them only for post-call validation. The positive-centroid "
+                "candidate option is benchmark-only and explicitly opt-in. "
+                "Ratios across those scopes are profiling context only, not "
+                "production search speedup claims."
             ),
         },
         capability,
@@ -319,6 +333,9 @@ def controls_payload(args: argparse.Namespace) -> dict[str, object]:
         "kayak_plaid_candidate_k": args.candidate_k,
         "kayak_plaid_payload": "i8",
         "kayak_i8_candidate_order": args.kayak_i8_candidate_order,
+        "kayak_i8_positive_centroids_only": (
+            args.kayak_i8_positive_centroids_only
+        ),
         "fastplaid_device": args.fastplaid_device,
         "fastplaid_low_memory": args.fastplaid_low_memory,
         "fastplaid_kmeans_niters": args.fastplaid_kmeans_niters,

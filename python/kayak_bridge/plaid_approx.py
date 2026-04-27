@@ -268,6 +268,7 @@ class KayakPlaidApproxIndex:
         return self._i8_candidate_positions_batch(
             queries,
             unordered=False,
+            positive_centroids=False,
         )
 
     def i8_candidate_positions_batch_unordered(
@@ -278,6 +279,18 @@ class KayakPlaidApproxIndex:
         return self._i8_candidate_positions_batch(
             queries,
             unordered=True,
+            positive_centroids=False,
+        )
+
+    def i8_candidate_positions_batch_positive_centroids_unordered(
+        self,
+        queries: np.ndarray,
+    ) -> tuple[tuple[int, ...], ...]:
+        """Return unordered candidates using positive selected centroids only."""
+        return self._i8_candidate_positions_batch(
+            queries,
+            unordered=True,
+            positive_centroids=True,
         )
 
     def _i8_candidate_positions_batch(
@@ -285,9 +298,12 @@ class KayakPlaidApproxIndex:
         queries: np.ndarray,
         *,
         unordered: bool,
+        positive_centroids: bool,
     ) -> tuple[tuple[int, ...], ...]:
         if self.config.payload != PLAID_PAYLOAD_I8:
             raise ValueError("i8 candidate positions require payload='i8'")
+        if positive_centroids and not unordered:
+            raise ValueError("positive-centroid candidates are unordered only")
         normalized_queries = _as_query_tensor(queries, vector_dim=self.vector_dim)
         if self.config.candidate_k >= self.document_count:
             full_window = tuple(range(self.document_count))
@@ -295,11 +311,19 @@ class KayakPlaidApproxIndex:
                 full_window for _ in range(int(normalized_queries.shape[0]))
             )
         module = load_module()
-        candidate_function = (
-            module.plaid_i8_candidate_positions_prepared_batch_address_unordered
-            if unordered
-            else module.plaid_i8_candidate_positions_prepared_batch_address
-        )
+        if positive_centroids:
+            candidate_function = getattr(
+                module,
+                "plaid_i8_positive_centroid_candidate_positions_prepared_batch_address_unordered",
+            )
+        elif unordered:
+            candidate_function = (
+                module.plaid_i8_candidate_positions_prepared_batch_address_unordered
+            )
+        else:
+            candidate_function = (
+                module.plaid_i8_candidate_positions_prepared_batch_address
+            )
         rows = candidate_function(
             int(normalized_queries.ctypes.data),
             int(normalized_queries.shape[0]),

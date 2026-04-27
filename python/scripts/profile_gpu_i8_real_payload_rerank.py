@@ -461,12 +461,16 @@ def time_candidate_generation(
     warmup_iterations: int,
     measurement_iterations: int,
     unordered: bool = False,
+    positive_centroids: bool = False,
 ) -> TimingSummary:
-    candidate_function = (
-        index.i8_candidate_positions_batch_unordered
-        if unordered
-        else index.i8_candidate_positions_batch
-    )
+    if positive_centroids:
+        candidate_function = (
+            index.i8_candidate_positions_batch_positive_centroids_unordered
+        )
+    elif unordered:
+        candidate_function = index.i8_candidate_positions_batch_unordered
+    else:
+        candidate_function = index.i8_candidate_positions_batch
     for _ in range(warmup_iterations):
         candidate_function(queries)
 

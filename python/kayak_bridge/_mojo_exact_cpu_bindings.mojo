@@ -39,6 +39,9 @@ from kayak.search.plaid_i8_candidate_profile_dim128 import (
 from kayak.search.plaid_i8_candidate_profile_types_dim128 import (
     PlaidI8CandidateGenerationProfile,
 )
+from kayak.search.plaid_i8_positive_centroid_candidates_dim128 import (
+    plaid_i8_positive_centroid_candidate_positions_for_query_unordered,
+)
 from kayak.scoring import (
     ExactScoringConfig,
     exact_scores_for_hybrid_flat_index_dim128,
@@ -1043,6 +1046,50 @@ def plaid_i8_candidate_positions_prepared_batch_address_unordered(
     return positions_batch_to_python(positions_by_query)
 
 
+def plaid_i8_positive_centroid_candidate_positions_prepared_batch_address_unordered(
+    py_query_values_address: PythonObject,
+    py_query_count: PythonObject,
+    py_query_vector_count: PythonObject,
+    py_centroids_per_query_vector: PythonObject,
+    py_candidate_k: PythonObject,
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_query_values_address)
+    var query_count = Int(py=py_query_count)
+    var query_vector_count = Int(py=py_query_vector_count)
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_centroids_per_query_vector)
+    var candidate_k = Int(py=py_candidate_k)
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            plaid_i8_positive_centroid_candidate_positions_for_query_unordered(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
 def plaid_i8_candidate_scores_prepared_batch(
     py_query_batch_values: PythonObject,
     py_candidate_positions_batch: PythonObject,
@@ -1274,6 +1321,15 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
             docstring=(
                 "Generate unordered int8 PLAID candidate positions from a"
                 " contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            plaid_i8_positive_centroid_candidate_positions_prepared_batch_address_unordered
+        ](
+            "plaid_i8_positive_centroid_candidate_positions_prepared_batch_address_unordered",
+            docstring=(
+                "Generate unordered int8 PLAID candidate positions from"
+                " positive selected centroid postings only."
             ),
         )
         module.def_function[plaid_i8_candidate_scores_prepared_batch](

@@ -73,12 +73,20 @@ def build_prepared_handle_topk_scope_row(
     build_seconds = time.perf_counter() - started_at
 
     candidate_order = getattr(args, "kayak_i8_candidate_order", "ordered")
-    use_unordered_candidates = candidate_order == "unordered"
-    candidate_function = (
-        index.i8_candidate_positions_batch_unordered
-        if use_unordered_candidates
-        else index.i8_candidate_positions_batch
+    positive_centroids = bool(
+        getattr(args, "kayak_i8_positive_centroids_only", False)
     )
+    use_unordered_candidates = candidate_order == "unordered"
+    if positive_centroids:
+        if not use_unordered_candidates:
+            raise ValueError("positive centroid candidates require unordered order")
+        candidate_function = (
+            index.i8_candidate_positions_batch_positive_centroids_unordered
+        )
+    elif use_unordered_candidates:
+        candidate_function = index.i8_candidate_positions_batch_unordered
+    else:
+        candidate_function = index.i8_candidate_positions_batch
     base_candidate_positions = candidate_function(inputs.queries)
     base_reference_scores = index.i8_score_candidate_positions_batch(
         inputs.queries,
@@ -111,6 +119,7 @@ def build_prepared_handle_topk_scope_row(
         warmup_iterations=args.warmup_iterations,
         measurement_iterations=args.measurement_iterations,
         unordered=use_unordered_candidates,
+        positive_centroids=positive_centroids,
     )
     score_timing = time_same_candidate_scores(
         index,
@@ -174,6 +183,7 @@ def build_prepared_handle_topk_scope_row(
         "rerank_kind": index.rerank_kind,
         "scope": "real_kayak_i8_candidate_window_prepared_handle_topk",
         "candidate_window_order": candidate_order,
+        "positive_centroid_postings_only": positive_centroids,
         "shape": _shape_payload(shape, candidate_k=args.candidate_k),
         "cpu_i8_build_seconds": build_seconds,
         "cpu_i8_multi_window_candidate_generation": timing_payload_per_window(

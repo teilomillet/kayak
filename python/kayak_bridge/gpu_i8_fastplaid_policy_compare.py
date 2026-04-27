@@ -29,6 +29,7 @@ class FastPlaidPolicyCompareControls:
     kayak_plaid_centroid_count: int = 128
     policy_name: str = "shape_rule_v0"
     kayak_i8_candidate_order: str = "unordered"
+    kayak_i8_positive_centroids_only: bool = False
     fastplaid_devices: tuple[str, ...] = ("cpu", "cuda")
 
     def validate(self) -> None:
@@ -44,6 +45,11 @@ class FastPlaidPolicyCompareControls:
             raise ValueError("gpu_topk_session_iterations must be positive")
         if self.kayak_i8_candidate_order not in {"ordered", "unordered"}:
             raise ValueError("kayak_i8_candidate_order must be ordered or unordered")
+        if (
+            self.kayak_i8_positive_centroids_only
+            and self.kayak_i8_candidate_order != "unordered"
+        ):
+            raise ValueError("positive centroid candidates require unordered order")
         if not self.fastplaid_devices:
             raise ValueError("at least one FastPlaid device is required")
 
@@ -57,6 +63,9 @@ class FastPlaidPolicyCompareControls:
             "measurement_iterations": self.measurement_iterations,
             "gpu_topk_session_iterations": self.gpu_topk_session_iterations,
             "kayak_i8_candidate_order": self.kayak_i8_candidate_order,
+            "kayak_i8_positive_centroids_only": (
+                self.kayak_i8_positive_centroids_only
+            ),
         }
 
 
@@ -129,6 +138,8 @@ def compare_argv_for_case(
         argv.append("--require-fastplaid")
     if overwrite_index_root:
         argv.append("--overwrite-index-root")
+    if controls.kayak_i8_positive_centroids_only:
+        argv.append("--kayak-i8-positive-centroids-only")
     return argv
 
 
@@ -167,6 +178,9 @@ def summarize_case_device_report(
         "shape": report.get("shape"),
         "policy": choice.to_json_ready(),
         "kayak_i8_candidate_order": controls.kayak_i8_candidate_order,
+        "kayak_i8_positive_centroids_only": (
+            controls.kayak_i8_positive_centroids_only
+        ),
         "report_path": str(report_path),
         "kayak_i8_recall_at_k_vs_kayak_exact": _optional_float(
             kayak_i8.get("recall_at_k_vs_kayak_exact") if kayak_i8 else None

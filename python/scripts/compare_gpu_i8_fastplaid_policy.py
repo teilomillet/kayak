@@ -64,6 +64,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         choices=("ordered", "unordered"),
         default="unordered",
     )
+    parser.add_argument(
+        "--kayak-i8-positive-centroids-only",
+        action="store_true",
+        help=(
+            "Benchmark-only: use unordered candidate windows built from "
+            "positive selected centroid postings only."
+        ),
+    )
     parser.add_argument("--policy-name", default="shape_rule_v0")
     parser.add_argument(
         "--fastplaid-devices",
@@ -113,6 +121,9 @@ def controls_from_args(args: argparse.Namespace) -> FastPlaidPolicyCompareContro
         gpu_topk_session_iterations=args.gpu_topk_session_iterations,
         kayak_plaid_centroid_count=args.kayak_plaid_centroid_count,
         kayak_i8_candidate_order=args.kayak_i8_candidate_order,
+        kayak_i8_positive_centroids_only=(
+            args.kayak_i8_positive_centroids_only
+        ),
         policy_name=args.policy_name,
         fastplaid_devices=tuple(args.fastplaid_devices),
     )

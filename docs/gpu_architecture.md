@@ -507,6 +507,21 @@ centroid selection.
 Reason: substep speed is not enough evidence for a hot-path change. The
 retained evidence is the measurement boundary, not the rejected runtime change.
 
+Candidate-window and positive-centroid finding: smaller internal candidate
+windows were tested at `candidate_k=128` and `192` on the wide non-full CPU
+FastPlaid rows. Both variants stayed top-k-correct against CPU i8 for the same
+candidate windows, but lost recall versus FastPlaid on at least two shapes, so
+no broad smaller-window policy was added. A benchmark-only positive-centroid
+posting path was also added as an explicit opt-in. It skips selected centroid
+postings with non-positive proxy score and preserved recall on the three CPU
+FastPlaid rows, but it did not improve candidate generation or the scoped
+envelope. A quiet-wrapper run hit `partial_gpu_unavailable`, so the current
+positive-centroid timing evidence is exploratory raw-run evidence only.
+
+Reason: candidate-window size and score-floor pruning are policy levers, not
+free optimizations. They must be validated by recall and envelope measurements
+before they can become defaults.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -746,10 +761,15 @@ evidence only justifies a measured primitive.
    preserve candidate sets and improve the useful non-full policy rows, while
    unordered centroid selection is retained only as profiler evidence because
    the full policy comparison did not confirm an envelope win.
-26. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+26. Test candidate-window reduction and positive selected-centroid postings as
+   explicit benchmark policy levers. Current result: smaller candidate windows
+   lose recall on the wide non-full rows, and positive centroid postings
+   preserve recall but do not improve the scoped envelope. Neither is promoted
+   to a default.
+27. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-27. Only after a measured win, consider public API design.
+28. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 
