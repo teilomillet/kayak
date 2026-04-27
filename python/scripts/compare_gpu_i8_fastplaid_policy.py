@@ -23,6 +23,9 @@ from kayak_bridge.gpu_i8_address_serve_sweep import (  # noqa: E402
     case_set_names,
     parse_sweep_case,
 )
+from kayak_bridge.gpu_i8_candidate_window_policy import (  # noqa: E402
+    INPUT_CANDIDATE_K_POLICY,
+)
 from kayak_bridge.gpu_i8_centroid_budget_sweep import (  # noqa: E402
     non_full_candidate_cases,
 )
@@ -74,6 +77,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--policy-name", default="shape_rule_v0")
+    parser.add_argument(
+        "--candidate-window-policy",
+        default=INPUT_CANDIDATE_K_POLICY,
+        help=(
+            "Benchmark-only candidate_k policy. Defaults to using each "
+            "case's explicit candidate_k."
+        ),
+    )
     parser.add_argument(
         "--fastplaid-devices",
         type=parse_fastplaid_devices,
@@ -127,6 +138,7 @@ def controls_from_args(args: argparse.Namespace) -> FastPlaidPolicyCompareContro
         ),
         gpu_hybrid_shortlist_k=args.gpu_hybrid_shortlist_k,
         policy_name=args.policy_name,
+        candidate_window_policy=args.candidate_window_policy,
         fastplaid_devices=tuple(args.fastplaid_devices),
     )
     controls.validate()
@@ -185,6 +197,7 @@ def run_case_device(
         case=case,
         device=fastplaid_device,
         policy_name=controls.policy_name,
+        candidate_window_policy=controls.candidate_window_policy,
         seed=controls.seed + case_index,
     )
     compare_args = fastplaid_compare.parse_args(
@@ -218,10 +231,19 @@ def row_report_path(
     case: AddressServeSweepCase,
     device: str,
     policy_name: str,
+    candidate_window_policy: str,
     seed: int,
 ) -> Path:
     safe_device = device.replace("/", "_").replace(":", "_")
-    return root / f"{case.name}_{policy_name}_{safe_device}_seed{seed}.json"
+    candidate_suffix = (
+        ""
+        if candidate_window_policy == INPUT_CANDIDATE_K_POLICY
+        else f"_{candidate_window_policy}"
+    )
+    filename = (
+        f"{case.name}_{policy_name}{candidate_suffix}_{safe_device}_seed{seed}.json"
+    )
+    return root / filename
 
 
 def row_index_root(

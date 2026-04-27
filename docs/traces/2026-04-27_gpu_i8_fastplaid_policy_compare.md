@@ -182,3 +182,34 @@ measured Kayak resident selected recall `0.65` versus FastPlaid recall `0.70`.
 Until that candidate coverage gap is closed or explained by variance, the
 correct next target is the shape-policy candidate budget/coverage, not another
 low-level kernel speed pass.
+
+## Follow-Up: Candidate-Window Width Policy
+
+The comparison now has a benchmark-only candidate-window policy,
+`doc_vectors64_125pct_v0`. It leaves each explicit `candidate_k` unchanged
+except for non-full `document_vector_count >= 64` windows, where it widens the
+window to `ceil(1.25 * input_candidate_k)`.
+
+Latest quiet artifact:
+
+- quiet log: `.cache/kayak/bench_quiet/20260427T174709Z`
+- summary report:
+  `.cache/kayak/gpu_i8_fastplaid_policy_compare/doc64_125pct_summary.json`
+
+The run reported status `ok` on all `6 / 6` rows:
+
+- minimum resident selected recall delta versus FastPlaid:
+  `0.09999999999999998`
+- mean resident selected exact-rerank / FastPlaid batch:
+  `0.10740016139030102`
+- max resident selected exact-rerank / FastPlaid batch:
+  `0.2142201863924867`
+- max cold resident selected exact-rerank / FastPlaid batch:
+  `0.22986110341743926`
+- candidate and final top-k agreement minima: `1.0`
+
+Reason: the fixed-seed diagnostic showed the `doc_vectors64` miss was a
+candidate-coverage issue. `candidate_k=256` returned recall `0.65`;
+`candidate_k=260` returned `0.70`; `candidate_k=320` returned `0.75`; and the
+full `512` window returned `1.0`. The `1.25x` policy keeps headroom while
+remaining much faster than FastPlaid in this matrix.

@@ -12,6 +12,11 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from kayak_bridge.gpu_i8_address_serve_sweep import AddressServeSweepCase
+from kayak_bridge.gpu_i8_candidate_window_policy import (
+    INPUT_CANDIDATE_K_POLICY,
+    choose_candidate_window,
+    validate_candidate_window_policy,
+)
 from kayak_bridge.gpu_i8_centroid_budget_policy import choose_policy_budget
 
 
@@ -28,6 +33,7 @@ class FastPlaidPolicyCompareControls:
     gpu_topk_session_iterations: int = 4
     kayak_plaid_centroid_count: int = 128
     policy_name: str = "shape_rule_v0"
+    candidate_window_policy: str = INPUT_CANDIDATE_K_POLICY
     kayak_i8_candidate_order: str = "unordered"
     kayak_i8_positive_centroids_only: bool = False
     fastplaid_devices: tuple[str, ...] = ("cpu", "cuda")
@@ -53,6 +59,7 @@ class FastPlaidPolicyCompareControls:
             )
         if self.kayak_i8_candidate_order not in {"ordered", "unordered"}:
             raise ValueError("kayak_i8_candidate_order must be ordered or unordered")
+        validate_candidate_window_policy(self.candidate_window_policy)
         if (
             self.kayak_i8_positive_centroids_only
             and self.kayak_i8_candidate_order != "unordered"
@@ -66,6 +73,7 @@ class FastPlaidPolicyCompareControls:
             "seed": self.seed,
             "kayak_plaid_centroid_count": self.kayak_plaid_centroid_count,
             "policy_name": self.policy_name,
+            "candidate_window_policy": self.candidate_window_policy,
             "fastplaid_devices": list(self.fastplaid_devices),
             "warmup_iterations": self.warmup_iterations,
             "measurement_iterations": self.measurement_iterations,
@@ -112,6 +120,10 @@ def compare_argv_for_case(
             "gpu_hybrid_shortlist_k must be no larger than document_count"
         )
     choice = choose_policy_budget(controls.policy_name, case)
+    candidate_choice = choose_candidate_window(
+        controls.candidate_window_policy,
+        case,
+    )
     argv = [
         "--document-count",
         str(case.document_count),
@@ -124,7 +136,7 @@ def compare_argv_for_case(
         "--vector-dim",
         str(controls.vector_dim),
         "--candidate-k",
-        str(case.candidate_k),
+        str(candidate_choice.candidate_k),
         "--top-k",
         str(controls.top_k),
         "--seed",
@@ -176,6 +188,10 @@ def summarize_case_device_report(
     report_path: Path,
 ) -> dict[str, Any]:
     choice = choose_policy_budget(controls.policy_name, case)
+    candidate_choice = choose_candidate_window(
+        controls.candidate_window_policy,
+        case,
+    )
     kayak_i8 = _system_by_name(report.get("systems", []), "kayak_plaid_mojo_probe")
     fastplaid = _system_by_name(report.get("systems", []), "fastplaid")
     comparison = report.get(
@@ -250,6 +266,9 @@ def summarize_case_device_report(
         "seed": controls.seed + case_index,
         "shape": report.get("shape"),
         "policy": choice.to_json_ready(),
+        "candidate_window_policy": candidate_choice.to_json_ready(),
+        "input_candidate_k": candidate_choice.input_candidate_k,
+        "effective_candidate_k": candidate_choice.candidate_k,
         "kayak_i8_candidate_order": controls.kayak_i8_candidate_order,
         "kayak_i8_positive_centroids_only": (
             controls.kayak_i8_positive_centroids_only

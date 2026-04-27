@@ -12,6 +12,10 @@ if str(SCRIPT_ROOT) not in sys.path:
     sys.path.append(str(SCRIPT_ROOT))
 
 from kayak_bridge.gpu_i8_address_serve_sweep import AddressServeSweepCase
+from kayak_bridge.gpu_i8_candidate_window_policy import (
+    DOC_VECTORS64_125PCT_POLICY,
+    choose_candidate_window,
+)
 from kayak_bridge import gpu_i8_fastplaid_policy_compare as policy_compare
 
 
@@ -58,6 +62,31 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
         self.assertIn("--require-fastplaid", argv)
         self.assertIn("--overwrite-index-root", argv)
         self.assertIn("--kayak-i8-positive-centroids-only", argv)
+
+    def test_candidate_window_policy_widens_doc_vector_heavy_window(self) -> None:
+        case = AddressServeSweepCase("doc_vectors64", 512, 64, 2, 8, 256)
+        choice = choose_candidate_window(DOC_VECTORS64_125PCT_POLICY, case)
+
+        self.assertEqual(choice.input_candidate_k, 256)
+        self.assertEqual(choice.candidate_k, 320)
+
+        controls = policy_compare.FastPlaidPolicyCompareControls(
+            candidate_window_policy=DOC_VECTORS64_125PCT_POLICY,
+        )
+        argv = policy_compare.compare_argv_for_case(
+            case=case,
+            case_index=1,
+            controls=controls,
+            fastplaid_device="cpu",
+            index_root=Path("indexes"),
+            output=Path("report.json"),
+            allow_missing_gpu=False,
+            require_fastplaid=False,
+            overwrite_index_root=False,
+        )
+
+        self.assertEqual(_arg_value(argv, "--candidate-k"), "320")
+        self.assertEqual(_arg_value(argv, "--seed"), "8")
 
     def test_summary_extracts_scope_metrics(self) -> None:
         case = AddressServeSweepCase("query_vectors32", 512, 16, 2, 32, 256)
@@ -117,6 +146,8 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
         )
 
         self.assertEqual(row["policy"]["centroids_per_query_vector"], 4)
+        self.assertEqual(row["candidate_window_policy"]["candidate_k"], 256)
+        self.assertEqual(row["effective_candidate_k"], 256)
         self.assertEqual(row["kayak_i8_candidate_order"], "unordered")
         self.assertIs(row["kayak_i8_positive_centroids_only"], False)
         self.assertEqual(row["kayak_i8_recall_at_k_vs_kayak_exact"], 0.7)
