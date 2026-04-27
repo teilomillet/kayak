@@ -429,6 +429,23 @@ not justify a new static default. The next optimization should be a measured
 shape-aware budget policy or calibration step, followed by a same-shape
 FastPlaid comparison.
 
+Selected-budget FastPlaid finding: the fastest no-loss centroid budgets from
+the non-full wide sweep were compared against FastPlaid CPU and CUDA on the
+same explicit synthetic shapes. All six rows were `ok`, no-reference GPU top-k
+agreement with CPU i8 was `1.0`, and Kayak i8 recall matched or exceeded the
+measured FastPlaid recall on every row. CPU candidate generation plus GPU
+no-reference top-k measured about `0.000575s/window`, `0.000643s/window`, and
+`0.000687s/window` on the CPU FastPlaid rows, corresponding to about `0.041x`,
+`0.025x`, and `0.052x` of FastPlaid CPU full-search batch time. The matching
+CUDA FastPlaid rows measured about `0.000566s/window`, `0.000644s/window`, and
+`0.000683s/window`, corresponding to about `0.227x`, `0.131x`, and `0.175x`
+of FastPlaid CUDA full-search batch time.
+
+Reason: this strengthens the case for shape-aware candidate-budget policy plus
+the existing GPU no-reference top-k primitive. It still does not prove a public
+GPU backend because Kayak starts from CPU-generated candidate windows while
+FastPlaid is timed as full search.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -648,10 +665,14 @@ evidence only justifies a measured primitive.
    quiet result: lower budgets preserve or improve the `32`-centroid baseline
    recall on measured default and wide non-full synthetic cases, but the
    fastest no-loss budget is shape-dependent.
-22. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+22. Compare selected-budget non-full shapes against FastPlaid CPU and CUDA.
+   Current quiet result: the scoped CPU-candidate-generation-plus-GPU-top-k
+   envelope is faster than FastPlaid CPU and CUDA full search on the measured
+   synthetic rows, while matching or exceeding the measured FastPlaid recall.
+23. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-23. Only after a measured win, consider public API design.
+24. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 
