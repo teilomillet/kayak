@@ -44,6 +44,14 @@ Reason: the primitive is only useful as candidate generation if score
 accumulation plus top-k is competitive. Measuring accumulation without top-k
 would overstate the end-to-end value.
 
+The same probe now also times a deliberately simple GPU document top-k variant.
+That kernel assigns one GPU lane per query and repeatedly scans the dense
+document-score row to choose each top-k rank.
+
+Reason: host top-k was a visible measured slice, so it deserved a direct GPU
+test. The one-lane design was chosen as a correctness-preserving lower bound,
+not as the assumed final GPU top-k design.
+
 ## Measurement
 
 Command:
@@ -55,9 +63,11 @@ pixi run profile_gpu_i8_candidate_posting_accumulation
 Artifacts:
 
 - report: `.cache/kayak/gpu_i8_candidate_posting_accumulation/summary.json`
-- quiet wrapper: `.cache/kayak/bench_quiet/20260427T133911Z`
+- quiet wrapper: `.cache/kayak/bench_quiet/20260427T140440Z`
 - rejected qv-doc atomic-add report:
   `.cache/kayak/gpu_i8_candidate_posting_accumulation/qv_doc_atomic_add_failed_summary.json`
+- device top-k smoke report:
+  `.cache/kayak/gpu_i8_candidate_posting_accumulation/device_topk_smoke.json`
 
 Status:
 
@@ -72,6 +82,7 @@ All rows validated:
 - `score_mismatch_count = 0`
 - `score_delta_max_abs = 0.0`
 - `topk_position_mismatch_count = 0`
+- `device_topk_position_mismatch_count = 0`
 - `selected_position_out_of_range_count = 0`
 - `doc_index_out_of_range_count = 0`
 
@@ -79,30 +90,46 @@ Non-full candidate-generation rows:
 
 | case | expanded postings | CPU candidate s | CPU centroid scoring + selection s | CPU posting s | GPU kernel s | GPU all measured s | host top-k s | GPU all + top-k s | projected resident s | projected cold s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `query_vectors32` | `16087` | `0.00039362766680521116` | `0.00009919261833513072` | `0.00006956520333333333` | `0.000009955043608025203` | `0.000025875730836370773` | `0.000033194848` | `0.00005907057883637078` | `0.00015105268846196017` | `0.0001582631971715015` |
-| `doc_vectors64` | `53949` | `0.0003659856671826371` | `0.00004353978041700765` | `0.00007368735733333333` | `0.000021899478956074252` | `0.00004328307774549517` | `0.000033133537` | `0.00007641661474549517` | `0.00010727945747798151` | `0.00011995639516250282` |
-| `query_batch4` | `15686` | `0.0005803493337831848` | `0.00006183196065008171` | `0.00005415339284291359` | `0.000012187922732818217` | `0.00002844377957147834` | `0.00006646704547975596` | `0.00009491082505123431` | `0.00014941896135796205` | `0.00015674278570131602` |
+| `query_vectors32` | `16087` | `0.00039813933411399677` | `0.00010302801410820132` | `0.000064448824` | `0.00000996820922132847` | `0.0000259893285237152` | `0.000032067768333333334` | `0.000058057096857048535` | `0.00015374020210247595` | `0.00016108511096524984` |
+| `doc_vectors64` | `53949` | `0.0003527180003099299` | `0.00004527691943583493` | `0.00007054474699999999` | `0.00002189056996711728` | `0.00004313827101595736` | `0.00003230754233333333` | `0.00007544581334929069` | `0.00010809420059175429` | `0.00012072273278512562` |
+| `query_batch4` | `15686` | `0.000572260999736803` | `0.00006180235337715202` | `0.00005397287991302342` | `0.00001218611320754717` | `0.00002846588382270652` | `0.00006497294855305467` | `0.0000934388323757612` | `0.00014787015433671036` | `0.00015524118575291321` |
 
 Non-full ratios:
 
 | case | GPU all / CPU candidate | GPU all + top-k / CPU candidate | projected resident / CPU candidate | projected cold / CPU candidate |
 | --- | ---: | ---: | ---: | ---: |
-| `query_vectors32` | `0.06573657992157913` | `0.1500671416615697` | `0.3837451002566581` | `0.40206319453103617` |
-| `doc_vectors64` | `0.11826440657823821` | `0.2087967415056206` | `0.2931247507691225` | `0.3277625489706438` |
-| `query_batch4` | `0.04901147966528859` | `0.16354085294201864` | `0.25746382852536215` | `0.27008351104590783` |
+| `query_vectors32` | `0.06527696787746633` | `0.14582105278858332` | `0.3861467303766989` | `0.40459481684652476` |
+| `doc_vectors64` | `0.12230243701215186` | `0.21389839271882122` | `0.3064606867150896` | `0.3422641676326349` |
+| `query_batch4` | `0.04974283383945208` | `0.1632800984493719` | `0.25839635132346866` | `0.27127689257928195` |
+
+Device top-k follow-up:
+
+| case | host top-k s | device top-k kernel s | device top-k D2H s | GPU all + host top-k / CPU candidate | GPU all + device top-k / CPU candidate | projected host resident / CPU candidate | projected device resident / CPU candidate |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `query_vectors32` | `0.000032067768333333334` | `0.0010210662478632479` | `0.0000041253007136975025` | `0.14582105278858332` | `2.631397545699474` | `0.3861467303766989` | `2.8717232232875896` |
+| `doc_vectors64` | `0.00003230754233333333` | `0.0010203801794871794` | `0.000004132419770526823` | `0.21389839271882122` | `3.0169254612427725` | `0.3064606867150896` | `3.1094877552390408` |
+| `query_batch4` | `0.00006497294855305467` | `0.0010211896324786324` | `0.00000412991210870313` | `0.1632800984493719` | `1.8350227724057404` | `0.25839635132346866` | `1.9301390252798372` |
 
 Summary:
 
-- non-full all-measured GPU accumulation ranged from about `0.049x` to `0.118x`
+- non-full all-measured GPU accumulation ranged from about `0.050x` to `0.122x`
   of full CPU candidate generation
-- non-full all-measured plus host top-k ranged from about `0.150x` to `0.209x`
+- non-full all-measured plus host top-k ranged from about `0.146x` to `0.214x`
   of full CPU candidate generation
-- non-full all-measured GPU accumulation ranged from about `0.372x` to `0.587x`
+- non-full all-measured plus device top-k ranged from about `1.835x` to
+  `3.017x` of full CPU candidate generation
+- non-full all-measured GPU accumulation ranged from about `0.403x` to `0.612x`
   of isolated CPU posting accumulation
-- the resident-payload projection ranged from about `0.257x` to `0.384x` of
-  full CPU candidate generation
-- the cold-payload projection ranged from about `0.270x` to `0.402x` of full
-  CPU candidate generation
+- the host top-k resident-payload projection ranged from about `0.258x` to
+  `0.386x` of full CPU candidate generation
+- the host top-k cold-payload projection ranged from about `0.271x` to `0.405x`
+  of full CPU candidate generation
+- the device top-k resident-payload projection ranged from about `1.930x` to
+  `3.109x` of full CPU candidate generation
+- the device top-k cold-payload projection ranged from about `1.943x` to
+  `3.145x` of full CPU candidate generation
+- the one-lane device top-k preserved exact top-k positions but was rejected by
+  timing
 - the race-free qv-doc reduce variant preserved exact scores and exact top-k
   order while beating isolated CPU posting accumulation on all three non-full
   rows
@@ -140,6 +167,9 @@ The rejected variants matter:
 - posting-oriented global atomic max has too much contention
 - qv-doc atomic add has lower contention but violates exact score agreement
   because floating-point addition order is no longer deterministic
+- one-lane device document top-k is deterministic and exact, but serializes too
+  much work per query; it is slower than host top-k and slower than full CPU
+  candidate generation on the non-full rows
 
 The current best primitive is race-free qv-doc reduce. It pays extra memory for
 `[query_count, query_vector_count, document_count]`, but that buys deterministic
@@ -147,18 +177,20 @@ scores and avoids global atomic contention.
 
 The post-top-k envelope changes the next optimization choice. Host top-k is
 visible at about `33us` on the two-query rows and about `66us` on the four-query
-row, so GPU top-k is a real candidate. However, the projected resident envelope
-also includes CPU centroid scoring plus selection at about `44us` to `99us` on
-the same non-full rows. That means optimizing only the qv-doc reduce kernel is
-not obviously the highest-leverage next step.
+row, but this probe falsifies the simplest GPU top-k shape. A future GPU top-k
+would need a parallel segmented or heap-like design, not one lane per query.
+The projected resident envelope also includes CPU centroid scoring plus
+selection at about `45us` to `103us` on the same non-full rows. That means
+optimizing only the qv-doc reduce kernel or only document top-k is not
+obviously the highest-leverage next step.
 
 ## Next Step
 
 Design the next probe around the remaining measured envelope, not around a
 kernel preference:
 
-- GPU or fused host/GPU top-k if readback plus host selection remains exposed
-  after resident payloads
+- parallel GPU or fused host/GPU top-k only if readback plus host selection
+  remains exposed after resident payloads
 - GPU selected-centroid scoring/selection if CPU selection stays comparable to
   the GPU accumulation path
 - tiled or segmented accumulation if dense intermediate memory becomes the

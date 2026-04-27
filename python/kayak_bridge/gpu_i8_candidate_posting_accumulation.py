@@ -258,8 +258,24 @@ def comparison_payload(
     kernel = optional_float(gpu_parsed.get("kernel_mean_seconds"))
     d2h = optional_float(gpu_parsed.get("device_to_host_mean_seconds"))
     host_topk = optional_float(gpu_parsed.get("host_topk_mean_seconds"))
+    device_topk_kernel = optional_float(
+        gpu_parsed.get("device_topk_kernel_mean_seconds")
+    )
+    device_topk_d2h = optional_float(
+        gpu_parsed.get("device_topk_device_to_host_mean_seconds")
+    )
     selected_h2d_kernel_d2h = sum_optional(selected_h2d, kernel, d2h)
+    selected_h2d_kernel_device_topk = sum_optional(
+        selected_h2d,
+        kernel,
+        device_topk_kernel,
+        device_topk_d2h,
+    )
     all_gpu_measured = sum_optional(payload_h2d, selected_h2d, kernel, d2h)
+    all_gpu_measured_device_topk = sum_optional(
+        payload_h2d,
+        selected_h2d_kernel_device_topk,
+    )
     all_gpu_measured_plus_host_topk = sum_optional(
         all_gpu_measured, host_topk
     )
@@ -273,6 +289,14 @@ def comparison_payload(
     projected_cold_payload_candidate = sum_optional(
         cpu_centroid_scoring_plus_selection_seconds,
         all_gpu_measured_plus_host_topk,
+    )
+    projected_resident_payload_device_topk_candidate = sum_optional(
+        cpu_centroid_scoring_plus_selection_seconds,
+        selected_h2d_kernel_device_topk,
+    )
+    projected_cold_payload_device_topk_candidate = sum_optional(
+        cpu_centroid_scoring_plus_selection_seconds,
+        all_gpu_measured_device_topk,
     )
     return {
         "cpu_i8_candidate_generation_mean_seconds": (
@@ -289,10 +313,22 @@ def comparison_payload(
         "gpu_posting_accumulation_kernel_mean_seconds": kernel,
         "gpu_posting_accumulation_device_to_host_mean_seconds": d2h,
         "gpu_posting_accumulation_host_topk_mean_seconds": host_topk,
+        "gpu_posting_accumulation_device_topk_kernel_mean_seconds": (
+            device_topk_kernel
+        ),
+        "gpu_posting_accumulation_device_topk_device_to_host_mean_seconds": (
+            device_topk_d2h
+        ),
         "gpu_posting_accumulation_selected_h2d_kernel_d2h_mean_seconds": (
             selected_h2d_kernel_d2h
         ),
+        "gpu_posting_accumulation_selected_h2d_kernel_device_topk_mean_seconds": (
+            selected_h2d_kernel_device_topk
+        ),
         "gpu_posting_accumulation_all_measured_mean_seconds": all_gpu_measured,
+        "gpu_posting_accumulation_all_measured_device_topk_mean_seconds": (
+            all_gpu_measured_device_topk
+        ),
         "gpu_posting_accumulation_all_measured_plus_host_topk_mean_seconds": (
             all_gpu_measured_plus_host_topk
         ),
@@ -304,6 +340,12 @@ def comparison_payload(
         ),
         "projected_cpu_selection_gpu_accumulation_host_topk_cold_payload_seconds": (
             projected_cold_payload_candidate
+        ),
+        "projected_cpu_selection_gpu_accumulation_device_topk_resident_payload_seconds": (
+            projected_resident_payload_device_topk_candidate
+        ),
+        "projected_cpu_selection_gpu_accumulation_device_topk_cold_payload_seconds": (
+            projected_cold_payload_device_topk_candidate
         ),
         "gpu_posting_accumulation_kernel_seconds_per_cpu_candidate_generation_second": ratio(
             kernel,
@@ -317,12 +359,24 @@ def comparison_payload(
             all_gpu_measured_plus_host_topk,
             cpu_candidate_generation_mean_seconds,
         ),
+        "gpu_posting_accumulation_all_measured_device_topk_seconds_per_cpu_candidate_generation_second": ratio(
+            all_gpu_measured_device_topk,
+            cpu_candidate_generation_mean_seconds,
+        ),
         "projected_resident_payload_candidate_seconds_per_cpu_candidate_generation_second": ratio(
             projected_resident_payload_candidate,
             cpu_candidate_generation_mean_seconds,
         ),
         "projected_cold_payload_candidate_seconds_per_cpu_candidate_generation_second": ratio(
             projected_cold_payload_candidate,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "projected_device_topk_resident_payload_candidate_seconds_per_cpu_candidate_generation_second": ratio(
+            projected_resident_payload_device_topk_candidate,
+            cpu_candidate_generation_mean_seconds,
+        ),
+        "projected_device_topk_cold_payload_candidate_seconds_per_cpu_candidate_generation_second": ratio(
+            projected_cold_payload_device_topk_candidate,
             cpu_candidate_generation_mean_seconds,
         ),
         "gpu_posting_accumulation_kernel_seconds_per_cpu_posting_accumulation_second": ratio(
@@ -392,6 +446,18 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         )
         for row in non_full_rows
     ]
+    all_device_topk_vs_candidate = [
+        row["comparison"].get(
+            "gpu_posting_accumulation_all_measured_device_topk_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_all_device_topk_vs_candidate = [
+        row["comparison"].get(
+            "gpu_posting_accumulation_all_measured_device_topk_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
     projected_resident_vs_candidate = [
         row["comparison"].get(
             "projected_resident_payload_candidate_seconds_per_cpu_candidate_generation_second"
@@ -401,6 +467,30 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
     non_full_projected_resident_vs_candidate = [
         row["comparison"].get(
             "projected_resident_payload_candidate_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
+    projected_device_topk_resident_vs_candidate = [
+        row["comparison"].get(
+            "projected_device_topk_resident_payload_candidate_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_projected_device_topk_resident_vs_candidate = [
+        row["comparison"].get(
+            "projected_device_topk_resident_payload_candidate_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in non_full_rows
+    ]
+    projected_device_topk_cold_vs_candidate = [
+        row["comparison"].get(
+            "projected_device_topk_cold_payload_candidate_seconds_per_cpu_candidate_generation_second"
+        )
+        for row in ok_rows
+    ]
+    non_full_projected_device_topk_cold_vs_candidate = [
+        row["comparison"].get(
+            "projected_device_topk_cold_payload_candidate_seconds_per_cpu_candidate_generation_second"
         )
         for row in non_full_rows
     ]
@@ -464,6 +554,18 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         "worst_non_full_all_measured_plus_host_topk_vs_candidate_generation_ratio": max_float(
             non_full_all_plus_topk_vs_candidate
         ),
+        "best_all_measured_device_topk_vs_candidate_generation_ratio": min_float(
+            all_device_topk_vs_candidate
+        ),
+        "worst_all_measured_device_topk_vs_candidate_generation_ratio": max_float(
+            all_device_topk_vs_candidate
+        ),
+        "best_non_full_all_measured_device_topk_vs_candidate_generation_ratio": min_float(
+            non_full_all_device_topk_vs_candidate
+        ),
+        "worst_non_full_all_measured_device_topk_vs_candidate_generation_ratio": max_float(
+            non_full_all_device_topk_vs_candidate
+        ),
         "best_projected_resident_payload_candidate_vs_cpu_candidate_generation_ratio": min_float(
             projected_resident_vs_candidate
         ),
@@ -487,6 +589,30 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, object]:
         ),
         "worst_non_full_projected_cold_payload_candidate_vs_cpu_candidate_generation_ratio": max_float(
             non_full_projected_cold_vs_candidate
+        ),
+        "best_projected_device_topk_resident_payload_candidate_vs_cpu_candidate_generation_ratio": min_float(
+            projected_device_topk_resident_vs_candidate
+        ),
+        "worst_projected_device_topk_resident_payload_candidate_vs_cpu_candidate_generation_ratio": max_float(
+            projected_device_topk_resident_vs_candidate
+        ),
+        "best_non_full_projected_device_topk_resident_payload_candidate_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_projected_device_topk_resident_vs_candidate
+        ),
+        "worst_non_full_projected_device_topk_resident_payload_candidate_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_projected_device_topk_resident_vs_candidate
+        ),
+        "best_projected_device_topk_cold_payload_candidate_vs_cpu_candidate_generation_ratio": min_float(
+            projected_device_topk_cold_vs_candidate
+        ),
+        "worst_projected_device_topk_cold_payload_candidate_vs_cpu_candidate_generation_ratio": max_float(
+            projected_device_topk_cold_vs_candidate
+        ),
+        "best_non_full_projected_device_topk_cold_payload_candidate_vs_cpu_candidate_generation_ratio": min_float(
+            non_full_projected_device_topk_cold_vs_candidate
+        ),
+        "worst_non_full_projected_device_topk_cold_payload_candidate_vs_cpu_candidate_generation_ratio": max_float(
+            non_full_projected_device_topk_cold_vs_candidate
         ),
         "max_expanded_posting_count": max_int(expanded_posting_counts),
     }

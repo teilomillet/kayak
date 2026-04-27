@@ -202,6 +202,68 @@ def reduce_i8_selected_centroid_best_scores_kernel(
     output_document_scores[score_index] = total_score
 
 
+def document_position_already_selected_device(
+    topk_positions: UnsafePointer[Int64, MutAnyOrigin],
+    topk_base: Int,
+    rank: Int,
+    document_index: Int,
+) -> Bool:
+    for selected_rank in range(rank):
+        if Int(topk_positions[topk_base + selected_rank]) == document_index:
+            return True
+    return False
+
+
+def score_position_ranks_before_float32_device(
+    score: Float32,
+    position: Int,
+    other_score: Float32,
+    other_position: Int,
+) -> Bool:
+    if score > other_score:
+        return True
+    if score < other_score:
+        return False
+    return position < other_position
+
+
+def select_i8_document_topk_kernel(
+    document_scores: UnsafePointer[Float32, MutAnyOrigin],
+    topk_positions: UnsafePointer[Int64, MutAnyOrigin],
+    topk_scores: UnsafePointer[Float32, MutAnyOrigin],
+    query_count: Int,
+    document_count: Int,
+    top_k: Int,
+):
+    var query_index = Int(global_idx.x)
+    if query_index >= query_count:
+        return
+
+    var score_base = query_index * document_count
+    var topk_base = query_index * top_k
+    for rank in range(top_k):
+        var best_position = 0
+        var best_score = Float32(-3.4028234663852886e38)
+        var seen = False
+        for document_index in range(document_count):
+            if document_position_already_selected_device(
+                topk_positions, topk_base, rank, document_index
+            ):
+                continue
+            var score = document_scores[score_base + document_index]
+            if not seen or score_position_ranks_before_float32_device(
+                score,
+                document_index,
+                best_score,
+                best_position,
+            ):
+                best_score = score
+                best_position = document_index
+                seen = True
+        topk_positions[topk_base + rank] = Int64(best_position)
+        topk_scores[topk_base + rank] = best_score
+
+
 def accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel(
     selected_centroid_positions: UnsafePointer[Int64, MutAnyOrigin],
     selected_centroid_scores: UnsafePointer[Float32, MutAnyOrigin],
@@ -2833,6 +2895,12 @@ def profile_i8_selected_posting_accumulation_addresses(
         var output_topk_positions_host = ctx.enqueue_create_host_buffer[
             DType.int64
         ](topk_position_count)
+        var device_topk_positions_host = ctx.enqueue_create_host_buffer[
+            DType.int64
+        ](topk_position_count)
+        var device_topk_scores_host = ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](topk_position_count)
         var expected_topk_positions_host = ctx.enqueue_create_host_buffer[
             DType.int64
         ](topk_position_count)
@@ -2855,6 +2923,12 @@ def profile_i8_selected_posting_accumulation_addresses(
         var best_scores_device = ctx.enqueue_create_buffer[DType.float32](
             best_score_count
         )
+        var device_topk_positions_device = ctx.enqueue_create_buffer[
+            DType.int64
+        ](topk_position_count)
+        var device_topk_scores_device = ctx.enqueue_create_buffer[
+            DType.float32
+        ](topk_position_count)
         ctx.synchronize()
 
         def host_ingest_once() capturing raises:
@@ -2921,6 +2995,29 @@ def profile_i8_selected_posting_accumulation_addresses(
             output_document_scores_device.enqueue_copy_to(
                 output_document_scores_host
             )
+            ctx.synchronize()
+
+        def device_topk_kernel_once() capturing raises:
+            ctx.enqueue_function[
+                select_i8_document_topk_kernel,
+                select_i8_document_topk_kernel,
+            ](
+                output_document_scores_device,
+                device_topk_positions_device,
+                device_topk_scores_device,
+                query_count,
+                document_count,
+                top_k,
+                grid_dim=query_count,
+                block_dim=1,
+            )
+            ctx.synchronize()
+
+        def device_topk_d2h_once() capturing raises:
+            device_topk_positions_device.enqueue_copy_to(
+                device_topk_positions_host
+            )
+            device_topk_scores_device.enqueue_copy_to(device_topk_scores_host)
             ctx.synchronize()
 
         def output_position_already_selected(
@@ -3027,6 +3124,8 @@ def profile_i8_selected_posting_accumulation_addresses(
         payload_h2d_once()
         selected_h2d_once()
         accumulation_kernel_once()
+        device_topk_kernel_once()
+        device_topk_d2h_once()
         d2h_once()
         expected_topk_once()
         host_topk_once()
@@ -3034,6 +3133,8 @@ def profile_i8_selected_posting_accumulation_addresses(
         for _ in range(warmup_iterations):
             selected_h2d_once()
             accumulation_kernel_once()
+            device_topk_kernel_once()
+            device_topk_d2h_once()
             d2h_once()
             host_topk_once()
 
@@ -3053,6 +3154,14 @@ def profile_i8_selected_posting_accumulation_addresses(
             max_iters=measurement_iterations
         )
         accumulation_kernel_once()
+        var device_topk_kernel = benchmark.run[device_topk_kernel_once](
+            max_iters=measurement_iterations
+        )
+        device_topk_kernel_once()
+        var device_topk_d2h = benchmark.run[device_topk_d2h_once](
+            max_iters=measurement_iterations
+        )
+        device_topk_d2h_once()
         var d2h = benchmark.run[d2h_once](max_iters=measurement_iterations)
         d2h_once()
         var host_topk = benchmark.run[host_topk_once](
@@ -3094,6 +3203,14 @@ def profile_i8_selected_posting_accumulation_addresses(
             ):
                 topk_position_mismatch_count += 1
 
+        var device_topk_position_mismatch_count = 0
+        for index in range(topk_position_count):
+            if (
+                device_topk_positions_host[index]
+                != expected_topk_positions_host[index]
+            ):
+                device_topk_position_mismatch_count += 1
+
         var py_result = Python.list()
         py_result.append(Python.float(host_ingest.mean()))
         py_result.append(Python.float(payload_h2d.mean()))
@@ -3101,11 +3218,14 @@ def profile_i8_selected_posting_accumulation_addresses(
         py_result.append(Python.float(kernel.mean()))
         py_result.append(Python.float(d2h.mean()))
         py_result.append(Python.float(host_topk.mean()))
+        py_result.append(Python.float(device_topk_kernel.mean()))
+        py_result.append(Python.float(device_topk_d2h.mean()))
         py_result.append(Python.int(selected_position_out_of_range_count))
         py_result.append(Python.int(doc_index_out_of_range_count))
         py_result.append(Python.int(score_mismatch_count))
         py_result.append(Python.float(score_delta_max_abs))
         py_result.append(Python.int(topk_position_mismatch_count))
+        py_result.append(Python.int(device_topk_position_mismatch_count))
         py_result.append(Python.int(top_k))
         py_result.append(Python.int(topk_position_count))
         py_result.append(Python.int(selected_centroid_count))

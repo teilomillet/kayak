@@ -163,6 +163,18 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
                 "gpu_posting_accumulation_all_measured_plus_host_topk_mean_seconds"
             ),
         )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_device_topk_kernel",
+            comparison.get(
+                "gpu_posting_accumulation_device_topk_kernel_mean_seconds"
+            ),
+        )
+        print_quiet_mean(
+            f"gpu_i8_candidate_posting_accumulation_{name}_all_measured_device_topk",
+            comparison.get(
+                "gpu_posting_accumulation_all_measured_device_topk_mean_seconds"
+            ),
+        )
 
 
 def print_quiet_mean(section: str, value: object) -> None:

@@ -586,18 +586,26 @@ surviving implementation assigns one GPU lane to each
 `[query, query_vector, document]` score contribution, binary-searches the
 selected centroid posting lists for that document, writes a dense
 `[query_count, query_vector_count, document_count]` best-score tensor, and
-reduces it to `[query_count, document_count]` scores on device. The probe now
-also times host candidate top-k after score readback and checks top-k order
-against CPU i8. The latest quiet wide run was exact on all `5 / 5` rows with
+reduces it to `[query_count, document_count]` scores on device. The probe also
+times host candidate top-k after score readback and checks top-k order against
+CPU i8. The latest quiet wide run was exact on all `5 / 5` rows with
 `score_delta_max_abs=0.0` and `topk_position_mismatch_count=0`. On the three
-non-full rows, the all-measured GPU accumulation path was about `0.049x`,
-`0.118x`, and `0.049x` of full CPU candidate generation before host top-k.
-Including host top-k, the same rows were about `0.150x`, `0.209x`, and
-`0.164x` of full CPU candidate generation. A projected resident-payload
+non-full rows, the all-measured GPU accumulation path was about `0.065x`,
+`0.122x`, and `0.050x` of full CPU candidate generation before host top-k.
+Including host top-k, the same rows were about `0.146x`, `0.214x`, and
+`0.163x` of full CPU candidate generation. A projected resident-payload
 candidate-generation envelope, defined as CPU centroid scoring/selection plus
-GPU selected-H2D/kernel/D2H plus host top-k, was about `0.384x`, `0.293x`, and
-`0.257x` of CPU candidate generation. The cold-payload projection was about
-`0.402x`, `0.328x`, and `0.270x`.
+GPU selected-H2D/kernel/D2H plus host top-k, was about `0.386x`, `0.306x`, and
+`0.258x` of CPU candidate generation. The cold-payload projection was about
+`0.405x`, `0.342x`, and `0.271x`.
+
+A one-lane device document top-k follow-up preserved exact top-k positions on
+all `5 / 5` rows, but was rejected by timing. On the three non-full rows,
+GPU accumulation plus device top-k cost about `2.631x`, `3.017x`, and
+`1.835x` of full CPU candidate generation, while the host top-k path stayed
+about `0.146x` to `0.214x`. The device top-k kernel alone was about `1.02ms`
+on each non-full row, because one GPU lane serially rescans all documents for
+each rank.
 
 Rejected accumulation variants are also recorded. The first document-centric
 variant validated score semantics but did not expose enough parallelism. A
@@ -605,7 +613,8 @@ posting-oriented global `Float32` atomic-max variant preserved exact scores but
 was much slower than CPU posting accumulation. A qv-doc `Float32` atomic-add
 variant removed the reduction launch, but failed the exact agreement contract
 on the wide rows with `score_delta_max_abs` up to about `9.16e-05` and hundreds of
-mismatches.
+mismatches. The one-lane device document top-k variant preserved correctness
+but serialized too much work.
 
 Reason: the winning qv-doc reduce shape keeps correctness deterministic and
 beats isolated CPU posting accumulation on the measured standard rows. It still
@@ -613,9 +622,9 @@ does repeated posting-list search and materializes a dense query-vector score
 buffer. The new envelope also shows that host top-k is material but not the only
 remaining cost: CPU centroid scoring/selection is now comparable to, and on
 some rows larger than, the GPU selected-H2D/kernel/D2H path. The next
-optimization should therefore test GPU-side top-k or fused selected-centroid
-scoring plus accumulation only as measured probes, not as an assumed kernel
-rewrite.
+optimization should therefore prefer fused selected-centroid scoring plus
+accumulation, or a genuinely parallel segmented top-k design if top-k is
+revisited, rather than another serial document scan.
 
 Centroid-selection finding: a benchmark-only GPU probe now scores sampled i8
 centroids from the real Kayak i8 payload and selects
@@ -897,12 +906,14 @@ evidence only justifies a measured primitive.
 31. Add a benchmark-only GPU posting-accumulation/reduction probe for non-full
    rows while final candidate top-k remains on CPU. Current quiet result:
    dense accumulation agrees exactly with the CPU score and top-k references.
-   With host top-k included, non-full rows cost about `0.150x` to `0.209x` of
+   With host top-k included, non-full rows cost about `0.146x` to `0.214x` of
    full CPU candidate generation. The resident-payload projection is about
-   `0.257x` to `0.384x`, which points next at CPU centroid scoring/selection
-   and candidate top-k, not just the accumulation kernel. The document-centric,
-   posting-oriented atomic-max, and qv-doc atomic-add variants were rejected by
-   timing or correctness evidence.
+   `0.258x` to `0.386x`. A one-lane device document top-k variant preserved
+   exact top-k positions but cost about `1.835x` to `3.017x` of full CPU
+   candidate generation on non-full rows, so it is rejected. The
+   document-centric, posting-oriented atomic-max, qv-doc atomic-add, and
+   one-lane device top-k variants were rejected by timing or correctness
+   evidence.
 32. Add a benchmark-only GPU centroid-selection probe. Current quiet result:
    selected centroid positions agree exactly on all wide rows; after rejecting
    the repeated-scan host selector, the heap-backed resident path costs about
