@@ -393,6 +393,26 @@ small loop edit. The next candidate-generation step should break timing and
 work counts into centroid scoring, centroid selection, posting accumulation,
 and final candidate top-k before moving any of that work onto GPU.
 
+Candidate-generation breakdown finding: the dedicated benchmark-only
+breakdown now profiles full candidate generation, centroid scoring, centroid
+selection, posting accumulation, and final candidate top-k from a prepared i8
+index handle. It records query vector count, document vector count, selected
+centroid count, posting visits, touched documents, and output candidate count.
+The quiet wide run was `ok` on all five cases. On non-full candidate windows,
+centroid selection and posting accumulation are the leading measured costs:
+`query_vectors32` measured about `0.000206s/batch` for centroid selection and
+`0.000213s/batch` for posting accumulation; `doc_vectors64` measured about
+`0.000100s/batch` for posting accumulation and `0.000063s/batch` for final
+top-k; `query_batch4` measured about `0.000103s/batch` for centroid selection,
+`0.000112s/batch` for posting accumulation, and `0.000127s/batch` for final
+top-k. The full-window rows remain shortcut rows, so their decomposed timings
+are explanatory only.
+
+Reason: the next GPU work should target a measured primitive with explicit
+posting fanout and vector-count fields. The current evidence points to
+reducing or restructuring candidate-generation work before treating GPU as a
+direct port of the CPU loop.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -605,7 +625,9 @@ evidence only justifies a measured primitive.
 20. Add a dedicated non-full candidate-generation breakdown before more local
    loop edits. Current quiet result: dense reset, streamed centroid selection,
    direct pointer candidate scoring, and reserve-only preallocation did not
-   produce a decision-quality win across default and wide sweeps.
+   produce a decision-quality win across default and wide sweeps. The new
+   breakdown shows centroid selection, posting accumulation, and final
+   candidate top-k as the dominant non-full-window substeps.
 21. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.

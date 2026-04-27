@@ -30,6 +30,12 @@ from kayak.search import (
     search_exact,
     search_exact_hybrid_flat_only_dim128,
 )
+from kayak.search.plaid_i8_candidate_profile_dim128 import (
+    profile_plaid_i8_candidate_generation_for_query,
+)
+from kayak.search.plaid_i8_candidate_profile_types_dim128 import (
+    PlaidI8CandidateGenerationProfile,
+)
 from kayak.scoring import (
     ExactScoringConfig,
     exact_scores_for_hybrid_flat_index_dim128,
@@ -316,6 +322,97 @@ def scalar_values_to_python(
         py_values.append(Python.float(value))
 
     return py_values
+
+
+def append_profile_float(
+    py_result: PythonObject, name: String, value: Float64
+) raises:
+    var field = Python.list()
+    field.append(Python.str(name))
+    field.append(Python.float(value))
+    py_result.append(field)
+
+
+def append_profile_int(
+    py_result: PythonObject, name: String, value: Int
+) raises:
+    var field = Python.list()
+    field.append(Python.str(name))
+    field.append(Python.int(value))
+    py_result.append(field)
+
+
+def i8_candidate_generation_profile_to_python(
+    read profile: PlaidI8CandidateGenerationProfile,
+) raises -> PythonObject:
+    var py_result = Python.list()
+    append_profile_float(
+        py_result,
+        "full_candidate_mean_seconds",
+        profile.full_candidate_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "centroid_scoring_mean_seconds",
+        profile.centroid_scoring_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "centroid_selection_mean_seconds",
+        profile.centroid_selection_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "posting_accumulation_mean_seconds",
+        profile.posting_accumulation_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "final_topk_mean_seconds",
+        profile.final_topk_mean_seconds,
+    )
+    append_profile_int(
+        py_result, "query_vector_count", profile.query_vector_count
+    )
+    append_profile_int(py_result, "document_count", profile.document_count)
+    append_profile_int(
+        py_result, "document_vector_count", profile.document_vector_count
+    )
+    append_profile_int(
+        py_result,
+        "total_document_vector_count",
+        profile.total_document_vector_count,
+    )
+    append_profile_int(py_result, "centroid_count", profile.centroid_count)
+    append_profile_int(
+        py_result,
+        "centroids_per_query_vector",
+        profile.centroids_per_query_vector,
+    )
+    append_profile_int(py_result, "candidate_k", profile.candidate_k)
+    append_profile_int(
+        py_result,
+        "selected_centroid_count",
+        profile.selected_centroid_count,
+    )
+    append_profile_int(
+        py_result, "posting_visit_count", profile.posting_visit_count
+    )
+    append_profile_int(
+        py_result,
+        "touched_document_count",
+        profile.touched_document_count,
+    )
+    append_profile_int(
+        py_result, "output_candidate_count", profile.output_candidate_count
+    )
+    append_profile_int(
+        py_result,
+        "measurement_iterations",
+        profile.measurement_iterations,
+    )
+    append_profile_float(py_result, "sink_value", profile.sink_value)
+    return py_result
 
 
 def prepare_packed_index(
@@ -901,6 +998,45 @@ def plaid_i8_candidate_scores_prepared_batch(
     return scores_batch_to_python(scores_by_query)
 
 
+def plaid_i8_candidate_generation_profile_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var measurement_iterations = Int(py=py_request[5])
+    var prepared_index = py_request[6].downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    var py_profiles = Python.list()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+        var profile = profile_plaid_i8_candidate_generation_for_query(
+            query,
+            prepared_index[],
+            centroids_per_query_vector,
+            candidate_k,
+            measurement_iterations,
+        )
+        py_profiles.append(i8_candidate_generation_profile_to_python(profile))
+
+    return py_profiles
+
+
 @export
 def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
     try:
@@ -1054,6 +1190,15 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
             docstring=(
                 "Score provided candidate positions with the prepared int8"
                 " reranker."
+            ),
+        )
+        module.def_function[
+            plaid_i8_candidate_generation_profile_prepared_batch_address
+        ](
+            "plaid_i8_candidate_generation_profile_prepared_batch_address",
+            docstring=(
+                "Profile int8 PLAID candidate-generation substeps from a"
+                " contiguous float32 query tensor address."
             ),
         )
         return module.finalize()
