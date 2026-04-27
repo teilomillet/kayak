@@ -32,6 +32,12 @@ def build_gpu_resident_selected_posting_exact_rerank_vs_fastplaid_comparison(
     exact_seconds = _optional_float(
         parsed.get("exact_rerank_topk_seconds_per_window")
     )
+    selected_posting_prepare_seconds = _optional_float(
+        parsed.get("selected_posting_prepare_extension_call_seconds")
+    )
+    selected_posting_release_seconds = _optional_float(
+        parsed.get("selected_posting_release_extension_call_seconds")
+    )
     total_seconds = _optional_float(
         parsed.get(
             "resident_selected_posting_exact_rerank_seconds_per_window"
@@ -77,6 +83,12 @@ def build_gpu_resident_selected_posting_exact_rerank_vs_fastplaid_comparison(
         "gpu_resident_selected_candidate_seconds_per_window": candidate_seconds,
         "gpu_resident_selected_candidate_cold_seconds_per_window": (
             candidate_cold_seconds
+        ),
+        "gpu_resident_selected_candidate_prepare_seconds": (
+            selected_posting_prepare_seconds
+        ),
+        "gpu_resident_selected_candidate_release_seconds": (
+            selected_posting_release_seconds
         ),
         "cpu_selected_centroids_seconds_per_window": selected_seconds,
         "gpu_resident_selected_exact_rerank_seconds_per_window": exact_seconds,

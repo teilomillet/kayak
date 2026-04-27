@@ -26,7 +26,7 @@ from kayak_bridge.gpu_i8_fastplaid_topk_metrics import (
 )
 from kayak_bridge.mojo_gpu_i8_rerank import (
     prepare_i8_address_session_handle,
-    score_i8_selected_posting_resident_dense_candidate_positions_addresses,
+    prepare_i8_selected_posting_session_handle,
 )
 from kayak_bridge.plaid_approx import KayakPlaidApproxConfig, KayakPlaidApproxIndex
 
@@ -160,7 +160,9 @@ def run_resident_selected_posting_exact_rerank_probe(
         raise ValueError("candidate_k must be greater than or equal to top_k")
 
     exact_handle = None
+    selected_posting_handle = None
     release_seconds = 0.0
+    selected_posting_release_seconds = 0.0
     try:
         exact_handle = prepare_i8_address_session_handle(
             target_accelerator=capability.target_accelerator or "",
@@ -168,32 +170,42 @@ def run_resident_selected_posting_exact_rerank_probe(
             candidate_k=candidate_k,
             payload=payload,
         )
+        selected_posting_handle = prepare_i8_selected_posting_session_handle(
+            target_accelerator=capability.target_accelerator or "",
+            shape=shape,
+            payload=payload,
+            centroids_per_query_vector=centroids_per_query_vector,
+        )
         for _ in range(warmup_iterations):
             _run_resident_selected_window(
                 exact_handle=exact_handle,
+                selected_posting_handle=selected_posting_handle,
                 index=index,
-                payload=payload,
                 queries=query_windows[0],
                 shape=shape,
                 candidate_k=candidate_k,
                 centroids_per_query_vector=centroids_per_query_vector,
-                target_accelerator=capability.target_accelerator or "",
             )
         results = [
             _run_resident_selected_window(
                 exact_handle=exact_handle,
+                selected_posting_handle=selected_posting_handle,
                 index=index,
-                payload=payload,
                 queries=query_windows[window_index],
                 shape=shape,
                 candidate_k=candidate_k,
                 centroids_per_query_vector=centroids_per_query_vector,
-                target_accelerator=capability.target_accelerator or "",
             )
             for window_index in range(len(query_windows))
         ]
+        selected_posting_release_seconds += selected_posting_handle.close()
         release_seconds += exact_handle.close()
     except Exception as exc:  # pragma: no cover - exercised by GPU environments.
+        if selected_posting_handle is not None:
+            try:
+                selected_posting_release_seconds += selected_posting_handle.close()
+            except Exception:
+                pass
         if exact_handle is not None:
             try:
                 release_seconds += exact_handle.close()
@@ -207,6 +219,10 @@ def run_resident_selected_posting_exact_rerank_probe(
         candidate_k=candidate_k,
         centroids_per_query_vector=centroids_per_query_vector,
         exact_prepare_seconds=exact_handle.prepare_extension_call_seconds,
+        selected_posting_prepare_seconds=(
+            selected_posting_handle.prepare_extension_call_seconds
+        ),
+        selected_posting_release_seconds=selected_posting_release_seconds,
         release_seconds=release_seconds,
         warmup_iterations=warmup_iterations,
     )
@@ -222,13 +238,12 @@ def run_resident_selected_posting_exact_rerank_probe(
 def _run_resident_selected_window(
     *,
     exact_handle: Any,
+    selected_posting_handle: Any,
     index: KayakPlaidApproxIndex,
-    payload: Any,
     queries: np.ndarray,
     shape: SpeedTrackShape,
     candidate_k: int,
     centroids_per_query_vector: int,
-    target_accelerator: str,
 ) -> dict[str, Any]:
     selected_started_at = time.perf_counter()
     selected = index.i8_selected_centroids_batch(
@@ -236,14 +251,9 @@ def _run_resident_selected_window(
         centroids_per_query_vector=centroids_per_query_vector,
     )
     cpu_selected_centroids_seconds = time.perf_counter() - selected_started_at
-    candidate_result = (
-        score_i8_selected_posting_resident_dense_candidate_positions_addresses(
-            target_accelerator=target_accelerator,
-            shape=shape,
-            payload=payload,
-            selected=selected,
-            candidate_k=candidate_k,
-        )
+    candidate_result = selected_posting_handle.score_dense_candidate_positions(
+        selected=selected,
+        candidate_k=candidate_k,
     )
     candidate_positions = position_rows(
         candidate_result.positions,
@@ -297,6 +307,8 @@ def _parsed_payload_from_results(
     candidate_k: int,
     centroids_per_query_vector: int,
     exact_prepare_seconds: float,
+    selected_posting_prepare_seconds: float,
+    selected_posting_release_seconds: float,
     release_seconds: float,
     warmup_iterations: int,
 ) -> dict[str, object]:
@@ -311,7 +323,7 @@ def _parsed_payload_from_results(
         + result["candidate_result"].candidate_selection_seconds
         + result["candidate_result"].release_call_seconds
         for result in results
-    )
+    ) + selected_posting_prepare_seconds + selected_posting_release_seconds
     selected_total = sum(
         float(result["cpu_selected_centroids_seconds"]) for result in results
     )
@@ -369,6 +381,12 @@ def _parsed_payload_from_results(
         "query_count_per_window": shape.query_count,
         "query_vector_count": shape.query_vector_count,
         "release_extension_call_seconds": release_seconds,
+        "selected_posting_prepare_extension_call_seconds": (
+            selected_posting_prepare_seconds
+        ),
+        "selected_posting_release_extension_call_seconds": (
+            selected_posting_release_seconds
+        ),
         "resident_candidate_cold_seconds_per_window": (
             resident_cold_total / float(window_count)
         ),

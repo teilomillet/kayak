@@ -359,6 +359,16 @@ def summarize_case_device_report(
                 )
             )
         ),
+        "gpu_resident_selected_candidate_prepare_seconds": _optional_float(
+            resident_selected_comparison.get(
+                "gpu_resident_selected_candidate_prepare_seconds"
+            )
+        ),
+        "gpu_resident_selected_candidate_release_seconds": _optional_float(
+            resident_selected_comparison.get(
+                "gpu_resident_selected_candidate_release_seconds"
+            )
+        ),
         "gpu_resident_selected_exact_rerank_exact_share": _optional_float(
             resident_selected_comparison.get(
                 "gpu_resident_selected_exact_rerank_exact_share"

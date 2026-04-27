@@ -191,6 +191,8 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
                     "gpu_resident_selected_exact_rerank_seconds_per_window_total": 0.00045,
                     "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second": 0.045,
                     "gpu_resident_selected_exact_rerank_cold_seconds_per_fastplaid_batch_second": 0.052,
+                    "gpu_resident_selected_candidate_prepare_seconds": 0.00007,
+                    "gpu_resident_selected_candidate_release_seconds": 0.00001,
                     "gpu_resident_selected_exact_rerank_exact_share": 0.2,
                     "recall_at_k_vs_kayak_exact": 0.66,
                     "final_topk_position_agreement": 1.0,
@@ -231,6 +233,14 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
                 "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second"
             ],
             0.045,
+        )
+        self.assertEqual(
+            row["gpu_resident_selected_candidate_prepare_seconds"],
+            0.00007,
+        )
+        self.assertEqual(
+            row["gpu_resident_selected_candidate_release_seconds"],
+            0.00001,
         )
         self.assertAlmostEqual(
             row["gpu_resident_selected_recall_delta_vs_fastplaid"],

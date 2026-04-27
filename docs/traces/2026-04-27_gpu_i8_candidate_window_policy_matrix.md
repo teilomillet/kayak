@@ -146,6 +146,57 @@ Artifact:
 | `input` | `6 / 6` | `~0.0` | `0.09688456479341993` | `0.20682108635153335` | `0` |
 | `coverage_safety_v0` | `6 / 6` | `+0.050000000000000044` | `0.11243990380894976` | `0.25440229610377485` | `0` |
 
+## Reusable Selected-Posting Session
+
+Follow-up claim: selected-posting candidate generation should prepare the GPU
+posting session once per benchmark probe, not once per measured query window.
+
+Reason: the resident selected-posting path is modeling a resident GPU primitive.
+Per-window session construction measures repeated device setup that a serving
+primitive would not repeat for every query batch. The one-shot API is still
+kept as a compatibility wrapper, but the FastPlaid comparison probe now uses a
+reusable selected-posting session handle.
+
+Validation run:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 300 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_candidate_window_policies.py --candidate-window-policy coverage_safety_v0 --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_reusable_selected_session_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_reusable_selected_session_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_reusable_selected_session_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T185342Z`
+
+Result versus the previous quiet `candidate_window_generalization` validation:
+
+| version | rows ok | min recall delta vs FastPlaid | mean resident / FastPlaid | max resident / FastPlaid | candidate agreement min | final agreement min |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| per-window selected-posting prepare | `8 / 8` | `+0.050000000000000044` | `0.13798288231784603` | `0.396522913897683` | `1.0` | `1.0` |
+| reusable selected-posting session | `8 / 8` | `+0.050000000000000044` | `0.12560525946839413` | `0.35583497335955816` | `1.0` | `1.0` |
+
+This is a measured improvement of roughly `9%` on the mean resident/FastPlaid
+ratio and roughly `10%` on the max row ratio for this matrix, with no observed
+loss in recall or order agreement.
+
+Reusable-session row-stage shares:
+
+| case | device | documents | document vectors | effective k | resident/FastPlaid | CPU select share | candidate share | exact share |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `doc_vectors48` | `cpu` | `512` | `48` | `320` | `0.041803869127046034` | `0.3569816635887928` | `0.27831837196441955` | `0.36469996444678765` |
+| `doc_vectors48` | `cuda` | `512` | `48` | `320` | `0.17155928961607578` | `0.35525280182627933` | `0.27681270542277336` | `0.3679344927509473` |
+| `doc_vectors64` | `cpu` | `512` | `64` | `320` | `0.031419028865149405` | `0.2554410936948984` | `0.2644255523843633` | `0.48013335392073825` |
+| `doc_vectors64` | `cuda` | `512` | `64` | `320` | `0.15207282874333414` | `0.2555739595402934` | `0.2693590646369914` | `0.47506697582271523` |
+| `doc_vectors96` | `cpu` | `512` | `96` | `448` | `0.01609191456201011` | `0.1729729208057524` | `0.2171748262267604` | `0.6098522529674872` |
+| `doc_vectors96` | `cuda` | `512` | `96` | `448` | `0.1437829910794396` | `0.17081428378417277` | `0.21536409404587906` | `0.6138216221699482` |
+| `documents1024_k256` | `cpu` | `1024` | `16` | `1024` | `0.09227718039453975` | `0.3025955636672748` | `0.5018771218859398` | `0.1955273144467854` |
+| `documents1024_k256` | `cuda` | `1024` | `16` | `1024` | `0.35583497335955816` | `0.3058644701299257` | `0.4957593839313375` | `0.1983761459387368` |
+
+Interpretation: there is no single next bottleneck. The vector-heavy rows are
+exact-rerank dominated, while the `1024`-document full-window rows are
+candidate-generation dominated. The next optimization should therefore be
+chosen from the row being targeted, not from the matrix mean alone.
+
 ## Decision
 
 Keep `coverage_safety_v0` as the next benchmark policy candidate.
