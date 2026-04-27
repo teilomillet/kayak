@@ -42,7 +42,7 @@ pixi run profile_gpu_i8_fused_centroid_posting_handle
 Artifacts:
 
 - report: `.cache/kayak/gpu_i8_fused_centroid_posting_handle/summary.json`
-- quiet wrapper: `.cache/kayak/bench_quiet/20260427T145047Z`
+- quiet wrapper: `.cache/kayak/bench_quiet/20260427T150112Z`
 
 Status:
 
@@ -63,23 +63,23 @@ Non-full rows:
 
 | case | cpqv | expanded postings | CPU candidate s | CPU slice s | prepare extension s | score extension s | score host+extension s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `query_vectors32` | `4` | `16087` | `0.00039849666548737633` | `0.00022449504242612897` | `0.000547851999726845` | `0.00009333466732641682` | `0.00009446666808798909` |
-| `doc_vectors64` | `16` | `53949` | `0.00036635366632253863` | `0.00018070177804926525` | `0.0018424569971102756` | `0.00011298733321988645` | `0.00011410633427052139` |
-| `query_batch4` | `8` | `15686` | `0.0005736203347623814` | `0.00024253767028910035` | `0.0005445160022645723` | `0.0001347946672467515` | `0.00013597333357514194` |
+| `query_vectors32` | `4` | `16087` | `0.00041524466723785736` | `0.00023471612817232913` | `0.0005263919993012678` | `0.00009281333283676456` | `0.00009400866595872989` |
+| `doc_vectors64` | `16` | `53949` | `0.00036512799973327975` | `0.00018144819185647977` | `0.0018464940003468655` | `0.00011206566826634419` | `0.00011310433546896093` |
+| `query_batch4` | `8` | `15686` | `0.0005804433349112514` | `0.0002498248270931103` | `0.0005343660013750196` | `0.00013698866678168997` | `0.00013820433377986774` |
 
 Ratios:
 
 | case | score extension / CPU candidate | score extension / CPU slice |
 | --- | ---: | ---: |
-| `query_vectors32` | `0.2342169343180451` | `0.4157538015884203` |
-| `doc_vectors64` | `0.3084105431618968` | `0.6252696262295903` |
-| `query_batch4` | `0.2349893458755944` | `0.5557679641520378` |
+| `query_vectors32` | `0.22351480984486652` | `0.3954280157885903` |
+| `doc_vectors64` | `0.30692159557252907` | `0.6176179939835656` |
+| `query_batch4` | `0.23600695975367733` | `0.5483388835915574` |
 
 Summary:
 
-- non-full score-call path ranged from about `0.234x` to `0.308x` of full CPU
+- non-full score-call path ranged from about `0.224x` to `0.307x` of full CPU
   candidate generation
-- non-full score-call path ranged from about `0.416x` to `0.625x` of the CPU
+- non-full score-call path ranged from about `0.395x` to `0.618x` of the CPU
   centroid-selection/posting/top-k slice
 - score-call host marshalling added about `1us` to `2us`, so the Python
   boundary is not the current dominant cost for these rows

@@ -672,12 +672,12 @@ readback; this is intentional because the previous one-lane device document
 top-k was rejected by timing. On all `5 / 5` wide rows, top-k positions matched
 the CPU selected-posting reference exactly, with maximum score delta
 `0.00006103515625`. On the three non-full rows, the serving-shaped score call
-measured about `0.234x`, `0.308x`, and `0.235x` of full CPU candidate
+measured about `0.224x`, `0.307x`, and `0.236x` of full CPU candidate
 generation. Against the CPU centroid-selection/posting/top-k slice, it measured
-about `0.416x`, `0.625x`, and `0.556x`. A follow-up destructive host top-k
+about `0.395x`, `0.618x`, and `0.548x`. A follow-up destructive host top-k
 scan was accepted because each score call overwrites the host document-score
 buffer before top-k; it reduced the worst non-full score-call ratio from about
-`0.318x` to `0.308x` of CPU candidate generation while preserving exact top-k
+`0.318x` to `0.307x` of CPU candidate generation while preserving exact top-k
 positions.
 
 Reason: this validates the ownership boundary required for a real internal
@@ -686,6 +686,19 @@ API. The prepared-handle score call is slower than the earlier in-call resident
 envelope, which is useful evidence that the next optimization should profile
 inside the score call rather than assume the remaining cost is a specific
 kernel or transfer.
+
+Prepared-handle score breakdown finding: the explicit handle now reports
+substep timings without changing the serving score path's fused kernel chain.
+On the three non-full rows, query H2D plus document-score D2H measured about
+`8.7us`, `7.8us`, and `10.5us`, so transfers are not the limiter. Destructive
+host top-k measured about `31.8us`, `31.8us`, and `63.7us`; centroid selection
+plus accumulation measured about `22.4us`, `48.2us`, and `29.8us`. This makes
+final top-k the leading repeated cost on `query_vectors32` and `query_batch4`,
+with `doc_vectors64` split between top-k and selected-posting work.
+
+Reason: this narrows the next kernel experiment. The earlier one-lane device
+document top-k remains rejected, so any top-k follow-up should be a parallel
+device selection design with host destructive top-k retained as the reference.
 
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
@@ -974,18 +987,23 @@ evidence only justifies a measured primitive.
 34. Move the fused primitive behind an explicit benchmark-only prepared handle
    with separate prepare, score, and release calls. Current quiet result: the
    prepared-handle score call preserves exact top-k positions on all wide rows
-   and costs about `0.234x` to `0.308x` of full CPU candidate generation on
-   non-full rows, or about `0.416x` to `0.625x` of the CPU
+   and costs about `0.224x` to `0.307x` of full CPU candidate generation on
+   non-full rows, or about `0.395x` to `0.618x` of the CPU
    centroid-selection/posting/top-k slice.
 35. Replace the prepared fused handle's non-destructive host top-k duplicate
    scan with a destructive scan after document-score readback. Current quiet
    result: exact top-k agreement is preserved and the worst non-full score-call
-   ratio improves from about `0.318x` to `0.308x` of full CPU candidate
+   ratio improves from about `0.318x` to `0.307x` of full CPU candidate
    generation.
-36. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+36. Add a prepared-handle score breakdown with per-substep timings. Current
+   quiet result: transfer costs are small on the non-full rows; destructive
+   host top-k costs about `31.8us`, `31.8us`, and `63.7us`, making final
+   document top-k the next measured target except where `doc_vectors64` also
+   shows material selected-posting work.
+37. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and FastPlaid scope rows after the resident ownership boundary
    exists.
-37. Only after a measured win, consider public API design.
+38. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

@@ -161,6 +161,26 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
                 "gpu_fused_handle_score_host_plus_extension_mean_seconds"
             ),
         )
+        profile = (
+            row.get("gpu_i8_fused_centroid_posting_handle", {})
+            .get("parsed", {})
+            .get("profile", {})
+        )
+        if isinstance(profile, dict):
+            for key in (
+                "query_host_to_device_mean_seconds",
+                "centroid_score_kernel_mean_seconds",
+                "centroid_selection_kernel_mean_seconds",
+                "accumulation_kernel_mean_seconds",
+                "reduction_kernel_mean_seconds",
+                "device_to_host_mean_seconds",
+                "host_topk_destructive_estimated_mean_seconds",
+                "host_topk_non_destructive_mean_seconds",
+            ):
+                print_quiet_mean(
+                    f"gpu_i8_fused_centroid_posting_handle_{name}_{key}",
+                    profile.get(key),
+                )
 
 
 def print_quiet_mean(section: str, value: object) -> None:

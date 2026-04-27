@@ -227,6 +227,12 @@ def run_gpu_handle_probe(
             )
             for _ in range(measurement_iterations)
         ]
+        profile_result = handle.profile_topk_without_reference(
+            queries=queries,
+            reference_document_scores=reference_scores,
+            warmup_iterations=warmup_iterations,
+            measurement_iterations=measurement_iterations,
+        )
         release_seconds = handle.close()
     except Exception as exc:  # pragma: no cover - exercised by GPU environments.
         if handle is not None:
@@ -276,6 +282,7 @@ def run_gpu_handle_probe(
             result.topk_score_delta_max_abs for result in results
         ),
         "document_score_count": results[-1].document_score_count,
+        "profile": profile_result.to_json_ready(),
     }
     status = (
         STATUS_OK
@@ -312,6 +319,23 @@ def comparison_payload(
         prepare_extension,
         score_extension,
     )
+    profile = gpu_parsed.get("profile")
+    if not isinstance(profile, dict):
+        profile = {}
+    profile_kernel_chain = sum_optional(
+        optional_float(profile.get("centroid_score_kernel_mean_seconds")),
+        optional_float(profile.get("centroid_selection_kernel_mean_seconds")),
+        optional_float(profile.get("accumulation_kernel_mean_seconds")),
+        optional_float(profile.get("reduction_kernel_mean_seconds")),
+    )
+    profile_transfer_topk = sum_optional(
+        optional_float(profile.get("query_host_to_device_mean_seconds")),
+        profile_kernel_chain,
+        optional_float(profile.get("device_to_host_mean_seconds")),
+        optional_float(
+            profile.get("host_topk_destructive_estimated_mean_seconds")
+        ),
+    )
     return {
         "cpu_i8_candidate_generation_mean_seconds": (
             cpu_candidate_generation_mean_seconds
@@ -341,6 +365,12 @@ def comparison_payload(
         "gpu_fused_handle_score_extension_seconds_per_cpu_centroid_selection_posting_topk_second": ratio(
             score_extension,
             cpu_centroid_selection_posting_topk_seconds,
+        ),
+        "gpu_fused_handle_profile_kernel_chain_mean_seconds": (
+            profile_kernel_chain
+        ),
+        "gpu_fused_handle_profile_query_h2d_kernel_d2h_topk_mean_seconds": (
+            profile_transfer_topk
         ),
     }
 

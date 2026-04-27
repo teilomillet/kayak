@@ -1013,16 +1013,18 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
         )
         self.ctx.synchronize()
 
-    def run_window(
+    def ingest_query(
         mut self,
         py_query_values: UnsafePointer[Float32, MutAnyOrigin],
-    ) raises:
+    ):
         for index in range(self.query_value_count):
             self.query_host[index] = py_query_values[index]
 
+    def copy_query_to_device(mut self) raises:
         self.query_device.enqueue_copy_from(self.query_host)
         self.ctx.synchronize()
 
+    def enqueue_centroid_score_kernel(mut self) raises:
         self.ctx.enqueue_function[
             score_i8_centroid_scores_kernel,
             score_i8_centroid_scores_kernel,
@@ -1038,6 +1040,12 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
             grid_dim=self.centroid_score_grid_x,
             block_dim=BLOCK_SIZE,
         )
+
+    def run_centroid_score_kernel(mut self) raises:
+        self.enqueue_centroid_score_kernel()
+        self.ctx.synchronize()
+
+    def enqueue_centroid_selection_kernel(mut self) raises:
         self.ctx.enqueue_function[
             select_i8_centroid_scores_heap_kernel,
             select_i8_centroid_scores_heap_kernel,
@@ -1053,6 +1061,12 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
             grid_dim=self.query_vector_global_count,
             block_dim=1,
         )
+
+    def run_centroid_selection_kernel(mut self) raises:
+        self.enqueue_centroid_selection_kernel()
+        self.ctx.synchronize()
+
+    def enqueue_accumulation_kernel(mut self) raises:
         self.ctx.enqueue_function[
             accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel,
             accumulate_i8_selected_centroid_scores_by_query_vector_document_kernel,
@@ -1069,6 +1083,12 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
             grid_dim=self.best_score_grid_x,
             block_dim=BLOCK_SIZE,
         )
+
+    def run_accumulation_kernel(mut self) raises:
+        self.enqueue_accumulation_kernel()
+        self.ctx.synchronize()
+
+    def enqueue_reduction_kernel(mut self) raises:
         self.ctx.enqueue_function[
             reduce_i8_selected_centroid_best_scores_kernel,
             reduce_i8_selected_centroid_best_scores_kernel,
@@ -1081,10 +1101,27 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
             grid_dim=self.document_score_grid_x,
             block_dim=BLOCK_SIZE,
         )
+
+    def run_reduction_kernel(mut self) raises:
+        self.enqueue_reduction_kernel()
         self.ctx.synchronize()
 
+    def copy_document_scores_to_host(mut self) raises:
         self.document_scores_device.enqueue_copy_to(self.document_scores_host)
         self.ctx.synchronize()
+
+    def run_window(
+        mut self,
+        py_query_values: UnsafePointer[Float32, MutAnyOrigin],
+    ) raises:
+        self.ingest_query(py_query_values)
+        self.copy_query_to_device()
+        self.enqueue_centroid_score_kernel()
+        self.enqueue_centroid_selection_kernel()
+        self.enqueue_accumulation_kernel()
+        self.enqueue_reduction_kernel()
+        self.ctx.synchronize()
+        self.copy_document_scores_to_host()
         self.host_topk_destructive()
 
     def topk_position_already_selected(
@@ -1169,6 +1206,150 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
             py_scores.append(Python.float(self.topk_scores_host[index]))
 
         var py_result = Python.list()
+        py_result.append(Python.int(self.document_score_count))
+        py_result.append(Python.int(self.top_k))
+        py_result.append(py_positions)
+        py_result.append(py_scores)
+        return py_result
+
+    def profile_topk_no_reference(
+        mut self,
+        py_query_values: UnsafePointer[Float32, MutAnyOrigin],
+        warmup_iterations: Int,
+        measurement_iterations: Int,
+    ) raises -> PythonObject:
+        if warmup_iterations < 0:
+            raise Error("warmup_iterations must be non-negative")
+        if measurement_iterations <= 0:
+            raise Error("measurement_iterations must be positive")
+
+        var document_scores_backup_host = self.ctx.enqueue_create_host_buffer[
+            DType.float32
+        ](self.document_score_count)
+        self.ctx.synchronize()
+
+        def ingest_query_once() capturing:
+            self.ingest_query(py_query_values)
+
+        def query_h2d_once() capturing raises:
+            self.copy_query_to_device()
+
+        def centroid_score_once() capturing raises:
+            self.run_centroid_score_kernel()
+
+        def centroid_selection_once() capturing raises:
+            self.run_centroid_selection_kernel()
+
+        def accumulation_once() capturing raises:
+            self.run_accumulation_kernel()
+
+        def reduction_once() capturing raises:
+            self.run_reduction_kernel()
+
+        def d2h_once() capturing raises:
+            self.copy_document_scores_to_host()
+
+        def snapshot_scores_once() capturing:
+            for index in range(self.document_score_count):
+                document_scores_backup_host[index] = self.document_scores_host[
+                    index
+                ]
+
+        def restore_scores_once() capturing:
+            for index in range(self.document_score_count):
+                self.document_scores_host[index] = document_scores_backup_host[
+                    index
+                ]
+
+        def host_topk_once() capturing:
+            self.host_topk()
+
+        def restore_and_destructive_host_topk_once() capturing:
+            restore_scores_once()
+            self.host_topk_destructive()
+
+        def full_score_once() capturing raises:
+            ingest_query_once()
+            query_h2d_once()
+            centroid_score_once()
+            centroid_selection_once()
+            accumulation_once()
+            reduction_once()
+            d2h_once()
+            snapshot_scores_once()
+            restore_and_destructive_host_topk_once()
+
+        full_score_once()
+        for _ in range(warmup_iterations):
+            full_score_once()
+
+        var ingest_query = benchmark.run[ingest_query_once](
+            max_iters=measurement_iterations
+        )
+        ingest_query_once()
+        var query_h2d = benchmark.run[query_h2d_once](
+            max_iters=measurement_iterations
+        )
+        query_h2d_once()
+        var centroid_score = benchmark.run[centroid_score_once](
+            max_iters=measurement_iterations
+        )
+        centroid_score_once()
+        var centroid_selection = benchmark.run[centroid_selection_once](
+            max_iters=measurement_iterations
+        )
+        centroid_selection_once()
+        var accumulation = benchmark.run[accumulation_once](
+            max_iters=measurement_iterations
+        )
+        accumulation_once()
+        var reduction = benchmark.run[reduction_once](
+            max_iters=measurement_iterations
+        )
+        reduction_once()
+        var d2h = benchmark.run[d2h_once](max_iters=measurement_iterations)
+        d2h_once()
+        snapshot_scores_once()
+        var host_topk_restore = benchmark.run[restore_scores_once](
+            max_iters=measurement_iterations
+        )
+        restore_scores_once()
+        var host_topk_restore_plus_destructive = benchmark.run[
+            restore_and_destructive_host_topk_once
+        ](max_iters=measurement_iterations)
+        restore_and_destructive_host_topk_once()
+        restore_scores_once()
+        var host_topk_non_destructive = benchmark.run[host_topk_once](
+            max_iters=measurement_iterations
+        )
+        host_topk_once()
+
+        var destructive_host_topk_estimated = (
+            host_topk_restore_plus_destructive.mean() - host_topk_restore.mean()
+        )
+        if destructive_host_topk_estimated < 0:
+            destructive_host_topk_estimated = 0
+
+        var py_positions = Python.list()
+        var py_scores = Python.list()
+        for index in range(self.topk_position_count):
+            py_positions.append(Python.int(self.topk_positions_host[index]))
+            py_scores.append(Python.float(self.topk_scores_host[index]))
+
+        var py_result = Python.list()
+        py_result.append(Python.float(ingest_query.mean()))
+        py_result.append(Python.float(query_h2d.mean()))
+        py_result.append(Python.float(centroid_score.mean()))
+        py_result.append(Python.float(centroid_selection.mean()))
+        py_result.append(Python.float(accumulation.mean()))
+        py_result.append(Python.float(reduction.mean()))
+        py_result.append(Python.float(d2h.mean()))
+        py_result.append(Python.float(host_topk_restore.mean()))
+        py_result.append(
+            Python.float(host_topk_restore_plus_destructive.mean())
+        )
+        py_result.append(Python.float(destructive_host_topk_estimated))
+        py_result.append(Python.float(host_topk_non_destructive.mean()))
         py_result.append(Python.int(self.document_score_count))
         py_result.append(Python.int(self.top_k))
         py_result.append(py_positions)
@@ -1488,6 +1669,33 @@ def score_i8_fused_centroid_posting_session_handle_topk_no_reference(
         unsafe_from_address=query_address
     )
     return session[].score_topk_no_reference(py_query_values)
+
+
+def profile_i8_fused_centroid_posting_session_handle_topk_no_reference(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var handle = Int(py=py_request[0])
+    var query_address = Int(py=py_request[1])
+    var warmup_iterations = Int(py=py_request[2])
+    var measurement_iterations = Int(py=py_request[3])
+    if handle == 0:
+        raise Error(
+            "prepared GPU i8 fused centroid-posting handle must be non-zero"
+        )
+    if query_address == 0:
+        raise Error("query address must be non-zero")
+
+    var session = UnsafePointer[
+        PreparedGpuI8FusedCentroidPostingSession, MutAnyOrigin
+    ](unsafe_from_address=handle)
+    var py_query_values = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=query_address
+    )
+    return session[].profile_topk_no_reference(
+        py_query_values,
+        warmup_iterations,
+        measurement_iterations,
+    )
 
 
 def release_i8_fused_centroid_posting_session_handle(
@@ -4556,6 +4764,15 @@ def PyInit__mojo_gpu_i8_rerank_bindings() -> PythonObject:
             docstring=(
                 "Run one fused GPU i8 centroid-posting score call and return"
                 " top-k positions without CPU reference inputs."
+            ),
+        )
+        module.def_function[
+            profile_i8_fused_centroid_posting_session_handle_topk_no_reference
+        ](
+            "profile_i8_fused_centroid_posting_session_handle_topk_no_reference",
+            docstring=(
+                "Profile one fused GPU i8 centroid-posting score call through"
+                " an explicit prepared handle."
             ),
         )
         module.def_function[release_i8_fused_centroid_posting_session_handle](

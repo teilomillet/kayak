@@ -28,6 +28,7 @@ from kayak_bridge.gpu_i8_fused_centroid_posting_handle import (  # noqa: E402
     summary_payload,
 )
 from kayak_bridge.mojo_gpu_i8_rerank import (  # noqa: E402
+    MojoGpuI8FusedCentroidPostingProfileResult,
     MojoGpuI8FusedCentroidPostingTopKResult,
 )
 
@@ -51,6 +52,37 @@ class GpuI8FusedCentroidPostingHandleTests(unittest.TestCase):
         self.assertEqual(payload["topk_position_count"], 4)
         self.assertEqual(payload["topk_position_agreement"], 1.0)
 
+    def test_profile_result_reports_breakdown_and_agreement(self) -> None:
+        result = MojoGpuI8FusedCentroidPostingProfileResult(
+            host_marshalling_seconds=0.001,
+            extension_call_seconds=0.2,
+            query_host_ingest_mean_seconds=0.003,
+            query_host_to_device_mean_seconds=0.004,
+            centroid_score_kernel_mean_seconds=0.005,
+            centroid_selection_kernel_mean_seconds=0.006,
+            accumulation_kernel_mean_seconds=0.007,
+            reduction_kernel_mean_seconds=0.008,
+            device_to_host_mean_seconds=0.009,
+            host_topk_restore_mean_seconds=0.01,
+            host_topk_restore_plus_destructive_mean_seconds=0.03,
+            host_topk_destructive_estimated_mean_seconds=0.02,
+            host_topk_non_destructive_mean_seconds=0.04,
+            document_score_count=16,
+            top_k=2,
+            topk_position_match_count=4,
+            topk_score_delta_max_abs=0.0,
+            positions=(1, 2, 3, 4),
+            scores=(5.0, 4.0, 3.0, 2.0),
+        )
+
+        payload = result.to_json_ready()
+
+        self.assertTrue(payload["topk_agreement_ok"])
+        self.assertEqual(
+            payload["host_topk_destructive_estimated_mean_seconds"],
+            0.02,
+        )
+
     def test_comparison_payload_reports_handle_ratios(self) -> None:
         comparison = comparison_payload(
             cpu_candidate_generation_mean_seconds=0.2,
@@ -59,6 +91,15 @@ class GpuI8FusedCentroidPostingHandleTests(unittest.TestCase):
                 "prepare_extension_call_seconds": 0.03,
                 "score_host_marshalling_mean_seconds": 0.004,
                 "score_extension_call_mean_seconds": 0.05,
+                "profile": {
+                    "centroid_score_kernel_mean_seconds": 0.01,
+                    "centroid_selection_kernel_mean_seconds": 0.02,
+                    "accumulation_kernel_mean_seconds": 0.03,
+                    "reduction_kernel_mean_seconds": 0.04,
+                    "query_host_to_device_mean_seconds": 0.005,
+                    "device_to_host_mean_seconds": 0.006,
+                    "host_topk_destructive_estimated_mean_seconds": 0.007,
+                },
             },
         )
 
@@ -79,6 +120,16 @@ class GpuI8FusedCentroidPostingHandleTests(unittest.TestCase):
                 "gpu_fused_handle_score_extension_seconds_per_cpu_centroid_selection_posting_topk_second"
             ],
             0.5,
+        )
+        self.assertAlmostEqual(
+            comparison["gpu_fused_handle_profile_kernel_chain_mean_seconds"],
+            0.1,
+        )
+        self.assertAlmostEqual(
+            comparison[
+                "gpu_fused_handle_profile_query_h2d_kernel_d2h_topk_mean_seconds"
+            ],
+            0.118,
         )
 
     def test_summary_reports_non_full_ratios(self) -> None:

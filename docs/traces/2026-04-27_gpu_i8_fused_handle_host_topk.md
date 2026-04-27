@@ -28,7 +28,7 @@ pixi run profile_gpu_i8_fused_centroid_posting_handle
 Artifacts:
 
 - before: `.cache/kayak/bench_quiet/20260427T144646Z`
-- after: `.cache/kayak/bench_quiet/20260427T145047Z`
+- after: `.cache/kayak/bench_quiet/20260427T150112Z`
 - report: `.cache/kayak/gpu_i8_fused_centroid_posting_handle/summary.json`
 
 Status after the change:
@@ -44,23 +44,23 @@ Non-full score-call ratios:
 
 | case | before score / CPU candidate | after score / CPU candidate | before score / CPU slice | after score / CPU slice |
 | --- | ---: | ---: | ---: | ---: |
-| `query_vectors32` | `0.23629640221274195` | `0.2342169343180451` | `0.41620342988766384` | `0.4157538015884203` |
-| `doc_vectors64` | `0.31803729470704345` | `0.3084105431618968` | `0.6313771376696127` | `0.6252696262295903` |
-| `query_batch4` | `0.24211193416623314` | `0.2349893458755944` | `0.571942692878157` | `0.5557679641520378` |
+| `query_vectors32` | `0.23629640221274195` | `0.22351480984486652` | `0.41620342988766384` | `0.3954280157885903` |
+| `doc_vectors64` | `0.31803729470704345` | `0.30692159557252907` | `0.6313771376696127` | `0.6176179939835656` |
+| `query_batch4` | `0.24211193416623314` | `0.23600695975367733` | `0.571942692878157` | `0.5483388835915574` |
 
 After-change timings:
 
 | case | score extension s | score host+extension s | prepare extension s |
 | --- | ---: | ---: | ---: |
-| `query_vectors32` | `0.00009333466732641682` | `0.00009446666808798909` | `0.000547851999726845` |
-| `doc_vectors64` | `0.00011298733321988645` | `0.00011410633427052139` | `0.0018424569971102756` |
-| `query_batch4` | `0.0001347946672467515` | `0.00013597333357514194` | `0.0005445160022645723` |
+| `query_vectors32` | `0.00009281333283676456` | `0.00009400866595872989` | `0.0005263919993012678` |
+| `doc_vectors64` | `0.00011206566826634419` | `0.00011310433546896093` | `0.0018464940003468655` |
+| `query_batch4` | `0.00013698866678168997` | `0.00013820433377986774` | `0.0005343660013750196` |
 
 ## Interpretation
 
 The change is accepted, but only as a small local improvement. It preserved
 correctness and reduced the worst non-full score-call ratio from about `0.318x`
-to `0.308x` of CPU candidate generation. It did not change the architecture
+to `0.307x` of CPU candidate generation. It did not change the architecture
 conclusion: the prepared fused handle is already faster than the CPU target on
 the non-full rows, and further optimization needs a prepared-handle substep
 profile rather than more guessing.

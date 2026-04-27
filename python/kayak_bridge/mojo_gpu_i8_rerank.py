@@ -571,6 +571,83 @@ class MojoGpuI8FusedCentroidPostingTopKResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class MojoGpuI8FusedCentroidPostingProfileResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    query_host_ingest_mean_seconds: float
+    query_host_to_device_mean_seconds: float
+    centroid_score_kernel_mean_seconds: float
+    centroid_selection_kernel_mean_seconds: float
+    accumulation_kernel_mean_seconds: float
+    reduction_kernel_mean_seconds: float
+    device_to_host_mean_seconds: float
+    host_topk_restore_mean_seconds: float
+    host_topk_restore_plus_destructive_mean_seconds: float
+    host_topk_destructive_estimated_mean_seconds: float
+    host_topk_non_destructive_mean_seconds: float
+    document_score_count: int
+    top_k: int
+    topk_position_match_count: int
+    topk_score_delta_max_abs: float
+    positions: tuple[int, ...]
+    scores: tuple[float, ...]
+
+    @property
+    def topk_position_count(self) -> int:
+        return len(self.positions)
+
+    @property
+    def topk_position_agreement(self) -> float:
+        if not self.positions:
+            return 0.0
+        return self.topk_position_match_count / len(self.positions)
+
+    @property
+    def topk_agreement_ok(self) -> bool:
+        return self.topk_position_match_count == len(self.positions)
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "query_host_ingest_mean_seconds": self.query_host_ingest_mean_seconds,
+            "query_host_to_device_mean_seconds": (
+                self.query_host_to_device_mean_seconds
+            ),
+            "centroid_score_kernel_mean_seconds": (
+                self.centroid_score_kernel_mean_seconds
+            ),
+            "centroid_selection_kernel_mean_seconds": (
+                self.centroid_selection_kernel_mean_seconds
+            ),
+            "accumulation_kernel_mean_seconds": (
+                self.accumulation_kernel_mean_seconds
+            ),
+            "reduction_kernel_mean_seconds": self.reduction_kernel_mean_seconds,
+            "device_to_host_mean_seconds": self.device_to_host_mean_seconds,
+            "host_topk_restore_mean_seconds": self.host_topk_restore_mean_seconds,
+            "host_topk_restore_plus_destructive_mean_seconds": (
+                self.host_topk_restore_plus_destructive_mean_seconds
+            ),
+            "host_topk_destructive_estimated_mean_seconds": (
+                self.host_topk_destructive_estimated_mean_seconds
+            ),
+            "host_topk_non_destructive_mean_seconds": (
+                self.host_topk_non_destructive_mean_seconds
+            ),
+            "document_score_count": self.document_score_count,
+            "top_k": self.top_k,
+            "topk_position_count": self.topk_position_count,
+            "topk_position_match_count": self.topk_position_match_count,
+            "topk_position_agreement": self.topk_position_agreement,
+            "topk_agreement_ok": self.topk_agreement_ok,
+            "topk_score_delta_max_abs": self.topk_score_delta_max_abs,
+            "positions": self.positions,
+            "scores": self.scores,
+        }
+
+
 @dataclass(slots=True)
 class MojoGpuI8FusedCentroidPostingSessionHandle:
     target_accelerator: str
@@ -665,6 +742,117 @@ class MojoGpuI8FusedCentroidPostingSessionHandle:
         return MojoGpuI8FusedCentroidPostingTopKResult(
             host_marshalling_seconds=host_marshalling_seconds,
             extension_call_seconds=extension_call_seconds,
+            document_score_count=result_document_score_count,
+            top_k=result_top_k,
+            topk_position_match_count=topk_position_match_count,
+            topk_score_delta_max_abs=score_delta_max_abs,
+            positions=positions,
+            scores=scores,
+        )
+
+    def profile_topk_without_reference(
+        self,
+        *,
+        queries: np.ndarray,
+        reference_document_scores: np.ndarray,
+        warmup_iterations: int,
+        measurement_iterations: int,
+    ) -> MojoGpuI8FusedCentroidPostingProfileResult:
+        if self._closed or self.handle == 0:
+            raise RuntimeError("GPU i8 fused centroid-posting handle is closed")
+        if warmup_iterations < 0:
+            raise ValueError("warmup_iterations must be non-negative")
+        if measurement_iterations <= 0:
+            raise ValueError("measurement_iterations must be positive")
+
+        marshalling_started_at = time.perf_counter()
+        query_values = _float32_array(queries)
+        expected_query_values = (
+            int(self.shape.query_count)
+            * int(self.shape.query_vector_count)
+            * int(self.shape.vector_dim)
+        )
+        if query_values.size != expected_query_values:
+            raise ValueError("queries shape must match the prepared handle shape")
+        reference_scores = _float32_array(reference_document_scores)
+        expected_score_count = int(self.shape.query_count) * int(
+            self.shape.document_count
+        )
+        if reference_scores.size != expected_score_count:
+            raise ValueError(
+                "reference_document_scores must match query_count * document_count"
+            )
+        host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+        module = load_module(target_accelerator=self.target_accelerator)
+        request = [
+            int(self.handle),
+            _array_address(query_values),
+            int(warmup_iterations),
+            int(measurement_iterations),
+        ]
+        extension_started_at = time.perf_counter()
+        raw_result = (
+            module.profile_i8_fused_centroid_posting_session_handle_topk_no_reference(
+                request
+            )
+        )
+        extension_call_seconds = time.perf_counter() - extension_started_at
+
+        if len(raw_result) != 15:
+            raise RuntimeError(
+                "GPU i8 fused centroid-posting top-k profile returned an "
+                "unexpected result shape"
+            )
+
+        result_document_score_count = int(raw_result[11])
+        result_top_k = int(raw_result[12])
+        positions = tuple(int(value) for value in raw_result[13])
+        scores = tuple(float(value) for value in raw_result[14])
+        expected_topk_count = int(self.shape.query_count) * result_top_k
+        if result_document_score_count != expected_score_count:
+            raise RuntimeError(
+                "GPU i8 fused centroid-posting top-k profile returned the "
+                "wrong document score count"
+            )
+        if len(positions) != expected_topk_count or len(scores) != expected_topk_count:
+            raise RuntimeError(
+                "GPU i8 fused centroid-posting top-k profile returned the "
+                "wrong top-k count"
+            )
+
+        expected_positions = _rank_document_scores_by_position(
+            reference_scores,
+            query_count=int(self.shape.query_count),
+            document_count=int(self.shape.document_count),
+            top_k=result_top_k,
+        )
+        topk_position_match_count = sum(
+            1
+            for actual, expected in zip(positions, expected_positions)
+            if actual == expected
+        )
+        score_delta_max_abs = _topk_score_delta_max_abs(
+            scores,
+            reference_scores,
+            expected_positions,
+            document_count=int(self.shape.document_count),
+            top_k=result_top_k,
+        )
+        return MojoGpuI8FusedCentroidPostingProfileResult(
+            host_marshalling_seconds=host_marshalling_seconds,
+            extension_call_seconds=extension_call_seconds,
+            query_host_ingest_mean_seconds=float(raw_result[0]),
+            query_host_to_device_mean_seconds=float(raw_result[1]),
+            centroid_score_kernel_mean_seconds=float(raw_result[2]),
+            centroid_selection_kernel_mean_seconds=float(raw_result[3]),
+            accumulation_kernel_mean_seconds=float(raw_result[4]),
+            reduction_kernel_mean_seconds=float(raw_result[5]),
+            device_to_host_mean_seconds=float(raw_result[6]),
+            host_topk_restore_mean_seconds=float(raw_result[7]),
+            host_topk_restore_plus_destructive_mean_seconds=float(raw_result[8]),
+            host_topk_destructive_estimated_mean_seconds=float(raw_result[9]),
+            host_topk_non_destructive_mean_seconds=float(raw_result[10]),
             document_score_count=result_document_score_count,
             top_k=result_top_k,
             topk_position_match_count=topk_position_match_count,
