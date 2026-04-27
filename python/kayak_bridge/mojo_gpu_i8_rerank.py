@@ -432,6 +432,105 @@ class MojoGpuI8SelectedPostingAccumulationResult:
 
 
 @dataclass(frozen=True, slots=True)
+class MojoGpuI8FusedCentroidPostingAccumulationResult:
+    host_marshalling_seconds: float
+    extension_call_seconds: float
+    mojo_host_ingest_mean_seconds: float
+    payload_host_to_device_mean_seconds: float
+    query_host_to_device_mean_seconds: float
+    centroid_score_kernel_mean_seconds: float
+    centroid_selection_kernel_mean_seconds: float
+    accumulation_kernel_mean_seconds: float
+    device_to_host_mean_seconds: float
+    host_topk_mean_seconds: float
+    selected_validation_device_to_host_mean_seconds: float
+    centroid_token_out_of_range_count: int
+    selected_position_mismatch_count: int
+    selected_score_mismatch_count: int
+    selected_score_delta_max_abs: float
+    score_mismatch_count: int
+    score_delta_max_abs: float
+    score_delta_tolerance: float
+    topk_position_mismatch_count: int
+    doc_index_out_of_range_count: int
+    top_k: int
+    topk_position_count: int
+    selected_centroid_count: int
+    centroid_score_count: int
+    document_score_count: int
+    document_count: int
+    query_count: int
+    query_vector_count: int
+    centroids_per_query_vector: int
+
+    @property
+    def fused_agreement_ok(self) -> bool:
+        return (
+            self.centroid_token_out_of_range_count == 0
+            and self.selected_position_mismatch_count == 0
+            and self.selected_score_mismatch_count == 0
+            and self.score_mismatch_count == 0
+            and self.topk_position_mismatch_count == 0
+            and self.doc_index_out_of_range_count == 0
+        )
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "host_marshalling_seconds": self.host_marshalling_seconds,
+            "extension_call_seconds": self.extension_call_seconds,
+            "mojo_host_ingest_mean_seconds": (
+                self.mojo_host_ingest_mean_seconds
+            ),
+            "payload_host_to_device_mean_seconds": (
+                self.payload_host_to_device_mean_seconds
+            ),
+            "query_host_to_device_mean_seconds": (
+                self.query_host_to_device_mean_seconds
+            ),
+            "centroid_score_kernel_mean_seconds": (
+                self.centroid_score_kernel_mean_seconds
+            ),
+            "centroid_selection_kernel_mean_seconds": (
+                self.centroid_selection_kernel_mean_seconds
+            ),
+            "accumulation_kernel_mean_seconds": (
+                self.accumulation_kernel_mean_seconds
+            ),
+            "device_to_host_mean_seconds": self.device_to_host_mean_seconds,
+            "host_topk_mean_seconds": self.host_topk_mean_seconds,
+            "selected_validation_device_to_host_mean_seconds": (
+                self.selected_validation_device_to_host_mean_seconds
+            ),
+            "centroid_token_out_of_range_count": (
+                self.centroid_token_out_of_range_count
+            ),
+            "selected_position_mismatch_count": (
+                self.selected_position_mismatch_count
+            ),
+            "selected_score_mismatch_count": self.selected_score_mismatch_count,
+            "selected_score_delta_max_abs": self.selected_score_delta_max_abs,
+            "selected_score_delta_tolerance": 1.0e-4,
+            "score_mismatch_count": self.score_mismatch_count,
+            "score_delta_max_abs": self.score_delta_max_abs,
+            "score_delta_tolerance": self.score_delta_tolerance,
+            "topk_position_mismatch_count": (
+                self.topk_position_mismatch_count
+            ),
+            "doc_index_out_of_range_count": self.doc_index_out_of_range_count,
+            "top_k": self.top_k,
+            "topk_position_count": self.topk_position_count,
+            "fused_agreement_ok": self.fused_agreement_ok,
+            "selected_centroid_count": self.selected_centroid_count,
+            "centroid_score_count": self.centroid_score_count,
+            "document_score_count": self.document_score_count,
+            "document_count": self.document_count,
+            "query_count": self.query_count,
+            "query_vector_count": self.query_vector_count,
+            "centroids_per_query_vector": self.centroids_per_query_vector,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class _SelectedPostingTraversalReference:
     selected_positions: np.ndarray
     selected_scores: np.ndarray
@@ -1372,6 +1471,110 @@ def profile_i8_selected_posting_accumulation_addresses(
         selected_centroid_count=int(raw_result[16]),
         document_score_count=int(raw_result[17]),
         document_count=int(raw_result[18]),
+    )
+
+
+def profile_i8_fused_centroid_posting_accumulation_addresses(
+    *,
+    target_accelerator: str,
+    shape: Any,
+    queries: np.ndarray,
+    payload: KayakPlaidI8PayloadSnapshot,
+    selected: KayakPlaidI8SelectedCentroids,
+    warmup_iterations: int,
+    measurement_iterations: int,
+) -> MojoGpuI8FusedCentroidPostingAccumulationResult:
+    if warmup_iterations < 0:
+        raise ValueError("warmup_iterations must be non-negative")
+    if measurement_iterations <= 0:
+        raise ValueError("measurement_iterations must be positive")
+
+    marshalling_started_at = time.perf_counter()
+    query_values = _float32_array(queries)
+    expected_query_values = (
+        int(shape.query_count)
+        * int(shape.query_vector_count)
+        * int(shape.vector_dim)
+    )
+    if query_values.size != expected_query_values:
+        raise ValueError("queries shape must match the profile shape")
+    token_codes = _int8_array(payload.token_codes)
+    token_scales = _float32_array(payload.token_scales)
+    centroid_token_indices = _int64_array(payload.centroid_token_indices)
+    centroid_doc_offsets = _int64_array(payload.centroid_doc_offsets)
+    centroid_doc_indices = _int64_array(payload.centroid_doc_indices)
+    reference = _selected_posting_accumulation_reference(
+        payload=payload,
+        selected=selected,
+    )
+    host_marshalling_seconds = time.perf_counter() - marshalling_started_at
+
+    module = load_module(target_accelerator=target_accelerator)
+    request = [
+        _array_address(query_values),
+        _array_address(token_codes),
+        _array_address(token_scales),
+        _array_address(centroid_token_indices),
+        _array_address(centroid_doc_offsets),
+        _array_address(centroid_doc_indices),
+        _array_address(reference.selected_positions),
+        _array_address(reference.selected_scores),
+        _array_address(reference.expected_document_scores),
+        int(payload.total_vector_count),
+        int(payload.centroid_count),
+        int(payload.posting_count),
+        int(shape.document_count),
+        int(shape.query_count),
+        int(shape.query_vector_count),
+        int(selected.centroids_per_query_vector),
+        int(shape.top_k),
+        int(warmup_iterations),
+        int(measurement_iterations),
+    ]
+    extension_started_at = time.perf_counter()
+    raw_result = (
+        module.profile_i8_fused_centroid_posting_accumulation_addresses(
+            request
+        )
+    )
+    extension_call_seconds = time.perf_counter() - extension_started_at
+
+    if len(raw_result) != 27:
+        raise RuntimeError(
+            "GPU i8 fused centroid-posting accumulation bridge returned an "
+            "unexpected result shape"
+        )
+
+    return MojoGpuI8FusedCentroidPostingAccumulationResult(
+        host_marshalling_seconds=host_marshalling_seconds,
+        extension_call_seconds=extension_call_seconds,
+        mojo_host_ingest_mean_seconds=float(raw_result[0]),
+        payload_host_to_device_mean_seconds=float(raw_result[1]),
+        query_host_to_device_mean_seconds=float(raw_result[2]),
+        centroid_score_kernel_mean_seconds=float(raw_result[3]),
+        centroid_selection_kernel_mean_seconds=float(raw_result[4]),
+        accumulation_kernel_mean_seconds=float(raw_result[5]),
+        device_to_host_mean_seconds=float(raw_result[6]),
+        host_topk_mean_seconds=float(raw_result[7]),
+        selected_validation_device_to_host_mean_seconds=float(raw_result[8]),
+        centroid_token_out_of_range_count=int(raw_result[9]),
+        selected_position_mismatch_count=int(raw_result[10]),
+        selected_score_mismatch_count=int(raw_result[11]),
+        selected_score_delta_max_abs=float(raw_result[12]),
+        score_mismatch_count=int(raw_result[13]),
+        score_delta_max_abs=float(raw_result[14]),
+        score_delta_tolerance=float(raw_result[15]),
+        topk_position_mismatch_count=int(raw_result[16]),
+        doc_index_out_of_range_count=int(raw_result[17]),
+        top_k=int(raw_result[18]),
+        topk_position_count=int(raw_result[19]),
+        selected_centroid_count=int(raw_result[20]),
+        centroid_score_count=int(raw_result[21]),
+        document_score_count=int(raw_result[22]),
+        document_count=int(raw_result[23]),
+        query_count=int(raw_result[24]),
+        query_vector_count=int(raw_result[25]),
+        centroids_per_query_vector=int(raw_result[26]),
     )
 
 

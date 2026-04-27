@@ -643,6 +643,26 @@ still reads all centroid scores back to host and would then upload selected
 centroid ids/scores for posting accumulation, so the next real optimization is
 a fused device-resident selected-centroid-to-accumulation probe.
 
+Fused centroid-posting finding: a benchmark-only fused probe now scores sampled
+i8 centroids on GPU, selects centroids on device, accumulates selected posting
+scores into dense document scores on GPU, reads document scores back, and runs
+host document top-k. A first repeated-scan device selector preserved
+correctness but was rejected after the selection kernel measured about `55us`,
+`596us`, and `172us` on the three non-full rows. The retained device heap
+selector preserved exact selected-centroid positions, score agreement within
+the explicit vector-count tolerance, and exact top-k positions on all `5 / 5`
+wide rows. On the three non-full rows, the resident fused path measured about
+`0.200x`, `0.282x`, and `0.201x` of full CPU candidate generation. Against the
+CPU centroid-selection/posting/top-k slice, the resident fused path measured
+about `0.353x`, `0.541x`, and `0.468x`. The cold-payload path still ranged
+from about `0.320x` to `0.831x` of full CPU candidate generation.
+
+Reason: this validates that the two prior primitive wins compose only when
+centroid selection stays device-resident and uses the same bounded heap shape
+as the CPU path. It also shows why the next boundary must be explicit prepared
+GPU payload ownership: hidden payload copies are still large enough to change
+the conclusion on `doc_vectors64`.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -920,10 +940,17 @@ evidence only justifies a measured primitive.
    `0.407x` to `0.656x` of CPU centroid scoring plus selection on non-full
    rows. This points next at fusing centroid selection with accumulation to
    avoid centroid-score readback and selected-centroid upload.
-33. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+33. Fuse GPU centroid scoring, device centroid selection, and posting
+   accumulation as one benchmark-only primitive. Current quiet result: after
+   rejecting repeated-scan device centroid selection, a device heap selector
+   preserves selected-centroid, score, and top-k agreement on all wide rows.
+   The non-full resident path costs about `0.200x` to `0.282x` of full CPU
+   candidate generation and about `0.353x` to `0.541x` of the CPU
+   centroid-selection/posting/top-k slice.
+34. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and FastPlaid scope rows after the resident ownership boundary
    exists.
-34. Only after a measured win, consider public API design.
+35. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 
