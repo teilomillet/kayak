@@ -112,6 +112,17 @@ def _policy_summary(report: dict[str, Any]) -> dict[str, Any]:
         "max_gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second": (
             max(resident_ratios) if resident_ratios else None
         ),
+        "mean_gpu_resident_selected_cpu_selection_share": _mean_optional(
+            row.get("gpu_resident_selected_cpu_selection_share")
+            for row in rows
+        ),
+        "mean_gpu_resident_selected_candidate_share": _mean_optional(
+            row.get("gpu_resident_selected_candidate_share") for row in rows
+        ),
+        "mean_gpu_resident_selected_exact_share": _mean_optional(
+            row.get("gpu_resident_selected_exact_rerank_exact_share")
+            for row in rows
+        ),
         "gpu_resident_selected_final_topk_position_agreement_min": _min_optional(
             row.get("gpu_resident_selected_final_topk_position_agreement")
             for row in rows
@@ -340,6 +351,10 @@ def _mean(values: Sequence[float]) -> float | None:
     if not values:
         return None
     return sum(values) / float(len(values))
+
+
+def _mean_optional(values: Iterable[object]) -> float | None:
+    return _mean(_floats(values))
 
 
 def _min_optional(values: Iterable[object]) -> float | None:

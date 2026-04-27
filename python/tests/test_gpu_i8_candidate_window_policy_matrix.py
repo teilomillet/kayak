@@ -69,6 +69,24 @@ class GpuI8CandidateWindowPolicyMatrixTests(unittest.TestCase):
         )
         self.assertEqual(
             policy_summaries[DOC_VECTORS64_125PCT_POLICY][
+                "mean_gpu_resident_selected_cpu_selection_share"
+            ],
+            0.2,
+        )
+        self.assertEqual(
+            policy_summaries[DOC_VECTORS64_125PCT_POLICY][
+                "mean_gpu_resident_selected_candidate_share"
+            ],
+            0.3,
+        )
+        self.assertEqual(
+            policy_summaries[DOC_VECTORS64_125PCT_POLICY][
+                "mean_gpu_resident_selected_exact_share"
+            ],
+            0.5,
+        )
+        self.assertEqual(
+            policy_summaries[DOC_VECTORS64_125PCT_POLICY][
                 "max_effective_to_input_candidate_k"
             ],
             1.25,
@@ -181,6 +199,9 @@ def _report(
                 "gpu_resident_selected_exact_rerank_seconds_per_fastplaid_batch_second": (
                     resident_ratio
                 ),
+                "gpu_resident_selected_cpu_selection_share": 0.2,
+                "gpu_resident_selected_candidate_share": 0.3,
+                "gpu_resident_selected_exact_rerank_exact_share": 0.5,
                 "gpu_resident_selected_final_topk_position_agreement": 1.0,
                 "gpu_resident_selected_candidate_position_agreement_min": 1.0,
             }
