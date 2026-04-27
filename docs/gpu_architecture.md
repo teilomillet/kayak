@@ -446,6 +446,22 @@ the existing GPU no-reference top-k primitive. It still does not prove a public
 GPU backend because Kayak starts from CPU-generated candidate windows while
 FastPlaid is timed as full search.
 
+Centroid-budget policy finding: a benchmark-only policy replay now evaluates
+static budgets, `shape_rule_v0`, and oracle calibration rows over the same
+measured sweep rows. On the wide non-full matrix, `shape_rule_v0` preserved
+static32 final recall on all `3 / 3` cases while reducing mean candidate
+generation plus CPU same-candidate score time to about `0.870x` of static32.
+On the default non-full matrix, it preserved static32 final recall on all
+`5 / 5` cases while reducing the same envelope to about `0.865x`. A static
+`cpqv=4` policy was faster on average but lost final recall on five of the
+eight measured default+wide non-full rows. The tiny smoke shape also falsified
+overgeneralization: `shape_rule_v0` chose `cpqv=4`, ran faster, and lost recall
+versus static32, while the oracle row selected `cpqv=8`.
+
+Reason: this is strong enough to automate same-shape FastPlaid comparisons for
+the shape rule, but not strong enough to make it a public default. The policy
+is still benchmark-only and must be treated as a falsifiable hypothesis.
+
 FastPlaid comparison finding: on the explicit wide `candidate1024` shape
 (`document_count=1024`, `document_vector_count=16`, `query_count=2`,
 `query_vector_count=8`, `candidate_k=1024`, `top_k=10`), the latest quiet
@@ -669,10 +685,15 @@ evidence only justifies a measured primitive.
    Current quiet result: the scoped CPU-candidate-generation-plus-GPU-top-k
    envelope is faster than FastPlaid CPU and CUDA full search on the measured
    synthetic rows, while matching or exceeding the measured FastPlaid recall.
-23. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+23. Replay static and shape-aware centroid-budget policies over measured
+   sweep rows. Current quiet result: `shape_rule_v0` preserves static32 final
+   recall on all measured default and wide non-full cases while reducing the
+   candidate-generation-plus-score envelope to about `0.87x` of static32; a
+   tiny smoke shape falsifies broader generalization.
+24. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and end-to-end times after the resident ownership boundary
    exists.
-24. Only after a measured win, consider public API design.
+25. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 
