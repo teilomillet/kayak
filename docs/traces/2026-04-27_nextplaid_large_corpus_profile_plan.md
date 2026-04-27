@@ -148,6 +148,7 @@ Added:
 
 - `python/kayak_bridge/plaid_task_candidate_profile.py`
 - `python/scripts/profile_task_plaid_i8_candidate_generation.py`
+- `python/scripts/sweep_task_plaid_i8_candidate_generation.py`
 - `python/tests/test_plaid_task_candidate_profile.py`
 - `python/kayak_bridge/msmarco_passage_task.py`
 - `python/scripts/build_msmarco_passage_task_json.py`
@@ -190,7 +191,7 @@ Validation run:
   `pixi run env PYTHONPATH=python python -m unittest python/tests/test_plaid_task_candidate_profile.py python/tests/test_msmarco_passage_task.py`
   passed `7 / 7`
 - syntax:
-  `pixi run env PYTHONPATH=python python -m py_compile python/kayak_bridge/plaid_task_candidate_profile.py python/kayak_bridge/msmarco_passage_task.py python/scripts/profile_task_plaid_i8_candidate_generation.py python/scripts/build_msmarco_passage_task_json.py python/scripts/build_lemb_narrativeqa_task_json.py`
+  `pixi run env PYTHONPATH=python python -m py_compile python/kayak_bridge/plaid_task_candidate_profile.py python/kayak_bridge/msmarco_passage_task.py python/scripts/profile_task_plaid_i8_candidate_generation.py python/scripts/sweep_task_plaid_i8_candidate_generation.py python/scripts/build_msmarco_passage_task_json.py python/scripts/build_lemb_narrativeqa_task_json.py`
   passed
 - in-memory Mojo smoke:
   one synthetic encoded task with `8` documents, `4` document vectors per
@@ -219,6 +220,19 @@ pixi run env PYTHONPATH=python python python/scripts/profile_task_plaid_i8_candi
   --measurement-iterations 2 \
   --emit-quiet-mean \
   --output .cache/kayak/lemb_narrativeqa_smoke/plaid_i8_candidate_profile.json
+
+pixi run env PYTHONPATH=python python python/scripts/sweep_task_plaid_i8_candidate_generation.py \
+  --task .cache/kayak/lemb_narrativeqa_smoke/python_task.json \
+  --query-limit 2 \
+  --candidate-k 128 \
+  --candidate-k 256 \
+  --candidate-k 320 \
+  --candidate-k 355 \
+  --centroids-per-query-vector 16 \
+  --centroids-per-query-vector 32 \
+  --measurement-iterations 2 \
+  --emit-quiet-mean \
+  --output .cache/kayak/lemb_narrativeqa_smoke/plaid_i8_candidate_sweep.json
 ```
 
 Observed LEMB smoke:
@@ -245,15 +259,20 @@ this becomes a speed claim.
 
 Follow-up LEMB candidate-window smoke on the same encoded task:
 
+Sweep artifact:
+
+- `.cache/kayak/lemb_narrativeqa_smoke/plaid_i8_candidate_sweep.json`
+
 | window | centroids/qv | full candidate s/query | posting accumulation s/query | final top-k s/query | candidate vectors/query | recall vs exact@10 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `128` | `16` | `0.00018909620872383287` | `0.00007382496663203668` | `0.000016335996935813753` | `23040` | `0.6000000000000001` |
-| `256` | `16` | `0.00019265821420015076` | `0.00007370415101687142` | `0.00002473556590762288` | `46080` | `0.8` |
-| `320` | `16` | `0.00019646010150263282` | `0.00007381549443407454` | `0.000028760864563217237` | `57600` | `0.85` |
-| `355` | `16` | `0.00000008916487866445425` | `0.0000737731648105422` | `0.000028342690647433474` | `63900` | `1.0` |
-| `128` | `32` | `0.00024791384513317665` | `0.00009312850469663501` | `0.000016266306316719063` | `23040` | `0.6000000000000001` |
-| `256` | `32` | `0.00025745812547538303` | `0.00009338398005701238` | `0.000024653996643379895` | `46080` | `0.8` |
-| `320` | `32` | `0.0002622060191388931` | `0.0000931669675742376` | `0.000029087586469015795` | `57600` | `0.85` |
+| `128` | `16` | `0.00019721592671820073` | `0.00007403321962802295` | `0.000016631727818380092` | `23040` | `0.6000000000000001` |
+| `256` | `16` | `0.00019604967616169782` | `0.00007370538929052232` | `0.00002601497435128403` | `46080` | `0.8` |
+| `320` | `16` | `0.00019878460714754995` | `0.00007400468954629415` | `0.00002878780237651818` | `57600` | `0.85` |
+| `355` | `16` | `0.00000008865935814003559` | `0.00007365206231199587` | `0.000029897632884063307` | `63900` | `1.0` |
+| `128` | `32` | `0.00025278766722357097` | `0.00009365771545462552` | `0.000016289921775060848` | `23040` | `0.6000000000000001` |
+| `256` | `32` | `0.00026027138105613946` | `0.00009380015596883166` | `0.00002629637020033854` | `46080` | `0.8` |
+| `320` | `32` | `0.00026249553487712573` | `0.00009334066208561563` | `0.000028808243871421473` | `57600` | `0.85` |
+| `355` | `32` | `0.00000008880609148448583` | `0.00009318933352418671` | `0.000029853933950923577` | `63900` | `1.0` |
 
 Interpretation:
 
@@ -264,6 +283,9 @@ Interpretation:
 - the `candidate_k=355` row is a full-window diagnostic, not a non-full
   candidate-generation timing claim, because the current candidate function
   short-circuits full windows
+- the sweep artifact records this explicitly: `candidate_k=355` has `0`
+  posting-candidate-generation queries and `2` full-window-short-circuit
+  queries
 - the next policy question is not more centroids on this slice; it is whether
   long-document candidate coverage needs a wider or different candidate
   generator before exact/rerank optimization matters

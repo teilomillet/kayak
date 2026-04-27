@@ -110,6 +110,7 @@ Current status:
 
 Current scaffold:
 - `python/scripts/profile_task_plaid_i8_candidate_generation.py`
+- `python/scripts/sweep_task_plaid_i8_candidate_generation.py`
 - `python/scripts/build_msmarco_passage_task_json.py`
 - `python/scripts/build_lemb_narrativeqa_task_json.py`
 
