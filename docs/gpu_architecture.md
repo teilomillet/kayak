@@ -672,9 +672,13 @@ readback; this is intentional because the previous one-lane device document
 top-k was rejected by timing. On all `5 / 5` wide rows, top-k positions matched
 the CPU selected-posting reference exactly, with maximum score delta
 `0.00006103515625`. On the three non-full rows, the serving-shaped score call
-measured about `0.236x`, `0.318x`, and `0.242x` of full CPU candidate
+measured about `0.234x`, `0.308x`, and `0.235x` of full CPU candidate
 generation. Against the CPU centroid-selection/posting/top-k slice, it measured
-about `0.416x`, `0.631x`, and `0.572x`.
+about `0.416x`, `0.625x`, and `0.556x`. A follow-up destructive host top-k
+scan was accepted because each score call overwrites the host document-score
+buffer before top-k; it reduced the worst non-full score-call ratio from about
+`0.318x` to `0.308x` of CPU candidate generation while preserving exact top-k
+positions.
 
 Reason: this validates the ownership boundary required for a real internal
 serving primitive without adding a hidden global cache or a public GPU search
@@ -970,13 +974,18 @@ evidence only justifies a measured primitive.
 34. Move the fused primitive behind an explicit benchmark-only prepared handle
    with separate prepare, score, and release calls. Current quiet result: the
    prepared-handle score call preserves exact top-k positions on all wide rows
-   and costs about `0.236x` to `0.318x` of full CPU candidate generation on
-   non-full rows, or about `0.416x` to `0.631x` of the CPU
+   and costs about `0.234x` to `0.308x` of full CPU candidate generation on
+   non-full rows, or about `0.416x` to `0.625x` of the CPU
    centroid-selection/posting/top-k slice.
-35. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
+35. Replace the prepared fused handle's non-destructive host top-k duplicate
+   scan with a destructive scan after document-score readback. Current quiet
+   result: exact top-k agreement is preserved and the worst non-full score-call
+   ratio improves from about `0.318x` to `0.308x` of full CPU candidate
+   generation.
+36. Quiet benchmark compares copy, kernel, readback, CPU candidate generation,
    CPU top-k, and FastPlaid scope rows after the resident ownership boundary
    exists.
-36. Only after a measured win, consider public API design.
+37. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

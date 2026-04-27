@@ -1085,7 +1085,7 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
 
         self.document_scores_device.enqueue_copy_to(self.document_scores_host)
         self.ctx.synchronize()
-        self.host_topk()
+        self.host_topk_destructive()
 
     def topk_position_already_selected(
         self, query_topk_base: Int, rank: Int, document_index: Int
@@ -1127,6 +1127,34 @@ struct PreparedGpuI8FusedCentroidPostingSession(Movable):
                     best_position
                 )
                 self.topk_scores_host[query_topk_base + rank] = best_score
+
+    def host_topk_destructive(mut self):
+        for query_index in range(self.query_count):
+            var score_base = query_index * self.document_count
+            var query_topk_base = query_index * self.top_k
+            for rank in range(self.top_k):
+                var best_position = 0
+                var best_score = Float32(-3.4028234663852886e38)
+                var seen = False
+                for document_index in range(self.document_count):
+                    var score_index = score_base + document_index
+                    var score = self.document_scores_host[score_index]
+                    if not seen or score_position_ranks_before_float32_device(
+                        score,
+                        document_index,
+                        best_score,
+                        best_position,
+                    ):
+                        best_score = score
+                        best_position = document_index
+                        seen = True
+                self.topk_positions_host[query_topk_base + rank] = Int64(
+                    best_position
+                )
+                self.topk_scores_host[query_topk_base + rank] = best_score
+                self.document_scores_host[score_base + best_position] = Float32(
+                    -3.4028234663852886e38
+                )
 
     def score_topk_no_reference(
         mut self,
