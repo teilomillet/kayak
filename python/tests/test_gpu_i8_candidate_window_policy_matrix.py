@@ -13,6 +13,7 @@ if str(SCRIPT_ROOT) not in sys.path:
 import compare_gpu_i8_fastplaid_candidate_window_policies as matrix_script  # noqa: E402
 from kayak_bridge.gpu_i8_candidate_window_policy import (  # noqa: E402
     COVERAGE_SAFETY_V0_POLICY,
+    COVERAGE_SAFETY_V1_POLICY,
     DOC_VECTORS64_125PCT_POLICY,
     INPUT_CANDIDATE_K_POLICY,
 )
@@ -124,6 +125,7 @@ class GpuI8CandidateWindowPolicyMatrixTests(unittest.TestCase):
                 INPUT_CANDIDATE_K_POLICY,
                 DOC_VECTORS64_125PCT_POLICY,
                 COVERAGE_SAFETY_V0_POLICY,
+                COVERAGE_SAFETY_V1_POLICY,
             ),
         )
 

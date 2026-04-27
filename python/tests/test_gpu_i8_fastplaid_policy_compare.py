@@ -15,6 +15,7 @@ if str(SCRIPT_ROOT) not in sys.path:
 from kayak_bridge.gpu_i8_address_serve_sweep import AddressServeSweepCase
 from kayak_bridge.gpu_i8_candidate_window_policy import (
     COVERAGE_SAFETY_V0_POLICY,
+    COVERAGE_SAFETY_V1_POLICY,
     DOC_VECTORS64_125PCT_POLICY,
     choose_candidate_window,
 )
@@ -121,6 +122,39 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
         self.assertEqual(
             choose_candidate_window(
                 COVERAGE_SAFETY_V0_POLICY,
+                documents1024,
+            ).candidate_k,
+            1024,
+        )
+
+    def test_coverage_safety_v1_tightens_post_array_export_windows(self) -> None:
+        doc48 = AddressServeSweepCase("doc_vectors48", 512, 48, 2, 8, 256)
+        doc64 = AddressServeSweepCase("doc_vectors64", 512, 64, 2, 8, 256)
+        doc96 = AddressServeSweepCase("doc_vectors96", 512, 96, 2, 8, 256)
+        documents1024 = AddressServeSweepCase(
+            "documents1024_k256",
+            1024,
+            16,
+            2,
+            8,
+            256,
+        )
+
+        self.assertEqual(
+            choose_candidate_window(COVERAGE_SAFETY_V1_POLICY, doc48).candidate_k,
+            320,
+        )
+        self.assertEqual(
+            choose_candidate_window(COVERAGE_SAFETY_V1_POLICY, doc64).candidate_k,
+            272,
+        )
+        self.assertEqual(
+            choose_candidate_window(COVERAGE_SAFETY_V1_POLICY, doc96).candidate_k,
+            416,
+        )
+        self.assertEqual(
+            choose_candidate_window(
+                COVERAGE_SAFETY_V1_POLICY,
                 documents1024,
             ).candidate_k,
             1024,

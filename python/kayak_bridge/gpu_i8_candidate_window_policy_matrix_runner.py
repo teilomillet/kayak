@@ -16,6 +16,7 @@ from kayak_bridge.gpu_i8_address_serve_sweep import (
 )
 from kayak_bridge.gpu_i8_candidate_window_policy import (
     COVERAGE_SAFETY_V0_POLICY,
+    COVERAGE_SAFETY_V1_POLICY,
     DOC_VECTORS64_125PCT_POLICY,
     INPUT_CANDIDATE_K_POLICY,
 )
@@ -25,6 +26,7 @@ DEFAULT_CANDIDATE_WINDOW_POLICIES = (
     INPUT_CANDIDATE_K_POLICY,
     DOC_VECTORS64_125PCT_POLICY,
     COVERAGE_SAFETY_V0_POLICY,
+    COVERAGE_SAFETY_V1_POLICY,
 )
 DEFAULT_CASE_SOURCE = "candidate_window_generalization"
 

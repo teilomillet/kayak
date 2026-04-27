@@ -15,6 +15,7 @@ from kayak_bridge.gpu_i8_address_serve_sweep import AddressServeSweepCase
 INPUT_CANDIDATE_K_POLICY = "input"
 DOC_VECTORS64_125PCT_POLICY = "doc_vectors64_125pct_v0"
 COVERAGE_SAFETY_V0_POLICY = "coverage_safety_v0"
+COVERAGE_SAFETY_V1_POLICY = "coverage_safety_v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +41,7 @@ def validate_candidate_window_policy(policy_name: str) -> None:
         INPUT_CANDIDATE_K_POLICY,
         DOC_VECTORS64_125PCT_POLICY,
         COVERAGE_SAFETY_V0_POLICY,
+        COVERAGE_SAFETY_V1_POLICY,
     }:
         return
     raise ValueError(f"unknown candidate-window policy: {policy_name}")
@@ -60,6 +62,8 @@ def choose_candidate_window(
         )
     if policy_name == COVERAGE_SAFETY_V0_POLICY:
         return _coverage_safety_v0(case)
+    if policy_name == COVERAGE_SAFETY_V1_POLICY:
+        return _coverage_safety_v1(case)
     return _doc_vectors64_125pct(case)
 
 
@@ -138,6 +142,70 @@ def _coverage_safety_v0(
     )
 
 
+def _coverage_safety_v1(
+    case: AddressServeSweepCase,
+) -> CandidateWindowPolicyChoice:
+    if case.candidate_k >= case.document_count:
+        return _coverage_choice_v1(
+            case,
+            candidate_k=case.candidate_k,
+            rationale="the input window already covers every document",
+        )
+    if case.document_count >= 1024:
+        return _coverage_choice_v1(
+            case,
+            candidate_k=case.document_count,
+            rationale=(
+                "documents1024 diagnostics still need a full window for "
+                "coverage against FastPlaid"
+            ),
+        )
+    if case.document_vector_count >= 96:
+        return _coverage_choice_v1(
+            case,
+            candidate_k=min(
+                case.document_count,
+                _ceil_ratio(case.candidate_k, 13, 8),
+            ),
+            rationale=(
+                "post-array-export doc_vectors96 diagnostics falsified "
+                "k=336 and k=384, while k=416 kept recall margin from "
+                "input k=256"
+            ),
+        )
+    if case.document_vector_count >= 64:
+        return _coverage_choice_v1(
+            case,
+            candidate_k=min(
+                case.document_count,
+                _ceil_ratio(case.candidate_k, 17, 16),
+            ),
+            rationale=(
+                "post-array-export doc_vectors64 diagnostics showed k=264 "
+                "only tied FastPlaid CPU recall, while k=272 kept margin "
+                "from input k=256"
+            ),
+        )
+    if case.document_count >= 512:
+        return _coverage_choice_v1(
+            case,
+            candidate_k=min(
+                case.document_count,
+                _ceil_ratio(case.candidate_k, 5, 4),
+            ),
+            rationale=(
+                "post-array-export doc_vectors48 diagnostics showed k=288 "
+                "only tied FastPlaid CPU recall, while k=320 kept margin "
+                "from input k=256"
+            ),
+        )
+    return _coverage_choice_v1(
+        case,
+        candidate_k=case.candidate_k,
+        rationale="no measured coverage risk rule matched this shape",
+    )
+
+
 def _coverage_choice(
     case: AddressServeSweepCase,
     *,
@@ -150,6 +218,21 @@ def _coverage_choice(
         candidate_k=candidate_k,
         policy_kind=COVERAGE_SAFETY_V0_POLICY,
         rationale="Benchmark-only coverage rule: " + rationale + ".",
+    )
+
+
+def _coverage_choice_v1(
+    case: AddressServeSweepCase,
+    *,
+    candidate_k: int,
+    rationale: str,
+) -> CandidateWindowPolicyChoice:
+    return CandidateWindowPolicyChoice(
+        policy_name=COVERAGE_SAFETY_V1_POLICY,
+        input_candidate_k=case.candidate_k,
+        candidate_k=candidate_k,
+        policy_kind=COVERAGE_SAFETY_V1_POLICY,
+        rationale="Benchmark-only tightened coverage rule: " + rationale + ".",
     )
 
 

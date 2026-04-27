@@ -58,7 +58,7 @@ Reason: this family tests below-threshold, threshold, above-threshold, and
 larger-document-count candidate coverage while keeping vector dimension and
 query shape explicit.
 
-## Policy
+## Initial Policy
 
 Added benchmark-only `coverage_safety_v0`:
 
@@ -490,19 +490,151 @@ Updated interpretation: exact rerank is now the dominant resident-selected
 component across the non-full rows. The next optimization should profile the
 exact address scorer before changing candidate generation again.
 
+## Candidate-Window Policy Tightening
+
+Follow-up claim: after removing selected-centroid list materialization,
+`coverage_safety_v0` is conservative on non-full `512`-document rows.
+
+Reason: exact rerank now dominates non-full rows, and exact-rerank work scales
+with effective candidate window size. The policy should therefore use the
+smallest measured-safe window for each explicit vector-count family, not the
+older wider windows.
+
+Added benchmark-only `coverage_safety_v1` while preserving
+`coverage_safety_v0` for artifact reproducibility:
+
+| condition | v0 effective k from input `256` | v1 effective k from input `256` | reason |
+| --- | ---: | ---: | --- |
+| full input window | input k | input k | already covers every document |
+| `document_count >= 1024` | `1024` | `1024` | full-window coverage is still required by the documents1024 diagnostic |
+| `document_vector_count >= 96` | `448` | `416` | `k=336` and `k=384` lost CPU recall, `k=416` kept recall margin |
+| `document_vector_count >= 64` | `320` | `272` | `k=264` only tied CPU recall, `k=272` kept recall margin |
+| otherwise, `document_count >= 512` | `320` | `320` | `k=288` only tied CPU recall, `k=320` kept recall margin |
+| otherwise | input k | input k | no measured coverage-risk rule matched |
+
+Boundary diagnostics:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 360 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_policy.py --case doc_vectors64_k272:documents=512,document_vectors=64,queries=2,query_vectors=8,candidate_k=272 --case doc_vectors96_k352:documents=512,document_vectors=96,queries=2,query_vectors=8,candidate_k=352 --fixed-case-seed --seed 8 --policy-name shape_rule_v0 --fastplaid-devices cpu,cuda --overwrite-index-root --require-fastplaid --allow-missing-gpu --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/boundary_selected_export_k_sweep_cpu_cuda_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/boundary_selected_export_k_sweep_cpu_cuda_reports
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 360 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_policy.py --case doc_vectors96_k352:documents=512,document_vectors=96,queries=2,query_vectors=8,candidate_k=352 --fixed-case-seed --seed 9 --policy-name shape_rule_v0 --fastplaid-devices cpu,cuda --overwrite-index-root --require-fastplaid --allow-missing-gpu --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors96_k352_seed9_selected_export_cpu_cuda_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors96_k352_seed9_selected_export_cpu_cuda_reports
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 360 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_policy.py --case doc_vectors64_k264:documents=512,document_vectors=64,queries=2,query_vectors=8,candidate_k=264 --case doc_vectors96_k336:documents=512,document_vectors=96,queries=2,query_vectors=8,candidate_k=336 --seed 8 --policy-name shape_rule_v0 --fastplaid-devices cpu,cuda --overwrite-index-root --require-fastplaid --allow-missing-gpu --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/boundary_smaller_selected_export_k_sweep_cpu_cuda_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/boundary_smaller_selected_export_k_sweep_cpu_cuda_reports
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 360 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_policy.py --case doc_vectors96_k384:documents=512,document_vectors=96,queries=2,query_vectors=8,candidate_k=384 --case doc_vectors96_k416:documents=512,document_vectors=96,queries=2,query_vectors=8,candidate_k=416 --fixed-case-seed --seed 9 --policy-name shape_rule_v0 --fastplaid-devices cpu,cuda --overwrite-index-root --require-fastplaid --allow-missing-gpu --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors96_margin_selected_export_cpu_cuda_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors96_margin_selected_export_cpu_cuda_reports
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 360 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_policy.py --case doc_vectors48_k288:documents=512,document_vectors=48,queries=2,query_vectors=8,candidate_k=288 --case doc_vectors48_k320:documents=512,document_vectors=48,queries=2,query_vectors=8,candidate_k=320 --fixed-case-seed --seed 7 --policy-name shape_rule_v0 --fastplaid-devices cpu,cuda --overwrite-index-root --require-fastplaid --allow-missing-gpu --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors48_margin_selected_export_cpu_cuda_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors48_margin_selected_export_cpu_cuda_reports
+```
+
+Artifacts:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/boundary_selected_export_k_sweep_cpu_cuda_summary.json`
+- `.cache/kayak/bench_quiet/20260427T195445Z`
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors96_k352_seed9_selected_export_cpu_cuda_summary.json`
+- `.cache/kayak/bench_quiet/20260427T195613Z`
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/boundary_smaller_selected_export_k_sweep_cpu_cuda_summary.json`
+- `.cache/kayak/bench_quiet/20260427T195723Z`
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors96_margin_selected_export_cpu_cuda_summary.json`
+- `.cache/kayak/bench_quiet/20260427T200354Z`
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors48_margin_selected_export_cpu_cuda_summary.json`
+- `.cache/kayak/bench_quiet/20260427T200853Z`
+
+Key boundary results:
+
+| diagnostic | seed | device | k | resident recall | FastPlaid recall | delta |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| `doc_vectors48` | `7` | CPU | `288` | `0.70` | `0.70` | `0.00` |
+| `doc_vectors48` | `7` | CUDA | `288` | `0.70` | `0.65` | `+0.05` |
+| `doc_vectors48` | `7` | CPU | `320` | `0.75` | `0.60` | `+0.15` |
+| `doc_vectors48` | `7` | CUDA | `320` | `0.75` | `0.55` | `+0.20` |
+| `doc_vectors64` | `8` | CPU | `264` | `0.70` | `0.70` | `0.00` |
+| `doc_vectors64` | `8` | CUDA | `264` | `0.70` | `0.65` | `+0.05` |
+| `doc_vectors64` | `8` | CPU | `272` | `0.70` | `0.60` | `+0.10` |
+| `doc_vectors64` | `8` | CUDA | `272` | `0.70` | `0.55` | `+0.15` |
+| `doc_vectors96` | `9` | CPU | `336` | `0.45` | `0.60` | `-0.15` |
+| `doc_vectors96` | `9` | CUDA | `336` | `0.45` | `0.45` | `~0.00` |
+| `doc_vectors96` | `9` | CPU | `352` | `0.55` | `0.45` | `+0.10` |
+| `doc_vectors96` | `9` | CUDA | `352` | `0.55` | `0.50` | `+0.05` |
+| `doc_vectors96` | `9` | CPU | `384` | `0.55` | `0.65` | `-0.10` |
+| `doc_vectors96` | `9` | CUDA | `384` | `0.55` | `0.45` | `+0.10` |
+| `doc_vectors96` | `9` | CPU | `416` | `0.65` | `0.45` | `+0.20` |
+| `doc_vectors96` | `9` | CUDA | `416` | `0.65` | `0.55` | `+0.10` |
+
+Note: `k=352` passed the targeted seed-correct run, but the first full v1
+matrix tied FastPlaid on the `doc_vectors96` CUDA row. Because the next check
+showed `k=384` could lose the CPU row and `k=416` restored margin, the v1 rule
+uses `k=416` for `document_vector_count >= 96`. The corrected full v1 matrix
+then showed `doc_vectors48` at input `k=256` could lose the CUDA row, and the
+doc48 boundary check showed `k=320` was needed for margin.
+
+Decision: use `coverage_safety_v1` as the current optimized benchmark policy.
+
+Reason: it keeps tested recall margin where smaller windows failed or only
+tied, while reducing exact-rerank work for `doc_vectors64` and
+`doc_vectors96` relative to `coverage_safety_v0`.
+
+Final v1 validation:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 360 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_candidate_window_policies.py --candidate-window-policy coverage_safety_v1 --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_v1_margin_doc48_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_v1_margin_doc48_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_v1_margin_doc48_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T201102Z`
+
+Aggregate result:
+
+| policy | rows ok | min recall delta vs FastPlaid | mean resident / FastPlaid | max resident / FastPlaid | candidate agreement min | final agreement min |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `coverage_safety_v1` | `8 / 8` | `+0.04999999999999993` | `0.06651144209959506` | `0.1337171932839994` | `1.0` | `1.0` |
+
+Final row-level policy:
+
+| case | device | effective k | resident recall | FastPlaid recall | delta | resident/FastPlaid |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `doc_vectors48` | CPU | `320` | `0.75` | `0.70` | `+0.05` | `0.029475271155063428` |
+| `doc_vectors48` | CUDA | `320` | `0.75` | `0.70` | `+0.05` | `0.12933153303802733` |
+| `doc_vectors64` | CPU | `272` | `0.70` | `0.65` | `+0.05` | `0.02081954120606805` |
+| `doc_vectors64` | CUDA | `272` | `0.70` | `0.65` | `+0.05` | `0.10196086550216815` |
+| `doc_vectors96` | CPU | `416` | `0.65` | `0.50` | `+0.15` | `0.018006848910618156` |
+| `doc_vectors96` | CUDA | `416` | `0.65` | `0.50` | `+0.15` | `0.1337171932839994` |
+| `documents1024_k256` | CPU | `1024` | `1.00` | `0.40` | `+0.60` | `0.02080679534720898` |
+| `documents1024_k256` | CUDA | `1024` | `1.00` | `0.40` | `+0.60` | `0.07797348835360701` |
+
+Same-run v0/v1 comparison:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 600 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_candidate_window_policies.py --candidate-window-policy coverage_safety_v0 --candidate-window-policy coverage_safety_v1 --baseline-candidate-window-policy coverage_safety_v0 --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_v0_vs_v1_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_v0_vs_v1_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_v0_vs_v1_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T201358Z`
+
+| policy | min recall delta vs FastPlaid | mean resident / FastPlaid | max resident / FastPlaid | mean effective/input k |
+| --- | ---: | ---: | ---: | ---: |
+| `coverage_safety_v0` | `+0.050000000000000044` | `0.06340819984704259` | `0.13575130609239697` | `2.0625` |
+| `coverage_safety_v1` | `+0.04999999999999993` | `0.061916783855300556` | `0.12656092608022257` | `1.984375` |
+
+Interpretation: v1 is latency-tighter under the FastPlaid-quality contract,
+not a strict recall Pareto improvement over v0. In the same-run comparison,
+v1 kept non-negative recall margin versus FastPlaid on every row and improved
+mean and max resident/FastPlaid ratios, but its recall was lower than v0 on
+some `doc_vectors64` and `doc_vectors96` rows.
+
 ## Decision
 
-Keep `coverage_safety_v0` as the next benchmark policy candidate.
+Keep `coverage_safety_v1` as the current optimized benchmark policy candidate.
 
-Reason: on the generalized synthetic matrix it repaired the input-window recall
-failures while staying below `0.40x` FastPlaid batch time on every CPU/CUDA row.
+Reason: it is the latency-tighter measured-safe non-full policy after the
+current bridge and ranking optimizations, while `coverage_safety_v0` remains
+available for reproducing older trace artifacts and for quality-biased
+comparisons.
 
 Do not promote it to a public default yet.
 
-Reason: the policy is deliberately conservative, can use full windows for
-`document_count >= 1024`, and has only been validated on synthetic dim128
-families. It is a good benchmark policy for the next primitive, not a serving
-policy.
+Reason: the policy can still use full windows for `document_count >= 1024`,
+and has only been validated on synthetic dim128 families. It is a good
+benchmark policy for the next primitive, not a serving policy.
 
 ## Next
 
