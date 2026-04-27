@@ -410,6 +410,86 @@ component. In the current worst CUDA row, CPU centroid selection is roughly
 `41%` of resident selected time. The next optimization should inspect exact
 rerank and CPU centroid selection before assuming which one has more headroom.
 
+## Selected-Centroid Array Export
+
+Follow-up claim: CPU selected-centroid export should fill typed arrays directly
+instead of returning nested Python lists.
+
+Reason: the resident selected-posting path immediately converts selected
+centroid positions and scores back into `Int64` and `Float32` arrays before
+sending them to the GPU. Returning lists makes Python object materialization
+part of the measured CPU selected-centroid boundary, even though the next stage
+needs contiguous arrays.
+
+Local focused check:
+
+```bash
+pixi run env PYTHONPATH=python:python/scripts python -c 'import timeit; from bench_fastplaid_speed_track import SpeedTrackShape, build_synthetic_inputs; from kayak_bridge.plaid_approx import KayakPlaidApproxConfig, KayakPlaidApproxIndex; shape=SpeedTrackShape(document_count=512, document_vector_count=48, query_count=2, query_vector_count=8, vector_dim=128, top_k=10, update_document_count=0); inputs=build_synthetic_inputs(shape, seed=7, normalize_vectors=False); index=KayakPlaidApproxIndex.build(doc_ids=inputs.doc_ids, documents=inputs.documents, config=KayakPlaidApproxConfig(centroid_count=128, centroids_per_query_vector=24, candidate_k=320, payload="i8"), final_k=10); print(timeit.timeit(lambda: index.i8_selected_centroids_batch(inputs.queries, centroids_per_query_vector=24), number=1000)); selected=index.i8_selected_centroids_batch(inputs.queries, centroids_per_query_vector=24); print(timeit.timeit(lambda: (selected.positions_array(), selected.scores_array()), number=10000)); legacy=index.i8_selected_centroids_batch_legacy_lists(inputs.queries, centroids_per_query_vector=24); print((selected.positions_array()==legacy.positions_array()).all(), abs(selected.scores_array()-legacy.scores_array()).max())'
+```
+
+Result:
+
+| measurement | before | after |
+| --- | ---: | ---: |
+| selected-centroid export, 1000 calls | `0.23306827500346117` | `0.06276784299552673` |
+| `positions_array()`/`scores_array()`, 10000 calls | `0.1013079350013868` | `0.0013429950049612671` |
+| positions equal to legacy list export | n/a | `True` |
+| max score delta versus legacy list export | n/a | `0.0` |
+
+Targeted validation:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 300 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_policy.py --case doc_vectors48:documents=512,document_vectors=48,queries=2,query_vectors=8,candidate_k=256 --candidate-window-policy coverage_safety_v0 --fastplaid-devices cuda --seed 7 --fixed-case-seed --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors48_selected_centroid_array_export_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors48_selected_centroid_array_export_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/doc_vectors48_selected_centroid_array_export_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T193717Z`
+
+Targeted `doc_vectors48` CUDA result:
+
+| metric | guarded partial ranking | selected-centroid array export |
+| --- | ---: | ---: |
+| resident / FastPlaid | `0.17605215330541546` | `0.1302957418231845` |
+| CPU selected-centroid share | `0.39058932579864264` | `0.18063840676669618` |
+| candidate share | `0.1998876751902321` | `0.2723268252614697` |
+| exact share | `0.4095229990111252` | `0.5470347679718341` |
+| candidate agreement min | `1.0` | `1.0` |
+| final agreement min | `1.0` | `1.0` |
+
+Full matrix validation:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 360 --force -- pixi run env UV_CACHE_DIR=.cache/uv uv run --python 3.11 --with fast-plaid==1.4.6.2110 python python/scripts/compare_gpu_i8_fastplaid_candidate_window_policies.py --candidate-window-policy coverage_safety_v0 --allow-missing-gpu --require-fastplaid --overwrite-index-root --emit-quiet-mean --output .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_selected_centroid_array_export_summary.json --report-root .cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_selected_centroid_array_export_reports
+```
+
+Artifact:
+
+- `.cache/kayak/gpu_i8_fastplaid_candidate_window_policies/coverage_safety_selected_centroid_array_export_summary.json`
+- quiet log: `.cache/kayak/bench_quiet/20260427T193808Z`
+
+Aggregate result:
+
+| version | rows ok | min recall delta vs FastPlaid | mean resident / FastPlaid | max resident / FastPlaid | mean CPU select share | mean candidate share | mean exact share |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| guarded partial ranking fast path | `8 / 8` | `+0.050000000000000044` | `0.08161427814748465` | `0.1855417397226204` | `0.21925823643775907` | `0.1321313879906215` | `0.6486103755716195` |
+| selected-centroid array export | `8 / 8` | `+0.050000000000000044` | `0.06363883871257384` | `0.136749921661277` | `0.09932719207595908` | `0.16042751747461778` | `0.7402452904494231` |
+
+Environment note: a non-escalated full-matrix run failed with `No CUDA GPUs
+are available`. The comparable matrix above was rerun with GPU access enabled.
+
+Decision: keep selected-centroid array export.
+
+Reason: it removes Python list materialization from a measured bridge boundary,
+keeps exact equality with the legacy list export in the focused test, preserves
+candidate/final agreement at `1.0`, and improves both the matrix mean and max
+ratios.
+
+Updated interpretation: exact rerank is now the dominant resident-selected
+component across the non-full rows. The next optimization should profile the
+exact address scorer before changing candidate generation again.
+
 ## Decision
 
 Keep `coverage_safety_v0` as the next benchmark policy candidate.
@@ -426,10 +506,8 @@ policy.
 
 ## Next
 
-The next optimization target is now the split between exact rerank and CPU
-selected-centroid work:
+The next optimization target is now exact rerank:
 
 - inspect the resident exact-rerank call path for avoidable host overhead
-- inspect selected-centroid scoring/selection for vectorized or resident-device
-  alternatives
+- profile the address scorer kernels versus readback and host top-k
 - test larger or real encoded corpora before claiming a backend-level win

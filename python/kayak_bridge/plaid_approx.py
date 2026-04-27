@@ -111,8 +111,8 @@ class KayakPlaidI8PayloadSnapshot:
 class KayakPlaidI8SelectedCentroids:
     """Selected centroid ids and scores for benchmark-only GPU probes."""
 
-    positions_by_query: tuple[tuple[int, ...], ...]
-    scores_by_query: tuple[tuple[float, ...], ...]
+    positions_by_query: Sequence[Sequence[int]] | np.ndarray
+    scores_by_query: Sequence[Sequence[float]] | np.ndarray
     query_count: int
     query_vector_count: int
     centroids_per_query_vector: int
@@ -431,6 +431,58 @@ class KayakPlaidApproxIndex:
         return tuple(tuple(float(score) for score in row) for row in rows)
 
     def i8_selected_centroids_batch(
+        self,
+        queries: np.ndarray,
+        *,
+        centroids_per_query_vector: int | None = None,
+    ) -> KayakPlaidI8SelectedCentroids:
+        if self.config.payload != PLAID_PAYLOAD_I8:
+            raise ValueError("i8 selected centroids require payload='i8'")
+        normalized_queries = _as_query_tensor(queries, vector_dim=self.vector_dim)
+        centroid_budget = (
+            self.config.centroids_per_query_vector
+            if centroids_per_query_vector is None
+            else int(centroids_per_query_vector)
+        )
+        _require_positive("centroids_per_query_vector", centroid_budget)
+        module = load_module()
+        selected_per_query = int(normalized_queries.shape[1]) * centroid_budget
+        positions = np.empty(
+            (int(normalized_queries.shape[0]), selected_per_query),
+            dtype=INDEX_OFFSET_DTYPE,
+        )
+        scores = np.empty(
+            (int(normalized_queries.shape[0]), selected_per_query),
+            dtype=VECTOR_DTYPE,
+        )
+        selected_count = int(
+            module.plaid_i8_selected_centroids_prepared_batch_address_into(
+                [
+                    int(normalized_queries.ctypes.data),
+                    int(normalized_queries.shape[0]),
+                    int(normalized_queries.shape[1]),
+                    centroid_budget,
+                    int(positions.ctypes.data),
+                    int(scores.ctypes.data),
+                    self._prepared_index,
+                ]
+            )
+        )
+        if selected_count != positions.size:
+            raise RuntimeError(
+                "selected centroid export filled the wrong element count"
+            )
+        selected = KayakPlaidI8SelectedCentroids(
+            positions_by_query=positions,
+            scores_by_query=scores,
+            query_count=int(normalized_queries.shape[0]),
+            query_vector_count=int(normalized_queries.shape[1]),
+            centroids_per_query_vector=centroid_budget,
+        )
+        selected.validate()
+        return selected
+
+    def i8_selected_centroids_batch_legacy_lists(
         self,
         queries: np.ndarray,
         *,

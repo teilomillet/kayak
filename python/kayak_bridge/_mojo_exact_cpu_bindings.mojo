@@ -1192,6 +1192,78 @@ def plaid_i8_selected_centroids_prepared_batch_address(
     return result
 
 
+def plaid_i8_selected_centroids_prepared_batch_address_into(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var positions_address = Int(py=py_request[4])
+    var scores_address = Int(py=py_request[5])
+    if positions_address == 0:
+        raise Error("selected centroid positions address must be non-zero")
+    if scores_address == 0:
+        raise Error("selected centroid scores address must be non-zero")
+    if centroids_per_query_vector <= 0:
+        raise Error("centroids_per_query_vector must be positive")
+
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    var prepared_index = py_request[6].downcast_value_ptr[
+        PreparedPlaidApproxI8Index
+    ]()
+    var selected_per_query = query_vector_count * centroids_per_query_vector
+    var positions_out = UnsafePointer[Int64, MutAnyOrigin](
+        unsafe_from_address=positions_address
+    )
+    var scores_out = UnsafePointer[Float32, MutAnyOrigin](
+        unsafe_from_address=scores_address
+    )
+
+    for query_index in range(len(queries)):
+        var query = queries[query_index].copy()
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        var centroid_scores_by_query_vector = (
+            build_i8_centroid_scores_by_query_vector(query, prepared_index[])
+        )
+        var centroid_positions_by_query_vector = (
+            build_i8_centroid_positions_by_query_vector(
+                centroid_scores_by_query_vector,
+                centroids_per_query_vector,
+            )
+        )
+        var query_base = query_index * selected_per_query
+        for query_vector_index in range(
+            len(centroid_positions_by_query_vector)
+        ):
+            var vector_base = (
+                query_base + query_vector_index * centroids_per_query_vector
+            )
+            for selected_offset in range(
+                len(centroid_positions_by_query_vector[query_vector_index])
+            ):
+                var centroid_position = centroid_positions_by_query_vector[
+                    query_vector_index
+                ][selected_offset]
+                var out_index = vector_base + selected_offset
+                positions_out[out_index] = Int64(centroid_position)
+                scores_out[out_index] = Float32(
+                    centroid_scores_by_query_vector[query_vector_index][
+                        centroid_position
+                    ]
+                )
+
+    return Python.int(query_count * selected_per_query)
+
+
 def plaid_i8_candidate_scores_prepared_batch(
     py_query_batch_values: PythonObject,
     py_candidate_positions_batch: PythonObject,
@@ -1458,6 +1530,15 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
             docstring=(
                 "Export selected int8 PLAID centroid positions and proxy"
                 " scores from a contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            plaid_i8_selected_centroids_prepared_batch_address_into
+        ](
+            "plaid_i8_selected_centroids_prepared_batch_address_into",
+            docstring=(
+                "Fill selected int8 PLAID centroid position and score arrays"
+                " from a contiguous float32 query tensor address."
             ),
         )
         module.def_function[

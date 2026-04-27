@@ -340,6 +340,8 @@ class FastPlaidSpeedTrackTests(unittest.TestCase):
         self.assertEqual(selected.centroids_per_query_vector, 1)
         self.assertEqual(selected.selected_centroid_count_per_query, 2)
         self.assertEqual(selected.selected_centroid_count_total, 2)
+        self.assertIsInstance(selected.positions_by_query, np.ndarray)
+        self.assertIsInstance(selected.scores_by_query, np.ndarray)
         self.assertEqual(len(selected.positions_by_query), 1)
         self.assertEqual(len(selected.positions_by_query[0]), 2)
         self.assertEqual(len(selected.scores_by_query[0]), 2)
@@ -348,6 +350,16 @@ class FastPlaidSpeedTrackTests(unittest.TestCase):
         for position in selected.positions_by_query[0]:
             self.assertGreaterEqual(position, 0)
             self.assertLess(position, index.centroid_count)
+
+        legacy = index.i8_selected_centroids_batch_legacy_lists(queries)
+        np.testing.assert_array_equal(
+            selected.positions_array(),
+            legacy.positions_array(),
+        )
+        np.testing.assert_allclose(
+            selected.scores_array(),
+            legacy.scores_array(),
+        )
 
     def test_script_emits_kayak_only_smoke_report(self) -> None:
         temp_root = Path(tempfile.mkdtemp())
