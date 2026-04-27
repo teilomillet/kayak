@@ -37,6 +37,7 @@ class PlaidTaskCandidateProfileTests(unittest.TestCase):
         summary = aggregate_profile_rows(
             (
                 {
+                    "candidate_window_mode": "posting_candidate_generation",
                     "candidate_document_vector_count": 64,
                     "candidate_i8_token_payload_bytes_estimate": 8448,
                     "nextplaid_4bit_residual_bytes_estimate": 4096,
@@ -55,6 +56,7 @@ class PlaidTaskCandidateProfileTests(unittest.TestCase):
                     },
                 },
                 {
+                    "candidate_window_mode": "full_window_short_circuit",
                     "candidate_document_vector_count": 128,
                     "candidate_i8_token_payload_bytes_estimate": 16896,
                     "nextplaid_4bit_residual_bytes_estimate": 8192,
@@ -76,6 +78,8 @@ class PlaidTaskCandidateProfileTests(unittest.TestCase):
         )
 
         self.assertEqual(summary["query_count"], 2)
+        self.assertEqual(summary["posting_candidate_generation_query_count"], 1)
+        self.assertEqual(summary["full_window_short_circuit_query_count"], 1)
         self.assertEqual(summary["candidate_document_vector_count_mean"], 96.0)
         self.assertEqual(summary["posting_visit_count_mean"], 150.0)
         self.assertEqual(summary["candidate_recall_at_k_vs_exact_mean"], 0.75)

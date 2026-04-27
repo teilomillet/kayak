@@ -250,6 +250,11 @@ def profile_query(
     candidate_doc_ids = tuple(
         plaid_index.doc_ids[position] for position in candidate_positions
     )
+    candidate_window_mode = (
+        "full_window_short_circuit"
+        if controls.candidate_k >= plaid_index.document_count
+        else "posting_candidate_generation"
+    )
     candidate_vector_count = candidate_document_vector_count(
         plaid_index.document_vector_counts,
         candidate_positions,
@@ -257,6 +262,7 @@ def profile_query(
     row: dict[str, Any] = {
         "query_index": query_index,
         "query_vector_count": late_query.vector_count,
+        "candidate_window_mode": candidate_window_mode,
         "candidate_count": len(candidate_positions),
         "candidate_document_vector_count": candidate_vector_count,
         "candidate_i8_token_payload_bytes_estimate": (
@@ -327,6 +333,16 @@ def aggregate_profile_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         )
     )
     summary["query_count"] = len(rows)
+    summary["posting_candidate_generation_query_count"] = sum(
+        1
+        for row in rows
+        if row.get("candidate_window_mode") == "posting_candidate_generation"
+    )
+    summary["full_window_short_circuit_query_count"] = sum(
+        1
+        for row in rows
+        if row.get("candidate_window_mode") == "full_window_short_circuit"
+    )
     return summary
 
 

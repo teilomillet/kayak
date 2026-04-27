@@ -159,6 +159,8 @@ What it measures:
 - real encoded task JSON, not synthetic tensors only
 - PLAID i8 candidate-generation substeps through the same Mojo prepared i8
   index path used by the GPU work
+- whether each row used posting candidate generation or a full-window
+  short-circuit
 - posting visits and touched documents from the existing Mojo profile
 - candidate document-vector count
 - Kayak i8 token payload byte estimate for candidate rerank
