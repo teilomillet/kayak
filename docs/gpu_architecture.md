@@ -40,6 +40,10 @@ Date: `2026-04-27`
   the repo path is inserted inside Python. Starting Python with
   `PYTHONPATH=python` can make Mojo GPU context creation fail locally with NVML
   error `9`, so GPU benchmark tasks must not use that environment variable.
+- In the FastPlaid comparison process, Mojo GPU capability should be probed
+  before running FastPlaid/Torch work. A CPU-only FastPlaid run was observed to
+  leave later `gpu-query` calls in the same benchmark path with NVML error `9`.
+  The comparison script now records capability before benchmarking FastPlaid.
 
 Reason for recording these facts: the GPU layer should start from observed
 repo contracts and local capability probes, not from a FastPlaid-shaped
@@ -1033,10 +1037,19 @@ evidence only justifies a measured primitive.
    result: fused device top-k is fast (`0.0041x` to `0.0301x` FastPlaid
    full-search time) but recall is too low (`0.0` to `0.1`) to promote as final
    search output.
-39. Test fused GPU shortlist generation plus exact candidate rerank. This is
-   the next measurable attempt to keep address-window recall while removing CPU
-   candidate-generation cost.
-40. Only after a measured win, consider public API design.
+39. Test fused GPU shortlist generation plus exact candidate rerank. Current
+   quiet result: `shortlist_k=256` recovers the address-window recall on the
+   wide policy rows and exact-rerank agreement is `1.0`, but the hybrid path
+   costs about `5.15ms` to `5.68ms` per window and exact rerank is only about
+   `2.2%` to `5.1%` of that time. Raw shortlist sweeps at `64`, `128`, and
+   `192` are faster but lose recall. This rejects exact rerank as the next
+   optimization target and points back to candidate-window generation.
+40. Add a serving-shaped candidate-window output for the selected-posting
+   accumulation primitive so it can feed exact rerank directly. Reason: the
+   posting-accumulation probe already shows exact agreement and a promising
+   candidate-generation ratio, but it does not yet return candidate positions
+   as a reusable pipeline primitive.
+41. Only after a measured win, consider public API design.
 
 ## Falsification Conditions
 

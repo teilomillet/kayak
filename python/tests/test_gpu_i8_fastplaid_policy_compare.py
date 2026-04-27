@@ -31,6 +31,7 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
             policy_name="shape_rule_v0",
             seed=7,
             kayak_i8_positive_centroids_only=True,
+            gpu_hybrid_shortlist_k=128,
         )
 
         argv = policy_compare.compare_argv_for_case(
@@ -52,6 +53,7 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
         )
         self.assertEqual(_arg_value(argv, "--kayak-i8-candidate-order"), "unordered")
         self.assertEqual(_arg_value(argv, "--fastplaid-device"), "cuda")
+        self.assertEqual(_arg_value(argv, "--gpu-hybrid-shortlist-k"), "128")
         self.assertIn("--allow-missing-gpu", argv)
         self.assertIn("--require-fastplaid", argv)
         self.assertIn("--overwrite-index-root", argv)
@@ -93,6 +95,14 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
                     "recall_at_k_vs_kayak_exact": 0.6,
                     "device_topk_position_agreement": 1.0,
                 },
+                "gpu_hybrid_shortlist_exact_rerank_vs_fastplaid_scope_comparison": {
+                    "gpu_hybrid_seconds_per_window": 0.0005,
+                    "gpu_hybrid_seconds_per_fastplaid_batch_second": 0.05,
+                    "gpu_hybrid_exact_rerank_share": 0.4,
+                    "recall_at_k_vs_kayak_exact": 0.65,
+                    "final_topk_position_agreement": 1.0,
+                    "shortlist_k": 256,
+                },
             },
             report_path=Path("row.json"),
         )
@@ -113,6 +123,12 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
             0.03,
         )
         self.assertAlmostEqual(row["gpu_fused_recall_delta_vs_fastplaid"], 0.2)
+        self.assertEqual(row["gpu_hybrid_shortlist_k"], 256)
+        self.assertEqual(
+            row["gpu_hybrid_seconds_per_fastplaid_batch_second"],
+            0.05,
+        )
+        self.assertAlmostEqual(row["gpu_hybrid_recall_delta_vs_fastplaid"], 0.25)
         self.assertEqual(row["cpu_candidate_generation_share_of_envelope"], 0.6)
         self.assertEqual(row["gpu_topk_no_reference_share_of_envelope"], 0.4)
         self.assertEqual(
@@ -130,6 +146,18 @@ class GpuI8FastPlaidPolicyCompareTests(unittest.TestCase):
                 "max_gpu_fused_device_topk_seconds_per_fastplaid_batch_second"
             ],
             0.03,
+        )
+        self.assertEqual(
+            policy_compare.summary_payload([row])[
+                "max_gpu_hybrid_seconds_per_fastplaid_batch_second"
+            ],
+            0.05,
+        )
+        self.assertEqual(
+            policy_compare.summary_payload([row])[
+                "gpu_hybrid_final_topk_position_agreement_min"
+            ],
+            1.0,
         )
 
 

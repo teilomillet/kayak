@@ -26,6 +26,14 @@ from kayak_bridge.gpu_i8_fastplaid_fused_scope import (  # noqa: E402
     build_fused_centroid_posting_scope_row,
     build_missing_fused_centroid_posting_scope_row,
 )
+from kayak_bridge.gpu_i8_fastplaid_hybrid_metrics import (  # noqa: E402
+    STATUS_BLOCKED_GPU_HYBRID_FAILED,
+    build_gpu_hybrid_shortlist_exact_rerank_vs_fastplaid_comparison,
+)
+from kayak_bridge.gpu_i8_fastplaid_hybrid_scope import (  # noqa: E402
+    build_hybrid_shortlist_exact_rerank_scope_row,
+    build_missing_hybrid_shortlist_exact_rerank_scope_row,
+)
 from kayak_bridge.gpu_i8_fastplaid_topk_compare import (  # noqa: E402
     build_missing_prepared_handle_topk_scope_row,
     build_prepared_handle_topk_scope_row,
@@ -76,6 +84,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--query-vector-count", type=int, default=8)
     parser.add_argument("--vector-dim", type=int, default=128)
     parser.add_argument("--candidate-k", type=int, default=128)
+    parser.add_argument(
+        "--gpu-hybrid-shortlist-k",
+        type=int,
+        default=None,
+        help=(
+            "Optional fused-shortlist size for the hybrid GPU primitive. "
+            "Defaults to candidate-k clipped to document-count."
+        ),
+    )
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument(
@@ -199,6 +216,15 @@ def build_shape(args: argparse.Namespace) -> SpeedTrackShape:
         )
     if args.candidate_k < shape.top_k:
         raise ValueError("candidate_k must be greater than or equal to top_k")
+    if args.gpu_hybrid_shortlist_k is not None:
+        if args.gpu_hybrid_shortlist_k < shape.top_k:
+            raise ValueError(
+                "gpu_hybrid_shortlist_k must be greater than or equal to top_k"
+            )
+        if args.gpu_hybrid_shortlist_k > shape.document_count:
+            raise ValueError(
+                "gpu_hybrid_shortlist_k must be no larger than document_count"
+            )
     if args.gpu_topk_session_iterations <= 0:
         raise ValueError("gpu_topk_session_iterations must be positive")
     if (
@@ -216,16 +242,17 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
         seed=args.seed,
         normalize_vectors=args.normalize_vectors,
     )
+    capability = probe_mojo_gpu(args.gpu_query_command)
     systems, reference_positions = benchmark_system_rows(
         shape=shape,
         inputs=inputs,
         args=args,
     )
 
-    capability = probe_mojo_gpu(args.gpu_query_command)
     gpu_probe: dict[str, object] | None = None
     prepared_handle_topk_row: dict[str, Any] | None = None
     fused_centroid_posting_row: dict[str, Any] | None = None
+    hybrid_shortlist_rerank_row: dict[str, Any] | None = None
     if capability.available:
         gpu_probe = run_gpu_i8_candidate_score_probe(
             shape,
@@ -245,6 +272,15 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             reference_positions=reference_positions,
             capability=capability,
             args=args,
+        )
+        hybrid_shortlist_rerank_row = (
+            build_hybrid_shortlist_exact_rerank_scope_row(
+                shape=shape,
+                inputs=inputs,
+                reference_positions=reference_positions,
+                capability=capability,
+                args=args,
+            )
         )
 
     fastplaid_row = _system_by_name(systems, "fastplaid")
@@ -276,11 +312,18 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             fastplaid_row=fastplaid_row,
         )
     )
+    hybrid_shortlist_rerank_comparison = (
+        build_gpu_hybrid_shortlist_exact_rerank_vs_fastplaid_comparison(
+            hybrid_row=hybrid_shortlist_rerank_row,
+            fastplaid_row=fastplaid_row,
+        )
+    )
     status = report_status(
         capability=capability,
         gpu_probe=gpu_probe,
         prepared_handle_topk_row=prepared_handle_topk_row,
         fused_centroid_posting_row=fused_centroid_posting_row,
+        hybrid_shortlist_rerank_row=hybrid_shortlist_rerank_row,
         fastplaid_row=fastplaid_row,
     )
 
@@ -319,6 +362,15 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
                     capability=capability,
                 )
             ),
+            "gpu_hybrid_shortlist_exact_rerank_primitive": (
+                hybrid_shortlist_rerank_row
+                if hybrid_shortlist_rerank_row is not None
+                else build_missing_hybrid_shortlist_exact_rerank_scope_row(
+                    shape=shape,
+                    candidate_k=args.candidate_k,
+                    capability=capability,
+                )
+            ),
             "gpu_vs_fastplaid_scope_comparison": comparison,
             "gpu_prepared_handle_topk_vs_fastplaid_scope_comparison": (
                 prepared_handle_topk_comparison
@@ -329,6 +381,9 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
             "gpu_fused_centroid_posting_vs_fastplaid_scope_comparison": (
                 fused_centroid_posting_comparison
             ),
+            "gpu_hybrid_shortlist_exact_rerank_vs_fastplaid_scope_comparison": (
+                hybrid_shortlist_rerank_comparison
+            ),
             "measurement_note": (
                 "FastPlaid rows are full-search timings. The GPU row is a "
                 "benchmark-only candidate-score primitive over deterministic "
@@ -338,7 +393,9 @@ def build_report(args: argparse.Namespace) -> tuple[dict[str, Any], MojoGpuCapab
                 "a full search backend. The fused centroid-posting row keeps "
                 "candidate generation inside the GPU primitive and returns "
                 "top-k positions from the prepared payload, but is also still "
-                "an internal primitive. The no-reference top-k comparisons "
+                "an internal primitive. The hybrid row uses fused GPU scores "
+                "only for shortlisting, then exact-reranks that shortlist with "
+                "the GPU address scorer. The no-reference top-k comparisons "
                 "keep CPU reference scores out of the Mojo serving calls and "
                 "use them only for post-call validation. The positive-centroid "
                 "candidate option applies only to the address-window row and "
@@ -369,6 +426,7 @@ def controls_payload(args: argparse.Namespace) -> dict[str, object]:
         ),
         "kayak_plaid_candidate_k": args.candidate_k,
         "kayak_plaid_payload": "i8",
+        "gpu_hybrid_shortlist_k": args.gpu_hybrid_shortlist_k,
         "kayak_i8_candidate_order": args.kayak_i8_candidate_order,
         "kayak_i8_positive_centroids_only": (
             args.kayak_i8_positive_centroids_only
@@ -536,6 +594,7 @@ def report_status(
     gpu_probe: dict[str, object] | None,
     prepared_handle_topk_row: dict[str, Any] | None,
     fused_centroid_posting_row: dict[str, Any] | None,
+    hybrid_shortlist_rerank_row: dict[str, Any] | None,
     fastplaid_row: dict[str, Any] | None,
 ) -> str:
     if fastplaid_row is None or fastplaid_row.get("status") != STATUS_OK:
@@ -559,6 +618,11 @@ def report_status(
         or fused_centroid_posting_row.get("status") != STATUS_OK
     ):
         return STATUS_BLOCKED_GPU_FUSED_HANDLE_FAILED
+    if (
+        hybrid_shortlist_rerank_row is None
+        or hybrid_shortlist_rerank_row.get("status") != STATUS_OK
+    ):
+        return STATUS_BLOCKED_GPU_HYBRID_FAILED
     return STATUS_OK
 
 
@@ -651,6 +715,32 @@ def print_quiet_sections(report: dict[str, Any]) -> None:
         if isinstance(ratio, (float, int)):
             print("== kayak_gpu_i8_fused_device_topk_per_fastplaid_batch ==")
             print("Mean:", ratio)
+    hybrid = report.get("gpu_hybrid_shortlist_exact_rerank_primitive")
+    if isinstance(hybrid, dict):
+        parsed = hybrid.get("parsed")
+        if isinstance(parsed, dict):
+            hybrid_seconds = parsed.get("hybrid_extension_seconds_per_window")
+            fused_seconds = parsed.get("fused_device_topk_seconds_per_window")
+            exact_seconds = parsed.get("exact_rerank_topk_seconds_per_window")
+            if isinstance(hybrid_seconds, (float, int)):
+                print("== kayak_gpu_i8_hybrid_per_window ==")
+                print("Mean:", hybrid_seconds)
+            if isinstance(fused_seconds, (float, int)):
+                print("== kayak_gpu_i8_hybrid_fused_shortlist_per_window ==")
+                print("Mean:", fused_seconds)
+            if isinstance(exact_seconds, (float, int)):
+                print("== kayak_gpu_i8_hybrid_exact_rerank_per_window ==")
+                print("Mean:", exact_seconds)
+    hybrid_comparison = report.get(
+        "gpu_hybrid_shortlist_exact_rerank_vs_fastplaid_scope_comparison"
+    )
+    if isinstance(hybrid_comparison, dict):
+        ratio = hybrid_comparison.get(
+            "gpu_hybrid_seconds_per_fastplaid_batch_second"
+        )
+        if isinstance(ratio, (float, int)):
+            print("== kayak_gpu_i8_hybrid_per_fastplaid_batch ==")
+            print("Mean:", ratio)
 
 
 def exit_code(
@@ -675,6 +765,8 @@ def exit_code(
         return 6
     if status == STATUS_BLOCKED_GPU_FUSED_HANDLE_FAILED:
         return 7
+    if status == STATUS_BLOCKED_GPU_HYBRID_FAILED:
+        return 8
     return 5
 
 

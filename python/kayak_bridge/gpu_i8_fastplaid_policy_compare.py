@@ -31,6 +31,7 @@ class FastPlaidPolicyCompareControls:
     kayak_i8_candidate_order: str = "unordered"
     kayak_i8_positive_centroids_only: bool = False
     fastplaid_devices: tuple[str, ...] = ("cpu", "cuda")
+    gpu_hybrid_shortlist_k: int | None = None
 
     def validate(self) -> None:
         if self.vector_dim != 128:
@@ -43,6 +44,13 @@ class FastPlaidPolicyCompareControls:
             raise ValueError("measurement_iterations must be positive")
         if self.gpu_topk_session_iterations <= 0:
             raise ValueError("gpu_topk_session_iterations must be positive")
+        if (
+            self.gpu_hybrid_shortlist_k is not None
+            and self.gpu_hybrid_shortlist_k < self.top_k
+        ):
+            raise ValueError(
+                "gpu_hybrid_shortlist_k must be greater than or equal to top_k"
+            )
         if self.kayak_i8_candidate_order not in {"ordered", "unordered"}:
             raise ValueError("kayak_i8_candidate_order must be ordered or unordered")
         if (
@@ -62,6 +70,7 @@ class FastPlaidPolicyCompareControls:
             "warmup_iterations": self.warmup_iterations,
             "measurement_iterations": self.measurement_iterations,
             "gpu_topk_session_iterations": self.gpu_topk_session_iterations,
+            "gpu_hybrid_shortlist_k": self.gpu_hybrid_shortlist_k,
             "kayak_i8_candidate_order": self.kayak_i8_candidate_order,
             "kayak_i8_positive_centroids_only": (
                 self.kayak_i8_positive_centroids_only
@@ -95,6 +104,13 @@ def compare_argv_for_case(
     overwrite_index_root: bool,
 ) -> list[str]:
     controls.validate()
+    if (
+        controls.gpu_hybrid_shortlist_k is not None
+        and controls.gpu_hybrid_shortlist_k > case.document_count
+    ):
+        raise ValueError(
+            "gpu_hybrid_shortlist_k must be no larger than document_count"
+        )
     choice = choose_policy_budget(controls.policy_name, case)
     argv = [
         "--document-count",
@@ -140,6 +156,13 @@ def compare_argv_for_case(
         argv.append("--overwrite-index-root")
     if controls.kayak_i8_positive_centroids_only:
         argv.append("--kayak-i8-positive-centroids-only")
+    if controls.gpu_hybrid_shortlist_k is not None:
+        argv.extend(
+            [
+                "--gpu-hybrid-shortlist-k",
+                str(controls.gpu_hybrid_shortlist_k),
+            ]
+        )
     return argv
 
 
@@ -163,6 +186,10 @@ def summarize_case_device_report(
         "gpu_fused_centroid_posting_vs_fastplaid_scope_comparison",
         {},
     )
+    hybrid_comparison = report.get(
+        "gpu_hybrid_shortlist_exact_rerank_vs_fastplaid_scope_comparison",
+        {},
+    )
     candidate_seconds = _optional_float(
         comparison.get("cpu_candidate_generation_seconds_per_window")
     )
@@ -184,6 +211,17 @@ def summarize_case_device_report(
     )
     fused_recall = _optional_float(
         fused_comparison.get("recall_at_k_vs_kayak_exact")
+    )
+    hybrid_seconds = _optional_float(
+        hybrid_comparison.get("gpu_hybrid_seconds_per_window")
+    )
+    hybrid_ratio = _optional_float(
+        hybrid_comparison.get(
+            "gpu_hybrid_seconds_per_fastplaid_batch_second"
+        )
+    )
+    hybrid_recall = _optional_float(
+        hybrid_comparison.get("recall_at_k_vs_kayak_exact")
     )
     fastplaid_recall = _optional_float(
         fastplaid.get("recall_at_k_vs_kayak_exact") if fastplaid else None
@@ -248,6 +286,23 @@ def summarize_case_device_report(
         "gpu_fused_device_topk_position_agreement": _optional_float(
             fused_comparison.get("device_topk_position_agreement")
         ),
+        "gpu_hybrid_seconds_per_window": hybrid_seconds,
+        "gpu_hybrid_seconds_per_fastplaid_batch_second": hybrid_ratio,
+        "gpu_hybrid_exact_rerank_share": _optional_float(
+            hybrid_comparison.get("gpu_hybrid_exact_rerank_share")
+        ),
+        "gpu_hybrid_recall_at_k_vs_kayak_exact": hybrid_recall,
+        "gpu_hybrid_recall_delta_vs_fastplaid": (
+            hybrid_recall - fastplaid_recall
+            if hybrid_recall is not None and fastplaid_recall is not None
+            else None
+        ),
+        "gpu_hybrid_final_topk_position_agreement": _optional_float(
+            hybrid_comparison.get("final_topk_position_agreement")
+        ),
+        "gpu_hybrid_shortlist_k": _optional_int(
+            hybrid_comparison.get("shortlist_k")
+        ),
     }
 
 
@@ -283,6 +338,16 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         for row in ok_rows
         if row["gpu_fused_recall_delta_vs_fastplaid"] is not None
     ]
+    hybrid_ratios = [
+        float(row["gpu_hybrid_seconds_per_fastplaid_batch_second"])
+        for row in ok_rows
+        if row["gpu_hybrid_seconds_per_fastplaid_batch_second"] is not None
+    ]
+    hybrid_recall_deltas = [
+        float(row["gpu_hybrid_recall_delta_vs_fastplaid"])
+        for row in ok_rows
+        if row["gpu_hybrid_recall_delta_vs_fastplaid"] is not None
+    ]
     return {
         "row_count": len(rows),
         "ok_row_count": len(ok_rows),
@@ -317,6 +382,22 @@ def summary_payload(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
             row.get("gpu_fused_device_topk_position_agreement")
             for row in ok_rows
         ),
+        "mean_gpu_hybrid_seconds_per_fastplaid_batch_second": (
+            _mean(hybrid_ratios)
+        ),
+        "max_gpu_hybrid_seconds_per_fastplaid_batch_second": (
+            max(hybrid_ratios) if hybrid_ratios else None
+        ),
+        "min_gpu_hybrid_recall_delta_vs_fastplaid": (
+            min(hybrid_recall_deltas) if hybrid_recall_deltas else None
+        ),
+        "mean_gpu_hybrid_exact_rerank_share": _mean_optional(
+            row.get("gpu_hybrid_exact_rerank_share") for row in ok_rows
+        ),
+        "gpu_hybrid_final_topk_position_agreement_min": _min_optional(
+            row.get("gpu_hybrid_final_topk_position_agreement")
+            for row in ok_rows
+        ),
     }
 
 
@@ -339,6 +420,12 @@ def _system_by_name(
 def _optional_float(value: object) -> float | None:
     if isinstance(value, (float, int)):
         return float(value)
+    return None
+
+
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, int):
+        return value
     return None
 
 

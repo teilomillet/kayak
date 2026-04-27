@@ -58,6 +58,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--warmup-iterations", type=int, default=1)
     parser.add_argument("--measurement-iterations", type=int, default=1)
     parser.add_argument("--gpu-topk-session-iterations", type=int, default=4)
+    parser.add_argument("--gpu-hybrid-shortlist-k", type=int, default=None)
     parser.add_argument("--kayak-plaid-centroid-count", type=int, default=128)
     parser.add_argument(
         "--kayak-i8-candidate-order",
@@ -124,6 +125,7 @@ def controls_from_args(args: argparse.Namespace) -> FastPlaidPolicyCompareContro
         kayak_i8_positive_centroids_only=(
             args.kayak_i8_positive_centroids_only
         ),
+        gpu_hybrid_shortlist_k=args.gpu_hybrid_shortlist_k,
         policy_name=args.policy_name,
         fastplaid_devices=tuple(args.fastplaid_devices),
     )
@@ -163,7 +165,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
             "shape-only centroid-budget policy, CPU candidate generation, and "
             "the GPU no-reference top-k primitive. The report also includes "
             "the fused centroid-posting GPU primitive as a separate internal "
-            "scope. This is not a public backend speedup claim."
+            "scope plus a fused-shortlist exact-rerank hybrid primitive. "
+            "This is not a public backend speedup claim."
         ),
     }
 
@@ -266,6 +269,18 @@ def emit_quiet_means(report: dict[str, Any]) -> None:
             row["gpu_fused_device_topk_seconds_per_fastplaid_batch_second"],
         )
         print_quiet_mean(
+            f"{prefix}_gpu_hybrid_per_window",
+            row["gpu_hybrid_seconds_per_window"],
+        )
+        print_quiet_mean(
+            f"{prefix}_gpu_hybrid_per_fastplaid_batch",
+            row["gpu_hybrid_seconds_per_fastplaid_batch_second"],
+        )
+        print_quiet_mean(
+            f"{prefix}_gpu_hybrid_exact_rerank_share",
+            row["gpu_hybrid_exact_rerank_share"],
+        )
+        print_quiet_mean(
             f"{prefix}_kayak_recall",
             row["kayak_i8_recall_at_k_vs_kayak_exact"],
         )
@@ -276,6 +291,10 @@ def emit_quiet_means(report: dict[str, Any]) -> None:
         print_quiet_mean(
             f"{prefix}_gpu_fused_recall",
             row["gpu_fused_recall_at_k_vs_kayak_exact"],
+        )
+        print_quiet_mean(
+            f"{prefix}_gpu_hybrid_recall",
+            row["gpu_hybrid_recall_at_k_vs_kayak_exact"],
         )
 
 

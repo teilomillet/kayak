@@ -77,3 +77,27 @@ Interpretation:
 - this does not prove a GPU candidate-generation speedup
 - the next validation step is a benchmark-only GPU candidate-generation
   payload/preparation probe before implementing posting accumulation kernels
+
+## Follow-Up: Hybrid Shortlist Rerank
+
+The fused-shortlist exact-rerank probe confirms that the next target is still
+candidate-window generation.
+
+Latest artifacts:
+
+- default quiet run: `.cache/kayak/bench_quiet/20260427T155138Z`
+- default report: `.cache/kayak/gpu_i8_fastplaid_policy_compare/summary.json`
+- trace:
+  `docs/traces/2026-04-27_gpu_i8_hybrid_shortlist_rerank_scope.md`
+
+Result:
+
+- `shortlist_k=256` recovers address-window recall on the wide rows and exact
+  rerank agreement is `1.0`
+- exact rerank is only about `2.2%` to `5.1%` of hybrid time
+- smaller raw exploratory shortlists at `64`, `128`, and `192` are faster but
+  lose too much recall
+
+Decision update: do not optimize exact rerank next. The next useful primitive
+is a serving-shaped selected-posting candidate generator that returns candidate
+positions for exact rerank.
