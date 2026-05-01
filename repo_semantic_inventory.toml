@@ -389,7 +389,9 @@ normative_docs = [
     "docs/python_sdk_roadmap.md",
 ]
 tests = [
+    "python/tests/test_encoder_api.py",
     "python/tests/test_public_api_contract.py",
+    "python/tests/test_public_typing_surface.py",
     "python/tests/test_text_retriever_api.py",
     "python/tests/test_search_plan_api.py",
     "python/tests/test_python_sdk_docs.py",
@@ -410,6 +412,7 @@ tests = [
     "python/tests/test_batch_api.py",
     "python/tests/test_late_interaction.py",
     "python/tests/test_search_plan_api.py",
+    "python/tests/test_tachiom_probe.py",
     "python/tests/test_mojo_packaging.py",
 ]
 

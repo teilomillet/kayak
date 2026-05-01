@@ -11,6 +11,7 @@ from .api_types import (
     DocOffsetsInput,
     DocTextsInput,
     TokenMatrixInput,
+    TokenIdValuesInput,
     TokenValuesInput,
 )
 from .array_conversions import (
@@ -20,6 +21,7 @@ from .array_conversions import (
     to_flat_vector_values,
     to_index_offsets,
     to_optional_doc_texts,
+    to_token_id_vector,
     to_vector_matrix,
 )
 from .dtypes import FLAT_DIM128_VECTOR_DIM
@@ -44,6 +46,7 @@ class LateIndex:
     doc_texts: tuple[str, ...] | None = None
     token_vectors: np.ndarray | None = None
     token_values: np.ndarray | None = None
+    token_ids: np.ndarray | None = None
     _doc_id_positions: dict[str, int] = field(
         init=False,
         repr=False,
@@ -58,6 +61,7 @@ class LateIndex:
         token_vectors: TokenMatrixInput,
         *,
         doc_texts: DocTextsInput | None = None,
+        token_ids: TokenIdValuesInput | None = None,
     ) -> "LateIndex":
         normalized_doc_ids = to_doc_ids(doc_ids, "packed index")
         offsets = to_index_offsets(
@@ -79,6 +83,11 @@ class LateIndex:
                 expected_length=len(normalized_doc_ids),
             ),
             token_vectors=matrix,
+            token_ids=(
+                None
+                if token_ids is None
+                else to_token_id_vector(token_ids, "packed index")
+            ),
         )
 
     @classmethod
@@ -89,6 +98,7 @@ class LateIndex:
         token_values: TokenValuesInput,
         *,
         doc_texts: DocTextsInput | None = None,
+        token_ids: TokenIdValuesInput | None = None,
     ) -> "LateIndex":
         normalized_doc_ids = to_doc_ids(doc_ids, "hybrid flat index")
         offsets = to_index_offsets(
@@ -115,6 +125,11 @@ class LateIndex:
                 expected_length=len(normalized_doc_ids),
             ),
             token_values=values,
+            token_ids=(
+                None
+                if token_ids is None
+                else to_token_id_vector(token_ids, "hybrid flat index")
+            ),
         )
 
     def __post_init__(self) -> None:
@@ -157,6 +172,11 @@ class LateIndex:
             raise ValueError(
                 "index doc_offsets must end at total vector count"
             )
+        if (
+            self.token_ids is not None
+            and self.token_ids.shape != (self.total_vector_count,)
+        ):
+            raise ValueError("index token_ids must align with token vectors")
 
         doc_id_positions: dict[str, int] = {}
         for index, doc_id in enumerate(self.doc_ids):
@@ -202,6 +222,7 @@ class LateIndex:
                 self.doc_offsets,
                 self.as_packed_token_matrix(),
                 doc_texts=self.doc_texts,
+                token_ids=self.token_ids,
             )
         if layout == INDEX_LAYOUT_HYBRID_FLAT_DIM128:
             return LateIndex.from_hybrid_flat_dim128(
@@ -209,6 +230,7 @@ class LateIndex:
                 self.doc_offsets,
                 self.as_flat_token_values(),
                 doc_texts=self.doc_texts,
+                token_ids=self.token_ids,
             )
         raise ValueError(f"unsupported index layout: {layout}")
 
@@ -244,9 +266,15 @@ class LateIndex:
                 selected_texts.append(self.doc_texts[position])
 
         packed_matrix = self.as_packed_token_matrix()
+        packed_token_ids = self.token_ids
         selected_vectors = np.empty(
             (total_selected_vectors, self.vector_dim),
             dtype=packed_matrix.dtype,
+        )
+        selected_token_ids = (
+            None
+            if packed_token_ids is None
+            else np.empty(total_selected_vectors, dtype=packed_token_ids.dtype)
         )
         running_offset = 0
         for position in selected_positions:
@@ -256,10 +284,17 @@ class LateIndex:
             selected_vectors[running_offset : running_offset + vector_count] = (
                 packed_matrix[start:stop]
             )
+            if selected_token_ids is not None:
+                assert packed_token_ids is not None
+                selected_token_ids[running_offset : running_offset + vector_count] = (
+                    packed_token_ids[start:stop]
+                )
             running_offset += vector_count
 
         selected_offsets.setflags(write=False)
         selected_vectors.setflags(write=False)
+        if selected_token_ids is not None:
+            selected_token_ids.setflags(write=False)
         if self.layout == INDEX_LAYOUT_PACKED:
             return LateIndex(
                 layout=INDEX_LAYOUT_PACKED,
@@ -272,6 +307,7 @@ class LateIndex:
                     None if selected_texts is None else tuple(selected_texts)
                 ),
                 token_vectors=selected_vectors,
+                token_ids=selected_token_ids,
             )
 
         return LateIndex.from_packed(
@@ -279,6 +315,7 @@ class LateIndex:
             selected_offsets,
             selected_vectors,
             doc_texts=selected_texts,
+            token_ids=selected_token_ids,
         ).to_layout(self.layout)
 
     def with_texts(self, doc_texts: DocTextsInput | None) -> "LateIndex":
@@ -289,12 +326,14 @@ class LateIndex:
                 self.doc_offsets,
                 self.as_packed_token_matrix(),
                 doc_texts=doc_texts,
+                token_ids=self.token_ids,
             )
         return LateIndex.from_hybrid_flat_dim128(
             self.doc_ids,
             self.doc_offsets,
             self.as_flat_token_values(),
             doc_texts=doc_texts,
+            token_ids=self.token_ids,
         )
 
     def maxsim(

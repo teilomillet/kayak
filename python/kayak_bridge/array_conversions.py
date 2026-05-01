@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from .dtypes import INDEX_OFFSET_DTYPE, VECTOR_DTYPE
+from .dtypes import INDEX_OFFSET_DTYPE, TOKEN_ID_DTYPE, VECTOR_DTYPE
 
 try:
     import torch
@@ -87,6 +87,15 @@ def to_flat_vector_values(value: Any, owner: str) -> np.ndarray:
     return readonly_array(array, dtype=VECTOR_DTYPE)
 
 
+def to_token_id_vector(value: Any, owner: str) -> np.ndarray:
+    array = _numpy_from_input(value)
+    if array.ndim != 1:
+        raise ValueError(f"{owner} token ids must be a flat 1D array")
+    if array.shape[0] <= 0:
+        raise ValueError(f"{owner} token ids must contain at least one id")
+    return readonly_array(array, dtype=TOKEN_ID_DTYPE)
+
+
 def to_document_matrices(value: Any, owner: str) -> tuple[np.ndarray, ...]:
     if _is_torch_tensor(value):
         tensor = value.detach().cpu().numpy()
@@ -115,6 +124,36 @@ def to_document_matrices(value: Any, owner: str) -> tuple[np.ndarray, ...]:
     if not matrices:
         raise ValueError(f"{owner} must contain at least one document")
     return matrices
+
+
+def to_document_token_id_rows(value: Any, owner: str) -> tuple[np.ndarray, ...]:
+    if _is_torch_tensor(value):
+        tensor = value.detach().cpu().numpy()
+        if tensor.ndim != 2:
+            raise ValueError(f"{owner} token ids torch input must be a 2D tensor")
+        return tuple(
+            to_token_id_vector(tensor[index], f"{owner}[{index}]")
+            for index in range(tensor.shape[0])
+        )
+
+    if isinstance(value, np.ndarray):
+        if value.ndim != 2:
+            raise ValueError(f"{owner} token ids ndarray input must be a 2D array")
+        return tuple(
+            to_token_id_vector(value[index], f"{owner}[{index}]")
+            for index in range(value.shape[0])
+        )
+
+    if not isinstance(value, Sequence):
+        raise ValueError(f"{owner} token ids must be a sequence of 1D arrays")
+
+    rows = tuple(
+        to_token_id_vector(token_ids, f"{owner}[{index}]")
+        for index, token_ids in enumerate(value)
+    )
+    if not rows:
+        raise ValueError(f"{owner} token ids must contain at least one document")
+    return rows
 
 
 def to_query_matrices(value: Any, owner: str) -> tuple[np.ndarray, ...]:

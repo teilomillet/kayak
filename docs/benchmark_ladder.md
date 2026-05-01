@@ -187,6 +187,8 @@ PYTHONPATH=python python python/scripts/build_msmarco_passage_task_json.py \
   --qrels /data/msmarco/qrels.dev.tsv \
   --document-limit 10000 \
   --query-limit 16 \
+  --include-document-token-ids \
+  --document-batch-size 16 \
   --output .cache/kayak/msmarco_passage_smoke/python_task.json
 
 PYTHONPATH=python python python/scripts/profile_task_plaid_i8_candidate_generation.py \
@@ -194,6 +196,258 @@ PYTHONPATH=python python python/scripts/profile_task_plaid_i8_candidate_generati
   --query-limit 4 \
   --candidate-k 256 \
   --emit-quiet-mean
+
+PYTHONPATH=python python python/scripts/bench_tachiom_task.py \
+  --task .cache/kayak/msmarco_passage_smoke/python_task.json \
+  --engine tachiom_tac_hnsw_pq \
+  --tac-centroid-count 32768 \
+  --tac-micro-token-threshold 128 \
+  --tac-small-token-threshold 256 \
+  --tac-active-token-floor 4 \
+  --tac-min-vectors-per-centroid 39 \
+  --tac-kmeans-iterations 10 \
+  --tac-centroids-per-query-vector 120 \
+  --tac-candidate-k 1000 \
+  --tac-candidate-pruning-alpha 0.35 \
+  --hnsw-max-neighbors 32 \
+  --hnsw-ef-construction 1500 \
+  --hnsw-ef-search 180 \
+  --pq-subspace-count 32 \
+  --pq-codebook-size 256 \
+  --pq-kmeans-iterations 10 \
+  --output .cache/kayak/msmarco_passage_smoke/tachiom_task_summary.json
+```
+
+Paper-scale MS MARCO materialization should use the sharded binary snapshot
+path, not task JSON:
+
+```bash
+PYTHONPATH=python python python/scripts/materialize_msmarco_colbert_snapshot.py \
+  --collection /data/msmarco/collection.tsv \
+  --queries /data/msmarco/dev/small/queries.tsv \
+  --qrels /data/msmarco/dev/small/qrels \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --document-batch-size 16 \
+  --query-batch-size 64 \
+  --shard-max-vectors 4000000 \
+  --resume
+```
+
+The current MS MARCO paper-scale estimate for this format is
+`155550734592` document payload bytes with `float16` document vectors and
+`uint32` token ids. This keeps vector count explicit: `598000000` document
+token vectors at dim `128`.
+
+For bounded judged snapshot slices, add `--include-query-positives` so selected
+query positives are present even when they fall outside the document prefix.
+Without that flag, a prefix snapshot is a pipeline smoke only and judged MRR can
+be zero by construction.
+
+Tachiom can be built from a selected snapshot slice without task JSON:
+
+```bash
+PYTHONPATH=python python python/scripts/bench_tachiom_snapshot.py \
+  --snapshot .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --engine tachiom_tac_hnsw_pq \
+  --document-limit 10000 \
+  --query-limit 128 \
+  --max-vector-count 1000000 \
+  --tac-centroid-count 32768 \
+  --tac-micro-token-threshold 128 \
+  --tac-small-token-threshold 256 \
+  --tac-active-token-floor 4 \
+  --tac-min-vectors-per-centroid 39 \
+  --tac-kmeans-iterations 10 \
+  --tac-centroids-per-query-vector 120 \
+  --tac-candidate-k 1000 \
+  --tac-candidate-pruning-alpha 0.35 \
+  --hnsw-max-neighbors 32 \
+  --hnsw-ef-construction 1500 \
+  --hnsw-ef-search 180 \
+  --pq-subspace-count 32 \
+  --pq-codebook-size 256 \
+  --pq-kmeans-iterations 10 \
+  --pq-training-sample-count 32768 \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot/tachiom_slice_summary.json
+```
+
+This is a selected-slice benchmark bridge. It avoids task JSON, but still loads
+the selected documents into one in-memory matrix before invoking the current
+reference index.
+
+Streaming TAC/PQ artifact construction avoids both task JSON and full selected
+document-matrix materialization:
+
+```bash
+PYTHONPATH=python python python/scripts/build_tachiom_streaming_index.py \
+  --snapshot .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index \
+  --tac-centroid-count 4000000 \
+  --tac-micro-token-threshold 128 \
+  --tac-small-token-threshold 256 \
+  --tac-active-token-floor 4 \
+  --tac-min-vectors-per-centroid 39 \
+  --tac-kmeans-iterations 10 \
+  --tac-centroids-per-query-vector 120 \
+  --tac-candidate-k 1000 \
+  --tac-candidate-pruning-alpha 0.35 \
+  --centroid-samples-per-centroid 4 \
+  --kmeans-max-centroids-per-token 256 \
+  --kmeans-max-samples-per-token 4096 \
+  --assignment-vector-chunk-size 2048 \
+  --assignment-centroid-chunk-size 4096 \
+  --posting-partition-count 128 \
+  --pq-subspace-count 32 \
+  --pq-codebook-size 256 \
+  --pq-kmeans-iterations 10 \
+  --pq-training-sample-count 32768
+```
+
+The resulting streaming artifact can be searched directly through memmaps:
+
+```bash
+PYTHONPATH=python python python/scripts/bench_tachiom_streaming_index.py \
+  --snapshot .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --index .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index \
+  --query-limit 6980 \
+  --warmup-iterations 1 \
+  --measurement-iterations 3 \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_summary.json \
+  --emit-quiet-mean
+```
+
+For dim128 artifacts, the native Mojo residual-PQ reader avoids the Python
+query-time scoring loops while using the same streaming index files:
+
+```bash
+PYTHONPATH=python python python/scripts/bench_tachiom_streaming_index.py \
+  --snapshot .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --index .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index \
+  --engine streaming_tac_pq_mojo \
+  --query-limit 6980 \
+  --warmup-iterations 2 \
+  --measurement-iterations 5 \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_mojo_summary.json \
+  --emit-quiet-mean
+```
+
+A persisted centroid HNSW graph can be built as a sidecar:
+
+```bash
+PYTHONPATH=python python python/scripts/build_tachiom_streaming_hnsw.py \
+  --index .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index \
+  --hnsw-max-neighbors 32 \
+  --hnsw-ef-construction 1500 \
+  --hnsw-ef-search 180 \
+  --hnsw-level-probability 0.0625
+```
+
+The HNSW sidecar can then be used for streaming artifact search:
+
+```bash
+PYTHONPATH=python python python/scripts/bench_tachiom_streaming_index.py \
+  --snapshot .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --index .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index \
+  --engine streaming_tac_hnsw_pq \
+  --query-limit 6980 \
+  --warmup-iterations 1 \
+  --measurement-iterations 3 \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_hnsw_summary.json \
+  --emit-quiet-mean
+```
+
+For dim128 artifacts, the native HNSW+PQ reader uses the same sidecar and
+reranks candidate-window document tokens without a full query-by-centroid score
+table:
+
+```bash
+PYTHONPATH=python python python/scripts/bench_tachiom_streaming_index.py \
+  --snapshot .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --index .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index \
+  --engine streaming_tac_hnsw_pq_mojo \
+  --query-limit 6980 \
+  --warmup-iterations 2 \
+  --measurement-iterations 5 \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_hnsw_mojo_summary.json \
+  --emit-quiet-mean
+```
+
+To tune the native reader's same-shape query batch cap, run the USL sweep
+against the already-built artifact. The sweep changes only batching; document
+vectors, query vectors, candidate budgets, rankings, and index bytes stay
+fixed. Use the best measured median batch cap as an input to later benchmark
+runs rather than treating the fitted USL peak as proof:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 60 --force -- \
+  pixi run env PYTHONPATH=python python \
+  python/scripts/sweep_tachiom_streaming_usl.py \
+  --snapshot .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --index .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index \
+  --engine streaming_tac_hnsw_pq_mojo \
+  --batch-sizes 1,2,4,8,16,32,64,128 \
+  --warmup-iterations 1 \
+  --measurement-iterations 3 \
+  --sweep-repeats 3 \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index/usl_hnsw_pq_mojo_batch_sweep.json \
+  --emit-quiet-mean
+```
+
+Then pass the chosen cap explicitly:
+
+```bash
+PYTHONPATH=python python python/scripts/bench_tachiom_streaming_index.py \
+  --snapshot .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --index .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index \
+  --engine streaming_tac_hnsw_pq_mojo \
+  --max-query-batch-size 64 \
+  --query-limit 6980 \
+  --warmup-iterations 2 \
+  --measurement-iterations 5 \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_hnsw_mojo_batch64_summary.json \
+  --emit-quiet-mean
+```
+
+For larger artifacts where Python-list materialization becomes the bottleneck,
+use the address-backed variant. It reads the same memmap-backed arrays by
+address and keeps query-time results comparable, but it is currently slower
+than the List-backed native engine on the bounded local slices:
+
+```bash
+PYTHONPATH=python python python/scripts/bench_tachiom_streaming_index.py \
+  --snapshot .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --index .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index \
+  --engine streaming_tac_hnsw_pq_mojo_address \
+  --query-limit 6980 \
+  --warmup-iterations 2 \
+  --measurement-iterations 5 \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_hnsw_mojo_address_summary.json \
+  --emit-quiet-mean
+```
+
+This is still not a paper-throughput command by itself: the current graph
+builder is the Python reference and has not been validated at paper-scale
+centroid counts.
+
+For repeatable bounded scale gates, use the combined runner. It materializes a
+judged-positive snapshot, builds the streaming TAC/PQ artifact, optionally
+benchmarks the native Mojo reader, optionally builds the HNSW sidecar, and
+writes one summary. The runner emits per-stage progress and records
+`stage_timings_seconds` because snapshot materialization can dominate wall
+time on larger local slices:
+
+```bash
+PYTHONPATH=python python python/scripts/run_tachiom_streaming_scale_gate.py \
+  --collection /data/msmarco/collection.tsv \
+  --queries /data/msmarco/dev/small/queries.tsv \
+  --qrels /data/msmarco/dev/small/qrels \
+  --output-root .cache/kayak/tachiom_streaming_scale_docs1500_q48_c32768 \
+  --document-limit 1500 \
+  --query-limit 48 \
+  --tac-centroid-count 32768 \
+  --max-exact-vector-count 150000 \
+  --include-address-mojo \
+  --overwrite
 ```
 
 ## What This Note Does Not Claim

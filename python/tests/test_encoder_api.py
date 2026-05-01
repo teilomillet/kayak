@@ -39,6 +39,38 @@ class _FakeCheckpoint:
         ]
 
 
+class _FakeDocTokenizer:
+    def tensorize(self, texts: list[str]) -> tuple[torch.Tensor, torch.Tensor]:
+        assert len(texts) == 1
+        ids = torch.tensor(
+            [[101, len(texts[0]), 102]],
+            dtype=torch.long,
+        )
+        return ids, torch.ones_like(ids)
+
+
+class _FakeCheckpointWithDocTokenizer:
+    doc_tokenizer = _FakeDocTokenizer()
+
+    def queryFromText(self, texts: list[str], *, to_cpu: bool) -> list[torch.Tensor]:
+        return _FakeCheckpoint().queryFromText(texts, to_cpu=to_cpu)
+
+    def doc(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        *,
+        keep_dims: bool,
+        to_cpu: bool,
+    ) -> torch.Tensor:
+        del attention_mask, to_cpu
+        assert keep_dims is True
+        rows = []
+        for token_id in input_ids[0].tolist():
+            rows.append([float(token_id), 0.0, 1.0])
+        return torch.tensor([rows], dtype=torch.float32)
+
+
 class EncoderApiTests(unittest.TestCase):
     def _restore_encoder_registry(
         self,
@@ -148,6 +180,24 @@ class EncoderApiTests(unittest.TestCase):
         np.testing.assert_allclose(
             documents.token_matrices[0],
             np.array([[1.0, 16.0, 0.0], [0.0, 0.0, 1.0]], dtype=np.float32),
+        )
+        self.assertIsNone(documents.token_ids)
+
+    def test_colbert_text_encoder_preserves_aligned_document_token_ids(self) -> None:
+        encoder = kayak.ColBERTTextEncoder(
+            checkpoint=_FakeCheckpointWithDocTokenizer(),
+        )
+
+        documents = encoder.encode_documents(["doc-a"], ["late interaction"])
+
+        self.assertEqual(documents.vector_counts, (3,))
+        np.testing.assert_array_equal(
+            documents.token_ids[0],
+            np.array([101, 16, 102], dtype=np.int64),
+        )
+        np.testing.assert_array_equal(
+            documents.pack().token_ids,
+            np.array([101, 16, 102], dtype=np.int64),
         )
 
     def test_encoder_registry_supports_builtin_and_custom_factories(self) -> None:

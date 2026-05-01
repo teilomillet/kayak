@@ -35,6 +35,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=Path(".cache/kayak/lemb_narrativeqa/python_task.json"),
     )
+    parser.add_argument(
+        "--include-document-token-ids",
+        action="store_true",
+        help=(
+            "Store ColBERT document tokenizer input ids aligned to document "
+            "vectors. This is required for token-aware clustering benchmarks."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -46,6 +54,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         query_limit=args.query_limit,
         model_name=args.model_name,
         dataset_id=args.dataset_id,
+        include_document_token_ids=args.include_document_token_ids,
     )
     task["created_at_utc"] = datetime.now(UTC).isoformat()
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -6,8 +6,18 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .api_types import DocIdsInput, DocumentMatricesInput, DocTextsInput
-from .array_conversions import to_doc_ids, to_document_matrices, to_optional_doc_texts
+from .api_types import (
+    DocIdsInput,
+    DocumentMatricesInput,
+    DocumentTokenIdsInput,
+    DocTextsInput,
+)
+from .array_conversions import (
+    to_doc_ids,
+    to_document_matrices,
+    to_document_token_id_rows,
+    to_optional_doc_texts,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +30,7 @@ class LateDocuments:
     document_count: int
     total_vector_count: int
     texts: tuple[str, ...] | None = None
+    token_ids: tuple[np.ndarray, ...] | None = None
 
     @classmethod
     def from_inputs(
@@ -28,19 +39,32 @@ class LateDocuments:
         token_vectors: DocumentMatricesInput,
         *,
         texts: DocTextsInput | None = None,
+        token_ids: DocumentTokenIdsInput | None = None,
     ) -> "LateDocuments":
         normalized_doc_ids = to_doc_ids(doc_ids, "documents")
         matrices = to_document_matrices(token_vectors, "documents")
         if len(normalized_doc_ids) != len(matrices):
             raise ValueError("documents doc_ids and token vectors must align")
+        token_id_rows = (
+            None
+            if token_ids is None
+            else to_document_token_id_rows(token_ids, "documents")
+        )
+        if token_id_rows is not None and len(token_id_rows) != len(matrices):
+            raise ValueError("documents token_ids must align with token vectors")
 
         vector_dim = int(matrices[0].shape[1])
         total_vector_count = 0
-        for matrix in matrices:
+        for index, matrix in enumerate(matrices):
             if matrix.shape[1] != vector_dim:
                 raise ValueError(
                     "all documents must share the same vector dimension"
                 )
+            if (
+                token_id_rows is not None
+                and int(token_id_rows[index].shape[0]) != int(matrix.shape[0])
+            ):
+                raise ValueError("documents token_ids must align with token vectors")
             total_vector_count += int(matrix.shape[0])
 
         return cls(
@@ -54,6 +78,7 @@ class LateDocuments:
                 "documents",
                 expected_length=len(normalized_doc_ids),
             ),
+            token_ids=token_id_rows,
         )
 
     def __post_init__(self) -> None:
@@ -65,10 +90,22 @@ class LateDocuments:
             raise ValueError("document_count must match token matrices")
         if self.texts is not None and self.document_count != len(self.texts):
             raise ValueError("document_count must match document texts")
+        if self.token_ids is not None and self.document_count != len(self.token_ids):
+            raise ValueError("document_count must match token id rows")
         if self.vector_dim <= 0:
             raise ValueError("documents vector_dim must be positive")
         if self.total_vector_count <= 0:
             raise ValueError("documents must contain at least one vector")
+        if self.token_ids is not None:
+            for matrix, token_ids in zip(
+                self.token_matrices,
+                self.token_ids,
+                strict=True,
+            ):
+                if int(token_ids.shape[0]) != int(matrix.shape[0]):
+                    raise ValueError(
+                        "documents token_ids must align with token vectors"
+                    )
 
     @property
     def vector_counts(self) -> tuple[int, ...]:
@@ -85,11 +122,17 @@ class LateDocuments:
             doc_offsets.append(running_offset)
 
         token_vectors = np.concatenate(self.token_matrices, axis=0)
+        token_ids = (
+            None
+            if self.token_ids is None
+            else np.concatenate(self.token_ids, axis=0)
+        )
         return LateIndex.from_packed(
             self.doc_ids,
             doc_offsets,
             token_vectors,
             doc_texts=self.texts,
+            token_ids=token_ids,
         )
 
     def to_layout(self, layout: str) -> "LateIndex":
@@ -102,4 +145,5 @@ class LateDocuments:
             self.doc_ids,
             self.token_matrices,
             texts=texts,
+            token_ids=self.token_ids,
         )

@@ -5,9 +5,11 @@ from __future__ import annotations
 from .api_types import (
     DocIdsInput,
     DocumentMatricesInput,
+    DocumentTokenIdsInput,
     DocOffsetsInput,
     DocTextsInput,
     QueryBatchInput,
+    TokenIdValuesInput,
     TokenMatrixInput,
     TokenValuesInput,
 )
@@ -90,9 +92,15 @@ def documents(
     token_vectors: DocumentMatricesInput,
     *,
     texts: DocTextsInput | None = None,
+    token_ids: DocumentTokenIdsInput | None = None,
 ) -> LateDocuments:
     """Build ``LateDocuments`` from document ids and token-level vectors."""
-    return LateDocuments.from_inputs(doc_ids, token_vectors, texts=texts)
+    return LateDocuments.from_inputs(
+        doc_ids,
+        token_vectors,
+        texts=texts,
+        token_ids=token_ids,
+    )
 
 
 def packed_index(
@@ -101,6 +109,7 @@ def packed_index(
     token_vectors: TokenMatrixInput,
     *,
     doc_texts: DocTextsInput | None = None,
+    token_ids: TokenIdValuesInput | None = None,
 ) -> LateIndex:
     """Build one packed ``LateIndex`` directly from packed layout fields."""
     return LateIndex.from_packed(
@@ -108,6 +117,7 @@ def packed_index(
         doc_offsets,
         token_vectors,
         doc_texts=doc_texts,
+        token_ids=token_ids,
     )
 
 
@@ -117,6 +127,7 @@ def hybrid_flat_dim128_index(
     token_values: TokenValuesInput,
     *,
     doc_texts: DocTextsInput | None = None,
+    token_ids: TokenIdValuesInput | None = None,
 ) -> LateIndex:
     """Build one ``hybrid_flat_dim128`` index directly from flat values."""
     return LateIndex.from_hybrid_flat_dim128(
@@ -124,6 +135,7 @@ def hybrid_flat_dim128_index(
         doc_offsets,
         token_values,
         doc_texts=doc_texts,
+        token_ids=token_ids,
     )
 
 

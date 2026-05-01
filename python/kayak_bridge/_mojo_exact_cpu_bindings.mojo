@@ -16,6 +16,13 @@ from kayak.runtime import ExactCpuBackend
 from kayak.search import (
     PreparedPlaidApproxI8Index,
     PreparedPlaidApproxIndex,
+    PreparedTachiomTacI8Index,
+    PreparedTachiomTacHnswIndex,
+    PreparedTachiomTacHnswPqAddressIndex,
+    PreparedTachiomTacHnswPqIndex,
+    PreparedTachiomTacIndex,
+    PreparedTachiomTacPqIndex,
+    TachiomTacCandidateGenerationProfile,
     SearchHit,
     plaid_approx_i8_prepared_posting_count_value,
     plaid_approx_prepared_posting_count_value,
@@ -27,8 +34,46 @@ from kayak.search import (
     plaid_search_positions_for_query,
     prepare_plaid_approx_i8_hybrid_flat_dim128_index,
     prepare_plaid_approx_hybrid_flat_dim128_index,
+    prepare_tachiom_tac_i8_hybrid_flat_dim128_index,
+    prepare_tachiom_tac_hnsw_hybrid_flat_dim128_index,
+    prepare_tachiom_tac_hnsw_pq_dim128_address_index,
+    prepare_tachiom_tac_hnsw_pq_dim128_index,
+    prepare_tachiom_tac_hybrid_flat_dim128_index,
+    prepare_tachiom_tac_pq_dim128_index,
+    profile_tachiom_tac_candidate_generation_for_query,
     search_exact,
     search_exact_hybrid_flat_only_dim128,
+    tachiom_tac_candidate_positions_for_query,
+    tachiom_tac_candidate_positions_for_query_with_pruning,
+    tachiom_tac_i8_candidate_positions_for_query,
+    tachiom_tac_hnsw_candidate_positions_for_query,
+    tachiom_tac_hnsw_candidate_positions_for_query_with_pruning,
+    tachiom_tac_hnsw_pq_address_candidate_positions_for_query,
+    tachiom_tac_hnsw_pq_address_candidate_positions_for_query_with_pruning,
+    tachiom_tac_hnsw_pq_address_prepared_graph_edge_count_value,
+    tachiom_tac_hnsw_pq_address_prepared_posting_count_value,
+    tachiom_tac_hnsw_pq_address_search_positions_for_query,
+    tachiom_tac_hnsw_pq_address_search_positions_for_query_with_pruning,
+    tachiom_tac_hnsw_pq_candidate_positions_for_query,
+    tachiom_tac_hnsw_pq_candidate_positions_for_query_with_pruning,
+    tachiom_tac_hnsw_pq_prepared_graph_edge_count_value,
+    tachiom_tac_hnsw_pq_prepared_posting_count_value,
+    tachiom_tac_hnsw_pq_search_positions_for_query,
+    tachiom_tac_hnsw_pq_search_positions_for_query_with_pruning,
+    tachiom_tac_hnsw_prepared_graph_edge_count_value,
+    tachiom_tac_hnsw_prepared_posting_count_value,
+    tachiom_tac_hnsw_search_positions_for_query,
+    tachiom_tac_i8_prepared_posting_count_value,
+    tachiom_tac_i8_search_positions_for_query,
+    tachiom_tac_pq_candidate_positions_for_query,
+    tachiom_tac_pq_candidate_positions_for_query_with_pruning,
+    tachiom_tac_pq_prepared_posting_count_value,
+    tachiom_tac_pq_search_positions_for_query,
+    tachiom_tac_pq_search_positions_for_query_with_pruning,
+    tachiom_tac_prepared_posting_count_value,
+    tachiom_tac_search_hits_for_query,
+    tachiom_tac_search_positions_for_query,
+    tachiom_tac_search_positions_for_query_with_pruning,
 )
 from kayak.search.plaid_i8_approx_dim128 import (
     plaid_i8_candidate_positions_for_query_unordered,
@@ -458,6 +503,98 @@ def i8_candidate_generation_profile_to_python(
     return py_result
 
 
+def tachiom_tac_candidate_generation_profile_to_python(
+    read profile: TachiomTacCandidateGenerationProfile,
+) raises -> PythonObject:
+    var py_result = Python.list()
+    append_profile_float(
+        py_result,
+        "full_candidate_mean_seconds",
+        profile.full_candidate_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "full_search_mean_seconds",
+        profile.full_search_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "centroid_scoring_mean_seconds",
+        profile.centroid_scoring_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "centroid_selection_mean_seconds",
+        profile.centroid_selection_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "posting_accumulation_mean_seconds",
+        profile.posting_accumulation_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "final_topk_mean_seconds",
+        profile.final_topk_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "exact_rerank_mean_seconds",
+        profile.exact_rerank_mean_seconds,
+    )
+    append_profile_int(
+        py_result, "query_vector_count", profile.query_vector_count
+    )
+    append_profile_int(py_result, "document_count", profile.document_count)
+    append_profile_int(
+        py_result, "document_vector_count", profile.document_vector_count
+    )
+    append_profile_int(
+        py_result,
+        "total_document_vector_count",
+        profile.total_document_vector_count,
+    )
+    append_profile_int(py_result, "centroid_count", profile.centroid_count)
+    append_profile_int(
+        py_result,
+        "centroids_per_query_vector",
+        profile.centroids_per_query_vector,
+    )
+    append_profile_int(py_result, "candidate_k", profile.candidate_k)
+    append_profile_int(py_result, "final_k", profile.final_k)
+    append_profile_int(
+        py_result,
+        "selected_centroid_count",
+        profile.selected_centroid_count,
+    )
+    append_profile_int(
+        py_result, "posting_visit_count", profile.posting_visit_count
+    )
+    append_profile_int(
+        py_result,
+        "touched_document_count",
+        profile.touched_document_count,
+    )
+    append_profile_int(
+        py_result,
+        "seen_document_count",
+        profile.seen_document_count,
+    )
+    append_profile_int(
+        py_result, "output_candidate_count", profile.output_candidate_count
+    )
+    append_profile_int(
+        py_result, "output_final_count", profile.output_final_count
+    )
+    append_profile_int(
+        py_result,
+        "measurement_iterations",
+        profile.measurement_iterations,
+    )
+    append_profile_float(py_result, "sink_value", profile.sink_value)
+    return py_result
+
+
 def prepare_packed_index(
     py_doc_ids: PythonObject,
     py_doc_offsets: PythonObject,
@@ -538,6 +675,141 @@ def prepare_plaid_approx_i8_hybrid_flat_dim128(
     )
 
 
+def prepare_tachiom_tac_hybrid_flat_dim128(
+    py_doc_ids: PythonObject,
+    py_doc_offsets: PythonObject,
+    py_token_values: PythonObject,
+    py_centroid_values: PythonObject,
+    py_centroid_doc_offsets: PythonObject,
+    py_centroid_doc_indices: PythonObject,
+) raises -> PythonObject:
+    var index = decode_hybrid_flat_dim128_index(
+        py_doc_ids, py_doc_offsets, py_token_values
+    )
+    return PythonObject(
+        alloc=prepare_tachiom_tac_hybrid_flat_dim128_index(
+            index^,
+            decode_float_values(py_centroid_values),
+            decode_int_list(py_centroid_doc_offsets),
+            decode_int_list(py_centroid_doc_indices),
+        )
+    )
+
+
+def prepare_tachiom_tac_i8_hybrid_flat_dim128(
+    py_doc_ids: PythonObject,
+    py_doc_offsets: PythonObject,
+    py_token_values: PythonObject,
+    py_centroid_values: PythonObject,
+    py_centroid_doc_offsets: PythonObject,
+    py_centroid_doc_indices: PythonObject,
+) raises -> PythonObject:
+    var index = decode_hybrid_flat_dim128_index(
+        py_doc_ids, py_doc_offsets, py_token_values
+    )
+    return PythonObject(
+        alloc=prepare_tachiom_tac_i8_hybrid_flat_dim128_index(
+            index,
+            decode_float_values(py_centroid_values),
+            decode_int_list(py_centroid_doc_offsets),
+            decode_int_list(py_centroid_doc_indices),
+        )
+    )
+
+
+def prepare_tachiom_tac_hnsw_hybrid_flat_dim128(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var index = decode_hybrid_flat_dim128_index(
+        py_request[0], py_request[1], py_request[2]
+    )
+    return PythonObject(
+        alloc=prepare_tachiom_tac_hnsw_hybrid_flat_dim128_index(
+            index^,
+            decode_float_values(py_request[3]),
+            decode_int_list(py_request[4]),
+            decode_int_list(py_request[5]),
+            decode_int_list(py_request[6]),
+            decode_int_list(py_request[7]),
+            decode_int_list(py_request[8]),
+            Int(py=py_request[9]),
+        )
+    )
+
+
+def prepare_tachiom_tac_pq_dim128(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    return PythonObject(
+        alloc=prepare_tachiom_tac_pq_dim128_index(
+            decode_string_list(py_request[0]),
+            decode_int_list(py_request[1]),
+            decode_float_values(py_request[2]),
+            decode_int_list(py_request[3]),
+            decode_int_list(py_request[4]),
+            decode_int_list(py_request[5]),
+            decode_float_values(py_request[6]),
+            decode_int_list(py_request[7]),
+            decode_float_values(py_request[8]),
+            Int(py=py_request[9]),
+            Int(py=py_request[10]),
+        )
+    )
+
+
+def prepare_tachiom_tac_hnsw_pq_dim128(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    return PythonObject(
+        alloc=prepare_tachiom_tac_hnsw_pq_dim128_index(
+            decode_string_list(py_request[0]),
+            decode_int_list(py_request[1]),
+            decode_float_values(py_request[2]),
+            decode_int_list(py_request[3]),
+            decode_int_list(py_request[4]),
+            decode_int_list(py_request[5]),
+            decode_float_values(py_request[6]),
+            decode_int_list(py_request[7]),
+            decode_float_values(py_request[8]),
+            Int(py=py_request[9]),
+            Int(py=py_request[10]),
+            decode_int_list(py_request[11]),
+            decode_int_list(py_request[12]),
+            decode_int_list(py_request[13]),
+            Int(py=py_request[14]),
+        )
+    )
+
+
+def prepare_tachiom_tac_hnsw_pq_dim128_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    return PythonObject(
+        alloc=prepare_tachiom_tac_hnsw_pq_dim128_address_index(
+            Int(py=py_request[0]),
+            Int(py=py_request[1]),
+            Int(py=py_request[2]),
+            Int(py=py_request[3]),
+            Int(py=py_request[4]),
+            Int(py=py_request[5]),
+            Int(py=py_request[6]),
+            Int(py=py_request[7]),
+            Int(py=py_request[8]),
+            Int(py=py_request[9]),
+            Int(py=py_request[10]),
+            Int(py=py_request[11]),
+            Int(py=py_request[12]),
+            Int(py=py_request[13]),
+            Int(py=py_request[14]),
+            Int(py=py_request[15]),
+            Int(py=py_request[16]),
+            Int(py=py_request[17]),
+            Int(py=py_request[18]),
+            Int(py=py_request[19]),
+        )
+    )
+
+
 def plaid_approx_prepared_posting_count(
     py_prepared_index: PythonObject,
 ) raises -> PythonObject:
@@ -557,6 +829,97 @@ def plaid_approx_i8_prepared_posting_count(
     ]()
     return Python.int(
         plaid_approx_i8_prepared_posting_count_value(prepared_index[])
+    )
+
+
+def tachiom_tac_prepared_posting_count(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacIndex
+    ]()
+    return Python.int(tachiom_tac_prepared_posting_count_value(prepared_index[]))
+
+
+def tachiom_tac_i8_prepared_posting_count(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacI8Index
+    ]()
+    return Python.int(tachiom_tac_i8_prepared_posting_count_value(prepared_index[]))
+
+
+def tachiom_tac_hnsw_prepared_posting_count(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacHnswIndex
+    ]()
+    return Python.int(tachiom_tac_hnsw_prepared_posting_count_value(prepared_index[]))
+
+
+def tachiom_tac_hnsw_prepared_graph_edge_count(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacHnswIndex
+    ]()
+    return Python.int(tachiom_tac_hnsw_prepared_graph_edge_count_value(prepared_index[]))
+
+
+def tachiom_tac_pq_prepared_posting_count(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacPqIndex
+    ]()
+    return Python.int(tachiom_tac_pq_prepared_posting_count_value(prepared_index[]))
+
+
+def tachiom_tac_hnsw_pq_prepared_posting_count(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacHnswPqIndex
+    ]()
+    return Python.int(
+        tachiom_tac_hnsw_pq_prepared_posting_count_value(prepared_index[])
+    )
+
+
+def tachiom_tac_hnsw_pq_prepared_graph_edge_count(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacHnswPqIndex
+    ]()
+    return Python.int(
+        tachiom_tac_hnsw_pq_prepared_graph_edge_count_value(prepared_index[])
+    )
+
+
+def tachiom_tac_hnsw_pq_address_prepared_posting_count(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacHnswPqAddressIndex
+    ]()
+    return Python.int(
+        tachiom_tac_hnsw_pq_address_prepared_posting_count_value(prepared_index[])
+    )
+
+
+def tachiom_tac_hnsw_pq_address_prepared_graph_edge_count(
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacHnswPqAddressIndex
+    ]()
+    return Python.int(
+        tachiom_tac_hnsw_pq_address_prepared_graph_edge_count_value(
+            prepared_index[]
+        )
     )
 
 
@@ -952,6 +1315,1005 @@ def search_plaid_approx_i8_prepared_hits_batch(
     return hits_batch_to_python(hits_by_query)
 
 
+def search_tachiom_tac_prepared_batch(
+    py_query_batch_values: PythonObject,
+    py_final_k: PythonObject,
+    py_centroids_per_query_vector: PythonObject,
+    py_candidate_k: PythonObject,
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var queries = decode_flat_queries(py_query_batch_values)
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_final_k)
+    var centroids_per_query_vector = Int(py=py_centroids_per_query_vector)
+    var candidate_k = Int(py=py_candidate_k)
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_search_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_request[3])
+    var centroids_per_query_vector = Int(py=py_request[4])
+    var candidate_k = Int(py=py_request[5])
+    var prepared_index = py_request[6].downcast_value_ptr[
+        PreparedTachiomTacIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_search_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_prepared_batch_address_with_pruning(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_request[3])
+    var centroids_per_query_vector = Int(py=py_request[4])
+    var candidate_k = Int(py=py_request[5])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[6]))
+    var prepared_index = py_request[7].downcast_value_ptr[
+        PreparedTachiomTacIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_search_positions_for_query_with_pruning(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                candidate_pruning_alpha,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_prepared_hits_batch(
+    py_query_batch_values: PythonObject,
+    py_final_k: PythonObject,
+    py_centroids_per_query_vector: PythonObject,
+    py_candidate_k: PythonObject,
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var queries = decode_flat_queries(py_query_batch_values)
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_final_k)
+    var centroids_per_query_vector = Int(py=py_centroids_per_query_vector)
+    var candidate_k = Int(py=py_candidate_k)
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacIndex
+    ]()
+    var hits_by_query = List[List[SearchHit]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        hits_by_query.append(
+            tachiom_tac_search_hits_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+            )
+        )
+
+    return hits_batch_to_python(hits_by_query)
+
+
+def tachiom_tac_candidate_positions_prepared_batch(
+    py_query_batch_values: PythonObject,
+    py_centroids_per_query_vector: PythonObject,
+    py_candidate_k: PythonObject,
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var queries = decode_flat_queries(py_query_batch_values)
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_centroids_per_query_vector)
+    var candidate_k = Int(py=py_candidate_k)
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_candidate_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_candidate_positions_prepared_batch_address(
+    py_query_values_address: PythonObject,
+    py_query_count: PythonObject,
+    py_query_vector_count: PythonObject,
+    py_centroids_per_query_vector: PythonObject,
+    py_candidate_k: PythonObject,
+    py_prepared_index: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_query_values_address)
+    var query_count = Int(py=py_query_count)
+    var query_vector_count = Int(py=py_query_vector_count)
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_centroids_per_query_vector)
+    var candidate_k = Int(py=py_candidate_k)
+    var prepared_index = py_prepared_index.downcast_value_ptr[
+        PreparedTachiomTacIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_candidate_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_candidate_positions_prepared_batch_address_with_pruning(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var final_k = Int(py=py_request[5])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[6]))
+    var prepared_index = py_request[7].downcast_value_ptr[
+        PreparedTachiomTacIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_candidate_positions_for_query_with_pruning(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                candidate_pruning_alpha,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_i8_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_request[3])
+    var centroids_per_query_vector = Int(py=py_request[4])
+    var candidate_k = Int(py=py_request[5])
+    var prepared_index = py_request[6].downcast_value_ptr[
+        PreparedTachiomTacI8Index
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_i8_search_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_i8_candidate_positions_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var prepared_index = py_request[5].downcast_value_ptr[
+        PreparedTachiomTacI8Index
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_i8_candidate_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_hnsw_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_request[3])
+    var centroids_per_query_vector = Int(py=py_request[4])
+    var candidate_k = Int(py=py_request[5])
+    var ef_search = Int(py=py_request[6])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[7]))
+    var prepared_index = py_request[8].downcast_value_ptr[
+        PreparedTachiomTacHnswIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_search_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                ef_search,
+                candidate_pruning_alpha,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_hnsw_candidate_positions_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var ef_search = Int(py=py_request[5])
+    var prepared_index = py_request[6].downcast_value_ptr[
+        PreparedTachiomTacHnswIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_candidate_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                ef_search,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_hnsw_candidate_positions_prepared_batch_address_with_pruning(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var final_k = Int(py=py_request[5])
+    var ef_search = Int(py=py_request[6])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[7]))
+    var prepared_index = py_request[8].downcast_value_ptr[
+        PreparedTachiomTacHnswIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_candidate_positions_for_query_with_pruning(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                ef_search,
+                candidate_pruning_alpha,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_hnsw_pq_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_request[3])
+    var centroids_per_query_vector = Int(py=py_request[4])
+    var candidate_k = Int(py=py_request[5])
+    var ef_search = Int(py=py_request[6])
+    var prepared_index = py_request[7].downcast_value_ptr[
+        PreparedTachiomTacHnswPqIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].pq.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_pq_search_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                ef_search,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_hnsw_pq_prepared_batch_address_with_pruning(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_request[3])
+    var centroids_per_query_vector = Int(py=py_request[4])
+    var candidate_k = Int(py=py_request[5])
+    var ef_search = Int(py=py_request[6])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[7]))
+    var prepared_index = py_request[8].downcast_value_ptr[
+        PreparedTachiomTacHnswPqIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].pq.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_pq_search_positions_for_query_with_pruning(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                ef_search,
+                candidate_pruning_alpha,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_hnsw_pq_candidate_positions_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var ef_search = Int(py=py_request[5])
+    var prepared_index = py_request[6].downcast_value_ptr[
+        PreparedTachiomTacHnswPqIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].pq.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_pq_candidate_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                ef_search,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_hnsw_pq_candidate_positions_prepared_batch_address_with_pruning(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var final_k = Int(py=py_request[5])
+    var ef_search = Int(py=py_request[6])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[7]))
+    var prepared_index = py_request[8].downcast_value_ptr[
+        PreparedTachiomTacHnswPqIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].pq.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_pq_candidate_positions_for_query_with_pruning(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                ef_search,
+                candidate_pruning_alpha,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_hnsw_pq_address_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_request[3])
+    var centroids_per_query_vector = Int(py=py_request[4])
+    var candidate_k = Int(py=py_request[5])
+    var ef_search = Int(py=py_request[6])
+    var prepared_index = py_request[7].downcast_value_ptr[
+        PreparedTachiomTacHnswPqAddressIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != 128:
+            raise Error("all queries must be dim128")
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_pq_address_search_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                ef_search,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_hnsw_pq_address_prepared_batch_address_with_pruning(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_request[3])
+    var centroids_per_query_vector = Int(py=py_request[4])
+    var candidate_k = Int(py=py_request[5])
+    var ef_search = Int(py=py_request[6])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[7]))
+    var prepared_index = py_request[8].downcast_value_ptr[
+        PreparedTachiomTacHnswPqAddressIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != 128:
+            raise Error("all queries must be dim128")
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_pq_address_search_positions_for_query_with_pruning(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                ef_search,
+                candidate_pruning_alpha,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_hnsw_pq_address_candidate_positions_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var ef_search = Int(py=py_request[5])
+    var prepared_index = py_request[6].downcast_value_ptr[
+        PreparedTachiomTacHnswPqAddressIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != 128:
+            raise Error("all queries must be dim128")
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_pq_address_candidate_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                ef_search,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_hnsw_pq_address_candidate_positions_prepared_batch_address_with_pruning(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var final_k = Int(py=py_request[5])
+    var ef_search = Int(py=py_request[6])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[7]))
+    var prepared_index = py_request[8].downcast_value_ptr[
+        PreparedTachiomTacHnswPqAddressIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != 128:
+            raise Error("all queries must be dim128")
+
+        positions_by_query.append(
+            tachiom_tac_hnsw_pq_address_candidate_positions_for_query_with_pruning(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                ef_search,
+                candidate_pruning_alpha,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_pq_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_request[3])
+    var centroids_per_query_vector = Int(py=py_request[4])
+    var candidate_k = Int(py=py_request[5])
+    var prepared_index = py_request[6].downcast_value_ptr[
+        PreparedTachiomTacPqIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_pq_search_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def search_tachiom_tac_pq_prepared_batch_address_with_pruning(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var final_k = Int(py=py_request[3])
+    var centroids_per_query_vector = Int(py=py_request[4])
+    var candidate_k = Int(py=py_request[5])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[6]))
+    var prepared_index = py_request[7].downcast_value_ptr[
+        PreparedTachiomTacPqIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_pq_search_positions_for_query_with_pruning(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                candidate_pruning_alpha,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_pq_candidate_positions_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var prepared_index = py_request[5].downcast_value_ptr[
+        PreparedTachiomTacPqIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_pq_candidate_positions_for_query(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
+def tachiom_tac_pq_candidate_positions_prepared_batch_address_with_pruning(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var final_k = Int(py=py_request[5])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[6]))
+    var prepared_index = py_request[7].downcast_value_ptr[
+        PreparedTachiomTacPqIndex
+    ]()
+    var positions_by_query = List[List[Int]]()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+
+        positions_by_query.append(
+            tachiom_tac_pq_candidate_positions_for_query_with_pruning(
+                query,
+                prepared_index[],
+                centroids_per_query_vector,
+                candidate_k,
+                final_k,
+                candidate_pruning_alpha,
+            )
+        )
+
+    return positions_batch_to_python(positions_by_query)
+
+
 def plaid_i8_candidate_positions_prepared_batch(
     py_query_batch_values: PythonObject,
     py_centroids_per_query_vector: PythonObject,
@@ -1340,6 +2702,47 @@ def plaid_i8_candidate_generation_profile_prepared_batch_address(
     return py_profiles
 
 
+def tachiom_tac_candidate_generation_profile_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var final_k = Int(py=py_request[5])
+    var measurement_iterations = Int(py=py_request[6])
+    var prepared_index = py_request[7].downcast_value_ptr[
+        PreparedTachiomTacIndex
+    ]()
+    var py_profiles = Python.list()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].index.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+        var profile = profile_tachiom_tac_candidate_generation_for_query(
+            query,
+            prepared_index[],
+            centroids_per_query_vector,
+            candidate_k,
+            final_k,
+            measurement_iterations,
+        )
+        py_profiles.append(tachiom_tac_candidate_generation_profile_to_python(profile))
+
+    return py_profiles
+
+
 @export
 def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
     try:
@@ -1350,6 +2753,24 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
         )
         _ = module.add_type[PreparedPlaidApproxI8Index](
             "PreparedPlaidApproxI8Index"
+        )
+        _ = module.add_type[PreparedTachiomTacI8Index](
+            "PreparedTachiomTacI8Index"
+        )
+        _ = module.add_type[PreparedTachiomTacHnswIndex](
+            "PreparedTachiomTacHnswIndex"
+        )
+        _ = module.add_type[PreparedTachiomTacHnswPqIndex](
+            "PreparedTachiomTacHnswPqIndex"
+        )
+        _ = module.add_type[PreparedTachiomTacHnswPqAddressIndex](
+            "PreparedTachiomTacHnswPqAddressIndex"
+        )
+        _ = module.add_type[PreparedTachiomTacIndex](
+            "PreparedTachiomTacIndex"
+        )
+        _ = module.add_type[PreparedTachiomTacPqIndex](
+            "PreparedTachiomTacPqIndex"
         )
         module.def_function[exact_scores_packed](
             "exact_scores_packed",
@@ -1383,6 +2804,45 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
                 " index in Mojo."
             ),
         )
+        module.def_function[prepare_tachiom_tac_hybrid_flat_dim128](
+            "prepare_tachiom_tac_hybrid_flat_dim128",
+            docstring=(
+                "Prepare a Tachiom TAC index from token-aware centroids in Mojo."
+            ),
+        )
+        module.def_function[prepare_tachiom_tac_i8_hybrid_flat_dim128](
+            "prepare_tachiom_tac_i8_hybrid_flat_dim128",
+            docstring=(
+                "Prepare a Tachiom TAC index with an int8 rerank payload in Mojo."
+            ),
+        )
+        module.def_function[prepare_tachiom_tac_hnsw_hybrid_flat_dim128](
+            "prepare_tachiom_tac_hnsw_hybrid_flat_dim128",
+            docstring=(
+                "Prepare a Tachiom TAC index with an HNSW centroid graph in Mojo."
+            ),
+        )
+        module.def_function[prepare_tachiom_tac_pq_dim128](
+            "prepare_tachiom_tac_pq_dim128",
+            docstring=(
+                "Prepare a Tachiom TAC index with a residual-PQ rerank payload"
+                " in Mojo."
+            ),
+        )
+        module.def_function[prepare_tachiom_tac_hnsw_pq_dim128](
+            "prepare_tachiom_tac_hnsw_pq_dim128",
+            docstring=(
+                "Prepare a Tachiom TAC HNSW index with a residual-PQ rerank"
+                " payload in Mojo."
+            ),
+        )
+        module.def_function[prepare_tachiom_tac_hnsw_pq_dim128_address](
+            "prepare_tachiom_tac_hnsw_pq_dim128_address",
+            docstring=(
+                "Prepare an address-backed streaming Tachiom TAC HNSW"
+                " residual-PQ index in Mojo."
+            ),
+        )
         module.def_function[plaid_approx_prepared_posting_count](
             "plaid_approx_prepared_posting_count",
             docstring="Return the prepared PLAID-style index posting count.",
@@ -1391,6 +2851,50 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
             "plaid_approx_i8_prepared_posting_count",
             docstring=(
                 "Return the prepared int8 PLAID-style index posting count."
+            ),
+        )
+        module.def_function[tachiom_tac_prepared_posting_count](
+            "tachiom_tac_prepared_posting_count",
+            docstring="Return the prepared Tachiom TAC posting count.",
+        )
+        module.def_function[tachiom_tac_i8_prepared_posting_count](
+            "tachiom_tac_i8_prepared_posting_count",
+            docstring="Return the prepared Tachiom TAC i8 posting count.",
+        )
+        module.def_function[tachiom_tac_hnsw_prepared_posting_count](
+            "tachiom_tac_hnsw_prepared_posting_count",
+            docstring="Return the prepared Tachiom TAC HNSW posting count.",
+        )
+        module.def_function[tachiom_tac_hnsw_prepared_graph_edge_count](
+            "tachiom_tac_hnsw_prepared_graph_edge_count",
+            docstring="Return the prepared Tachiom TAC HNSW graph edge count.",
+        )
+        module.def_function[tachiom_tac_pq_prepared_posting_count](
+            "tachiom_tac_pq_prepared_posting_count",
+            docstring="Return the prepared Tachiom TAC residual-PQ posting count.",
+        )
+        module.def_function[tachiom_tac_hnsw_pq_prepared_posting_count](
+            "tachiom_tac_hnsw_pq_prepared_posting_count",
+            docstring=(
+                "Return the prepared Tachiom TAC HNSW residual-PQ posting count."
+            ),
+        )
+        module.def_function[tachiom_tac_hnsw_pq_prepared_graph_edge_count](
+            "tachiom_tac_hnsw_pq_prepared_graph_edge_count",
+            docstring=(
+                "Return the prepared Tachiom TAC HNSW residual-PQ graph edge count."
+            ),
+        )
+        module.def_function[tachiom_tac_hnsw_pq_address_prepared_posting_count](
+            "tachiom_tac_hnsw_pq_address_prepared_posting_count",
+            docstring=(
+                "Return the address-backed Tachiom TAC HNSW residual-PQ posting count."
+            ),
+        )
+        module.def_function[tachiom_tac_hnsw_pq_address_prepared_graph_edge_count](
+            "tachiom_tac_hnsw_pq_address_prepared_graph_edge_count",
+            docstring=(
+                "Return the address-backed Tachiom TAC HNSW residual-PQ graph edge count."
             ),
         )
         module.def_function[plaid_i8_prepared_doc_offsets](
@@ -1484,6 +2988,201 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
                 " approximation index and return hits."
             ),
         )
+        module.def_function[search_tachiom_tac_prepared_batch](
+            "search_tachiom_tac_prepared_batch",
+            docstring="Search a prepared Tachiom TAC index.",
+        )
+        module.def_function[search_tachiom_tac_prepared_batch_address](
+            "search_tachiom_tac_prepared_batch_address",
+            docstring=(
+                "Search a prepared Tachiom TAC index from a contiguous"
+                " float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            search_tachiom_tac_prepared_batch_address_with_pruning
+        ](
+            "search_tachiom_tac_prepared_batch_address_with_pruning",
+            docstring=(
+                "Search a prepared Tachiom TAC index with candidate pruning"
+                " from a contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[search_tachiom_tac_prepared_hits_batch](
+            "search_tachiom_tac_prepared_hits_batch",
+            docstring="Search a prepared Tachiom TAC index and return hits.",
+        )
+        module.def_function[tachiom_tac_candidate_positions_prepared_batch](
+            "tachiom_tac_candidate_positions_prepared_batch",
+            docstring="Generate Tachiom TAC candidate document positions.",
+        )
+        module.def_function[
+            tachiom_tac_candidate_positions_prepared_batch_address
+        ](
+            "tachiom_tac_candidate_positions_prepared_batch_address",
+            docstring=(
+                "Generate Tachiom TAC candidates from a contiguous float32"
+                " query tensor address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_candidate_positions_prepared_batch_address_with_pruning
+        ](
+            "tachiom_tac_candidate_positions_prepared_batch_address_with_pruning",
+            docstring=(
+                "Generate pruned Tachiom TAC candidates from a contiguous"
+                " float32 query tensor address."
+            ),
+        )
+        module.def_function[search_tachiom_tac_i8_prepared_batch_address](
+            "search_tachiom_tac_i8_prepared_batch_address",
+            docstring=(
+                "Search a prepared Tachiom TAC i8 index from a contiguous"
+                " float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_i8_candidate_positions_prepared_batch_address
+        ](
+            "tachiom_tac_i8_candidate_positions_prepared_batch_address",
+            docstring=(
+                "Generate Tachiom TAC i8 candidates from a contiguous float32"
+                " query tensor address."
+            ),
+        )
+        module.def_function[search_tachiom_tac_hnsw_prepared_batch_address](
+            "search_tachiom_tac_hnsw_prepared_batch_address",
+            docstring=(
+                "Search a prepared Tachiom TAC HNSW index from a contiguous"
+                " float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_hnsw_candidate_positions_prepared_batch_address
+        ](
+            "tachiom_tac_hnsw_candidate_positions_prepared_batch_address",
+            docstring=(
+                "Generate Tachiom TAC HNSW candidates from a contiguous"
+                " float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_hnsw_candidate_positions_prepared_batch_address_with_pruning
+        ](
+            "tachiom_tac_hnsw_candidate_positions_prepared_batch_address_with_pruning",
+            docstring=(
+                "Generate pruned Tachiom TAC HNSW candidates from a contiguous"
+                " float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            search_tachiom_tac_hnsw_pq_prepared_batch_address
+        ](
+            "search_tachiom_tac_hnsw_pq_prepared_batch_address",
+            docstring=(
+                "Search a prepared Tachiom TAC HNSW residual-PQ index from a"
+                " contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            search_tachiom_tac_hnsw_pq_prepared_batch_address_with_pruning
+        ](
+            "search_tachiom_tac_hnsw_pq_prepared_batch_address_with_pruning",
+            docstring=(
+                "Search a prepared Tachiom TAC HNSW residual-PQ index with"
+                " candidate pruning from a contiguous float32 query tensor"
+                " address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_hnsw_pq_candidate_positions_prepared_batch_address
+        ](
+            "tachiom_tac_hnsw_pq_candidate_positions_prepared_batch_address",
+            docstring=(
+                "Generate Tachiom TAC HNSW residual-PQ candidates from a"
+                " contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_hnsw_pq_candidate_positions_prepared_batch_address_with_pruning
+        ](
+            "tachiom_tac_hnsw_pq_candidate_positions_prepared_batch_address_with_pruning",
+            docstring=(
+                "Generate pruned Tachiom TAC HNSW residual-PQ candidates from"
+                " a contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            search_tachiom_tac_hnsw_pq_address_prepared_batch_address
+        ](
+            "search_tachiom_tac_hnsw_pq_address_prepared_batch_address",
+            docstring=(
+                "Search an address-backed Tachiom TAC HNSW residual-PQ index"
+                " from a contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            search_tachiom_tac_hnsw_pq_address_prepared_batch_address_with_pruning
+        ](
+            "search_tachiom_tac_hnsw_pq_address_prepared_batch_address_with_pruning",
+            docstring=(
+                "Search an address-backed Tachiom TAC HNSW residual-PQ index"
+                " with pruning from a contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_hnsw_pq_address_candidate_positions_prepared_batch_address
+        ](
+            "tachiom_tac_hnsw_pq_address_candidate_positions_prepared_batch_address",
+            docstring=(
+                "Generate address-backed Tachiom TAC HNSW residual-PQ"
+                " candidates from a contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_hnsw_pq_address_candidate_positions_prepared_batch_address_with_pruning
+        ](
+            "tachiom_tac_hnsw_pq_address_candidate_positions_prepared_batch_address_with_pruning",
+            docstring=(
+                "Generate pruned address-backed Tachiom TAC HNSW residual-PQ"
+                " candidates from a contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[search_tachiom_tac_pq_prepared_batch_address](
+            "search_tachiom_tac_pq_prepared_batch_address",
+            docstring=(
+                "Search a prepared Tachiom TAC residual-PQ index from a"
+                " contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            search_tachiom_tac_pq_prepared_batch_address_with_pruning
+        ](
+            "search_tachiom_tac_pq_prepared_batch_address_with_pruning",
+            docstring=(
+                "Search a prepared Tachiom TAC residual-PQ index with"
+                " candidate pruning from a contiguous float32 query tensor"
+                " address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_pq_candidate_positions_prepared_batch_address
+        ](
+            "tachiom_tac_pq_candidate_positions_prepared_batch_address",
+            docstring=(
+                "Generate Tachiom TAC residual-PQ candidates from a contiguous"
+                " float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_pq_candidate_positions_prepared_batch_address_with_pruning
+        ](
+            "tachiom_tac_pq_candidate_positions_prepared_batch_address_with_pruning",
+            docstring=(
+                "Generate pruned Tachiom TAC residual-PQ candidates from a"
+                " contiguous float32 query tensor address."
+            ),
+        )
         module.def_function[plaid_i8_candidate_positions_prepared_batch](
             "plaid_i8_candidate_positions_prepared_batch",
             docstring=(
@@ -1547,6 +3246,15 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
             "plaid_i8_candidate_generation_profile_prepared_batch_address",
             docstring=(
                 "Profile int8 PLAID candidate-generation substeps from a"
+                " contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_candidate_generation_profile_prepared_batch_address
+        ](
+            "tachiom_tac_candidate_generation_profile_prepared_batch_address",
+            docstring=(
+                "Profile Tachiom TAC candidate-generation substeps from a"
                 " contiguous float32 query tensor address."
             ),
         )

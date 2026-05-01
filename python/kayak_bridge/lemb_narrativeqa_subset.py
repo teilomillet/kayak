@@ -25,6 +25,7 @@ def build_lemb_narrativeqa_colbert_subset(
     query_limit: int = 8,
     model_name: str = DEFAULT_MODEL_NAME,
     dataset_id: str = DEFAULT_DATASET_ID,
+    include_document_token_ids: bool = False,
 ) -> dict:
     queries_dataset = load_dataset(dataset_id, "queries", split="test")
     documents_dataset = load_dataset(dataset_id, "corpus", split="test")
@@ -85,4 +86,5 @@ def build_lemb_narrativeqa_colbert_subset(
         model_name=model_name,
         documents=documents,
         queries=selected_queries,
+        include_document_token_ids=include_document_token_ids,
     )

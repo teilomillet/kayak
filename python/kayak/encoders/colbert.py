@@ -50,6 +50,10 @@ def _tensor_to_vectors(tensor: torch.Tensor) -> list[list[float]]:
     return tensor.detach().cpu().tolist()
 
 
+def _tensor_to_token_ids(tensor: torch.Tensor) -> tuple[int, ...]:
+    return tuple(int(token_id) for token_id in tensor.detach().cpu().tolist())
+
+
 @dataclass(frozen=True, slots=True)
 class ColBERTTextEncoder:
     """Encode text with a ColBERT checkpoint into late-interaction objects.
@@ -82,12 +86,32 @@ class ColBERTTextEncoder:
             encoded = checkpoint.queryFromText([text], to_cpu=True)
         return query(_tensor_to_vectors(encoded[0]), text=text)
 
+    def _encode_document_tensor_and_token_ids(
+        self,
+        text: str,
+    ) -> tuple[torch.Tensor, tuple[int, ...] | None]:
+        checkpoint = self._effective_checkpoint()
+        doc_tokenizer = getattr(checkpoint, "doc_tokenizer", None)
+        doc_encoder = getattr(checkpoint, "doc", None)
+        if doc_tokenizer is None or doc_encoder is None:
+            with torch.inference_mode():
+                encoded = checkpoint.docFromText([text], to_cpu=True)
+            return encoded[0], None
+
+        with torch.inference_mode():
+            input_ids, attention_mask = doc_tokenizer.tensorize([text])
+            encoded = doc_encoder(
+                input_ids,
+                attention_mask,
+                keep_dims=True,
+                to_cpu=True,
+            )
+        return encoded[0], _tensor_to_token_ids(input_ids[0])
+
     def encode_document_vectors(self, text: str) -> TokenMatrixInput:
         """Encode one document string into token-level vectors using ColBERT."""
-        checkpoint = self._effective_checkpoint()
-        with torch.inference_mode():
-            encoded = checkpoint.docFromText([text], to_cpu=True)
-        return _tensor_to_vectors(encoded[0])
+        encoded, _ = self._encode_document_tensor_and_token_ids(text)
+        return _tensor_to_vectors(encoded)
 
     def encode_documents(
         self,
@@ -96,11 +120,19 @@ class ColBERTTextEncoder:
     ) -> LateDocuments:
         """Encode aligned document ids and texts into ``LateDocuments``."""
         text_rows = tuple(str(text) for text in texts)
-        token_vectors = tuple(
-            self.encode_document_vectors(text) for text in text_rows
-        )
+        token_vectors: list[list[list[float]]] = []
+        token_id_rows: list[tuple[int, ...]] = []
+        saw_missing_token_ids = False
+        for text in text_rows:
+            encoded, token_ids = self._encode_document_tensor_and_token_ids(text)
+            token_vectors.append(_tensor_to_vectors(encoded))
+            if token_ids is None:
+                saw_missing_token_ids = True
+            else:
+                token_id_rows.append(token_ids)
         return documents(
             doc_ids,
-            token_vectors,
+            tuple(token_vectors),
             texts=text_rows,
+            token_ids=None if saw_missing_token_ids else tuple(token_id_rows),
         )

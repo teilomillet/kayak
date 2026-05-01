@@ -27,6 +27,10 @@ TokenMatrixInput: TypeAlias = (
     np.ndarray | TensorInput | Sequence[Sequence[ScalarInput]]
 )
 TokenValuesInput: TypeAlias = np.ndarray | TensorInput | Sequence[ScalarInput]
+TokenIdValuesInput: TypeAlias = np.ndarray | TensorInput | Sequence[int]
+DocumentTokenIdsInput: TypeAlias = (
+    np.ndarray | TensorInput | Sequence[Sequence[int]]
+)
 QueryBatchInput: TypeAlias = np.ndarray | TensorInput | Sequence[TokenMatrixInput]
 DocumentMatricesInput: TypeAlias = (
     np.ndarray | TensorInput | Sequence[TokenMatrixInput]

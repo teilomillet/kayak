@@ -166,6 +166,8 @@ def build_msmarco_passage_task(
     document_limit: int | None = None,
     query_limit: int | None = None,
     include_relevant_documents: bool = True,
+    include_document_token_ids: bool = False,
+    document_batch_size: int = 8,
     model_name: str = DEFAULT_MODEL_NAME,
     dataset_id: str = DEFAULT_DATASET_ID,
 ) -> tuple[dict, MsmarcoPassageSelection]:
@@ -182,12 +184,14 @@ def build_msmarco_passage_task(
             "Local MS MARCO passage ranking subset encoded for Kayak PLAID "
             "candidate-generation and serving-scale profiling."
         ),
-        primary_metric="recall",
+        primary_metric="mrr",
         k=10,
         dataset_id=dataset_id,
         model_name=model_name,
         documents=selection.documents,
         queries=selection.queries,
+        include_document_token_ids=include_document_token_ids,
+        document_batch_size=document_batch_size,
     )
     return task, selection
 

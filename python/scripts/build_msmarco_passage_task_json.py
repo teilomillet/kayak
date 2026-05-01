@@ -50,11 +50,28 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
     parser.add_argument("--dataset-id", default=DEFAULT_DATASET_ID)
     parser.add_argument(
+        "--document-batch-size",
+        type=int,
+        default=8,
+        help=(
+            "ColBERT document encoding batch size. Keep explicit because "
+            "artifact build time and peak memory depend on it."
+        ),
+    )
+    parser.add_argument(
         "--no-include-relevant-documents",
         action="store_true",
         help=(
             "Do not force selected query positives into limited document "
             "subsets. Full-corpus runs do not need this flag."
+        ),
+    )
+    parser.add_argument(
+        "--include-document-token-ids",
+        action="store_true",
+        help=(
+            "Store ColBERT document tokenizer input ids aligned to document "
+            "vectors. This is required for token-aware clustering benchmarks."
         ),
     )
     return parser.parse_args(argv)
@@ -76,6 +93,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         document_limit=args.document_limit,
         query_limit=args.query_limit,
         include_relevant_documents=not args.no_include_relevant_documents,
+        include_document_token_ids=args.include_document_token_ids,
+        document_batch_size=args.document_batch_size,
         model_name=args.model_name,
         dataset_id=args.dataset_id,
     )

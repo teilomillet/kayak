@@ -107,6 +107,38 @@ class LateInteractionApiTests(unittest.TestCase):
         self.assertEqual(selected.doc_texts, ("beta evidence",))
         self.assertEqual(packed.to_layout("hybrid_flat_dim128").doc_texts, packed.doc_texts)
 
+    def test_documents_pack_preserves_optional_token_ids(self) -> None:
+        late_documents = kayak.documents(
+            ["doc-a", "doc-b"],
+            [
+                np.stack([_dim128_vector((0, 1.0)), _dim128_vector((1, 1.0))]),
+                np.stack([_dim128_vector((1, 1.0)), _dim128_vector((0, 1.0))]),
+            ],
+            token_ids=[[101, 102], [201, 202]],
+        )
+
+        packed = late_documents.pack()
+        hybrid = packed.to_layout("hybrid_flat_dim128")
+        selected = hybrid.select(["doc-b"])
+
+        np.testing.assert_array_equal(
+            packed.token_ids,
+            np.array([101, 102, 201, 202], dtype=np.int64),
+        )
+        np.testing.assert_array_equal(hybrid.token_ids, packed.token_ids)
+        np.testing.assert_array_equal(
+            selected.token_ids,
+            np.array([201, 202], dtype=np.int64),
+        )
+
+    def test_documents_reject_misaligned_token_ids(self) -> None:
+        with self.assertRaisesRegex(ValueError, "token_ids must align"):
+            kayak.documents(
+                ["doc-a"],
+                [np.stack([_dim128_vector((0, 1.0)), _dim128_vector((1, 1.0))])],
+                token_ids=[[101]],
+            )
+
     def test_flat_query_requires_dim128(self) -> None:
         narrow_query = kayak.query(np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32))
 

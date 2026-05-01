@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from kayak_bridge.msmarco_passage_task import (
     MsmarcoPassagePaths,
+    build_msmarco_passage_task,
     parse_qrels_line,
     parse_tsv_id_text_line,
     select_msmarco_passage_documents_and_queries,
@@ -58,6 +60,42 @@ class MsmarcoPassageTaskTests(unittest.TestCase):
             ["p0", "p2"],
         )
         self.assertEqual(selection.queries[0]["relevant_doc_ids"], ["p2"])
+
+    def test_build_task_uses_msmarco_mrr_and_explicit_batch_size(self) -> None:
+        with TemporaryDirectory() as root:
+            root_path = Path(root)
+            collection = root_path / "collection.tsv"
+            queries = root_path / "queries.tsv"
+            qrels = root_path / "qrels.dev.tsv"
+            collection.write_text("p0\tfirst passage\n", encoding="utf-8")
+            queries.write_text("q0\tfirst?\n", encoding="utf-8")
+            qrels.write_text("q0 0 p0 1\n", encoding="utf-8")
+
+            with patch(
+                "kayak_bridge.msmarco_passage_task.build_retrieval_subset_task",
+                return_value={"documents": [], "queries": []},
+            ) as build_task:
+                task, selection = build_msmarco_passage_task(
+                    MsmarcoPassagePaths(
+                        collection=collection,
+                        queries=queries,
+                        qrels=qrels,
+                    ),
+                    document_limit=1,
+                    query_limit=1,
+                    include_document_token_ids=True,
+                    document_batch_size=16,
+                    model_name="unit-model",
+                    dataset_id="dataset://unit",
+                )
+
+        self.assertEqual(task, {"documents": [], "queries": []})
+        self.assertEqual(selection.selected_document_count, 1)
+        build_task.assert_called_once()
+        kwargs = build_task.call_args.kwargs
+        self.assertEqual(kwargs["primary_metric"], "mrr")
+        self.assertEqual(kwargs["document_batch_size"], 16)
+        self.assertTrue(kwargs["include_document_token_ids"])
 
 
 if __name__ == "__main__":
