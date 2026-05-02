@@ -9,7 +9,7 @@ from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
 from kayak.scoring.dot128_flat import dot_product_dim128_flat_pair_at
 
 from .plaid_approx_dim128 import require_positive_int, top_positions_by_score
-from .tachiom_tac_dim128 import prune_tachiom_candidate_positions_by_score
+from .tachiom_tac_dim128 import pruned_top_positions_by_score
 
 
 # Native search over a Python-built HNSW-style graph on TAC centroids. Graph
@@ -478,9 +478,8 @@ def tachiom_tac_hnsw_candidate_positions_for_query_with_pruning(
     var document_scores = tachiom_tac_hnsw_document_scores_for_query(
         query, prepared_index, centroids_per_query_vector, ef_search
     )
-    var ranked_positions = top_positions_by_score(document_scores, candidate_k)
-    return prune_tachiom_candidate_positions_by_score(
-        ranked_positions, document_scores, final_k, candidate_pruning_alpha
+    return pruned_top_positions_by_score(
+        document_scores, candidate_k, final_k, candidate_pruning_alpha
     )
 
 

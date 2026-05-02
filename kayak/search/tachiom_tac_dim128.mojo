@@ -11,7 +11,12 @@ from kayak.scoring.dot128 import COLBERT_VECTOR_DIM
 from kayak.scoring.dot128_flat import dot_product_dim128_flat_pair_at
 
 from .hit import SearchHit
-from .plaid_approx_dim128 import require_positive_int, top_positions_by_score
+from .plaid_approx_dim128 import (
+    insert_top_score_position,
+    pop_worst_score_position,
+    require_positive_int,
+    top_positions_by_score,
+)
 from .topk import insert_descending, top_k_hits
 
 
@@ -129,12 +134,8 @@ def tachiom_tac_candidate_positions_for_query_with_pruning(
     var document_scores = tachiom_tac_document_scores_for_query(
         query, prepared_index, centroids_per_query_vector
     )
-    var ranked_positions = top_positions_by_score(document_scores, candidate_k)
-    return prune_tachiom_candidate_positions_by_score(
-        ranked_positions,
-        document_scores,
-        final_k,
-        candidate_pruning_alpha,
+    return pruned_top_positions_by_score(
+        document_scores, candidate_k, final_k, candidate_pruning_alpha
     )
 
 
@@ -231,6 +232,67 @@ def prune_tachiom_candidate_positions_by_score(
         kept.append(position)
 
     return kept^
+
+
+def pruned_top_positions_by_score(
+    read document_scores: List[ScoreScalar],
+    candidate_k: Int,
+    final_k: Int,
+    candidate_pruning_alpha: ScoreScalar,
+) raises -> List[Int]:
+    require_positive_int("candidate_k", candidate_k)
+    require_positive_int("final_k", final_k)
+
+    if candidate_pruning_alpha <= zero_score_scalar():
+        return top_positions_by_score(document_scores, candidate_k)
+
+    var required_positions = top_positions_by_score(document_scores, final_k)
+    if len(required_positions) == 0:
+        return required_positions^
+
+    var required_count = final_k
+    if required_count > len(required_positions):
+        required_count = len(required_positions)
+    var cutoff_position = required_positions[required_count - 1]
+    var cutoff_score = document_scores[cutoff_position]
+    var threshold = (ScoreScalar(1.0) - candidate_pruning_alpha) * cutoff_score
+    var require_explicit_required = threshold > cutoff_score
+
+    var limit = candidate_k
+    if limit > len(document_scores):
+        limit = len(document_scores)
+
+    var heap_positions = List[Int]()
+    heap_positions.reserve(limit)
+    var heap_scores = List[ScoreScalar]()
+    heap_scores.reserve(limit)
+    for position in range(len(document_scores)):
+        var score = document_scores[position]
+        var retain_position = score >= threshold
+        if (not retain_position) and require_explicit_required:
+            for required_offset in range(required_count):
+                if position == required_positions[required_offset]:
+                    retain_position = True
+                    break
+        if not retain_position:
+            continue
+        insert_top_score_position(heap_positions, heap_scores, position, score, limit)
+
+    var ascending_positions = List[Int]()
+    ascending_positions.reserve(len(heap_positions))
+    while len(heap_positions) > 0:
+        ascending_positions.append(
+            pop_worst_score_position(heap_positions, heap_scores)
+        )
+
+    var selected = List[Int]()
+    selected.reserve(len(ascending_positions))
+    for offset in range(len(ascending_positions)):
+        selected.append(
+            ascending_positions[len(ascending_positions) - offset - 1]
+        )
+
+    return selected^
 
 
 def tachiom_tac_rerank_candidates_for_query(

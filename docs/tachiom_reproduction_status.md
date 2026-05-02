@@ -126,6 +126,10 @@ These claims are currently justified:
   stress row improved while preserving the same MRR@10 and exact-overlap gates.
   The `131072` eligible row was slightly slower, and the `ef * 16 + 16`
   variant was measured and rejected.
+- Candidate pruning now uses a pruning-aware top-k helper that computes the
+  final-rank cutoff first and only heap-ranks positions that can survive the
+  pruning threshold. This improved the current `32768`, `131072`, and `262144`
+  quality-preserving rows while preserving the same quality gates.
 
 Current strongest bounded native streaming rows:
 
@@ -140,7 +144,7 @@ Current optimized bounded native streaming row:
 
 | Slice | Docs | Doc vectors | Queries | Query vectors | Centroids | Engine | Policy | MRR@10 | Final recall@10 vs exact | QPS |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: |
-| `docs10000_q128_c32768` | `10135` | `739372` | `128` | `4096` | `32768` | native HNSW+PQ | `kc120_ef64_alpha0.35` | `0.9895833333333334` | `0.8867187500000006` | `92.78163789778101` |
+| `docs10000_q128_c32768` | `10135` | `739372` | `128` | `4096` | `32768` | native HNSW+PQ | `kc120_ef64_alpha0.35` | `0.9895833333333334` | `0.8867187500000006` | `94.92727410156428` |
 
 Current bounded centroid-scale ladder:
 
@@ -160,9 +164,9 @@ Quality floors:
 | Centroids | Row kind | `k_c` | HNSW `ef_search` | Alpha | MRR@10 | Final recall@10 vs exact | QPS |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `131072` | fastest | `120` | `64` | `0.3` | `0.9817708333333334` | `0.8023437499999998` | `87.69168200632623` |
-| `131072` | fastest eligible after heap frontier, sort skip, and visited-table sizing | `200` | `64` | `0.45` | `0.9895833333333334` | `0.8906250000000002` | `68.18820304691724` |
+| `131072` | fastest eligible after heap frontier, sort skip, visited-table sizing, and pruning-aware top-k | `200` | `64` | `0.45` | `0.9895833333333334` | `0.8906250000000002` | `69.5078171936609` |
 | `262144` | fastest | `120` | `64` | `0.3` | `0.9856770833333334` | `0.7945312499999997` | `97.06290014898175` |
-| `262144` | fastest eligible after heap frontier, sort skip, and visited-table sizing | `360` | `64` | `0.35` | `0.9934895833333334` | `0.8875000000000008` | `73.48173692089176` |
+| `262144` | fastest eligible after heap frontier, sort skip, visited-table sizing, and pruning-aware top-k | `360` | `64` | `0.35` | `0.9934895833333334` | `0.8875000000000008` | `74.9128485720521` |
 
 Interpretation:
 - these rows are meaningful systems evidence for Kayak's local path
@@ -172,9 +176,9 @@ Interpretation:
 - larger centroid artifacts can be fast or quality-preserving in the measured
   grid, but did not produce a quality-preserving speedup over the `32768`
   baseline
-- heap-backed HNSW frontiers, the `ef == k_c` sort skip, and visited-table
-  sizing substantially narrow the gap, but the optimized `32768` row is still
-  the fastest quality-preserving bounded row
+- heap-backed HNSW frontiers, the `ef == k_c` sort skip, visited-table sizing,
+  and pruning-aware top-k substantially narrow the gap, but the optimized
+  `32768` row is still the fastest quality-preserving bounded row
 
 Current native HNSW+PQ internal profile:
 
