@@ -15,6 +15,7 @@ if str(PYTHON_ROOT) not in sys.path:
 
 from kayak_bridge.tachiom_streaming_benchmark import (  # noqa: E402
     benchmark_streaming_tachiom_index,
+    build_streaming_tachiom_exact_reference,
 )
 
 
@@ -87,6 +88,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.max_query_batch_size is not None and args.max_query_batch_size <= 0:
         raise ValueError("max_query_batch_size must be positive when provided")
     settings = _parse_pruning_settings(args.pruning_alphas)
+    exact_reference = None
+    if args.run_exact:
+        exact_reference = build_streaming_tachiom_exact_reference(
+            snapshot_root=args.snapshot,
+            index_root=args.index,
+            query_limit=args.query_limit,
+            max_exact_vector_count=args.max_exact_vector_count,
+        )
     measurement_rows = []
     for repeat_index in range(args.sweep_repeats):
         for setting in settings:
@@ -103,6 +112,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 max_query_batch_size=args.max_query_batch_size,
                 candidate_pruning_alpha=setting["candidate_pruning_alpha"],
                 disable_candidate_pruning=bool(setting["disable_candidate_pruning"]),
+                exact_reference=exact_reference,
             )
             measurement_rows.append(
                 {
@@ -137,6 +147,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "graph": None if args.graph is None else str(args.graph),
         "max_query_batch_size": args.max_query_batch_size,
         "sweep_repeats": args.sweep_repeats,
+        "exact_reference": (
+            None if exact_reference is None else exact_reference.to_json_ready()
+        ),
         "settings": settings,
         "recommendation": {
             "best_speed": _recommendation_row(best_speed_row),

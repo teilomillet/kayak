@@ -27,6 +27,11 @@ The benchmark now supports three query-time states:
 - override it with a positive alpha in `(0, 1)`
 - disable pruning
 
+The pruning sweep now builds exact MaxSim reference rankings once when
+`--run-exact` is enabled and passes that reference to every alpha row. This
+keeps exact-aware Pareto sweeps from redoing the same exact search for every
+candidate-pruning setting.
+
 Prepared Mojo readers keep their native prepared index handle. The pruning alpha
 is passed per search call, so the override changes only the lightweight Python
 metadata wrapper.

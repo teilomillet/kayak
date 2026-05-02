@@ -21,7 +21,7 @@ from .encoded_snapshot_loader import (
     load_snapshot_queries,
 )
 from .dtypes import VECTOR_DTYPE
-from .judged_metrics import summarize_ranked_task
+from .judged_metrics import TaskMetricSummary, summarize_ranked_task
 from .tachiom_metrics import mean_candidate_set_recall_at_k, mean_recall_at_k
 from .tachiom_snapshot_benchmark import _exact_search_snapshot_positions
 from .tachiom_streaming_search import (
@@ -76,6 +76,32 @@ class StreamingTachiomBenchmarkSummary:
         return asdict(self)
 
 
+@dataclass(frozen=True, slots=True)
+class StreamingTachiomExactReference:
+    """Exact MaxSim reference rankings for one streaming snapshot/index prefix."""
+
+    reference_positions: tuple[tuple[int, ...], ...]
+    exact_metrics: TaskMetricSummary
+    doc_ids: tuple[str, ...]
+    document_count: int
+    document_vector_count_total: int
+    query_count: int
+    query_vector_count_total: int
+    k: int
+    loaded_payload_bytes: int
+
+    def to_json_ready(self) -> dict[str, object]:
+        return {
+            "exact_metrics": asdict(self.exact_metrics),
+            "document_count": self.document_count,
+            "document_vector_count_total": self.document_vector_count_total,
+            "query_count": self.query_count,
+            "query_vector_count_total": self.query_vector_count_total,
+            "k": self.k,
+            "loaded_payload_bytes": self.loaded_payload_bytes,
+        }
+
+
 def benchmark_streaming_tachiom_index(
     *,
     snapshot_root: Path,
@@ -90,6 +116,7 @@ def benchmark_streaming_tachiom_index(
     max_query_batch_size: int | None = None,
     candidate_pruning_alpha: float | None = None,
     disable_candidate_pruning: bool = False,
+    exact_reference: StreamingTachiomExactReference | None = None,
 ) -> StreamingTachiomBenchmarkSummary:
     if warmup_iterations < 0:
         raise ValueError("warmup_iterations must be non-negative")
@@ -165,29 +192,29 @@ def benchmark_streaming_tachiom_index(
         ranked_doc_ids_by_query=ranked_doc_ids,
     )
 
-    exact_metrics = None
-    reference_positions = None
-    if run_exact:
-        documents = load_packed_snapshot_documents(
-            snapshot_root,
-            document_limit=index.document_count,
-            max_vector_count=max_exact_vector_count,
-        )
-        if tuple(documents.doc_ids) != tuple(index.doc_ids):
-            raise ValueError("snapshot document prefix does not match streaming index doc ids")
-        reference_positions = _exact_search_snapshot_positions(
-            documents=documents,
-            queries=queries.query_matrices,
+    exact_reference_source = None
+    if exact_reference is not None:
+        run_exact = True
+        exact_reference_source = "provided"
+        _validate_exact_reference(
+            exact_reference,
+            index=index,
+            queries=queries,
             final_k=final_k,
         )
-        exact_doc_ids = _positions_to_doc_id_rows(
-            reference_positions,
-            doc_ids=index.doc_ids,
-        )
-        exact_metrics = summarize_ranked_task(
+    elif run_exact:
+        exact_reference_source = "computed"
+        exact_reference = _compute_streaming_exact_reference(
+            snapshot_root=snapshot_root,
+            index=index,
+            queries=queries,
             task=task,
-            ranked_doc_ids_by_query=exact_doc_ids,
+            max_exact_vector_count=max_exact_vector_count,
         )
+    reference_positions = (
+        None if exact_reference is None else exact_reference.reference_positions
+    )
+    exact_metrics = None if exact_reference is None else exact_reference.exact_metrics
 
     stats = _measurement_stats(durations)
     query_count = len(queries.query_matrices)
@@ -254,8 +281,93 @@ def benchmark_streaming_tachiom_index(
                 _remaining_blocker_for_engine(engine)
             ),
             "candidate_pruning_alpha_source": candidate_pruning_alpha_source,
+            "exact_reference_source": exact_reference_source,
         },
     )
+
+
+def build_streaming_tachiom_exact_reference(
+    *,
+    snapshot_root: Path,
+    index_root: Path,
+    query_limit: int | None = None,
+    max_exact_vector_count: int | None = None,
+) -> StreamingTachiomExactReference:
+    """Build exact MaxSim rankings once for sweeps over the same artifact."""
+
+    snapshot_manifest = load_snapshot_manifest(snapshot_root)
+    index = load_streaming_tachiom_pq_index(index_root)
+    queries = load_snapshot_queries(snapshot_root, query_limit=query_limit)
+    task = _streaming_task_metadata(
+        snapshot_manifest=snapshot_manifest,
+        index_doc_ids=index.doc_ids,
+        queries=queries,
+    )
+    return _compute_streaming_exact_reference(
+        snapshot_root=snapshot_root,
+        index=index,
+        queries=queries,
+        task=task,
+        max_exact_vector_count=max_exact_vector_count,
+    )
+
+
+def _compute_streaming_exact_reference(
+    *,
+    snapshot_root: Path,
+    index: object,
+    queries: SnapshotQueries,
+    task: dict[str, object],
+    max_exact_vector_count: int | None,
+) -> StreamingTachiomExactReference:
+    documents = load_packed_snapshot_documents(
+        snapshot_root,
+        document_limit=index.document_count,
+        max_vector_count=max_exact_vector_count,
+    )
+    if tuple(documents.doc_ids) != tuple(index.doc_ids):
+        raise ValueError("snapshot document prefix does not match streaming index doc ids")
+    reference_positions = _exact_search_snapshot_positions(
+        documents=documents,
+        queries=queries.query_matrices,
+        final_k=queries.k,
+    )
+    exact_doc_ids = _positions_to_doc_id_rows(
+        reference_positions,
+        doc_ids=index.doc_ids,
+    )
+    exact_metrics = summarize_ranked_task(
+        task=task,
+        ranked_doc_ids_by_query=exact_doc_ids,
+    )
+    return StreamingTachiomExactReference(
+        reference_positions=reference_positions,
+        exact_metrics=exact_metrics,
+        doc_ids=tuple(index.doc_ids),
+        document_count=index.document_count,
+        document_vector_count_total=index.total_vector_count,
+        query_count=len(queries.query_matrices),
+        query_vector_count_total=queries.query_vector_count,
+        k=queries.k,
+        loaded_payload_bytes=documents.loaded_payload_bytes,
+    )
+
+
+def _validate_exact_reference(
+    exact_reference: StreamingTachiomExactReference,
+    *,
+    index: object,
+    queries: SnapshotQueries,
+    final_k: int,
+) -> None:
+    if exact_reference.doc_ids != tuple(index.doc_ids):
+        raise ValueError("exact reference doc ids do not match streaming index")
+    if exact_reference.query_count != len(queries.query_matrices):
+        raise ValueError("exact reference query count does not match benchmark queries")
+    if exact_reference.query_vector_count_total != queries.query_vector_count:
+        raise ValueError("exact reference query vector count does not match queries")
+    if exact_reference.k != final_k:
+        raise ValueError("exact reference k does not match benchmark k")
 
 
 def _validate_candidate_pruning_alpha(candidate_pruning_alpha: float | None) -> None:

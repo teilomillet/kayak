@@ -44,6 +44,7 @@ Paper source checked on `2026-05-02`:
 Local evidence source:
 - [docs/traces/2026-05-01_tachiom_tac_probe.md](traces/2026-05-01_tachiom_tac_probe.md)
 - [docs/traces/2026-05-02_tachiom_pruning_sweep.md](traces/2026-05-02_tachiom_pruning_sweep.md)
+- [docs/traces/2026-05-02_tachiom_centroid_ladder.md](traces/2026-05-02_tachiom_centroid_ladder.md)
 - [docs/benchmark_ladder.md](benchmark_ladder.md)
 - [docs/recent_paper_targets.md](recent_paper_targets.md)
 
@@ -73,7 +74,7 @@ Local evidence source:
 | MS MARCO judged quality | MS MARCO-v1, `8.8M` passages, `598M` vectors, `6980` queries, MRR@10 | bounded selected-positive MS MARCO slices | `docs5000_q128` JSON gate reaches exact MRR@10 at `32768` centroids; streaming gates keep judged MRR matched or slightly above exact on bounded slices | `Bounded reproduction gate` |
 | LoTTE judged quality | LoTTE-pooled, `2.4M` passages, `266M` vectors, `2931` queries, Success@5 | only a small LEMB/NarrativeQA token-id gate exists, not LoTTE | no LoTTE-pooled paper-dataset run | `Not reproduced` |
 | Corpus scale | millions of passages and hundreds of millions of token vectors | largest measured bounded streaming row is `10135` documents and `739372` document vectors | no full MS MARCO or LoTTE corpus run | `Not reproduced` |
-| Centroid scale | about `4M` centroids for MS MARCO-v1, about `2M` for LoTTE | bounded gates use up to `32768` centroids | no `262K`, `1M`, `2M`, or `4M` local centroid gate has completed | `Not reproduced` |
+| Centroid scale | about `4M` centroids for MS MARCO-v1, about `2M` for LoTTE | bounded gates now reach `262144` centroids on the docs10000 snapshot | `262144` centroids materialized locally, but fixed-policy exact top-10 overlap fell to `0.8109374999999999`; no `1M`, `2M`, or `4M` local centroid gate has completed | `Partial` |
 | Throughput scale | paper reports Tachiom average query times of `10-15ms` at MS MARCO cutoffs and speedups up to `9.8x` over baselines | native HNSW+PQ reaches comparable per-query milliseconds only on much smaller bounded slices | local QPS rows are not comparable to paper throughput because corpus and centroid scale differ by orders of magnitude | `Not reproduced` |
 | Graph construction | Rust/kANNolo implementation, 64-thread clustering, single-core retrieval experiments | Python HNSW graph builder; native query traversal exists | Python graph build dominates or remains a blocker; no native/kANNolo-class builder | `Partial` |
 | Hardware/runtime parity | Intel Xeon Silver 4314, 64 threads; Rust/kANNolo; retrieval sequential on one core | current local CPU/Python/Mojo environment | no hardware-parity run; no paper implementation replay | `Not reproduced` |
@@ -99,6 +100,10 @@ These claims are currently justified:
 - Query-time candidate-pruning sweeps are instrumented and measured; aggressive
   alpha values can improve bounded throughput while preserving judged MRR, but
   exact top-10 overlap must be treated as a separate quality constraint.
+- A centroid-count ladder is instrumented and measured up to `262144`
+  centroids on the docs10000 bounded snapshot; larger centroid counts improved
+  throughput under fixed `k_c=120` and `ef_search=64`, but exact top-10 overlap
+  fell rather than improved.
 
 Current strongest bounded native streaming rows:
 
@@ -108,6 +113,14 @@ Current strongest bounded native streaming rows:
 | `docs2500_q64_c32768` | `2570` | `188537` | `64` | `2048` | `32768` | native TAC+PQ | `1.0` | `1.0` | `0.8890624999999996` | `73.48328381526854` |
 | `docs5000_q96_c32768` | `5103` | `371673` | `96` | `3072` | `32768` | native TAC+PQ | `1.0` | `0.9947916666666666` | `0.8791666666666665` | `58.04598536948425` |
 | `docs10000_q128_c32768` | `10135` | `739372` | `128` | `4096` | `32768` | native HNSW+PQ | `0.9895833333333334` | `0.9893973214285714` | `0.8867187500000006` | `69.01278987944805` |
+
+Current bounded centroid-scale ladder:
+
+| Slice | Docs | Doc vectors | Queries | Query vectors | Centroids | Engine | MRR@10 | Final recall@10 vs exact | QPS | Build note |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | --- |
+| `docs10000_q128_centroid_ladder` | `10135` | `739372` | `128` | `4096` | `65536` | native HNSW+PQ | `0.9854910714285714` | `0.8414062500000004` | `69.72040770584155` | index `92.356s`, graph `76.086s` |
+| `docs10000_q128_centroid_ladder` | `10135` | `739372` | `128` | `4096` | `131072` | native HNSW+PQ | `0.9817708333333334` | `0.828125` | `77.63396980050325` | index `188.830s`, graph `142.481s` |
+| `docs10000_q128_centroid_ladder` | `10135` | `739372` | `128` | `4096` | `262144` | native HNSW+PQ | `0.9856770833333334` | `0.8109374999999999` | `89.7766500938627` | index `414.644s`, graph `291.103s` |
 
 Interpretation:
 - these rows are meaningful systems evidence for Kayak's local path
