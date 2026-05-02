@@ -20,7 +20,9 @@ from kayak_bridge.tachiom_streaming_index import (
 )
 from kayak_bridge.tachiom_streaming_benchmark import (
     _same_shape_query_groups,
+    _with_centroids_per_query_vector,
     _with_candidate_pruning_alpha,
+    _with_hnsw_ef_search,
 )
 from kayak_bridge.tachiom_streaming_search import (
     load_streaming_tachiom_hnsw_pq_mojo_address_index,
@@ -178,6 +180,8 @@ class TachiomStreamingIndexTests(unittest.TestCase):
             )
             hnsw_index = load_streaming_tachiom_hnsw_pq_index(output)
             pruned_hnsw_index = _with_candidate_pruning_alpha(hnsw_index, 0.25)
+            wider_hnsw_index = _with_centroids_per_query_vector(hnsw_index, 3)
+            deeper_hnsw_index = _with_hnsw_ef_search(hnsw_index, 8)
             hnsw_rankings = hnsw_index.search_batch_positions(
                 np.asarray(
                     [
@@ -200,6 +204,13 @@ class TachiomStreamingIndexTests(unittest.TestCase):
             self.assertIsNone(unpruned_index.candidate_pruning_alpha)
             self.assertEqual(pruned_hnsw_index.base_index.candidate_pruning_alpha, 0.25)
             self.assertIs(pruned_hnsw_index.graph, hnsw_index.graph)
+            self.assertEqual(
+                wider_hnsw_index.base_index.centroids_per_query_vector,
+                3,
+            )
+            self.assertIs(wider_hnsw_index.graph, hnsw_index.graph)
+            self.assertEqual(deeper_hnsw_index.graph.ef_search, 8)
+            self.assertIs(deeper_hnsw_index.base_index, hnsw_index.base_index)
             self.assertEqual(posting_offsets.shape, (5,))
             self.assertEqual(int(posting_offsets[-1]), int(postings.shape[0]))
             self.assertEqual(codes.shape[0], 8)

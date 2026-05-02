@@ -49,6 +49,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "the benchmark's full same-shape batch."
         ),
     )
+    parser.add_argument(
+        "--centroids-per-query-vector",
+        type=int,
+        help="Override the artifact centroids-per-query-vector search budget.",
+    )
+    parser.add_argument(
+        "--hnsw-ef-search",
+        type=int,
+        help="Override the persisted HNSW ef_search query budget.",
+    )
     pruning_group = parser.add_mutually_exclusive_group()
     pruning_group.add_argument(
         "--candidate-pruning-alpha",
@@ -83,6 +93,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         engine=args.engine,
         graph_root=args.graph,
         max_query_batch_size=args.max_query_batch_size,
+        centroids_per_query_vector=args.centroids_per_query_vector,
+        hnsw_ef_search=args.hnsw_ef_search,
         candidate_pruning_alpha=args.candidate_pruning_alpha,
         disable_candidate_pruning=args.disable_candidate_pruning,
     )
@@ -97,6 +109,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "quiet_context "
             f"qps={summary.query_qps:.6f} "
             f"primary={summary.primary_value:.6f} "
+            f"centroids_per_query_vector={summary.centroids_per_query_vector} "
+            f"hnsw_ef_search={summary.hnsw_ef_search} "
             f"candidate_pruning_alpha={summary.candidate_pruning_alpha} "
             f"candidate_recall={summary.candidate_recall_at_k_vs_exact} "
             f"final_recall={summary.final_recall_at_k_vs_exact}"

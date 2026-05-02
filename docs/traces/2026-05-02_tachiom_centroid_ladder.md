@@ -21,6 +21,7 @@ Primary files:
 - `python/scripts/run_tachiom_streaming_centroid_ladder.py`
 - `python/kayak_bridge/tachiom_streaming_benchmark.py`
 - `python/scripts/sweep_tachiom_streaming_pruning.py`
+- `python/scripts/sweep_tachiom_streaming_query_policy.py`
 
 The ladder runner takes an existing encoded snapshot and builds one streaming
 TAC/PQ index per centroid count. It can build the HNSW sidecar, benchmark one
@@ -130,8 +131,11 @@ Not validated:
 
 Decision:
 - do not claim centroid scaling alone improves quality
-- the next scale experiment should co-sweep centroid count with
-  `centroids_per_query_vector` and HNSW `ef_search`
-- the first quality-preserving target should be at least the `32768` baseline
-  final recall@10 vs exact, while retaining some of the candidate-window
-  reduction from the larger centroid rows
+- the follow-up query-policy co-sweep did recover the `32768` baseline
+  final-recall floor on larger centroid artifacts
+- that recovery required larger query-side budgets and did not beat the
+  `32768` baseline QPS, so larger centroid count is not yet a quality-preserving
+  speedup on this bounded docs10000 slice
+
+Follow-up:
+- [2026-05-02 Tachiom query-policy co-sweep](2026-05-02_tachiom_query_policy_sweep.md)

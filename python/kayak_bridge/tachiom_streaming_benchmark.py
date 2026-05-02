@@ -50,6 +50,10 @@ class StreamingTachiomBenchmarkSummary:
     query_mean_seconds: float
     query_qps: float
     max_query_batch_size: int | None
+    centroids_per_query_vector: int
+    centroids_per_query_vector_source: str
+    hnsw_ef_search: int | None
+    hnsw_ef_search_source: str | None
     candidate_pruning_alpha: float | None
     candidate_pruning_alpha_source: str
     k: int
@@ -114,6 +118,8 @@ def benchmark_streaming_tachiom_index(
     engine: str = "streaming_tac_pq",
     graph_root: Path | None = None,
     max_query_batch_size: int | None = None,
+    centroids_per_query_vector: int | None = None,
+    hnsw_ef_search: int | None = None,
     candidate_pruning_alpha: float | None = None,
     disable_candidate_pruning: bool = False,
     exact_reference: StreamingTachiomExactReference | None = None,
@@ -124,6 +130,10 @@ def benchmark_streaming_tachiom_index(
         raise ValueError("measurement_iterations must be positive")
     if max_query_batch_size is not None and max_query_batch_size <= 0:
         raise ValueError("max_query_batch_size must be positive when provided")
+    if centroids_per_query_vector is not None and centroids_per_query_vector <= 0:
+        raise ValueError("centroids_per_query_vector must be positive when provided")
+    if hnsw_ef_search is not None and hnsw_ef_search <= 0:
+        raise ValueError("hnsw_ef_search must be positive when provided")
     if disable_candidate_pruning and candidate_pruning_alpha is not None:
         raise ValueError(
             "candidate_pruning_alpha and disable_candidate_pruning are mutually exclusive"
@@ -136,6 +146,14 @@ def benchmark_streaming_tachiom_index(
         engine=engine,
         graph_root=graph_root,
     )
+    centroids_per_query_vector_source = "artifact"
+    if centroids_per_query_vector is not None:
+        index = _with_centroids_per_query_vector(index, centroids_per_query_vector)
+        centroids_per_query_vector_source = "override"
+    hnsw_ef_search_source = _hnsw_ef_search_source_for_index(index)
+    if hnsw_ef_search is not None:
+        index = _with_hnsw_ef_search(index, hnsw_ef_search)
+        hnsw_ef_search_source = "override"
     candidate_pruning_alpha_source = "artifact"
     if disable_candidate_pruning:
         index = _with_candidate_pruning_alpha(index, None)
@@ -143,6 +161,8 @@ def benchmark_streaming_tachiom_index(
     elif candidate_pruning_alpha is not None:
         index = _with_candidate_pruning_alpha(index, candidate_pruning_alpha)
         candidate_pruning_alpha_source = "override"
+    effective_centroids_per_query_vector = _centroids_per_query_vector_for_index(index)
+    effective_hnsw_ef_search = _hnsw_ef_search_for_index(index)
     effective_candidate_pruning_alpha = _candidate_pruning_alpha_for_index(index)
     queries = load_snapshot_queries(snapshot_root, query_limit=query_limit)
     final_k = queries.k
@@ -252,6 +272,10 @@ def benchmark_streaming_tachiom_index(
         query_mean_seconds=batch_mean_seconds / float(query_count),
         query_qps=float(query_count) / batch_mean_seconds,
         max_query_batch_size=max_query_batch_size,
+        centroids_per_query_vector=effective_centroids_per_query_vector,
+        centroids_per_query_vector_source=centroids_per_query_vector_source,
+        hnsw_ef_search=effective_hnsw_ef_search,
+        hnsw_ef_search_source=hnsw_ef_search_source,
         candidate_pruning_alpha=effective_candidate_pruning_alpha,
         candidate_pruning_alpha_source=candidate_pruning_alpha_source,
         k=final_k,
@@ -280,6 +304,8 @@ def benchmark_streaming_tachiom_index(
             "remaining_paper_scale_blocker": (
                 _remaining_blocker_for_engine(engine)
             ),
+            "centroids_per_query_vector_source": centroids_per_query_vector_source,
+            "hnsw_ef_search_source": hnsw_ef_search_source,
             "candidate_pruning_alpha_source": candidate_pruning_alpha_source,
             "exact_reference_source": exact_reference_source,
         },
@@ -377,6 +403,35 @@ def _validate_candidate_pruning_alpha(candidate_pruning_alpha: float | None) -> 
         raise ValueError("candidate_pruning_alpha must be between 0 and 1")
 
 
+def _with_centroids_per_query_vector(
+    index: object,
+    centroids_per_query_vector: int,
+) -> object:
+    if centroids_per_query_vector <= 0:
+        raise ValueError("centroids_per_query_vector must be positive")
+    base_index = getattr(index, "base_index", None)
+    if base_index is not None and hasattr(base_index, "centroids_per_query_vector"):
+        return replace(
+            index,
+            base_index=replace(
+                base_index,
+                centroids_per_query_vector=centroids_per_query_vector,
+            ),
+        )
+    if hasattr(index, "centroids_per_query_vector"):
+        return replace(index, centroids_per_query_vector=centroids_per_query_vector)
+    raise TypeError("streaming index does not expose centroids_per_query_vector")
+
+
+def _with_hnsw_ef_search(index: object, hnsw_ef_search: int) -> object:
+    if hnsw_ef_search <= 0:
+        raise ValueError("hnsw_ef_search must be positive")
+    graph = getattr(index, "graph", None)
+    if graph is None or not hasattr(graph, "ef_search"):
+        raise TypeError("streaming index does not expose hnsw ef_search")
+    return replace(index, graph=replace(graph, ef_search=hnsw_ef_search))
+
+
 def _with_candidate_pruning_alpha(
     index: object,
     candidate_pruning_alpha: float | None,
@@ -400,6 +455,24 @@ def _with_candidate_pruning_alpha(
     if hasattr(index, "candidate_pruning_alpha"):
         return replace(index, candidate_pruning_alpha=candidate_pruning_alpha)
     raise TypeError("streaming index does not expose candidate_pruning_alpha")
+
+
+def _centroids_per_query_vector_for_index(index: object) -> int:
+    base_index = getattr(index, "base_index", index)
+    return int(base_index.centroids_per_query_vector)
+
+
+def _hnsw_ef_search_for_index(index: object) -> int | None:
+    graph = getattr(index, "graph", None)
+    if graph is None:
+        return None
+    return int(graph.ef_search)
+
+
+def _hnsw_ef_search_source_for_index(index: object) -> str | None:
+    if _hnsw_ef_search_for_index(index) is None:
+        return None
+    return "artifact"
 
 
 def _candidate_pruning_alpha_for_index(index: object) -> float | None:

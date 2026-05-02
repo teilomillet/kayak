@@ -45,6 +45,7 @@ Local evidence source:
 - [docs/traces/2026-05-01_tachiom_tac_probe.md](traces/2026-05-01_tachiom_tac_probe.md)
 - [docs/traces/2026-05-02_tachiom_pruning_sweep.md](traces/2026-05-02_tachiom_pruning_sweep.md)
 - [docs/traces/2026-05-02_tachiom_centroid_ladder.md](traces/2026-05-02_tachiom_centroid_ladder.md)
+- [docs/traces/2026-05-02_tachiom_query_policy_sweep.md](traces/2026-05-02_tachiom_query_policy_sweep.md)
 - [docs/benchmark_ladder.md](benchmark_ladder.md)
 - [docs/recent_paper_targets.md](recent_paper_targets.md)
 
@@ -67,7 +68,7 @@ Local evidence source:
 | --- | --- | --- | --- | --- |
 | Token-aware clustering | TAC allocates centroids by token frequency and variance with tail handling, damped scoring, bounds, and budget reconciliation | `python/kayak_bridge/tachiom_allocation.py`, `tachiom_clustering.py`, `tachiom_index.py` | unit tests and bounded MS MARCO gates use `mu=128`, `tau=256`, `epsilon=4`, `theta=39` | `Implemented` |
 | Aligned token ids | TAC depends on document token identity aligned to document vectors | ColBERT encoder path and task/snapshot builders preserve aligned document token ids | vector-only cached LEMB artifact was rejected; token-id-bearing artifacts were rebuilt | `Implemented` |
-| Candidate pruning | prune candidate windows with paper-style alpha threshold | shared candidate ranking path supports `candidate_pruning_alpha`; streaming benchmark now supports query-time override and disable controls | alpha `0.05` roughly doubled docs10000 bounded QPS while preserving judged MRR, but exact top-10 overlap fell to `0.5625`; alpha `0.3` preserved more exact overlap at `0.8664062500000004` with smaller speed gain | `Bounded reproduction gate` |
+| Candidate pruning and query policy | paper reports a grid over `k_c`, `k_d`, and candidate-pruning `alpha` | shared candidate ranking path supports `candidate_pruning_alpha`; streaming benchmark now supports query-time overrides for `centroids_per_query_vector`, HNSW `ef_search`, and pruning | alpha `0.05` roughly doubled docs10000 bounded QPS while preserving judged MRR, but exact top-10 overlap fell to `0.5625`; larger-centroid co-sweeps recovered exact-overlap floors only at slower QPS | `Bounded reproduction gate` |
 | HNSW centroid traversal | graph over centroids, paper settings include `M=32`, `ef_construction=1500` | Python graph builder plus native dim128 query traversal and streaming sidecar | bounded gates use persisted HNSW sidecars; native HNSW+PQ reaches `125.52` QPS on `docs1500_q48_c32768` and `69.01` QPS on `docs10000_q128_c32768` | `Partial` |
 | Residual-PQ refine | normalized residual compression, PQ32, 8-bit codes, optimized layout for MaxSim | Python residual-PQ reference and dim128 Mojo residual-PQ paths | PQ32 bounded gates exist; native sparse HNSW+PQ reranks candidate-window tokens | `Partial` |
 | Streaming/materialized index | paper-scale implementation avoids full dense token scoring at query time | binary snapshot writer, streaming TAC/PQ builder, memmap reader, native list-backed and address-backed engines | full MS MARCO document payload estimate is about `155.55GB` with f16 vectors/u32 token ids; bounded streaming artifacts are built and searched | `Partial` |
@@ -104,6 +105,10 @@ These claims are currently justified:
   centroids on the docs10000 bounded snapshot; larger centroid counts improved
   throughput under fixed `k_c=120` and `ef_search=64`, but exact top-10 overlap
   fell rather than improved.
+- A larger-centroid query-policy co-sweep is instrumented and measured; it
+  recovered the `32768` baseline final-recall floor on `131072` and `262144`
+  centroid artifacts, but the quality-preserving rows were slower than the
+  fixed-policy `32768` baseline.
 
 Current strongest bounded native streaming rows:
 
@@ -122,11 +127,28 @@ Current bounded centroid-scale ladder:
 | `docs10000_q128_centroid_ladder` | `10135` | `739372` | `128` | `4096` | `131072` | native HNSW+PQ | `0.9817708333333334` | `0.828125` | `77.63396980050325` | index `188.830s`, graph `142.481s` |
 | `docs10000_q128_centroid_ladder` | `10135` | `739372` | `128` | `4096` | `262144` | native HNSW+PQ | `0.9856770833333334` | `0.8109374999999999` | `89.7766500938627` | index `414.644s`, graph `291.103s` |
 
+Current larger-centroid query-policy co-sweep:
+
+Quality floors:
+- primary metric at least `0.989`
+- final recall@10 vs exact at least `0.8867`, matching the fixed-policy
+  `32768` baseline floor on this bounded slice
+
+| Centroids | Row kind | `k_c` | HNSW `ef_search` | Alpha | MRR@10 | Final recall@10 vs exact | QPS |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `131072` | fastest | `120` | `64` | `0.3` | `0.9817708333333334` | `0.8023437499999998` | `87.69168200632623` |
+| `131072` | fastest eligible | `180` | `128` | `0.5` | `0.9895833333333334` | `0.8890625000000004` | `40.093095874216985` |
+| `262144` | fastest | `120` | `64` | `0.3` | `0.9856770833333334` | `0.7945312499999997` | `97.06290014898175` |
+| `262144` | fastest eligible | `360` | `64` | `0.35` | `0.9934895833333334` | `0.8875000000000008` | `24.116374186902767` |
+
 Interpretation:
 - these rows are meaningful systems evidence for Kayak's local path
 - they are not paper-scale reproduction rows
 - judged MRR can match exact while exact top-10 overlap remains approximate,
   so "quality matched" must name the metric
+- larger centroid artifacts can be fast or quality-preserving in the measured
+  grid, but did not produce a quality-preserving speedup over the `32768`
+  baseline
 
 Current native HNSW+PQ internal profile:
 
@@ -164,7 +186,7 @@ The following statements are not justified today:
    - Paper MS MARCO-v1 is `8.8M` passages and `598M` token vectors.
 
 2. **Centroid scale**
-   - Local bounded gates use `32768` centroids.
+   - Local bounded gates now reach `262144` centroids.
    - Paper retrieval uses about `4M` centroids for MS MARCO-v1 and about `2M`
      for LoTTE.
 
@@ -204,6 +226,8 @@ Allowed language:
   slices"
 - "does not reproduce full paper-scale throughput"
 - "USL batching was measured and is not the current material bottleneck"
+- "larger-centroid query-policy rows can recover bounded exact-overlap floors,
+  but not as a speedup over the `32768` baseline in the measured grid"
 
 Disallowed language unless future evidence changes this document:
 

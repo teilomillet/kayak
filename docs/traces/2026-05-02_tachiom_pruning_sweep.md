@@ -131,5 +131,5 @@ Validated:
 Open:
 - these are still bounded slices, not full MS MARCO or LoTTE paper-scale runs
 - the right alpha is a task policy choice, not a fixed implementation truth
-- exact-reference computation is still repeated per benchmark call; a future
-  sweep could cache exact rankings once per artifact when `--run-exact` is used
+- larger centroid artifacts need a co-sweep with `k_c` and HNSW `ef_search`,
+  because pruning alone cannot decide the query policy at higher centroid counts
