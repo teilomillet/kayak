@@ -286,6 +286,25 @@ class TachiomStreamingIndexTests(unittest.TestCase):
                 address_mojo_index.index_kind,
                 "streaming_token_aware_hnsw_centroid_postings_residual_pq_sparse_rerank_mojo_address",
             )
+            profiles = mojo_index.profile_search_batch(
+                queries,
+                final_k=1,
+                measurement_iterations=1,
+            )
+            self.assertEqual(len(profiles), 2)
+            self.assertEqual(profiles[0]["document_count"], 2)
+            self.assertEqual(profiles[0]["query_vector_count"], 1)
+            self.assertEqual(profiles[0]["centroid_count"], 4)
+            self.assertEqual(profiles[0]["candidate_k"], 2)
+            self.assertEqual(profiles[0]["final_k"], 1)
+            self.assertEqual(profiles[0]["ef_search"], 4)
+            self.assertGreater(profiles[0]["full_search_mean_seconds"], 0.0)
+            self.assertGreater(profiles[0]["hnsw_traversal_mean_seconds"], 0.0)
+            self.assertGreater(
+                profiles[0]["candidate_score_accumulation_mean_seconds"],
+                0.0,
+            )
+            self.assertGreater(profiles[0]["rerank_scoring_mean_seconds"], 0.0)
 
 
 if __name__ == "__main__":

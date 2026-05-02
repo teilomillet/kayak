@@ -92,6 +92,9 @@ These claims are currently justified:
   approximate relative to exact top-10 rankings.
 - USL batch-cap tuning is instrumented and measured; it did not reveal a
   material batching bottleneck on the current native HNSW+PQ slices.
+- Native HNSW+PQ internal profiling is instrumented and measured on the same
+  bounded slices; the 1.5k slice is HNSW-traversal dominated, while the 10k
+  slice is split between residual-PQ rerank scoring and HNSW traversal.
 
 Current strongest bounded native streaming rows:
 
@@ -107,6 +110,20 @@ Interpretation:
 - they are not paper-scale reproduction rows
 - judged MRR can match exact while exact top-10 overlap remains approximate,
   so "quality matched" must name the metric
+
+Current native HNSW+PQ internal profile:
+
+| Slice | Full search batch s | HNSW traversal share | Rerank scoring share | Dominant isolated stage |
+| --- | ---: | ---: | ---: | --- |
+| `docs1500_q48_c32768` | `0.3731530674041517` | `0.6839060718283632` | `0.19329688245060372` | HNSW traversal |
+| `docs10000_q128_c32768` | `1.7938839457593654` | `0.4039404047271564` | `0.4807778546467288` | rerank scoring |
+
+Interpretation:
+- candidate pruning and final top-k are not material bottlenecks on these
+  slices
+- optimizing batching alone is not expected to move the result meaningfully
+- the next code-level work should target centroid graph traversal and sparse
+  residual-PQ document scoring, with before/after profiles on the same artifacts
 
 ## What Is Not Reproduced
 
@@ -221,14 +238,22 @@ Reason:
 
 ### Gate 4: Native HNSW+PQ Internal Profile
 
-Minimum next gate:
+Status: implemented for the list-backed native Mojo reader.
+
+Evidence:
 - stage timings for HNSW traversal, candidate dedup/window construction,
   residual-PQ lookup/scoring, and final top-k
-- same artifact measured before and after any optimization
+- measured on `docs1500_q48_c32768` and `docs10000_q128_c32768`
+- profile artifacts are written as `hnsw_pq_mojo_internal_profile.json` under
+  each measured streaming index root
 
 Reason:
 - USL batching did not identify a material bottleneck, so the next optimization
   needs internal timing evidence
+
+Next use:
+- measure the same artifact before and after each HNSW traversal or residual-PQ
+  scoring optimization
 
 ### Gate 5: LoTTE-Pooled Slice
 

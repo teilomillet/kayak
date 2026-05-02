@@ -23,6 +23,7 @@ from kayak.search import (
     PreparedTachiomTacIndex,
     PreparedTachiomTacPqIndex,
     TachiomTacCandidateGenerationProfile,
+    TachiomTacHnswPqQueryProfile,
     SearchHit,
     plaid_approx_i8_prepared_posting_count_value,
     plaid_approx_prepared_posting_count_value,
@@ -40,6 +41,7 @@ from kayak.search import (
     prepare_tachiom_tac_hnsw_pq_dim128_index,
     prepare_tachiom_tac_hybrid_flat_dim128_index,
     prepare_tachiom_tac_pq_dim128_index,
+    profile_tachiom_tac_hnsw_pq_for_query,
     profile_tachiom_tac_candidate_generation_for_query,
     search_exact,
     search_exact_hybrid_flat_only_dim128,
@@ -579,6 +581,119 @@ def tachiom_tac_candidate_generation_profile_to_python(
         py_result,
         "seen_document_count",
         profile.seen_document_count,
+    )
+    append_profile_int(
+        py_result, "output_candidate_count", profile.output_candidate_count
+    )
+    append_profile_int(
+        py_result, "output_final_count", profile.output_final_count
+    )
+    append_profile_int(
+        py_result,
+        "measurement_iterations",
+        profile.measurement_iterations,
+    )
+    append_profile_float(py_result, "sink_value", profile.sink_value)
+    return py_result
+
+
+def tachiom_tac_hnsw_pq_query_profile_to_python(
+    read profile: TachiomTacHnswPqQueryProfile,
+) raises -> PythonObject:
+    var py_result = Python.list()
+    append_profile_float(
+        py_result,
+        "full_search_mean_seconds",
+        profile.full_search_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "candidate_generation_mean_seconds",
+        profile.candidate_generation_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "hnsw_traversal_mean_seconds",
+        profile.hnsw_traversal_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "candidate_score_accumulation_mean_seconds",
+        profile.candidate_score_accumulation_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "candidate_topk_mean_seconds",
+        profile.candidate_topk_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "candidate_pruning_mean_seconds",
+        profile.candidate_pruning_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "residual_score_table_mean_seconds",
+        profile.residual_score_table_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "rerank_scoring_mean_seconds",
+        profile.rerank_scoring_mean_seconds,
+    )
+    append_profile_float(
+        py_result,
+        "rerank_topk_mean_seconds",
+        profile.rerank_topk_mean_seconds,
+    )
+    append_profile_int(
+        py_result, "query_vector_count", profile.query_vector_count
+    )
+    append_profile_int(py_result, "document_count", profile.document_count)
+    append_profile_int(
+        py_result, "document_vector_count", profile.document_vector_count
+    )
+    append_profile_int(
+        py_result,
+        "total_document_vector_count",
+        profile.total_document_vector_count,
+    )
+    append_profile_int(py_result, "centroid_count", profile.centroid_count)
+    append_profile_int(
+        py_result,
+        "centroids_per_query_vector",
+        profile.centroids_per_query_vector,
+    )
+    append_profile_int(py_result, "candidate_k", profile.candidate_k)
+    append_profile_int(py_result, "final_k", profile.final_k)
+    append_profile_int(py_result, "ef_search", profile.ef_search)
+    append_profile_float(
+        py_result,
+        "candidate_pruning_alpha",
+        profile.candidate_pruning_alpha,
+    )
+    append_profile_int(
+        py_result,
+        "selected_centroid_count",
+        profile.selected_centroid_count,
+    )
+    append_profile_int(
+        py_result, "posting_visit_count", profile.posting_visit_count
+    )
+    append_profile_int(
+        py_result,
+        "touched_document_count",
+        profile.touched_document_count,
+    )
+    append_profile_int(
+        py_result,
+        "seen_document_count",
+        profile.seen_document_count,
+    )
+    append_profile_int(
+        py_result,
+        "ranked_candidate_count",
+        profile.ranked_candidate_count,
     )
     append_profile_int(
         py_result, "output_candidate_count", profile.output_candidate_count
@@ -2743,6 +2858,51 @@ def tachiom_tac_candidate_generation_profile_prepared_batch_address(
     return py_profiles
 
 
+def tachiom_tac_hnsw_pq_query_profile_prepared_batch_address(
+    py_request: PythonObject,
+) raises -> PythonObject:
+    var query_values_address = Int(py=py_request[0])
+    var query_count = Int(py=py_request[1])
+    var query_vector_count = Int(py=py_request[2])
+    var queries = decode_flat_queries_from_float32_address(
+        query_values_address,
+        query_count,
+        query_vector_count,
+    )
+    if len(queries) == 0:
+        return Python.list()
+
+    var centroids_per_query_vector = Int(py=py_request[3])
+    var candidate_k = Int(py=py_request[4])
+    var final_k = Int(py=py_request[5])
+    var ef_search = Int(py=py_request[6])
+    var candidate_pruning_alpha = ScoreScalar(Float64(py=py_request[7]))
+    var measurement_iterations = Int(py=py_request[8])
+    var prepared_index = py_request[9].downcast_value_ptr[
+        PreparedTachiomTacHnswPqIndex
+    ]()
+    var py_profiles = Python.list()
+
+    for query in queries:
+        if query.vector_dim != prepared_index[].pq.vector_dim:
+            raise Error(
+                "all queries must share the prepared index vector dimension"
+            )
+        var profile = profile_tachiom_tac_hnsw_pq_for_query(
+            query,
+            prepared_index[],
+            centroids_per_query_vector,
+            candidate_k,
+            final_k,
+            ef_search,
+            candidate_pruning_alpha,
+            measurement_iterations,
+        )
+        py_profiles.append(tachiom_tac_hnsw_pq_query_profile_to_python(profile))
+
+    return py_profiles
+
+
 @export
 def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
     try:
@@ -3256,6 +3416,15 @@ def PyInit__mojo_exact_cpu_bindings() -> PythonObject:
             docstring=(
                 "Profile Tachiom TAC candidate-generation substeps from a"
                 " contiguous float32 query tensor address."
+            ),
+        )
+        module.def_function[
+            tachiom_tac_hnsw_pq_query_profile_prepared_batch_address
+        ](
+            "tachiom_tac_hnsw_pq_query_profile_prepared_batch_address",
+            docstring=(
+                "Profile native Tachiom TAC HNSW residual-PQ search substeps"
+                " from a contiguous float32 query tensor address."
             ),
         )
         return module.finalize()

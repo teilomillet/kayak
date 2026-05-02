@@ -1628,6 +1628,82 @@ Interpretation:
   bounded 10k slice). It is not evidence for a global default, and it is not a
   route to paper-scale throughput by itself.
 
+## Native HNSW+PQ Internal Profile
+
+Implemented:
+- `profile_tachiom_tac_hnsw_pq_for_query` profiles the list-backed native
+  streaming HNSW+PQ path. Reason: the USL sweep showed batching is not the
+  active lever, so optimization needs internal timing splits.
+- `StreamingTachiomHnswPqMojoIndex.profile_search_batch` exposes the profile to
+  Python for same-shape query batches.
+- `python/scripts/profile_tachiom_streaming_hnsw_pq_mojo.py` writes per-query
+  profiles plus aggregate batch sums for full search, candidate generation,
+  HNSW traversal, posting/document-score accumulation, candidate top-k/pruning,
+  residual-PQ table construction, rerank scoring, and final top-k.
+
+Validation:
+
+```bash
+pixi run python -m py_compile \
+  python/kayak_bridge/tachiom_streaming_search.py \
+  python/scripts/profile_tachiom_streaming_hnsw_pq_mojo.py \
+  python/tests/test_tachiom_streaming_index.py
+
+env PYTHONPATH=python pixi run python -m unittest \
+  python/tests/test_tachiom_streaming_index.py
+```
+
+Result: `3` streaming tests passed, including the pruning-enabled Mojo
+HNSW+PQ fixture.
+
+Bounded slice commands:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 60 --force -- \
+  pixi run env PYTHONPATH=python python \
+  python/scripts/profile_tachiom_streaming_hnsw_pq_mojo.py \
+  --snapshot .cache/kayak/tachiom_streaming_scale_docs1500_q48_c32768/snapshot \
+  --index .cache/kayak/tachiom_streaming_scale_docs1500_q48_c32768/streaming_tachiom_index_c32768 \
+  --measurement-iterations 3 \
+  --output .cache/kayak/tachiom_streaming_scale_docs1500_q48_c32768/streaming_tachiom_index_c32768/hnsw_pq_mojo_internal_profile.json \
+  --emit-quiet-mean
+
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 60 --force -- \
+  pixi run env PYTHONPATH=python python \
+  python/scripts/profile_tachiom_streaming_hnsw_pq_mojo.py \
+  --snapshot .cache/kayak/tachiom_streaming_scale_docs10000_q128_c32768_mojo/snapshot \
+  --index .cache/kayak/tachiom_streaming_scale_docs10000_q128_c32768_mojo/streaming_tachiom_index_c32768 \
+  --measurement-iterations 3 \
+  --output .cache/kayak/tachiom_streaming_scale_docs10000_q128_c32768_mojo/streaming_tachiom_index_c32768/hnsw_pq_mojo_internal_profile.json \
+  --emit-quiet-mean
+```
+
+Quiet wrapper logs:
+- `.cache/kayak/bench_quiet/20260502T145642Z`
+- `.cache/kayak/bench_quiet/20260502T145801Z`
+
+Result:
+
+| Slice | Docs | Doc vectors | Queries | Query vectors | Centroids | Full search batch s | Candidate generation batch s | HNSW traversal batch s | Candidate score accumulation batch s | Candidate top-k batch s | Residual table batch s | Rerank scoring batch s | Dominant isolated stage |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `docs1500_q48_c32768` | `1553` | `114393` | `48` | `1536` | `32768` | `0.3731530674041517` | `0.2762609720585087` | `0.25520164851907784` | `0.003089758038742391` | `0.00678724390813936` | `0.030647324923995904` | `0.07212932460610252` | HNSW traversal |
+| `docs10000_q128_c32768` | `10135` | `739372` | `128` | `4096` | `32768` | `1.7938839457593654` | `0.8617029691858498` | `0.7246222070835864` | `0.04396645630654519` | `0.051461918539476056` | `0.08173503653280952` | `0.8624596749273965` | rerank scoring |
+
+Interpretation:
+- On `docs1500_q48_c32768`, isolated HNSW traversal is `68.39%` of measured
+  full-search batch time and `92.38%` of candidate-generation time. The local
+  optimization target is centroid graph traversal, not candidate pruning.
+- On `docs10000_q128_c32768`, isolated rerank scoring is `48.08%` of measured
+  full-search batch time and HNSW traversal is `40.39%`. That means the first
+  larger-slice target is split: improve sparse residual-PQ document scoring and
+  centroid traversal before revisiting batching.
+- Candidate pruning and final top-k are negligible on both slices. Candidate
+  score accumulation is small on the 1.5k slice and visible but not dominant on
+  the 10k slice.
+- These are internal profiler boundaries, so their isolated timings are not
+  expected to sum exactly to full search. They are still enough to debunk
+  Python/native call batching as the main bottleneck on these bounded artifacts.
+
 ## Decision
 
 The implemented TAC first gate is useful enough to keep:
@@ -1659,9 +1735,9 @@ Next sound gate:
   counts to identify the scale where graph traversal becomes useful, or judge
   the paper-throughput target out of scope for the current Python/kANNolo-free
   implementation
-- profile the HNSW traversal path separately; the exact-centroid reader's
-  largest Python top-k/posting overhead has now been reduced on the measured
-  `docs1500_q48_c32768` gate
+- optimize the measured native HNSW+PQ hot paths: centroid graph traversal on
+  the 1.5k slice, and both sparse residual-PQ rerank scoring and graph traversal
+  on the 10k slice
 - test whether a stronger residual-PQ refine policy can close the recall gap
   without giving back the byte savings
 - move HNSW graph construction and neighbor selection out of the Python

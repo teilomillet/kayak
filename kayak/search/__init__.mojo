@@ -68,6 +68,9 @@ from .tachiom_tac_hnsw_pq_dim128 import (
     tachiom_tac_hnsw_pq_search_positions_for_query,
     tachiom_tac_hnsw_pq_search_positions_for_query_with_pruning,
 )
+from .tachiom_tac_hnsw_pq_profile_dim128 import (
+    profile_tachiom_tac_hnsw_pq_for_query,
+)
 from .tachiom_tac_pq_dim128 import (
     PreparedTachiomTacPqIndex,
     prepare_tachiom_tac_pq_dim128_index,
@@ -82,4 +85,5 @@ from .tachiom_tac_profile_dim128 import (
 )
 from .tachiom_tac_profile_types_dim128 import (
     TachiomTacCandidateGenerationProfile,
+    TachiomTacHnswPqQueryProfile,
 )

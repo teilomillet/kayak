@@ -411,6 +411,22 @@ PYTHONPATH=python python python/scripts/bench_tachiom_streaming_index.py \
   --emit-quiet-mean
 ```
 
+To choose an optimization target inside the native HNSW+PQ reader, profile the
+same artifact before and after the change. This isolates HNSW traversal,
+candidate window construction, residual-PQ table construction, rerank scoring,
+and final top-k:
+
+```bash
+bash scripts/run_bench_quiet.sh --repeats 1 --timeout-seconds 60 --force -- \
+  pixi run env PYTHONPATH=python python \
+  python/scripts/profile_tachiom_streaming_hnsw_pq_mojo.py \
+  --snapshot .cache/kayak/msmarco_colbertv2_f16_snapshot \
+  --index .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index \
+  --measurement-iterations 3 \
+  --output .cache/kayak/msmarco_colbertv2_f16_snapshot/streaming_tachiom_index/hnsw_pq_mojo_internal_profile.json \
+  --emit-quiet-mean
+```
+
 For larger artifacts where Python-list materialization becomes the bottleneck,
 use the address-backed variant. It reads the same memmap-backed arrays by
 address and keeps query-time results comparable, but it is currently slower

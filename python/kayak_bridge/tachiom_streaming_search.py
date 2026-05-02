@@ -765,6 +765,43 @@ class StreamingTachiomHnswPqMojoIndex:
         )
         return tuple(tuple(int(position) for position in row) for row in rows)
 
+    def profile_search_batch(
+        self,
+        queries: np.ndarray,
+        *,
+        final_k: int,
+        measurement_iterations: int,
+    ) -> tuple[dict[str, Any], ...]:
+        """Profile native HNSW/PQ search substeps for same-shape queries."""
+        if self.address_backed:
+            raise NotImplementedError(
+                "native HNSW/PQ profiling currently covers the list-backed "
+                "Mojo reader"
+            )
+        if final_k <= 0:
+            raise ValueError("final_k must be positive")
+        if measurement_iterations <= 0:
+            raise ValueError("measurement_iterations must be positive")
+        query_tensor = _as_query_tensor(queries, vector_dim=self.vector_dim)
+        module = load_module()
+        rows = module.tachiom_tac_hnsw_pq_query_profile_prepared_batch_address(
+            [
+                int(query_tensor.ctypes.data),
+                int(query_tensor.shape[0]),
+                int(query_tensor.shape[1]),
+                self.base_index.centroids_per_query_vector,
+                self.base_index.candidate_k,
+                final_k,
+                self.graph.ef_search,
+                0.0
+                if self.base_index.candidate_pruning_alpha is None
+                else float(self.base_index.candidate_pruning_alpha),
+                measurement_iterations,
+                self.prepared_index,
+            ]
+        )
+        return tuple(_profile_pairs_to_dict(row) for row in rows)
+
 
 def load_streaming_tachiom_hnsw_pq_mojo_index(
     index_root: Path,
@@ -1046,3 +1083,7 @@ def _effective_codebook_size(
 
 def _dot(left: np.ndarray, right: np.ndarray) -> float:
     return float(np.dot(left, right))
+
+
+def _profile_pairs_to_dict(row: Any) -> dict[str, Any]:
+    return {str(key): value for key, value in row}
