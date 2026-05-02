@@ -469,6 +469,7 @@ def hnsw_pq_search_layer_centroids(
     layer_index: Int,
     entry_point: Int,
     ef: Int,
+    return_descending: Bool,
 ) raises -> List[Int]:
     require_positive_int("ef", ef)
     var visited = hnsw_pq_sparse_visited_table(ef * 64 + 16)
@@ -528,7 +529,13 @@ def hnsw_pq_search_layer_centroids(
                     best_positions, best_scores, neighbor, score, ef
                 )
 
-    return hnsw_pq_descending_positions_from_retained_heap(best_positions, best_scores)
+    if return_descending:
+        return hnsw_pq_descending_positions_from_retained_heap(
+            best_positions, best_scores
+        )
+    # Callers only skip ordering when every retained centroid is consumed.
+    # Downstream document score accumulation is order-independent in that case.
+    return best_positions^
 
 
 def tachiom_tac_hnsw_pq_centroid_positions_for_query_vector(
@@ -550,7 +557,13 @@ def tachiom_tac_hnsw_pq_centroid_positions_for_query_vector(
     if ef < centroids_per_query_vector:
         ef = centroids_per_query_vector
     var candidates = hnsw_pq_search_layer_centroids(
-        query, query_vector_index, prepared_index, 0, entry, ef
+        query,
+        query_vector_index,
+        prepared_index,
+        0,
+        entry,
+        ef,
+        ef > centroids_per_query_vector,
     )
     var selected = List[Int]()
     var limit = centroids_per_query_vector
@@ -1146,6 +1159,7 @@ def hnsw_pq_address_search_layer_centroids(
     layer_index: Int,
     entry_point: Int,
     ef: Int,
+    return_descending: Bool,
 ) raises -> List[Int]:
     require_positive_int("ef", ef)
     var visited = hnsw_pq_sparse_visited_table(ef * 64 + 16)
@@ -1205,7 +1219,13 @@ def hnsw_pq_address_search_layer_centroids(
                     best_positions, best_scores, neighbor, score, ef
                 )
 
-    return hnsw_pq_descending_positions_from_retained_heap(best_positions, best_scores)
+    if return_descending:
+        return hnsw_pq_descending_positions_from_retained_heap(
+            best_positions, best_scores
+        )
+    # Callers only skip ordering when every retained centroid is consumed.
+    # Downstream document score accumulation is order-independent in that case.
+    return best_positions^
 
 
 def tachiom_tac_hnsw_pq_address_centroid_positions_for_query_vector(
@@ -1227,7 +1247,13 @@ def tachiom_tac_hnsw_pq_address_centroid_positions_for_query_vector(
     if ef < centroids_per_query_vector:
         ef = centroids_per_query_vector
     var candidates = hnsw_pq_address_search_layer_centroids(
-        query, query_vector_index, prepared_index, 0, entry, ef
+        query,
+        query_vector_index,
+        prepared_index,
+        0,
+        entry,
+        ef,
+        ef > centroids_per_query_vector,
     )
     var selected = List[Int]()
     var limit = centroids_per_query_vector

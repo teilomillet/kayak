@@ -172,6 +172,7 @@ Decision:
 
 Follow-up:
 - [2026-05-02 Tachiom HNSW heap frontier](2026-05-02_tachiom_hnsw_heap_frontier.md)
-  reduced traversal cost and improved the best measured larger-centroid
-  quality-preserving row to `67.76123363711898` QPS. The optimized `32768`
-  baseline is still faster at `89.25310082533578` QPS.
+  reduced traversal cost and added an `ef == k_c` sort skip, improving the
+  best measured larger-centroid quality-preserving row to
+  `72.61081722938026` QPS. The optimized `32768` baseline is still faster at
+  `91.26208201247302` QPS.
