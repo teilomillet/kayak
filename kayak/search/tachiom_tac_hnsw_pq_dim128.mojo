@@ -472,7 +472,9 @@ def hnsw_pq_search_layer_centroids(
     return_descending: Bool,
 ) raises -> List[Int]:
     require_positive_int("ef", ef)
-    var visited = hnsw_pq_sparse_visited_table(ef * 64 + 16)
+    # The table grows if a query visits more centroids; starting below the
+    # old ef*64 size avoids repeatedly clearing oversized sparse sets.
+    var visited = hnsw_pq_sparse_visited_table(ef * 32 + 16)
     var visited_count = 0
 
     var candidate_positions = List[Int]()
@@ -1164,7 +1166,9 @@ def hnsw_pq_address_search_layer_centroids(
     return_descending: Bool,
 ) raises -> List[Int]:
     require_positive_int("ef", ef)
-    var visited = hnsw_pq_sparse_visited_table(ef * 64 + 16)
+    # The table grows if a query visits more centroids; starting below the
+    # old ef*64 size avoids repeatedly clearing oversized sparse sets.
+    var visited = hnsw_pq_sparse_visited_table(ef * 32 + 16)
     var visited_count = 0
 
     var candidate_positions = List[Int]()
