@@ -62,6 +62,8 @@ Why it fits:
   implementation must add or import token ids explicitly
 
 Implementation note checked on `2026-05-01`:
+- canonical reproduction boundary:
+  [docs/tachiom_reproduction_status.md](tachiom_reproduction_status.md)
 - the repo now has an additive first-gate probe in
   `python/kayak_bridge/tachiom_probe.py`
 - the probe implements token-aware centroid allocation and exact centroid-scan

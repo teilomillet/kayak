@@ -1,0 +1,268 @@
+# Tachiom Reproduction Status
+
+Date: `2026-05-02`
+
+Paper:
+- **Efficient Multivector Retrieval with Token-Aware Clustering and
+  Hierarchical Indexing**
+- <https://arxiv.org/pdf/2604.28142>
+
+## Verdict
+
+Status: **paper-shaped implementation exists; bounded MS MARCO quality gates
+pass; full paper-scale throughput is not reproduced.**
+
+This document is the canonical claim boundary for Kayak's Tachiom work. It
+separates:
+
+- implemented algorithmic components
+- bounded local reproduction evidence
+- paper-scale results that are still unverified
+- exact gates that would upgrade the claim
+
+Reason:
+- the codebase now contains enough Tachiom machinery that loose language like
+  "we reproduced the paper" would be misleading
+- the current strongest evidence is real and useful, but it is not the same
+  scale, implementation substrate, or throughput setting as the paper
+
+## Sources Checked
+
+Paper source checked on `2026-05-02`:
+- the paper evaluates MS MARCO-v1 with `8.8M` passages, `598M` token vectors,
+  and `6980` dev.small queries
+- the paper evaluates LoTTE-pooled with `2.4M` passages, `266M` token vectors,
+  and `2931` search/dev queries
+- the paper uses ColBERTv2, reports MRR@10 for MS MARCO-v1 and Success@5 for
+  LoTTE, and reports an implementation written in Rust on top of kANNolo
+- the paper uses TAC thresholds `mu=128`, `tau=256`, active-token floor
+  `epsilon=4`, `theta=39`, PQ32 with 8-bit codes, and `10` k-means iterations
+- the paper's retrieval setup uses about `2M` centroids for LoTTE and about
+  `4M` centroids for MS MARCO-v1, HNSW `M=32`, `ef_construction=1500`, and a
+  grid over `k_c`, `k_d`, and candidate-pruning `alpha`
+
+Local evidence source:
+- [docs/traces/2026-05-01_tachiom_tac_probe.md](traces/2026-05-01_tachiom_tac_probe.md)
+- [docs/benchmark_ladder.md](benchmark_ladder.md)
+- [docs/recent_paper_targets.md](recent_paper_targets.md)
+
+## Status Key
+
+- `Implemented`
+  - the repo has code for the component and focused tests cover its local
+    contract
+- `Bounded reproduction gate`
+  - the component or result has been measured on a stated local slice with
+    explicit vector counts
+- `Partial`
+  - the shape exists, but an important paper equivalence condition is missing
+- `Not reproduced`
+  - the current repo does not yet provide evidence for the paper claim
+
+## Paper vs Kayak
+
+| Paper item | Paper target | Kayak implementation | Current evidence | Status |
+| --- | --- | --- | --- | --- |
+| Token-aware clustering | TAC allocates centroids by token frequency and variance with tail handling, damped scoring, bounds, and budget reconciliation | `python/kayak_bridge/tachiom_allocation.py`, `tachiom_clustering.py`, `tachiom_index.py` | unit tests and bounded MS MARCO gates use `mu=128`, `tau=256`, `epsilon=4`, `theta=39` | `Implemented` |
+| Aligned token ids | TAC depends on document token identity aligned to document vectors | ColBERT encoder path and task/snapshot builders preserve aligned document token ids | vector-only cached LEMB artifact was rejected; token-id-bearing artifacts were rebuilt | `Implemented` |
+| Candidate pruning | prune candidate windows with paper-style alpha threshold | shared candidate ranking path supports `candidate_pruning_alpha` | moderate PQ128 pruning preserved `0.9875` final recall and raised QPS from about `69.01` to `84.48` in the trace | `Bounded reproduction gate` |
+| HNSW centroid traversal | graph over centroids, paper settings include `M=32`, `ef_construction=1500` | Python graph builder plus native dim128 query traversal and streaming sidecar | bounded gates use persisted HNSW sidecars; native HNSW+PQ reaches `125.52` QPS on `docs1500_q48_c32768` and `69.01` QPS on `docs10000_q128_c32768` | `Partial` |
+| Residual-PQ refine | normalized residual compression, PQ32, 8-bit codes, optimized layout for MaxSim | Python residual-PQ reference and dim128 Mojo residual-PQ paths | PQ32 bounded gates exist; native sparse HNSW+PQ reranks candidate-window tokens | `Partial` |
+| Streaming/materialized index | paper-scale implementation avoids full dense token scoring at query time | binary snapshot writer, streaming TAC/PQ builder, memmap reader, native list-backed and address-backed engines | full MS MARCO document payload estimate is about `155.55GB` with f16 vectors/u32 token ids; bounded streaming artifacts are built and searched | `Partial` |
+| MS MARCO judged quality | MS MARCO-v1, `8.8M` passages, `598M` vectors, `6980` queries, MRR@10 | bounded selected-positive MS MARCO slices | `docs5000_q128` JSON gate reaches exact MRR@10 at `32768` centroids; streaming gates keep judged MRR matched or slightly above exact on bounded slices | `Bounded reproduction gate` |
+| LoTTE judged quality | LoTTE-pooled, `2.4M` passages, `266M` vectors, `2931` queries, Success@5 | only a small LEMB/NarrativeQA token-id gate exists, not LoTTE | no LoTTE-pooled paper-dataset run | `Not reproduced` |
+| Corpus scale | millions of passages and hundreds of millions of token vectors | largest measured bounded streaming row is `10135` documents and `739372` document vectors | no full MS MARCO or LoTTE corpus run | `Not reproduced` |
+| Centroid scale | about `4M` centroids for MS MARCO-v1, about `2M` for LoTTE | bounded gates use up to `32768` centroids | no `262K`, `1M`, `2M`, or `4M` local centroid gate has completed | `Not reproduced` |
+| Throughput scale | paper reports Tachiom average query times of `10-15ms` at MS MARCO cutoffs and speedups up to `9.8x` over baselines | native HNSW+PQ reaches comparable per-query milliseconds only on much smaller bounded slices | local QPS rows are not comparable to paper throughput because corpus and centroid scale differ by orders of magnitude | `Not reproduced` |
+| Graph construction | Rust/kANNolo implementation, 64-thread clustering, single-core retrieval experiments | Python HNSW graph builder; native query traversal exists | Python graph build dominates or remains a blocker; no native/kANNolo-class builder | `Partial` |
+| Hardware/runtime parity | Intel Xeon Silver 4314, 64 threads; Rust/kANNolo; retrieval sequential on one core | current local CPU/Python/Mojo environment | no hardware-parity run; no paper implementation replay | `Not reproduced` |
+
+## Strongest Verified Local Claims
+
+These claims are currently justified:
+
+- Kayak has a paper-shaped TAC + HNSW + residual-PQ implementation path.
+- Kayak can reject unfaithful vector-only Tachiom artifacts when aligned
+  document token ids are missing.
+- Bounded MS MARCO selected-positive gates can match exact MRR@10 when the
+  centroid budget is high enough.
+- Native streaming TAC+PQ and HNSW+PQ paths beat exact MaxSim on the measured
+  bounded slices as document-vector count grows.
+- Native HNSW+PQ is the fastest bounded query path measured so far, but it is
+  approximate relative to exact top-10 rankings.
+- USL batch-cap tuning is instrumented and measured; it did not reveal a
+  material batching bottleneck on the current native HNSW+PQ slices.
+
+Current strongest bounded native streaming rows:
+
+| Slice | Docs | Doc vectors | Queries | Query vectors | Centroids | Engine | MRR@10 | Exact MRR@10 | Final recall@10 vs exact | QPS |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| `docs1500_q48_c32768` | `1553` | `114393` | `48` | `1536` | `32768` | native HNSW+PQ | `1.0` | `1.0` | `0.9041666666666663` | `125.52333181000189` |
+| `docs2500_q64_c32768` | `2570` | `188537` | `64` | `2048` | `32768` | native TAC+PQ | `1.0` | `1.0` | `0.8890624999999996` | `73.48328381526854` |
+| `docs5000_q96_c32768` | `5103` | `371673` | `96` | `3072` | `32768` | native TAC+PQ | `1.0` | `0.9947916666666666` | `0.8791666666666665` | `58.04598536948425` |
+| `docs10000_q128_c32768` | `10135` | `739372` | `128` | `4096` | `32768` | native HNSW+PQ | `0.9895833333333334` | `0.9893973214285714` | `0.8867187500000006` | `69.01278987944805` |
+
+Interpretation:
+- these rows are meaningful systems evidence for Kayak's local path
+- they are not paper-scale reproduction rows
+- judged MRR can match exact while exact top-10 overlap remains approximate,
+  so "quality matched" must name the metric
+
+## What Is Not Reproduced
+
+The following statements are not justified today:
+
+- full MS MARCO-v1 paper result
+- full LoTTE-pooled paper result
+- paper-scale centroid count
+- paper-scale graph build
+- paper throughput comparison against Warp, IGP, or EMVB
+- paper hardware/runtime parity
+- Rust/kANNolo implementation parity
+- SOTA
+- physical or asymptotic optimality
+
+## Blockers
+
+1. **Corpus scale**
+   - Local bounded runs are at most `10135` documents and `739372` document
+     vectors.
+   - Paper MS MARCO-v1 is `8.8M` passages and `598M` token vectors.
+
+2. **Centroid scale**
+   - Local bounded gates use `32768` centroids.
+   - Paper retrieval uses about `4M` centroids for MS MARCO-v1 and about `2M`
+     for LoTTE.
+
+3. **Graph construction**
+   - The current HNSW graph builder is Python reference code.
+   - Paper-scale credibility requires a native or streaming graph builder with
+     explicit memory and wall-clock evidence.
+
+4. **Residual-PQ layout equivalence**
+   - Kayak has residual-PQ refine paths.
+   - The paper's cache-optimized Rust layout and speedups are not proven
+     equivalent by Kayak's current Mojo/Python layout.
+
+5. **External baseline parity**
+   - Current local comparisons are primarily against Kayak exact and internal
+     Python/native variants.
+   - Paper throughput claims compare against Warp, IGP, and EMVB at metric
+     cutoffs.
+
+6. **Dataset coverage**
+   - MS MARCO selected-positive bounded gates exist.
+   - LoTTE-pooled paper-dataset gates do not.
+
+7. **Metric semantics**
+   - Bounded gates can match exact MRR@10 while exact top-10 overlap remains
+     around `0.88-0.91`.
+   - Claims must state which metric is matched.
+
+## Claim Policy
+
+Allowed language:
+
+- "paper-shaped Tachiom implementation"
+- "bounded-scale reproduction gate"
+- "matches exact MRR@10 on selected-positive MS MARCO slices"
+- "native streaming HNSW+PQ is faster than exact MaxSim on bounded local
+  slices"
+- "does not reproduce full paper-scale throughput"
+- "USL batching was measured and is not the current material bottleneck"
+
+Disallowed language unless future evidence changes this document:
+
+- "we reproduced the paper"
+- "full Tachiom reproduction"
+- "paper-equivalent throughput"
+- "SOTA"
+- "physically optimized"
+- "full MS MARCO result"
+- "LoTTE reproduced"
+
+## Upgrade Gates
+
+The status can be upgraded only by adding evidence for one of these gates.
+
+### Gate 1: Larger Bounded MS MARCO
+
+Minimum next gate:
+- `50000-100000` selected-positive MS MARCO documents
+- explicit document count, document-vector count, query count, query-vector
+  count, and centroid count
+- exact MRR@10, candidate recall@10 vs exact, final recall@10 vs exact, QPS,
+  index bytes, build time
+
+Reason:
+- this tests whether current bounded behavior bends before paper scale
+
+### Gate 2: Larger Centroid Counts
+
+Minimum next gate:
+- `262144` centroids, then `1048576` centroids if memory permits
+- same judged slice and same metrics as Gate 1
+- graph build time and graph bytes reported separately
+
+Reason:
+- the current `32768`-centroid evidence cannot validate the paper's `2M-4M`
+  centroid regime
+
+### Gate 3: Native Or Streaming Graph Builder
+
+Minimum next gate:
+- graph construction without Python reference bottlenecks
+- bounded-memory construction report
+- correctness check against the existing Python graph on a small fixture
+- build-time curve over increasing centroid counts
+
+Reason:
+- Python graph construction is the largest paper-scale credibility gap
+
+### Gate 4: Native HNSW+PQ Internal Profile
+
+Minimum next gate:
+- stage timings for HNSW traversal, candidate dedup/window construction,
+  residual-PQ lookup/scoring, and final top-k
+- same artifact measured before and after any optimization
+
+Reason:
+- USL batching did not identify a material bottleneck, so the next optimization
+  needs internal timing evidence
+
+### Gate 5: LoTTE-Pooled Slice
+
+Minimum next gate:
+- token-id-bearing LoTTE-pooled artifact
+- Success@5 reported
+- document/query vector counts explicit
+- exact-reference overlap reported
+
+Reason:
+- the paper reports both in-domain and out-of-domain evaluation; Kayak has not
+  reproduced the LoTTE side
+
+### Gate 6: External Baseline Matrix
+
+Minimum next gate:
+- compare against at least one paper baseline family or a clearly labeled local
+  proxy
+- record why the comparison is or is not equivalent to Warp, IGP, and EMVB
+
+Reason:
+- Kayak exact is not a substitute for the paper's baseline comparison
+
+## Definition Of Done For This Status
+
+This document is current if it answers:
+
+- what is implemented
+- what has been measured
+- what scale was measured
+- what the paper target was
+- what is still missing
+- what language is allowed
+- what evidence would upgrade the claim
+
+If new benchmark rows change the boundary, update this document in the same PR
+as the measurement artifact or trace note.

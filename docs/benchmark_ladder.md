@@ -221,6 +221,9 @@ PYTHONPATH=python python python/scripts/bench_tachiom_task.py \
 Paper-scale MS MARCO materialization should use the sharded binary snapshot
 path, not task JSON:
 
+Canonical claim boundary:
+- [docs/tachiom_reproduction_status.md](tachiom_reproduction_status.md)
+
 ```bash
 PYTHONPATH=python python python/scripts/materialize_msmarco_colbert_snapshot.py \
   --collection /data/msmarco/collection.tsv \
