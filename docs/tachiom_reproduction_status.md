@@ -1,6 +1,6 @@
 # Tachiom Reproduction Status
 
-Date: `2026-05-02`
+Date: `2026-05-03`
 
 Paper:
 - **Efficient Multivector Retrieval with Token-Aware Clustering and
@@ -47,6 +47,7 @@ Local evidence source:
 - [docs/traces/2026-05-02_tachiom_centroid_ladder.md](traces/2026-05-02_tachiom_centroid_ladder.md)
 - [docs/traces/2026-05-02_tachiom_query_policy_sweep.md](traces/2026-05-02_tachiom_query_policy_sweep.md)
 - [docs/traces/2026-05-02_tachiom_hnsw_heap_frontier.md](traces/2026-05-02_tachiom_hnsw_heap_frontier.md)
+- [docs/traces/2026-05-03_tachiom_rerank_hot_loop.md](traces/2026-05-03_tachiom_rerank_hot_loop.md)
 - [docs/benchmark_ladder.md](benchmark_ladder.md)
 - [docs/recent_paper_targets.md](recent_paper_targets.md)
 
@@ -116,6 +117,9 @@ These claims are currently justified:
   retained-centroid sort when `ef == k_c`; this improves the measured `262144`
   quality-preserving row from `24.116374186902767` QPS to
   `72.61081722938026` QPS, while preserving MRR@10 and exact-overlap gates.
+- A small rerank hot-loop cleanup was measured with controlled repeated A/B on
+  the `32768` and `262144` focused rows; it is kept as a marginal local
+  optimization, not as a new paper-reproduction result.
 
 Current strongest bounded native streaming rows:
 

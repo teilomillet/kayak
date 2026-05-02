@@ -718,7 +718,7 @@ def best_tachiom_hnsw_pq_score_for_query_vector_in_document_dim128(
             residual_score_table,
             token_index,
         )
-        if token_index == start_token or score > best_score:
+        if score > best_score:
             best_score = score
 
     return best_score
@@ -759,6 +759,7 @@ def tachiom_tac_hnsw_pq_rerank_candidates_for_query(
     )
 
     var rerank_scores = List[ScoreScalar]()
+    rerank_scores.reserve(len(candidate_positions))
     for document_index in candidate_positions:
         rerank_scores.append(
             tachiom_tac_hnsw_pq_score_for_document(
@@ -771,6 +772,7 @@ def tachiom_tac_hnsw_pq_rerank_candidates_for_query(
 
     var winner_offsets = top_positions_by_score(rerank_scores, final_k)
     var winners = List[Int]()
+    winners.reserve(len(winner_offsets))
     for winner_offset in winner_offsets:
         winners.append(candidate_positions[winner_offset])
 
@@ -1437,7 +1439,7 @@ def best_tachiom_hnsw_pq_address_score_for_query_vector_in_document_dim128(
             residual_score_table,
             token_index,
         )
-        if token_index == start_token or score > best_score:
+        if score > best_score:
             best_score = score
 
     return best_score
@@ -1478,6 +1480,7 @@ def tachiom_tac_hnsw_pq_address_rerank_candidates_for_query(
     )
 
     var rerank_scores = List[ScoreScalar]()
+    rerank_scores.reserve(len(candidate_positions))
     for document_index in candidate_positions:
         rerank_scores.append(
             tachiom_tac_hnsw_pq_address_score_for_document(
@@ -1487,6 +1490,7 @@ def tachiom_tac_hnsw_pq_address_rerank_candidates_for_query(
 
     var winner_offsets = top_positions_by_score(rerank_scores, final_k)
     var winners = List[Int]()
+    winners.reserve(len(winner_offsets))
     for winner_offset in winner_offsets:
         winners.append(candidate_positions[winner_offset])
 
