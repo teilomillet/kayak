@@ -46,6 +46,7 @@ Local evidence source:
 - [docs/traces/2026-05-02_tachiom_pruning_sweep.md](traces/2026-05-02_tachiom_pruning_sweep.md)
 - [docs/traces/2026-05-02_tachiom_centroid_ladder.md](traces/2026-05-02_tachiom_centroid_ladder.md)
 - [docs/traces/2026-05-02_tachiom_query_policy_sweep.md](traces/2026-05-02_tachiom_query_policy_sweep.md)
+- [docs/traces/2026-05-02_tachiom_hnsw_heap_frontier.md](traces/2026-05-02_tachiom_hnsw_heap_frontier.md)
 - [docs/benchmark_ladder.md](benchmark_ladder.md)
 - [docs/recent_paper_targets.md](recent_paper_targets.md)
 
@@ -109,6 +110,9 @@ These claims are currently justified:
   recovered the `32768` baseline final-recall floor on `131072` and `262144`
   centroid artifacts, but the quality-preserving rows were slower than the
   fixed-policy `32768` baseline.
+- Native HNSW+PQ now uses heap-backed HNSW layer frontiers; this improves the
+  measured `262144` quality-preserving row from `24.116374186902767` QPS to
+  `67.76123363711898` QPS, while preserving MRR@10 and exact-overlap gates.
 
 Current strongest bounded native streaming rows:
 
@@ -118,6 +122,12 @@ Current strongest bounded native streaming rows:
 | `docs2500_q64_c32768` | `2570` | `188537` | `64` | `2048` | `32768` | native TAC+PQ | `1.0` | `1.0` | `0.8890624999999996` | `73.48328381526854` |
 | `docs5000_q96_c32768` | `5103` | `371673` | `96` | `3072` | `32768` | native TAC+PQ | `1.0` | `0.9947916666666666` | `0.8791666666666665` | `58.04598536948425` |
 | `docs10000_q128_c32768` | `10135` | `739372` | `128` | `4096` | `32768` | native HNSW+PQ | `0.9895833333333334` | `0.9893973214285714` | `0.8867187500000006` | `69.01278987944805` |
+
+Current optimized bounded native streaming row:
+
+| Slice | Docs | Doc vectors | Queries | Query vectors | Centroids | Engine | Policy | MRR@10 | Final recall@10 vs exact | QPS |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: |
+| `docs10000_q128_c32768` | `10135` | `739372` | `128` | `4096` | `32768` | native HNSW+PQ | `kc120_ef64_alpha0.35` | `0.9895833333333334` | `0.8867187500000006` | `89.25310082533578` |
 
 Current bounded centroid-scale ladder:
 
@@ -137,9 +147,9 @@ Quality floors:
 | Centroids | Row kind | `k_c` | HNSW `ef_search` | Alpha | MRR@10 | Final recall@10 vs exact | QPS |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `131072` | fastest | `120` | `64` | `0.3` | `0.9817708333333334` | `0.8023437499999998` | `87.69168200632623` |
-| `131072` | fastest eligible | `180` | `128` | `0.5` | `0.9895833333333334` | `0.8890625000000004` | `40.093095874216985` |
+| `131072` | fastest eligible after heap frontier | `200` | `64` | `0.45` | `0.9895833333333334` | `0.8906250000000002` | `65.53828788809584` |
 | `262144` | fastest | `120` | `64` | `0.3` | `0.9856770833333334` | `0.7945312499999997` | `97.06290014898175` |
-| `262144` | fastest eligible | `360` | `64` | `0.35` | `0.9934895833333334` | `0.8875000000000008` | `24.116374186902767` |
+| `262144` | fastest eligible after heap frontier | `360` | `64` | `0.35` | `0.9934895833333334` | `0.8875000000000008` | `67.76123363711898` |
 
 Interpretation:
 - these rows are meaningful systems evidence for Kayak's local path
@@ -149,6 +159,8 @@ Interpretation:
 - larger centroid artifacts can be fast or quality-preserving in the measured
   grid, but did not produce a quality-preserving speedup over the `32768`
   baseline
+- heap-backed HNSW frontiers substantially narrow the gap, but the optimized
+  `32768` row is still the fastest quality-preserving bounded row
 
 Current native HNSW+PQ internal profile:
 

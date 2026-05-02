@@ -19,6 +19,9 @@ from kayak_bridge.dtypes import VECTOR_DTYPE  # noqa: E402
 from kayak_bridge.encoded_snapshot_loader import load_snapshot_queries  # noqa: E402
 from kayak_bridge.tachiom_streaming_benchmark import (  # noqa: E402
     _same_shape_query_groups,
+    _with_candidate_pruning_alpha,
+    _with_centroids_per_query_vector,
+    _with_hnsw_ef_search,
 )
 from kayak_bridge.tachiom_streaming_search import (  # noqa: E402
     load_streaming_tachiom_hnsw_pq_mojo_index,
@@ -73,6 +76,26 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--query-limit", type=int)
     parser.add_argument("--measurement-iterations", type=int, default=3)
     parser.add_argument(
+        "--centroids-per-query-vector",
+        type=int,
+        help="Override the artifact centroids-per-query-vector profile budget.",
+    )
+    parser.add_argument(
+        "--hnsw-ef-search",
+        type=int,
+        help="Override the persisted HNSW ef_search profile budget.",
+    )
+    parser.add_argument(
+        "--candidate-pruning-alpha",
+        type=float,
+        help="Override the artifact candidate-pruning alpha during profiling.",
+    )
+    parser.add_argument(
+        "--disable-candidate-pruning",
+        action="store_true",
+        help="Profile with candidate pruning disabled.",
+    )
+    parser.add_argument(
         "--max-query-batch-size",
         type=int,
         help="Cap same-shape batches before sending them to the profile binding.",
@@ -89,10 +112,24 @@ def profile_streaming_hnsw_pq_mojo(
     graph_root: Path | None,
     query_limit: int | None,
     measurement_iterations: int,
+    centroids_per_query_vector: int | None,
+    hnsw_ef_search: int | None,
+    candidate_pruning_alpha: float | None,
+    disable_candidate_pruning: bool,
     max_query_batch_size: int | None,
 ) -> dict[str, Any]:
     if measurement_iterations <= 0:
         raise ValueError("measurement_iterations must be positive")
+    if centroids_per_query_vector is not None and centroids_per_query_vector <= 0:
+        raise ValueError("centroids_per_query_vector must be positive when provided")
+    if hnsw_ef_search is not None and hnsw_ef_search <= 0:
+        raise ValueError("hnsw_ef_search must be positive when provided")
+    if disable_candidate_pruning and candidate_pruning_alpha is not None:
+        raise ValueError(
+            "candidate_pruning_alpha and disable_candidate_pruning are mutually exclusive"
+        )
+    if candidate_pruning_alpha is not None and not (0.0 < candidate_pruning_alpha < 1.0):
+        raise ValueError("candidate_pruning_alpha must be between 0 and 1")
     if max_query_batch_size is not None and max_query_batch_size <= 0:
         raise ValueError("max_query_batch_size must be positive when provided")
 
@@ -100,6 +137,21 @@ def profile_streaming_hnsw_pq_mojo(
         index_root,
         graph_root=graph_root,
     )
+    centroids_per_query_vector_source = "artifact"
+    if centroids_per_query_vector is not None:
+        index = _with_centroids_per_query_vector(index, centroids_per_query_vector)
+        centroids_per_query_vector_source = "override"
+    hnsw_ef_search_source = "artifact"
+    if hnsw_ef_search is not None:
+        index = _with_hnsw_ef_search(index, hnsw_ef_search)
+        hnsw_ef_search_source = "override"
+    candidate_pruning_alpha_source = "artifact"
+    if disable_candidate_pruning:
+        index = _with_candidate_pruning_alpha(index, None)
+        candidate_pruning_alpha_source = "disabled"
+    elif candidate_pruning_alpha is not None:
+        index = _with_candidate_pruning_alpha(index, candidate_pruning_alpha)
+        candidate_pruning_alpha_source = "override"
     queries = load_snapshot_queries(snapshot_root, query_limit=query_limit)
     profiles = _profile_queries(
         index=index,
@@ -125,6 +177,9 @@ def profile_streaming_hnsw_pq_mojo(
         "final_k": queries.k,
         "measurement_iterations": measurement_iterations,
         "max_query_batch_size": max_query_batch_size,
+        "centroids_per_query_vector_source": centroids_per_query_vector_source,
+        "hnsw_ef_search_source": hnsw_ef_search_source,
+        "candidate_pruning_alpha_source": candidate_pruning_alpha_source,
         "measurement_note": (
             "Substep timings are benchmark-only boundaries. They isolate "
             "native HNSW traversal, candidate score accumulation, candidate "
@@ -245,6 +300,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         graph_root=args.graph,
         query_limit=args.query_limit,
         measurement_iterations=args.measurement_iterations,
+        centroids_per_query_vector=args.centroids_per_query_vector,
+        hnsw_ef_search=args.hnsw_ef_search,
+        candidate_pruning_alpha=args.candidate_pruning_alpha,
+        disable_candidate_pruning=args.disable_candidate_pruning,
         max_query_batch_size=args.max_query_batch_size,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)

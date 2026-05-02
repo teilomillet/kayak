@@ -164,37 +164,207 @@ def hnsw_pq_score_position_before(
     return score > other_score or (score == other_score and position < other_position)
 
 
-def hnsw_pq_insert_descending_position(
+def hnsw_pq_score_position_is_worse(
+    score: ScoreScalar,
+    position: Int,
+    other_score: ScoreScalar,
+    other_position: Int,
+) -> Bool:
+    if score < other_score:
+        return True
+    if score > other_score:
+        return False
+    return position > other_position
+
+
+def hnsw_pq_swap_score_position_entries(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+    left: Int,
+    right: Int,
+):
+    var position = positions[left]
+    var score = scores[left]
+    positions[left] = positions[right]
+    scores[left] = scores[right]
+    positions[right] = position
+    scores[right] = score
+
+
+def hnsw_pq_sift_up_worst_first_retained(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+    offset: Int,
+):
+    var current = offset
+    while current > 0:
+        var parent = (current - 1) // 2
+        if not hnsw_pq_score_position_is_worse(
+            scores[current],
+            positions[current],
+            scores[parent],
+            positions[parent],
+        ):
+            break
+        hnsw_pq_swap_score_position_entries(positions, scores, current, parent)
+        current = parent
+
+
+def hnsw_pq_sift_down_worst_first_retained(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+    offset: Int,
+):
+    var current = offset
+    while True:
+        var worst = current
+        var left = current * 2 + 1
+        var right = left + 1
+        if left < len(scores) and hnsw_pq_score_position_is_worse(
+            scores[left],
+            positions[left],
+            scores[worst],
+            positions[worst],
+        ):
+            worst = left
+        if right < len(scores) and hnsw_pq_score_position_is_worse(
+            scores[right],
+            positions[right],
+            scores[worst],
+            positions[worst],
+        ):
+            worst = right
+        if worst == current:
+            break
+        hnsw_pq_swap_score_position_entries(positions, scores, current, worst)
+        current = worst
+
+
+def hnsw_pq_insert_retained_top_position(
     mut positions: List[Int],
     mut scores: List[ScoreScalar],
     position: Int,
     score: ScoreScalar,
     limit: Int,
 ):
-    var insert_at = 0
-    while insert_at < len(scores) and not hnsw_pq_score_position_before(
-        score, position, scores[insert_at], positions[insert_at]
-    ):
-        insert_at += 1
-
-    if insert_at >= limit:
-        if len(scores) < limit:
-            positions.append(position)
-            scores.append(score)
-        return
-
     if len(scores) < limit:
         positions.append(position)
         scores.append(score)
+        hnsw_pq_sift_up_worst_first_retained(positions, scores, len(scores) - 1)
+        return
+    if not hnsw_pq_score_position_before(score, position, scores[0], positions[0]):
+        return
+    positions[0] = position
+    scores[0] = score
+    hnsw_pq_sift_down_worst_first_retained(positions, scores, 0)
 
-    var cursor = len(scores) - 1
-    while cursor > insert_at:
-        positions[cursor] = positions[cursor - 1]
-        scores[cursor] = scores[cursor - 1]
-        cursor -= 1
 
-    positions[insert_at] = position
-    scores[insert_at] = score
+def hnsw_pq_pop_worst_retained_position(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+) -> Int:
+    var worst_position = positions[0]
+    var last_offset = len(positions) - 1
+    positions[0] = positions[last_offset]
+    scores[0] = scores[last_offset]
+    _ = positions.pop()
+    _ = scores.pop()
+    if len(scores) > 0:
+        hnsw_pq_sift_down_worst_first_retained(positions, scores, 0)
+    return worst_position
+
+
+def hnsw_pq_descending_positions_from_retained_heap(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+) -> List[Int]:
+    var ascending_positions = List[Int]()
+    ascending_positions.reserve(len(positions))
+    while len(positions) > 0:
+        ascending_positions.append(
+            hnsw_pq_pop_worst_retained_position(positions, scores)
+        )
+
+    var descending_positions = List[Int]()
+    descending_positions.reserve(len(ascending_positions))
+    for offset in range(len(ascending_positions)):
+        descending_positions.append(
+            ascending_positions[len(ascending_positions) - offset - 1]
+        )
+    return descending_positions^
+
+
+def hnsw_pq_sift_up_best_first_candidate(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+    offset: Int,
+):
+    var current = offset
+    while current > 0:
+        var parent = (current - 1) // 2
+        if not hnsw_pq_score_position_before(
+            scores[current],
+            positions[current],
+            scores[parent],
+            positions[parent],
+        ):
+            break
+        hnsw_pq_swap_score_position_entries(positions, scores, current, parent)
+        current = parent
+
+
+def hnsw_pq_sift_down_best_first_candidate(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+    offset: Int,
+):
+    var current = offset
+    while True:
+        var best = current
+        var left = current * 2 + 1
+        var right = left + 1
+        if left < len(scores) and hnsw_pq_score_position_before(
+            scores[left],
+            positions[left],
+            scores[best],
+            positions[best],
+        ):
+            best = left
+        if right < len(scores) and hnsw_pq_score_position_before(
+            scores[right],
+            positions[right],
+            scores[best],
+            positions[best],
+        ):
+            best = right
+        if best == current:
+            break
+        hnsw_pq_swap_score_position_entries(positions, scores, current, best)
+        current = best
+
+
+def hnsw_pq_push_best_first_candidate(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+    position: Int,
+    score: ScoreScalar,
+):
+    positions.append(position)
+    scores.append(score)
+    hnsw_pq_sift_up_best_first_candidate(positions, scores, len(scores) - 1)
+
+
+def hnsw_pq_pop_best_first_candidate(
+    mut positions: List[Int],
+    mut scores: List[ScoreScalar],
+):
+    var last_offset = len(positions) - 1
+    positions[0] = positions[last_offset]
+    scores[0] = scores[last_offset]
+    _ = positions.pop()
+    _ = scores.pop()
+    if len(scores) > 0:
+        hnsw_pq_sift_down_best_first_candidate(positions, scores, 0)
 
 
 def hnsw_pq_sparse_visited_table(size_hint: Int) -> List[Int]:
@@ -306,7 +476,6 @@ def hnsw_pq_search_layer_centroids(
 
     var candidate_positions = List[Int]()
     var candidate_scores = List[ScoreScalar]()
-    var candidate_expanded = List[Int]()
     var best_positions = List[Int]()
     var best_scores = List[ScoreScalar]()
 
@@ -315,37 +484,19 @@ def hnsw_pq_search_layer_centroids(
     )
     hnsw_pq_sparse_visited_insert(visited, entry_point)
     visited_count += 1
-    candidate_positions.append(entry_point)
-    candidate_scores.append(entry_score)
-    candidate_expanded.append(0)
-    hnsw_pq_insert_descending_position(
+    hnsw_pq_push_best_first_candidate(
+        candidate_positions, candidate_scores, entry_point, entry_score
+    )
+    hnsw_pq_insert_retained_top_position(
         best_positions, best_scores, entry_point, entry_score, ef
     )
 
-    while True:
-        var best_candidate_offset = -1
-        var best_candidate_score = min_score_scalar()
-        var best_candidate_position = -1
-        for offset in range(len(candidate_positions)):
-            if candidate_expanded[offset] != 0:
-                continue
-            var position = candidate_positions[offset]
-            var score = candidate_scores[offset]
-            if best_candidate_offset < 0 or hnsw_pq_score_position_before(
-                score,
-                position,
-                best_candidate_score,
-                best_candidate_position,
-            ):
-                best_candidate_offset = offset
-                best_candidate_score = score
-                best_candidate_position = position
-
-        if best_candidate_offset < 0:
+    while len(candidate_positions) > 0:
+        var best_candidate_score = candidate_scores[0]
+        var best_candidate_position = candidate_positions[0]
+        if len(best_scores) >= ef and best_candidate_score < best_scores[0]:
             break
-        if len(best_scores) >= ef and best_candidate_score < best_scores[len(best_scores) - 1]:
-            break
-        candidate_expanded[best_candidate_offset] = 1
+        hnsw_pq_pop_best_first_candidate(candidate_positions, candidate_scores)
 
         var start = hnsw_pq_neighbor_start(
             prepared_index, layer_index, best_candidate_position
@@ -367,17 +518,17 @@ def hnsw_pq_search_layer_centroids(
             if len(best_scores) < ef or hnsw_pq_score_position_before(
                 score,
                 neighbor,
-                best_scores[len(best_scores) - 1],
-                best_positions[len(best_positions) - 1],
+                best_scores[0],
+                best_positions[0],
             ):
-                candidate_positions.append(neighbor)
-                candidate_scores.append(score)
-                candidate_expanded.append(0)
-                hnsw_pq_insert_descending_position(
+                hnsw_pq_push_best_first_candidate(
+                    candidate_positions, candidate_scores, neighbor, score
+                )
+                hnsw_pq_insert_retained_top_position(
                     best_positions, best_scores, neighbor, score, ef
                 )
 
-    return best_positions^
+    return hnsw_pq_descending_positions_from_retained_heap(best_positions, best_scores)
 
 
 def tachiom_tac_hnsw_pq_centroid_positions_for_query_vector(
@@ -1002,7 +1153,6 @@ def hnsw_pq_address_search_layer_centroids(
 
     var candidate_positions = List[Int]()
     var candidate_scores = List[ScoreScalar]()
-    var candidate_expanded = List[Int]()
     var best_positions = List[Int]()
     var best_scores = List[ScoreScalar]()
 
@@ -1011,37 +1161,19 @@ def hnsw_pq_address_search_layer_centroids(
     )
     hnsw_pq_sparse_visited_insert(visited, entry_point)
     visited_count += 1
-    candidate_positions.append(entry_point)
-    candidate_scores.append(entry_score)
-    candidate_expanded.append(0)
-    hnsw_pq_insert_descending_position(
+    hnsw_pq_push_best_first_candidate(
+        candidate_positions, candidate_scores, entry_point, entry_score
+    )
+    hnsw_pq_insert_retained_top_position(
         best_positions, best_scores, entry_point, entry_score, ef
     )
 
-    while True:
-        var best_candidate_offset = -1
-        var best_candidate_score = min_score_scalar()
-        var best_candidate_position = -1
-        for offset in range(len(candidate_positions)):
-            if candidate_expanded[offset] != 0:
-                continue
-            var position = candidate_positions[offset]
-            var score = candidate_scores[offset]
-            if best_candidate_offset < 0 or hnsw_pq_score_position_before(
-                score,
-                position,
-                best_candidate_score,
-                best_candidate_position,
-            ):
-                best_candidate_offset = offset
-                best_candidate_score = score
-                best_candidate_position = position
-
-        if best_candidate_offset < 0:
+    while len(candidate_positions) > 0:
+        var best_candidate_score = candidate_scores[0]
+        var best_candidate_position = candidate_positions[0]
+        if len(best_scores) >= ef and best_candidate_score < best_scores[0]:
             break
-        if len(best_scores) >= ef and best_candidate_score < best_scores[len(best_scores) - 1]:
-            break
-        candidate_expanded[best_candidate_offset] = 1
+        hnsw_pq_pop_best_first_candidate(candidate_positions, candidate_scores)
 
         var start = hnsw_pq_address_neighbor_start(
             prepared_index, layer_index, best_candidate_position
@@ -1063,17 +1195,17 @@ def hnsw_pq_address_search_layer_centroids(
             if len(best_scores) < ef or hnsw_pq_score_position_before(
                 score,
                 neighbor,
-                best_scores[len(best_scores) - 1],
-                best_positions[len(best_positions) - 1],
+                best_scores[0],
+                best_positions[0],
             ):
-                candidate_positions.append(neighbor)
-                candidate_scores.append(score)
-                candidate_expanded.append(0)
-                hnsw_pq_insert_descending_position(
+                hnsw_pq_push_best_first_candidate(
+                    candidate_positions, candidate_scores, neighbor, score
+                )
+                hnsw_pq_insert_retained_top_position(
                     best_positions, best_scores, neighbor, score, ef
                 )
 
-    return best_positions^
+    return hnsw_pq_descending_positions_from_retained_heap(best_positions, best_scores)
 
 
 def tachiom_tac_hnsw_pq_address_centroid_positions_for_query_vector(
