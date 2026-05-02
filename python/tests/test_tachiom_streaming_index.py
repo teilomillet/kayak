@@ -18,7 +18,10 @@ from kayak_bridge.tachiom_streaming_index import (
     StreamingTachiomBuildConfig,
     build_streaming_tachiom_index,
 )
-from kayak_bridge.tachiom_streaming_benchmark import _same_shape_query_groups
+from kayak_bridge.tachiom_streaming_benchmark import (
+    _same_shape_query_groups,
+    _with_candidate_pruning_alpha,
+)
 from kayak_bridge.tachiom_streaming_search import (
     load_streaming_tachiom_hnsw_pq_mojo_address_index,
     load_streaming_tachiom_hnsw_pq_mojo_index,
@@ -152,6 +155,8 @@ class TachiomStreamingIndexTests(unittest.TestCase):
             postings = np.fromfile(output / "centroid_doc_postings.u32", dtype=np.uint32)
             codes = np.fromfile(output / "pq_codes.u8", dtype=np.uint8)
             index = load_streaming_tachiom_pq_index(output)
+            pruned_index = _with_candidate_pruning_alpha(index, 0.25)
+            unpruned_index = _with_candidate_pruning_alpha(pruned_index, None)
             rankings = index.search_batch_positions(
                 np.asarray(
                     [
@@ -172,6 +177,7 @@ class TachiomStreamingIndexTests(unittest.TestCase):
                 ),
             )
             hnsw_index = load_streaming_tachiom_hnsw_pq_index(output)
+            pruned_hnsw_index = _with_candidate_pruning_alpha(hnsw_index, 0.25)
             hnsw_rankings = hnsw_index.search_batch_positions(
                 np.asarray(
                     [
@@ -190,6 +196,10 @@ class TachiomStreamingIndexTests(unittest.TestCase):
             self.assertTrue(summary.pq_enabled)
             self.assertLess(summary.index_payload_bytes, summary.build_payload_bytes)
             self.assertEqual(index.index_bytes, summary.index_payload_bytes)
+            self.assertEqual(pruned_index.candidate_pruning_alpha, 0.25)
+            self.assertIsNone(unpruned_index.candidate_pruning_alpha)
+            self.assertEqual(pruned_hnsw_index.base_index.candidate_pruning_alpha, 0.25)
+            self.assertIs(pruned_hnsw_index.graph, hnsw_index.graph)
             self.assertEqual(posting_offsets.shape, (5,))
             self.assertEqual(int(posting_offsets[-1]), int(postings.shape[0]))
             self.assertEqual(codes.shape[0], 8)

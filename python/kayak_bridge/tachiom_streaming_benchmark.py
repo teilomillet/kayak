@@ -7,7 +7,7 @@ exact snapshot search for bounded slices. It does not build the index.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import time
 from pathlib import Path
 from typing import Sequence
@@ -50,6 +50,8 @@ class StreamingTachiomBenchmarkSummary:
     query_mean_seconds: float
     query_qps: float
     max_query_batch_size: int | None
+    candidate_pruning_alpha: float | None
+    candidate_pruning_alpha_source: str
     k: int
     query_count: int
     document_count: int
@@ -86,6 +88,8 @@ def benchmark_streaming_tachiom_index(
     engine: str = "streaming_tac_pq",
     graph_root: Path | None = None,
     max_query_batch_size: int | None = None,
+    candidate_pruning_alpha: float | None = None,
+    disable_candidate_pruning: bool = False,
 ) -> StreamingTachiomBenchmarkSummary:
     if warmup_iterations < 0:
         raise ValueError("warmup_iterations must be non-negative")
@@ -93,6 +97,11 @@ def benchmark_streaming_tachiom_index(
         raise ValueError("measurement_iterations must be positive")
     if max_query_batch_size is not None and max_query_batch_size <= 0:
         raise ValueError("max_query_batch_size must be positive when provided")
+    if disable_candidate_pruning and candidate_pruning_alpha is not None:
+        raise ValueError(
+            "candidate_pruning_alpha and disable_candidate_pruning are mutually exclusive"
+        )
+    _validate_candidate_pruning_alpha(candidate_pruning_alpha)
 
     snapshot_manifest = load_snapshot_manifest(snapshot_root)
     index = _load_streaming_index(
@@ -100,6 +109,14 @@ def benchmark_streaming_tachiom_index(
         engine=engine,
         graph_root=graph_root,
     )
+    candidate_pruning_alpha_source = "artifact"
+    if disable_candidate_pruning:
+        index = _with_candidate_pruning_alpha(index, None)
+        candidate_pruning_alpha_source = "disabled_override"
+    elif candidate_pruning_alpha is not None:
+        index = _with_candidate_pruning_alpha(index, candidate_pruning_alpha)
+        candidate_pruning_alpha_source = "override"
+    effective_candidate_pruning_alpha = _candidate_pruning_alpha_for_index(index)
     queries = load_snapshot_queries(snapshot_root, query_limit=query_limit)
     final_k = queries.k
 
@@ -208,6 +225,8 @@ def benchmark_streaming_tachiom_index(
         query_mean_seconds=batch_mean_seconds / float(query_count),
         query_qps=float(query_count) / batch_mean_seconds,
         max_query_batch_size=max_query_batch_size,
+        candidate_pruning_alpha=effective_candidate_pruning_alpha,
+        candidate_pruning_alpha_source=candidate_pruning_alpha_source,
         k=final_k,
         query_count=query_count,
         document_count=index.document_count,
@@ -234,8 +253,46 @@ def benchmark_streaming_tachiom_index(
             "remaining_paper_scale_blocker": (
                 _remaining_blocker_for_engine(engine)
             ),
+            "candidate_pruning_alpha_source": candidate_pruning_alpha_source,
         },
     )
+
+
+def _validate_candidate_pruning_alpha(candidate_pruning_alpha: float | None) -> None:
+    if candidate_pruning_alpha is None:
+        return
+    if not (0.0 < candidate_pruning_alpha < 1.0):
+        raise ValueError("candidate_pruning_alpha must be between 0 and 1")
+
+
+def _with_candidate_pruning_alpha(
+    index: object,
+    candidate_pruning_alpha: float | None,
+) -> object:
+    """Return an index view with a query-time pruning override.
+
+    Prepared Mojo readers keep their native index handle because pruning alpha is
+    passed per search call; only the lightweight Python metadata wrapper changes.
+    """
+
+    _validate_candidate_pruning_alpha(candidate_pruning_alpha)
+    base_index = getattr(index, "base_index", None)
+    if base_index is not None and hasattr(base_index, "candidate_pruning_alpha"):
+        return replace(
+            index,
+            base_index=replace(
+                base_index,
+                candidate_pruning_alpha=candidate_pruning_alpha,
+            ),
+        )
+    if hasattr(index, "candidate_pruning_alpha"):
+        return replace(index, candidate_pruning_alpha=candidate_pruning_alpha)
+    raise TypeError("streaming index does not expose candidate_pruning_alpha")
+
+
+def _candidate_pruning_alpha_for_index(index: object) -> float | None:
+    base_index = getattr(index, "base_index", index)
+    return base_index.candidate_pruning_alpha
 
 
 def _load_streaming_index(

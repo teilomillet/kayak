@@ -49,6 +49,20 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "the benchmark's full same-shape batch."
         ),
     )
+    pruning_group = parser.add_mutually_exclusive_group()
+    pruning_group.add_argument(
+        "--candidate-pruning-alpha",
+        type=float,
+        help=(
+            "Override the artifact candidate-pruning alpha for this query run. "
+            "Must be between 0 and 1."
+        ),
+    )
+    pruning_group.add_argument(
+        "--disable-candidate-pruning",
+        action="store_true",
+        help="Disable artifact candidate pruning for this query run.",
+    )
     parser.add_argument("--run-exact", action="store_true")
     parser.add_argument("--max-exact-vector-count", type=int)
     parser.add_argument("--output", type=Path, required=True)
@@ -69,6 +83,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         engine=args.engine,
         graph_root=args.graph,
         max_query_batch_size=args.max_query_batch_size,
+        candidate_pruning_alpha=args.candidate_pruning_alpha,
+        disable_candidate_pruning=args.disable_candidate_pruning,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
@@ -81,6 +97,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "quiet_context "
             f"qps={summary.query_qps:.6f} "
             f"primary={summary.primary_value:.6f} "
+            f"candidate_pruning_alpha={summary.candidate_pruning_alpha} "
             f"candidate_recall={summary.candidate_recall_at_k_vs_exact} "
             f"final_recall={summary.final_recall_at_k_vs_exact}"
         )

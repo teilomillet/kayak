@@ -43,6 +43,7 @@ Paper source checked on `2026-05-02`:
 
 Local evidence source:
 - [docs/traces/2026-05-01_tachiom_tac_probe.md](traces/2026-05-01_tachiom_tac_probe.md)
+- [docs/traces/2026-05-02_tachiom_pruning_sweep.md](traces/2026-05-02_tachiom_pruning_sweep.md)
 - [docs/benchmark_ladder.md](benchmark_ladder.md)
 - [docs/recent_paper_targets.md](recent_paper_targets.md)
 
@@ -65,7 +66,7 @@ Local evidence source:
 | --- | --- | --- | --- | --- |
 | Token-aware clustering | TAC allocates centroids by token frequency and variance with tail handling, damped scoring, bounds, and budget reconciliation | `python/kayak_bridge/tachiom_allocation.py`, `tachiom_clustering.py`, `tachiom_index.py` | unit tests and bounded MS MARCO gates use `mu=128`, `tau=256`, `epsilon=4`, `theta=39` | `Implemented` |
 | Aligned token ids | TAC depends on document token identity aligned to document vectors | ColBERT encoder path and task/snapshot builders preserve aligned document token ids | vector-only cached LEMB artifact was rejected; token-id-bearing artifacts were rebuilt | `Implemented` |
-| Candidate pruning | prune candidate windows with paper-style alpha threshold | shared candidate ranking path supports `candidate_pruning_alpha` | moderate PQ128 pruning preserved `0.9875` final recall and raised QPS from about `69.01` to `84.48` in the trace | `Bounded reproduction gate` |
+| Candidate pruning | prune candidate windows with paper-style alpha threshold | shared candidate ranking path supports `candidate_pruning_alpha`; streaming benchmark now supports query-time override and disable controls | alpha `0.05` roughly doubled docs10000 bounded QPS while preserving judged MRR, but exact top-10 overlap fell to `0.5625`; alpha `0.3` preserved more exact overlap at `0.8664062500000004` with smaller speed gain | `Bounded reproduction gate` |
 | HNSW centroid traversal | graph over centroids, paper settings include `M=32`, `ef_construction=1500` | Python graph builder plus native dim128 query traversal and streaming sidecar | bounded gates use persisted HNSW sidecars; native HNSW+PQ reaches `125.52` QPS on `docs1500_q48_c32768` and `69.01` QPS on `docs10000_q128_c32768` | `Partial` |
 | Residual-PQ refine | normalized residual compression, PQ32, 8-bit codes, optimized layout for MaxSim | Python residual-PQ reference and dim128 Mojo residual-PQ paths | PQ32 bounded gates exist; native sparse HNSW+PQ reranks candidate-window tokens | `Partial` |
 | Streaming/materialized index | paper-scale implementation avoids full dense token scoring at query time | binary snapshot writer, streaming TAC/PQ builder, memmap reader, native list-backed and address-backed engines | full MS MARCO document payload estimate is about `155.55GB` with f16 vectors/u32 token ids; bounded streaming artifacts are built and searched | `Partial` |
@@ -95,6 +96,9 @@ These claims are currently justified:
 - Native HNSW+PQ internal profiling is instrumented and measured on the same
   bounded slices; the 1.5k slice is HNSW-traversal dominated, while the 10k
   slice is split between residual-PQ rerank scoring and HNSW traversal.
+- Query-time candidate-pruning sweeps are instrumented and measured; aggressive
+  alpha values can improve bounded throughput while preserving judged MRR, but
+  exact top-10 overlap must be treated as a separate quality constraint.
 
 Current strongest bounded native streaming rows:
 
