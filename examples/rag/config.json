@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "k": 1,
+  "repeats": 1,
+  "max_concurrency": 1,
+  "system": {"retrieval_limit": 2, "context_limit": 1},
+  "gates": [
+    {"metric": "answer.correct", "minimum": 1.0, "min_coverage": 1.0},
+    {"metric": "source_coverage.context", "minimum": 1.0, "min_coverage": 1.0}
+  ]
+}

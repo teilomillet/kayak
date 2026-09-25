@@ -1,0 +1,9 @@
+{
+  "state": "My invoice includes a duplicate charge. How can I get my money back?",
+  "instructions": "Which passage best helps the user solve their problem?",
+  "candidates": {
+    "refunds": "To request a refund, open Billing, choose the invoice, and contact support.",
+    "passwords": "To reset a forgotten password, use the reset link on the login page.",
+    "exports": "To export records, open the project menu and choose Download CSV."
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "source_commit": "7956937c58ed5839c06ddc4dc6b6b61c3a3e4094",
+  "checkpoint_sha256": "b2b4a8c9c2d39263eff78a351eb909a342ce9b3bf21a3f07c1d1bf15f1c4eda5",
+  "input": "NumPy default_rng(20260924), standard_normal: states (2,4096), then actions (5,4096); cast float32; divide by row norm + 1e-12",
+  "operation": "upstream HeadPair.project_states/project_actions, then scale * (actions @ state) per state as in Engine.answer",
+  "seed": 20260924,
+  "scale": 100.0,
+  "scores": [
+    [
+      11.84903335571289,
+      5.777797698974609,
+      12.91376781463623,
+      18.67032814025879,
+      17.652692794799805
+    ],
+    [
+      16.124990463256836,
+      11.468954086303711,
+      19.054527282714844,
+      16.68593978881836,
+      16.733530044555664
+    ]
+  ],
+  "absolute_tolerance": 1e-05
+}

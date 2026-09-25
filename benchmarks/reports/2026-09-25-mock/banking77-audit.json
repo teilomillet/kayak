@@ -1,0 +1,1507 @@
+{
+  "schema_version": 1,
+  "unicode_version": "15.1.0",
+  "interpretation": "Diagnostic text overlap only; normalization does not establish semantic equivalence or model-training contamination. No rows or labels are changed.",
+  "count_definitions": {
+    "group": "One shared normalized-text key; groups are sorted by that key.",
+    "duplicate_row_count": "All rows in within-split groups containing at least two rows.",
+    "duplicate_pair_count": "Unordered within-split row pairs: sum(n * (n - 1) / 2).",
+    "left_row_count": "Left-split rows in cross-split overlap groups.",
+    "right_row_count": "Right-split rows in cross-split overlap groups.",
+    "row_pair_count": "Cross-split row pairs: sum(left rows * right rows) per shared key.",
+    "conflicting_label_group_count": "Groups containing more than one distinct gold label.",
+    "row_order": "Rows within each group are sorted lexicographically by original ID."
+  },
+  "suites": {
+    "train": {
+      "name": "banking77",
+      "split": "train",
+      "suite_sha256": "f96e81d2645681dbaa9e741a17cdd4925682b00841e50805b97e275e3c1a9e32",
+      "example_count": 9233,
+      "provenance": {
+        "repository": "https://github.com/PolyAI-LDN/task-specific-datasets",
+        "revision": "57ec275d8078af65b7731c2a98be812d844a6d6b",
+        "source_split": "train",
+        "source_sha256": "b06e26ac675513959a63135f11b94ea7786ed02da65db93a5650d8838cbc664b",
+        "categories_sha256": "53261da888122daf2d120d925458631d9619e15d82e56052e7a42e535ce32b63",
+        "license": "CC-BY-4.0",
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "citation": "Casanueva et al. (2020), https://aclanthology.org/2020.nlp4convai-1.5/",
+        "partition": "sha256-v1:42; 10/intent from train for dev; train excludes dev",
+        "candidate_recipe": "banking77-label-text-v1; underscores replaced by spaces",
+        "selection": "round-robin intents, SHA-256 order within each intent",
+        "available_examples": "9233",
+        "coverage": "full_split",
+        "task": "zero-shot 77-way label-description classification; no demonstrations"
+      }
+    },
+    "dev": {
+      "name": "banking77",
+      "split": "dev",
+      "suite_sha256": "9126dcbf6ba37e3d16afa2eb4867a8fe27ceba12be3488584b12973b3933627c",
+      "example_count": 770,
+      "provenance": {
+        "repository": "https://github.com/PolyAI-LDN/task-specific-datasets",
+        "revision": "57ec275d8078af65b7731c2a98be812d844a6d6b",
+        "source_split": "train",
+        "source_sha256": "b06e26ac675513959a63135f11b94ea7786ed02da65db93a5650d8838cbc664b",
+        "categories_sha256": "53261da888122daf2d120d925458631d9619e15d82e56052e7a42e535ce32b63",
+        "license": "CC-BY-4.0",
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "citation": "Casanueva et al. (2020), https://aclanthology.org/2020.nlp4convai-1.5/",
+        "partition": "sha256-v1:42; 10/intent from train for dev; train excludes dev",
+        "candidate_recipe": "banking77-label-text-v1; underscores replaced by spaces",
+        "selection": "round-robin intents, SHA-256 order within each intent",
+        "available_examples": "770",
+        "coverage": "full_split",
+        "task": "zero-shot 77-way label-description classification; no demonstrations"
+      }
+    },
+    "test": {
+      "name": "banking77",
+      "split": "test",
+      "suite_sha256": "25431c72931132319867ca4d944b16a20347982a09aae3a3389a790b37c84b97",
+      "example_count": 3080,
+      "provenance": {
+        "repository": "https://github.com/PolyAI-LDN/task-specific-datasets",
+        "revision": "57ec275d8078af65b7731c2a98be812d844a6d6b",
+        "source_split": "test",
+        "source_sha256": "d12d6e3bc4c3103966ae786dc435913c0c563dfa328f5a3646d0e62cfeeb474d",
+        "categories_sha256": "53261da888122daf2d120d925458631d9619e15d82e56052e7a42e535ce32b63",
+        "license": "CC-BY-4.0",
+        "license_url": "https://creativecommons.org/licenses/by/4.0/",
+        "citation": "Casanueva et al. (2020), https://aclanthology.org/2020.nlp4convai-1.5/",
+        "partition": "sha256-v1:42; 10/intent from train for dev; train excludes dev",
+        "candidate_recipe": "banking77-label-text-v1; underscores replaced by spaces",
+        "selection": "round-robin intents, SHA-256 order within each intent",
+        "available_examples": "3080",
+        "coverage": "full_split",
+        "task": "zero-shot 77-way label-description classification; no demonstrations"
+      }
+    }
+  },
+  "analyses": {
+    "exact": {
+      "definition": "text",
+      "within": {
+        "train": {
+          "row_count": 9233,
+          "distinct_key_count": 9233,
+          "duplicate_group_count": 0,
+          "duplicate_row_count": 0,
+          "duplicate_pair_count": 0,
+          "conflicting_label_group_count": 0,
+          "groups": []
+        },
+        "dev": {
+          "row_count": 770,
+          "distinct_key_count": 770,
+          "duplicate_group_count": 0,
+          "duplicate_row_count": 0,
+          "duplicate_pair_count": 0,
+          "conflicting_label_group_count": 0,
+          "groups": []
+        },
+        "test": {
+          "row_count": 3080,
+          "distinct_key_count": 3080,
+          "duplicate_group_count": 0,
+          "duplicate_row_count": 0,
+          "duplicate_pair_count": 0,
+          "conflicting_label_group_count": 0,
+          "groups": []
+        }
+      },
+      "between": [
+        {
+          "left_split": "train",
+          "right_split": "dev",
+          "overlap_group_count": 0,
+          "left_row_count": 0,
+          "right_row_count": 0,
+          "row_pair_count": 0,
+          "conflicting_label_group_count": 0,
+          "groups": []
+        },
+        {
+          "left_split": "train",
+          "right_split": "test",
+          "overlap_group_count": 0,
+          "left_row_count": 0,
+          "right_row_count": 0,
+          "row_pair_count": 0,
+          "conflicting_label_group_count": 0,
+          "groups": []
+        },
+        {
+          "left_split": "dev",
+          "right_split": "test",
+          "overlap_group_count": 0,
+          "left_row_count": 0,
+          "right_row_count": 0,
+          "row_pair_count": 0,
+          "conflicting_label_group_count": 0,
+          "groups": []
+        }
+      ]
+    },
+    "casefold_whitespace": {
+      "definition": "\" \".join(text.casefold().split())",
+      "within": {
+        "train": {
+          "row_count": 9233,
+          "distinct_key_count": 9229,
+          "duplicate_group_count": 4,
+          "duplicate_row_count": 8,
+          "duplicate_pair_count": 4,
+          "conflicting_label_group_count": 0,
+          "groups": [
+            {
+              "normalized_text": "do i need to go to a physical bank to change my pin?",
+              "rows": [
+                {
+                  "id": "train:6910",
+                  "text": "Do I need to go to a physical bank to change my PIN?",
+                  "label": "change_pin"
+                },
+                {
+                  "id": "train:6965",
+                  "text": "\nDo I need to go to a physical bank to change my PIN?",
+                  "label": "change_pin"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "i can't seem to be able to use my card",
+              "rows": [
+                {
+                  "id": "train:1246",
+                  "text": "I can't seem to be able to use my card",
+                  "label": "card_not_working"
+                },
+                {
+                  "id": "train:1290",
+                  "text": "\nI can't seem to be able to use my card\n\n\n",
+                  "label": "card_not_working"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "i put the wrong pin too many times and now it is blocked. can you help me unblock it?",
+              "rows": [
+                {
+                  "id": "train:1710",
+                  "text": "\nI put the wrong pin too many times and now it is blocked. Can you help me unblock it?",
+                  "label": "pin_blocked"
+                },
+                {
+                  "id": "train:1724",
+                  "text": "I put the wrong pin too many times and now it is blocked. Can you help me unblock it?",
+                  "label": "pin_blocked"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "where can i withdraw money from?",
+              "rows": [
+                {
+                  "id": "train:4594",
+                  "text": "Where can I withdraw money from?",
+                  "label": "atm_support"
+                },
+                {
+                  "id": "train:4595",
+                  "text": "\nWhere can I withdraw money from?",
+                  "label": "atm_support"
+                }
+              ],
+              "conflicting_labels": false
+            }
+          ]
+        },
+        "dev": {
+          "row_count": 770,
+          "distinct_key_count": 770,
+          "duplicate_group_count": 0,
+          "duplicate_row_count": 0,
+          "duplicate_pair_count": 0,
+          "conflicting_label_group_count": 0,
+          "groups": []
+        },
+        "test": {
+          "row_count": 3080,
+          "distinct_key_count": 3079,
+          "duplicate_group_count": 1,
+          "duplicate_row_count": 2,
+          "duplicate_pair_count": 1,
+          "conflicting_label_group_count": 0,
+          "groups": [
+            {
+              "normalized_text": "which atms accept this card?",
+              "rows": [
+                {
+                  "id": "test:1441",
+                  "text": "Which ATMs accept this card?",
+                  "label": "atm_support"
+                },
+                {
+                  "id": "test:1461",
+                  "text": "\nWhich ATMs accept this card?",
+                  "label": "atm_support"
+                }
+              ],
+              "conflicting_labels": false
+            }
+          ]
+        }
+      },
+      "between": [
+        {
+          "left_split": "train",
+          "right_split": "dev",
+          "overlap_group_count": 0,
+          "left_row_count": 0,
+          "right_row_count": 0,
+          "row_pair_count": 0,
+          "conflicting_label_group_count": 0,
+          "groups": []
+        },
+        {
+          "left_split": "train",
+          "right_split": "test",
+          "overlap_group_count": 7,
+          "left_row_count": 7,
+          "right_row_count": 7,
+          "row_pair_count": 7,
+          "conflicting_label_group_count": 0,
+          "groups": [
+            {
+              "normalized_text": "at which atms can i use this card?",
+              "left_rows": [
+                {
+                  "id": "train:4576",
+                  "text": "\nAt which ATMs can I use this card?",
+                  "label": "atm_support"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:1474",
+                  "text": "At which ATMs can I use this card?",
+                  "label": "atm_support"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "how do i unblock my pin?",
+              "left_rows": [
+                {
+                  "id": "train:1722",
+                  "text": "\nHow do I unblock my PIN?",
+                  "label": "pin_blocked"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:554",
+                  "text": "How do I unblock my PIN?",
+                  "label": "pin_blocked"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "i don't live in the uk. can i still get a card?",
+              "left_rows": [
+                {
+                  "id": "train:9921",
+                  "text": "I don't live in the UK. Can I still get a card?",
+                  "label": "country_support"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:3070",
+                  "text": "I don't live in the UK.  Can I still get a card?",
+                  "label": "country_support"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "there are a few transaction that i don't recognize, i think someone managed to get my card details and use it.",
+              "left_rows": [
+                {
+                  "id": "train:4476",
+                  "text": "There are a few transaction that I don't recognize, I think someone managed to get my card details and use it.\n",
+                  "label": "compromised_card"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:1432",
+                  "text": "There are a few transaction that I don't recognize, I think someone managed to get my card details and use it.",
+                  "label": "compromised_card"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "what businesses accept this card?",
+              "left_rows": [
+                {
+                  "id": "train:3103",
+                  "text": "What businesses accept this card?",
+                  "label": "card_acceptance"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:976",
+                  "text": "\n\nWhat businesses accept this card?",
+                  "label": "card_acceptance"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "where can i use my card?",
+              "left_rows": [
+                {
+                  "id": "train:3116",
+                  "text": "\nWhere can I use my card?",
+                  "label": "card_acceptance"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:977",
+                  "text": "Where can I use my card?",
+                  "label": "card_acceptance"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "which cash machines will allow me to change my pin?",
+              "left_rows": [
+                {
+                  "id": "train:6984",
+                  "text": "\nWhich cash machines will allow me to change my PIN?",
+                  "label": "change_pin"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2149",
+                  "text": "Which cash machines will allow me to change my PIN?",
+                  "label": "change_pin"
+                }
+              ],
+              "conflicting_labels": false
+            }
+          ]
+        },
+        {
+          "left_split": "dev",
+          "right_split": "test",
+          "overlap_group_count": 0,
+          "left_row_count": 0,
+          "right_row_count": 0,
+          "row_pair_count": 0,
+          "conflicting_label_group_count": 0,
+          "groups": []
+        }
+      ]
+    },
+    "unicode_word_tokens": {
+      "definition": "\" \".join(re.findall(r\"\\w+\", text.casefold()))",
+      "within": {
+        "train": {
+          "row_count": 9233,
+          "distinct_key_count": 9205,
+          "duplicate_group_count": 28,
+          "duplicate_row_count": 56,
+          "duplicate_pair_count": 28,
+          "conflicting_label_group_count": 1,
+          "groups": [
+            {
+              "normalized_text": "can i top up any amount",
+              "rows": [
+                {
+                  "id": "train:2237",
+                  "text": "Can I top-up any amount?",
+                  "label": "top_up_limits"
+                },
+                {
+                  "id": "train:2309",
+                  "text": "Can I top up any amount?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "can i use my apple watch to top up",
+              "rows": [
+                {
+                  "id": "train:9657",
+                  "text": "Can I use my apple watch to top-up?",
+                  "label": "apple_pay_or_google_pay"
+                },
+                {
+                  "id": "train:9689",
+                  "text": "Can I use my apple watch to top up?",
+                  "label": "apple_pay_or_google_pay"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "do i need to go to a physical bank to change my pin",
+              "rows": [
+                {
+                  "id": "train:6910",
+                  "text": "Do I need to go to a physical bank to change my PIN?",
+                  "label": "change_pin"
+                },
+                {
+                  "id": "train:6965",
+                  "text": "\nDo I need to go to a physical bank to change my PIN?",
+                  "label": "change_pin"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "do i need to verify my top up",
+              "rows": [
+                {
+                  "id": "train:7711",
+                  "text": "Do I need to verify my top-up?",
+                  "label": "verify_top_up"
+                },
+                {
+                  "id": "train:7774",
+                  "text": "Do i need to verify my top up?",
+                  "label": "verify_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "has my top up gone through",
+              "rows": [
+                {
+                  "id": "train:2002",
+                  "text": "Has my top up gone through?",
+                  "label": "pending_top_up"
+                },
+                {
+                  "id": "train:3160",
+                  "text": "Has my top-up gone through?",
+                  "label": "top_up_reverted"
+                }
+              ],
+              "conflicting_labels": true
+            },
+            {
+              "normalized_text": "how can i reset my passcode",
+              "rows": [
+                {
+                  "id": "train:4903",
+                  "text": "How can I reset my passcode?",
+                  "label": "passcode_forgotten"
+                },
+                {
+                  "id": "train:4915",
+                  "text": "How can i reset my passcode ?",
+                  "label": "passcode_forgotten"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "how do i verify the top up",
+              "rows": [
+                {
+                  "id": "train:7716",
+                  "text": "How do I verify the top-up?",
+                  "label": "verify_top_up"
+                },
+                {
+                  "id": "train:7756",
+                  "text": "How do I verify the top up?",
+                  "label": "verify_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "i can t seem to be able to use my card",
+              "rows": [
+                {
+                  "id": "train:1246",
+                  "text": "I can't seem to be able to use my card",
+                  "label": "card_not_working"
+                },
+                {
+                  "id": "train:1290",
+                  "text": "\nI can't seem to be able to use my card\n\n\n",
+                  "label": "card_not_working"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "i made a transfer and according to the receiver they haven t received the right amount its lesser than it should be now i have to transfer more money to make up for the missing amount can you please help me about this what should be done",
+              "rows": [
+                {
+                  "id": "train:7265",
+                  "text": "I made a transfer and according to the receiver \"they haven't received the right amount\" Its lesser than it should be.Now I have to transfer more money to make up for the missing amount . Can you please help me about this,what should be done",
+                  "label": "transfer_fee_charged"
+                },
+                {
+                  "id": "train:7282",
+                  "text": "I made a transfer and according to the receiver \"they haven't received the right amount\" Its lesser than it should be.Now I have to transfer more money to make up for the missing amount . Can you please help me about this, what should be done ?",
+                  "label": "transfer_fee_charged"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "i put the wrong pin too many times and now it is blocked can you help me unblock it",
+              "rows": [
+                {
+                  "id": "train:1710",
+                  "text": "\nI put the wrong pin too many times and now it is blocked. Can you help me unblock it?",
+                  "label": "pin_blocked"
+                },
+                {
+                  "id": "train:1724",
+                  "text": "I put the wrong pin too many times and now it is blocked. Can you help me unblock it?",
+                  "label": "pin_blocked"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "is it possible to top up with google pay",
+              "rows": [
+                {
+                  "id": "train:9741",
+                  "text": "is it possible to top-up with google pay.",
+                  "label": "apple_pay_or_google_pay"
+                },
+                {
+                  "id": "train:9751",
+                  "text": "Is it possible to top up with Google Pay?",
+                  "label": "apple_pay_or_google_pay"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "is there a limit to how much i can top up",
+              "rows": [
+                {
+                  "id": "train:2253",
+                  "text": "Is there a limit to how much I can top-up?",
+                  "label": "top_up_limits"
+                },
+                {
+                  "id": "train:2258",
+                  "text": "Is there a limit to how much I can top up?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "my cash withdrawal was declined why",
+              "rows": [
+                {
+                  "id": "train:4990",
+                  "text": "My cash withdrawal was declined.  Why?",
+                  "label": "declined_cash_withdrawal"
+                },
+                {
+                  "id": "train:5025",
+                  "text": "My cash withdrawal was declined, why?",
+                  "label": "declined_cash_withdrawal"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "my money is gone i had topped up recently and saw it was there and went through but now it s disappeared what s going on",
+              "rows": [
+                {
+                  "id": "train:3165",
+                  "text": "My money is gone. I had topped up recently and saw it was there and went through, but now it's disappeared, what's going on?",
+                  "label": "top_up_reverted"
+                },
+                {
+                  "id": "train:3202",
+                  "text": "My money is gone :( I had topped up recently and saw it was there and went through, but now it's disappeared, what's going on?",
+                  "label": "top_up_reverted"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "my top up didn t go through",
+              "rows": [
+                {
+                  "id": "train:8512",
+                  "text": "My top-up didn't go through",
+                  "label": "top_up_failed"
+                },
+                {
+                  "id": "train:8524",
+                  "text": "My top up didn't go through",
+                  "label": "top_up_failed"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "my top up hasn t gone through",
+              "rows": [
+                {
+                  "id": "train:1982",
+                  "text": "My top-up hasn't gone through",
+                  "label": "pending_top_up"
+                },
+                {
+                  "id": "train:2022",
+                  "text": "My top up hasn't gone through",
+                  "label": "pending_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "my top up is still pending",
+              "rows": [
+                {
+                  "id": "train:2009",
+                  "text": "My top-up is still pending",
+                  "label": "pending_top_up"
+                },
+                {
+                  "id": "train:2010",
+                  "text": "My top up is still pending",
+                  "label": "pending_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "seems like my top up has been cancelled",
+              "rows": [
+                {
+                  "id": "train:3171",
+                  "text": "Seems like my top-up has been cancelled",
+                  "label": "top_up_reverted"
+                },
+                {
+                  "id": "train:3172",
+                  "text": "Seems like my top up has been cancelled",
+                  "label": "top_up_reverted"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "what are the auto top up policies",
+              "rows": [
+                {
+                  "id": "train:1171",
+                  "text": "What are the auto-top up policies?",
+                  "label": "automatic_top_up"
+                },
+                {
+                  "id": "train:1211",
+                  "text": "What are the auto top-up policies?",
+                  "label": "automatic_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "where can i withdraw money from",
+              "rows": [
+                {
+                  "id": "train:4594",
+                  "text": "Where can I withdraw money from?",
+                  "label": "atm_support"
+                },
+                {
+                  "id": "train:4595",
+                  "text": "\nWhere can I withdraw money from?",
+                  "label": "atm_support"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why did my top up get reverted",
+              "rows": [
+                {
+                  "id": "train:3167",
+                  "text": "Why did my top up get reverted?",
+                  "label": "top_up_reverted"
+                },
+                {
+                  "id": "train:3194",
+                  "text": "Why did my top-up get reverted?",
+                  "label": "top_up_reverted"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why did you revert my top up",
+              "rows": [
+                {
+                  "id": "train:3228",
+                  "text": "Why did you revert my top-up?",
+                  "label": "top_up_reverted"
+                },
+                {
+                  "id": "train:3271",
+                  "text": "Why did you revert my top up?",
+                  "label": "top_up_reverted"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why do i need to verify the top up",
+              "rows": [
+                {
+                  "id": "train:7747",
+                  "text": "Why do I need to verify the top-up?",
+                  "label": "verify_top_up"
+                },
+                {
+                  "id": "train:7803",
+                  "text": "why do i need to verify the top up?",
+                  "label": "verify_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why do i see an extra 1 charge on my statement",
+              "rows": [
+                {
+                  "id": "train:574",
+                  "text": "Why do I see an extra £1 charge on my statement?",
+                  "label": "extra_charge_on_statement"
+                },
+                {
+                  "id": "train:610",
+                  "text": "Why do I see an extra €1 charge on my statement?",
+                  "label": "extra_charge_on_statement"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why do you keep declining my payment i tried several times already with this card and it is just not working",
+              "rows": [
+                {
+                  "id": "train:5922",
+                  "text": "Why do you keep declining my payment? I tried several times already with this card and it is just not working.",
+                  "label": "declined_card_payment"
+                },
+                {
+                  "id": "train:5930",
+                  "text": "Why do you keep declining my payment?I tried several times already with this card and it is just not working.",
+                  "label": "declined_card_payment"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why do you keep declining my transfers it s always been working really well so far but when i tried to buy something just now the card got declined i tried couple of times already but same thing is happening",
+              "rows": [
+                {
+                  "id": "train:5559",
+                  "text": "Why do you keep declining my transfers? it's always been working really well so far but when I tried to buy something just now the card got declined . I tried couple of times already  but same thing is happening .",
+                  "label": "declined_transfer"
+                },
+                {
+                  "id": "train:5670",
+                  "text": "Why do you keep declining my transfers? it's always been working really well so far but when I tried to buy something just now the card got declined, I tried couple of times already  but same thing is happening.",
+                  "label": "declined_transfer"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why has my top up failed",
+              "rows": [
+                {
+                  "id": "train:8503",
+                  "text": "Why has my top up failed?",
+                  "label": "top_up_failed"
+                },
+                {
+                  "id": "train:8505",
+                  "text": "Why has my top-up failed?",
+                  "label": "top_up_failed"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why is there a 1 charge on my statement",
+              "rows": [
+                {
+                  "id": "train:585",
+                  "text": "Why is there a $1 charge on my statement?",
+                  "label": "extra_charge_on_statement"
+                },
+                {
+                  "id": "train:735",
+                  "text": "Why is there a €1 charge on my statement?",
+                  "label": "extra_charge_on_statement"
+                }
+              ],
+              "conflicting_labels": false
+            }
+          ]
+        },
+        "dev": {
+          "row_count": 770,
+          "distinct_key_count": 770,
+          "duplicate_group_count": 0,
+          "duplicate_row_count": 0,
+          "duplicate_pair_count": 0,
+          "conflicting_label_group_count": 0,
+          "groups": []
+        },
+        "test": {
+          "row_count": 3080,
+          "distinct_key_count": 3076,
+          "duplicate_group_count": 4,
+          "duplicate_row_count": 8,
+          "duplicate_pair_count": 4,
+          "conflicting_label_group_count": 1,
+          "groups": [
+            {
+              "normalized_text": "what are the fees for top ups",
+              "rows": [
+                {
+                  "id": "test:2838",
+                  "text": "What are the fees for top ups?",
+                  "label": "top_up_by_card_charge"
+                },
+                {
+                  "id": "test:618",
+                  "text": "What are the fees for top-ups?",
+                  "label": "top_up_by_bank_transfer_charge"
+                }
+              ],
+              "conflicting_labels": true
+            },
+            {
+              "normalized_text": "what is the limit to top up",
+              "rows": [
+                {
+                  "id": "test:723",
+                  "text": "What is the limit to top up?",
+                  "label": "top_up_limits"
+                },
+                {
+                  "id": "test:748",
+                  "text": "What is the limit to top-up?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "which atms accept this card",
+              "rows": [
+                {
+                  "id": "test:1441",
+                  "text": "Which ATMs accept this card?",
+                  "label": "atm_support"
+                },
+                {
+                  "id": "test:1461",
+                  "text": "\nWhich ATMs accept this card?",
+                  "label": "atm_support"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why is my top up still pending",
+              "rows": [
+                {
+                  "id": "test:663",
+                  "text": "Why is my top up still pending?",
+                  "label": "pending_top_up"
+                },
+                {
+                  "id": "test:675",
+                  "text": "Why is my top-up still pending?",
+                  "label": "pending_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            }
+          ]
+        }
+      },
+      "between": [
+        {
+          "left_split": "train",
+          "right_split": "dev",
+          "overlap_group_count": 3,
+          "left_row_count": 3,
+          "right_row_count": 3,
+          "row_pair_count": 3,
+          "conflicting_label_group_count": 0,
+          "groups": [
+            {
+              "normalized_text": "the disposable cards what are they for",
+              "left_rows": [
+                {
+                  "id": "train:8430",
+                  "text": "The disposable cards, what are they for?",
+                  "label": "get_disposable_virtual_card"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "train:8467",
+                  "text": "The disposable cards - what are they for?",
+                  "label": "get_disposable_virtual_card"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "when will my top up go through",
+              "left_rows": [
+                {
+                  "id": "train:2005",
+                  "text": "When will my top-up go through?",
+                  "label": "pending_top_up"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "train:2068",
+                  "text": "When will my top up go through?",
+                  "label": "pending_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why hasn t my top up gone through",
+              "left_rows": [
+                {
+                  "id": "train:1995",
+                  "text": "Why hasn't my top up gone through?",
+                  "label": "pending_top_up"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "train:2015",
+                  "text": "Why hasn't my top-up gone through?",
+                  "label": "pending_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            }
+          ]
+        },
+        {
+          "left_split": "train",
+          "right_split": "test",
+          "overlap_group_count": 23,
+          "left_row_count": 23,
+          "right_row_count": 23,
+          "row_pair_count": 23,
+          "conflicting_label_group_count": 0,
+          "groups": [
+            {
+              "normalized_text": "at which atms can i use this card",
+              "left_rows": [
+                {
+                  "id": "train:4576",
+                  "text": "\nAt which ATMs can I use this card?",
+                  "label": "atm_support"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:1474",
+                  "text": "At which ATMs can I use this card?",
+                  "label": "atm_support"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "can i top up by cheque",
+              "left_rows": [
+                {
+                  "id": "train:7972",
+                  "text": "Can I top-up by cheque?",
+                  "label": "top_up_by_cash_or_cheque"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2440",
+                  "text": "Can I top up by cheque?",
+                  "label": "top_up_by_cash_or_cheque"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "can i use apple pay to top up",
+              "left_rows": [
+                {
+                  "id": "train:9678",
+                  "text": "Can I use Apple Pay to top-up?",
+                  "label": "apple_pay_or_google_pay"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2969",
+                  "text": "Can I use Apple Pay to top up?",
+                  "label": "apple_pay_or_google_pay"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "how do i unblock my pin",
+              "left_rows": [
+                {
+                  "id": "train:1722",
+                  "text": "\nHow do I unblock my PIN?",
+                  "label": "pin_blocked"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:554",
+                  "text": "How do I unblock my PIN?",
+                  "label": "pin_blocked"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "i don t live in the uk can i still get a card",
+              "left_rows": [
+                {
+                  "id": "train:9921",
+                  "text": "I don't live in the UK. Can I still get a card?",
+                  "label": "country_support"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:3070",
+                  "text": "I don't live in the UK.  Can I still get a card?",
+                  "label": "country_support"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "is there a limit on top ups",
+              "left_rows": [
+                {
+                  "id": "train:2321",
+                  "text": "is there a limit on top ups",
+                  "label": "top_up_limits"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:742",
+                  "text": "Is there a limit on top-ups?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "is there an auto top up option",
+              "left_rows": [
+                {
+                  "id": "train:1163",
+                  "text": "Is there an auto top up option?",
+                  "label": "automatic_top_up"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:332",
+                  "text": "Is there an auto top-up option?",
+                  "label": "automatic_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "my card payment was reverted why",
+              "left_rows": [
+                {
+                  "id": "train:6764",
+                  "text": "My card payment was reverted, why?",
+                  "label": "reverted_card_payment?"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2081",
+                  "text": "My card payment was reverted.  Why?",
+                  "label": "reverted_card_payment?"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "my top up didn t work",
+              "left_rows": [
+                {
+                  "id": "train:8515",
+                  "text": "My top-up didn't work.",
+                  "label": "top_up_failed"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2651",
+                  "text": "My top up didn't work.",
+                  "label": "top_up_failed"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "my top up has failed",
+              "left_rows": [
+                {
+                  "id": "train:8525",
+                  "text": "My top up has failed",
+                  "label": "top_up_failed"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2673",
+                  "text": "My top-up has failed.",
+                  "label": "top_up_failed"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "the transfer keeps failing i tried to transfer some money to friends this morning but it keeps getting rejected for some reason would you please check the issue",
+              "left_rows": [
+                {
+                  "id": "train:7531",
+                  "text": "The transfer keeps failing , I tried to transfer some money to friends this morning but it keeps getting rejected for some reason, Would you please check the issue?",
+                  "label": "failed_transfer"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2298",
+                  "text": "The transfer keeps failing , I tried to transfer some money to friends this morning but it keeps getting rejected for some reason, Would you please check the issue ?",
+                  "label": "failed_transfer"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "there are a few transaction that i don t recognize i think someone managed to get my card details and use it",
+              "left_rows": [
+                {
+                  "id": "train:4476",
+                  "text": "There are a few transaction that I don't recognize, I think someone managed to get my card details and use it.\n",
+                  "label": "compromised_card"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:1432",
+                  "text": "There are a few transaction that I don't recognize, I think someone managed to get my card details and use it.",
+                  "label": "compromised_card"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "what businesses accept this card",
+              "left_rows": [
+                {
+                  "id": "train:3103",
+                  "text": "What businesses accept this card?",
+                  "label": "card_acceptance"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:976",
+                  "text": "\n\nWhat businesses accept this card?",
+                  "label": "card_acceptance"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "what is the most i can top up",
+              "left_rows": [
+                {
+                  "id": "train:2315",
+                  "text": "What is the most I can top-up?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:751",
+                  "text": "what is the most i can top up?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "what is the top up limit",
+              "left_rows": [
+                {
+                  "id": "train:2297",
+                  "text": "What is the top-up limit?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:727",
+                  "text": "what is the top up limit",
+                  "label": "top_up_limits"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "what s the top up limit",
+              "left_rows": [
+                {
+                  "id": "train:2330",
+                  "text": "What's the top-up limit?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:747",
+                  "text": "What's the top up limit?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "when will my top up process",
+              "left_rows": [
+                {
+                  "id": "train:2063",
+                  "text": "When will my top up process?",
+                  "label": "pending_top_up"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:677",
+                  "text": "When will my top-up process?",
+                  "label": "pending_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "where can i find the top up verification code",
+              "left_rows": [
+                {
+                  "id": "train:7696",
+                  "text": "Where can I find the top up verification code?",
+                  "label": "verify_top_up"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2362",
+                  "text": "Where can I find the top-up verification code?",
+                  "label": "verify_top_up"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "where can i use my card",
+              "left_rows": [
+                {
+                  "id": "train:3116",
+                  "text": "\nWhere can I use my card?",
+                  "label": "card_acceptance"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:977",
+                  "text": "Where can I use my card?",
+                  "label": "card_acceptance"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "which cash machines will allow me to change my pin",
+              "left_rows": [
+                {
+                  "id": "train:6984",
+                  "text": "\nWhich cash machines will allow me to change my PIN?",
+                  "label": "change_pin"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2149",
+                  "text": "Which cash machines will allow me to change my PIN?",
+                  "label": "change_pin"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why am i being charged a fee for transferring money",
+              "left_rows": [
+                {
+                  "id": "train:7169",
+                  "text": "why am I being charged a fee for transferring money ?",
+                  "label": "transfer_fee_charged"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2211",
+                  "text": "Why am I being charged a fee for transferring money?",
+                  "label": "transfer_fee_charged"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why did my top up not work",
+              "left_rows": [
+                {
+                  "id": "train:8573",
+                  "text": "Why did my top-up not work?",
+                  "label": "top_up_failed"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2655",
+                  "text": "Why did my top up not work?",
+                  "label": "top_up_failed"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "why did the app deny my top up",
+              "left_rows": [
+                {
+                  "id": "train:8545",
+                  "text": "Why did the app deny my top-up?",
+                  "label": "top_up_failed"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:2644",
+                  "text": "Why did the app deny my top up?",
+                  "label": "top_up_failed"
+                }
+              ],
+              "conflicting_labels": false
+            }
+          ]
+        },
+        {
+          "left_split": "dev",
+          "right_split": "test",
+          "overlap_group_count": 2,
+          "left_row_count": 2,
+          "right_row_count": 2,
+          "row_pair_count": 2,
+          "conflicting_label_group_count": 0,
+          "groups": [
+            {
+              "normalized_text": "how do i change my address",
+              "left_rows": [
+                {
+                  "id": "train:3713",
+                  "text": "How do I change my address ?",
+                  "label": "edit_personal_details"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:1158",
+                  "text": "How do I change my address?",
+                  "label": "edit_personal_details"
+                }
+              ],
+              "conflicting_labels": false
+            },
+            {
+              "normalized_text": "is there a limit for top ups",
+              "left_rows": [
+                {
+                  "id": "train:2316",
+                  "text": "Is there a limit for top ups?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "right_rows": [
+                {
+                  "id": "test:754",
+                  "text": "Is there a limit for top-ups?",
+                  "label": "top_up_limits"
+                }
+              ],
+              "conflicting_labels": false
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

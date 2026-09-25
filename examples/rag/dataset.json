@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "name": "lexical-extractive-rag-fixture",
+  "provenance": {
+    "source": "handwritten independent questions and reference answers",
+    "purpose": "integration behavior only; not learned-model quality"
+  },
+  "cases": [
+    {
+      "input": {"id": "download-invoice", "query": "How do I download an invoice?"},
+      "judgments": {
+        "relevance": {"invoice": 1, "password": 0, "logs": 0},
+        "evidence_sets": [["invoice"]],
+        "evidence_texts": {"invoice": "Settings > Billing > Invoices"}
+      },
+      "reference_answer": "Download your invoice from Settings > Billing > Invoices."
+    },
+    {
+      "input": {"id": "reset-password", "query": "Where can I reset my password?"},
+      "judgments": {
+        "relevance": {"invoice": 0, "password": 1, "logs": 0},
+        "evidence_sets": [["password"]],
+        "evidence_texts": {"password": "Settings > Security > Password"}
+      },
+      "reference_answer": "Reset your password from Settings > Security > Password."
+    },
+    {
+      "input": {"id": "export-logs", "query": "How can I export audit logs?"},
+      "judgments": {
+        "relevance": {"invoice": 0, "password": 0, "logs": 1},
+        "evidence_sets": [["logs"]],
+        "evidence_texts": {"logs": "Settings > Security > Audit logs"}
+      },
+      "reference_answer": "Export audit logs from Settings > Security > Audit logs."
+    }
+  ]
+}

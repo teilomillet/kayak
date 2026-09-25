@@ -1,0 +1,41 @@
+{
+  "name": "support-routing-pilot-starter",
+  "split": "demo",
+  "question": {
+    "type": "choice",
+    "instructions": "Suggest the support team for this request. Choose manual review when there is insufficient information, more than one team's issue, or no suitable team.",
+    "criteria": {
+      "billing": "Charges, invoices, payments, and the status of an already approved refund",
+      "shipping": "Delivery, missing parcels, tracking, and arranging a product return",
+      "account": "Login, password reset, and account access",
+      "review": "Manual review for unclear, unrelated, or multiple-team requests"
+    }
+  },
+  "examples": [
+    {"id": "billing-duplicate", "text": "My statement shows two charges for the same order.", "label": "billing"},
+    {"id": "billing-invoice", "text": "Please send a copy of last month's invoice.", "label": "billing"},
+    {"id": "billing-refund", "text": "My refund was approved last week, but the money has not arrived.", "label": "billing"},
+    {"id": "billing-payment", "text": "The payment for my subscription was declined.", "label": "billing"},
+    {"id": "billing-amount", "text": "The invoice amount is higher than the price at checkout.", "label": "billing"},
+    {"id": "shipping-tracking", "text": "The parcel tracking has not changed for a week.", "label": "shipping"},
+    {"id": "shipping-missing", "text": "My order says delivered, but there is no parcel here.", "label": "shipping"},
+    {"id": "shipping-time", "text": "Can I change the scheduled delivery day?", "label": "shipping"},
+    {"id": "shipping-return", "text": "Where should I send this product for a return?", "label": "shipping"},
+    {"id": "shipping-address", "text": "The courier is taking my parcel to the wrong address.", "label": "shipping"},
+    {"id": "account-password", "text": "My password reset link has expired.", "label": "account"},
+    {"id": "account-login", "text": "I cannot log in with my usual password.", "label": "account"},
+    {"id": "account-code", "text": "The verification code to sign in never arrives.", "label": "account"},
+    {"id": "account-locked", "text": "My account was locked after too many sign-in attempts.", "label": "account"},
+    {"id": "account-email", "text": "I lost access to the email address used to log in.", "label": "account"},
+    {"id": "review-empty-context", "text": "Please help me with this.", "label": "review"},
+    {"id": "review-unrelated", "text": "What will the weather be like tomorrow?", "label": "review"},
+    {"id": "review-billing-account", "text": "I was charged twice and I cannot log into my account.", "label": "review"},
+    {"id": "review-shipping-billing", "text": "My parcel is missing and I also need last month's invoice.", "label": "review"},
+    {"id": "review-vague", "text": "It is broken again, just like before.", "label": "review"}
+  ],
+  "provenance": {
+    "source": "Fictional starter tickets authored for the support-routing pilot",
+    "label_review": "Illustrative labels; independent application review pending",
+    "coverage": "Five cases per outcome, including ambiguous, unrelated, and multi-team requests; not representative quality evidence"
+  }
+}

@@ -1,0 +1,22 @@
+# Local environments and credentials
+.pixi/
+.venv/
+.env
+.pypirc
+
+# Python bytecode and build output
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Development caches
+.hypothesis/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Local measurement and validation evidence
+.benchmarks/
+validation/

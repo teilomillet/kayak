@@ -1,0 +1,27 @@
+{
+  "name": "support-routing-demo",
+  "split": "dev",
+  "question": {
+    "type": "choice",
+    "instructions": "Which support team should handle this request?",
+    "criteria": {
+      "billing": "Charges, invoices, payments, and refunds",
+      "shipping": "Delivery, parcels, tracking, and returns",
+      "account": "Login, password, and account access"
+    }
+  },
+  "examples": [
+    {"id": "duplicate-charge", "text": "There are two charges for my order.", "label": "billing"},
+    {"id": "invoice-copy", "text": "Where can I find my invoices?", "label": "billing"},
+    {"id": "refund-status", "text": "I am still waiting for the money you said you would send back.", "label": "billing"},
+    {"id": "parcel-tracking", "text": "Tracking says my parcel is delayed.", "label": "shipping"},
+    {"id": "delivery-time", "text": "Can I change the delivery time?", "label": "shipping"},
+    {"id": "missing-order", "text": "My order never arrived.", "label": "shipping"},
+    {"id": "password-reset", "text": "The password reset link has expired.", "label": "account"},
+    {"id": "login-failure", "text": "I cannot login to my account.", "label": "account"}
+  ],
+  "provenance": {
+    "source": "Fictional support requests written for this example",
+    "coverage": "Constructed development demonstration; not representative accuracy evidence"
+  }
+}

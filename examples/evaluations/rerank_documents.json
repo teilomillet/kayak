@@ -1,0 +1,92 @@
+{
+  "name": "rerank-documents",
+  "kind": "ranking",
+  "examples": ["examples/rerank_documents.py"],
+  "k": 2,
+  "cases": [
+    {
+      "id": "download-monthly-invoice",
+      "request": {
+        "state": "Where can I download the PDF invoice for last month's payment?",
+        "instructions": "Rank supplied passages that directly help answer the question. Treat each useful passage as relevant. Choose no_match only when none of the passages helps.",
+        "candidates": {
+          "subscription": "Change your plan under Billing, then Subscription.",
+          "invoices": "Open Billing, then Invoices. Select the month and download its invoice PDF.",
+          "members": "Invite members from Workspace Settings.",
+          "no_match": "None of the supplied passages helps answer the question."
+        }
+      },
+      "relevant": ["invoices"]
+    },
+    {
+      "id": "member-invite-permission",
+      "request": {
+        "state": "I have the viewer role. Which role can invite another workspace member?",
+        "instructions": "Rank supplied passages that directly help answer the question. Treat each useful passage as relevant. Choose no_match only when none of the passages helps.",
+        "candidates": {
+          "invite_roles": "Only workspace owners and administrators can invite members. Viewers cannot send invitations.",
+          "invite_expiration": "A workspace invitation link expires after seven days.",
+          "profile_name": "Members can change their display name in Profile.",
+          "no_match": "None of the supplied passages helps answer the question."
+        }
+      },
+      "relevant": ["invite_roles"]
+    },
+    {
+      "id": "supported-upload-formats",
+      "request": {
+        "state": "Does the fictional Acorn portal accept a TIFF file as a profile image?",
+        "instructions": "Rank supplied passages that directly help answer the question. Treat each useful passage as relevant. Choose no_match only when none of the passages helps.",
+        "candidates": {
+          "document_uploads": "Project document uploads accept PDF and plain text.",
+          "profile_size": "A profile image must be smaller than 2 MB.",
+          "profile_formats": "Profile images accept PNG and JPEG only. TIFF profile images are not supported.",
+          "no_match": "None of the supplied passages helps answer the question."
+        }
+      },
+      "relevant": ["profile_formats"]
+    },
+    {
+      "id": "retry-after-rate-limit",
+      "request": {
+        "state": "The fictional Acorn API returned 429. Which response value tells my client how long to wait before retrying?",
+        "instructions": "Rank supplied passages that directly help answer the question. Treat each useful passage as relevant. Choose no_match only when none of the passages helps.",
+        "candidates": {
+          "auth": "A missing access token produces a 401 response.",
+          "no_match": "None of the supplied passages helps answer the question.",
+          "request_id": "Every response carries a request ID for support investigations.",
+          "rate_limit": "A 429 response includes Retry-After, giving the number of seconds to wait before another request."
+        }
+      },
+      "relevant": ["rate_limit"]
+    },
+    {
+      "id": "cancel-path-and-effect",
+      "request": {
+        "state": "How do I cancel my fictional Acorn subscription, and will access stop immediately?",
+        "instructions": "Rank supplied passages that directly help answer the question. Treat each useful passage as relevant. Choose no_match only when none of the passages helps.",
+        "candidates": {
+          "cancel_path": "Open Billing, then Subscription, then Cancel renewal to cancel your subscription.",
+          "invoice_address": "Change the company address for future invoices in Billing details.",
+          "cancel_effect": "After cancellation, access continues until the end of the already-paid billing period.",
+          "password": "Use Forgot password on the login page to request a reset email."
+        }
+      },
+      "relevant": ["cancel_path", "cancel_effect"]
+    },
+    {
+      "id": "retention-not-in-shortlist",
+      "request": {
+        "state": "How many days does the fictional Acorn service retain deleted project backups?",
+        "instructions": "Rank supplied passages that directly help answer the question. Treat each useful passage as relevant. Choose no_match only when none of the passages helps.",
+        "candidates": {
+          "project_names": "Project owners can rename a project in Settings.",
+          "no_match": "None of the supplied passages helps answer the question.",
+          "member_limit": "The starter workspace plan supports five members.",
+          "invoice_download": "Monthly invoice PDFs are available in Billing."
+        }
+      },
+      "relevant": ["no_match"]
+    }
+  ]
+}

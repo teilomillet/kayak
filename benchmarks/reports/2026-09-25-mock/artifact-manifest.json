@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "mock_evaluator_and_dataset_inspection",
+  "created_at": "2026-09-25T10:28:32.729501+00:00",
+  "source_commit": "1f0578de2f47c1b451e4b1247b41b1f9e0b5d3f6",
+  "source_url": "https://github.com/teilomillet/kayak/tree/1f0578de2f47c1b451e4b1247b41b1f9e0b5d3f6",
+  "kayak_source_sha256": "c43f7efa436bbcea23c2292c430bcee078d3597214306f6a97505854f44026aa",
+  "script_sha256": {
+    "benchmarks/mock_evaluation.py": "3c65ae3d28204c171383021620110ee3e30e69495620af2330ca0796d3106dab",
+    "benchmarks/audit_dataset.py": "3347aca46cbf9ee0608e364733984f481702ebf0df7c8f63b318cc382af0fd53"
+  },
+  "commands": [
+    ".venv/bin/python -m benchmarks.mock_evaluation --output benchmarks/reports/2026-09-25-mock",
+    ".venv/bin/python -m benchmarks.audit_dataset --data-cache-dir /tmp/audit_methodology-data"
+  ],
+  "checks": {
+    "non_inference_suite": {
+      "command": ".venv/bin/pytest -q -m 'not inference' --junitxml=/tmp/kayak-benchmark-validation-final.xml",
+      "exit_code": 0,
+      "passed": 447,
+      "inference_deselected": 31,
+      "seconds": 24.864,
+      "note": "Ran with local socket access for mock HTTP fixtures. One existing Starlette/httpx deprecation warning."
+    },
+    "focused_audit": {
+      "command": ".venv/bin/pytest -q tests/test_eval_integrity.py tests/test_eval_measurement.py tests/test_eval_report.py tests/test_dataset_audit.py",
+      "exit_code": 0,
+      "passed": 127
+    },
+    "lint": {
+      "command": ".venv/bin/ruff check kayak tests scripts benchmarks examples stubs",
+      "exit_code": 0
+    },
+    "format": {
+      "command": ".venv/bin/ruff format --check kayak tests scripts benchmarks examples stubs",
+      "exit_code": 0,
+      "files": 95
+    },
+    "typing": {
+      "command": ".venv/bin/mypy",
+      "exit_code": 0,
+      "files": 94
+    },
+    "retained_report_regeneration": {
+      "verified_scenarios": [
+        "complete",
+        "failed",
+        "interrupted"
+      ],
+      "markdown_matches": true
+    },
+    "dataset_regeneration": {
+      "matches_independent_inspection_artifact": true
+    },
+    "package_build": {
+      "command": "/tmp/kayak-benchmark-build/bin/python -m build --no-isolation --outdir /tmp/kayak-benchmark-dist",
+      "exit_code": 0,
+      "status": "passed in isolated temporary environment",
+      "build_tools": {
+        "setuptools": "84.0.0",
+        "wheel": "0.48.0",
+        "build": "1.6.1"
+      },
+      "note": "Project dependencies were unchanged; the earlier missing-tools failure is retained separately."
+    },
+    "initial_package_build_attempt": {
+      "command": ".venv/bin/python -m build --no-isolation --outdir /tmp/kayak-benchmark-dist",
+      "exit_code": 1,
+      "status": "unverified: build stopped before distribution creation",
+      "reason": "setuptools 78.1.0 is below the required >=81; wheel is not installed"
+    },
+    "distribution_metadata": {
+      "command": ".venv/bin/twine check --strict /tmp/kayak-benchmark-dist/*",
+      "exit_code": 0
+    },
+    "installed_wheel": {
+      "command": "/tmp/kayak-benchmark-build/bin/python -I scripts/check_wheel.py",
+      "exit_code": 0,
+      "scope": "Fresh base-only installation; no inference dependencies or model calls.",
+      "retained_markdown_matches_cli_output": true,
+      "source_distribution_contains_all_retained_evidence_and_scripts": true
+    },
+    "protocol_shell_blocks": {
+      "syntax_checked": 4,
+      "mock_execution_cases": [
+        "dev success",
+        "dev setup failure",
+        "test success",
+        "test setup failure"
+      ],
+      "observation": "Success retained exit 0 plus logs and Markdown; setup failure retained exit 2 and stderr, without rendering absent artifacts.",
+      "method": "Independent reviewer extracted the actual shell blocks and routed their commands through the real CLI with mocked loading."
+    }
+  },
+  "limits": [
+    "No model quality, real accelerator behavior, inference latency, or model memory claim.",
+    "Installed inference libraries are inventoried but are not loaded by the mock campaign.",
+    "Source/runtime metadata are snapshots; hashes are not execution authentication.",
+    "Durations, process memory, host fields, timestamps, and resulting artifact hashes vary across runs.",
+    "The evidence was generated from the recorded source; subsequent changes only document and retain it."
+  ],
+  "files": {
+    "banking77-audit.json": {
+      "bytes": 54082,
+      "sha256": "da9614a8502001bfcf7b07cb57ad038496693258daddb61f5bd76a45264b2f22"
+    },
+    "complete/predictions.jsonl": {
+      "bytes": 3367,
+      "sha256": "72af2be152ea85687df5dc85918e6b5309ac5be8778c39b44ac463ca2c4362cb"
+    },
+    "complete/report.json": {
+      "bytes": 3696,
+      "sha256": "7a65cf6d7576fa4d94280e6384d18efae61ca739ab0da60e1e2219f4f1d10694"
+    },
+    "complete/report.md": {
+      "bytes": 5260,
+      "sha256": "c2c505ef92ba4c4cdcb97f626a79f9ebe1f3733239ab77be2028fa4a2c61b546"
+    },
+    "failed/predictions.jsonl": {
+      "bytes": 2752,
+      "sha256": "924f9dfe11751cb4aaafa6d8f1310babb8f08403027989183383ee0486b22a93"
+    },
+    "failed/report.json": {
+      "bytes": 3680,
+      "sha256": "2a64040c2b4700d284e6c5b1abcacbc29251ada39684a02d88f0fbbe5c6753a6"
+    },
+    "failed/report.md": {
+      "bytes": 5249,
+      "sha256": "2e037d5626f5bbdcb1f564323612fabab5062eef7e9945e19cdbb88ba302186d"
+    },
+    "interrupted/predictions.jsonl": {
+      "bytes": 433,
+      "sha256": "9015e5617dc16199923c25f90f0fb9ad0bc7f6af47a49139668c7152f22951ac"
+    },
+    "interrupted/report.json": {
+      "bytes": 3687,
+      "sha256": "9a1dd7d56921f8ca197947f95da771422a352a64e86656613688da019ec0167c"
+    },
+    "interrupted/report.md": {
+      "bytes": 5272,
+      "sha256": "9f79d483896eadf9a7be511d4c9629247f96c056c6bcda2d2ad8577cbb718e16"
+    },
+    "python-packages.json": {
+      "bytes": 1853,
+      "sha256": "683a10a155ef8122fa049adfbe69ef0470800c2d02b9b8b6369c798dcc297a59"
+    },
+    "validation.xml": {
+      "bytes": 72365,
+      "sha256": "87effc00132df43045a40c28cd2943c33a2ded5c40d9d6ba99ab060152b29d14"
+    }
+  }
+}

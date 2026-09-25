@@ -1,0 +1,234 @@
+{
+  "name": "feedback",
+  "kind": "choice",
+  "examples": [
+    "examples/evaluate_use_cases.py"
+  ],
+  "cases": [
+    {
+      "id": "different-aspect-sentiments",
+      "request": {
+        "state": "The headphones sound great, but the parcel arrived a week late.",
+        "questions": {
+          "delivery": {
+            "type": "choice",
+            "instructions": "Does the feedback discuss delivery?",
+            "criteria": {
+              "yes": "The feedback discusses shipping, delivery time, or receiving a parcel",
+              "no": "The feedback does not discuss delivery"
+            }
+          },
+          "product": {
+            "type": "choice",
+            "instructions": "Does the feedback discuss the product itself?",
+            "criteria": {
+              "yes": "The feedback discusses the product's features, condition, or performance",
+              "no": "The feedback does not discuss the product itself"
+            }
+          },
+          "sentiment": {
+            "type": "choice",
+            "instructions": "What overall sentiment does this feedback express?",
+            "criteria": {
+              "positive": "Satisfaction without dissatisfaction",
+              "negative": "Dissatisfaction without satisfaction",
+              "mixed": "Both satisfaction and dissatisfaction",
+              "neutral": "Neither satisfaction nor dissatisfaction"
+            }
+          }
+        }
+      },
+      "expected": {
+        "delivery": [
+          "yes"
+        ],
+        "product": [
+          "yes"
+        ],
+        "sentiment": [
+          "mixed"
+        ]
+      }
+    },
+    {
+      "id": "positive-product-only",
+      "request": {
+        "state": "I love the clear sound and comfortable fit of these headphones.",
+        "questions": {
+          "delivery": {
+            "type": "choice",
+            "instructions": "Does the feedback discuss delivery?",
+            "criteria": {
+              "yes": "The feedback discusses shipping, delivery time, or receiving a parcel",
+              "no": "The feedback does not discuss delivery"
+            }
+          },
+          "product": {
+            "type": "choice",
+            "instructions": "Does the feedback discuss the product itself?",
+            "criteria": {
+              "yes": "The feedback discusses the product's features, condition, or performance",
+              "no": "The feedback does not discuss the product itself"
+            }
+          },
+          "sentiment": {
+            "type": "choice",
+            "instructions": "What overall sentiment does this feedback express?",
+            "criteria": {
+              "positive": "Satisfaction without dissatisfaction",
+              "negative": "Dissatisfaction without satisfaction",
+              "mixed": "Both satisfaction and dissatisfaction",
+              "neutral": "Neither satisfaction nor dissatisfaction"
+            }
+          }
+        }
+      },
+      "expected": {
+        "delivery": [
+          "no"
+        ],
+        "product": [
+          "yes"
+        ],
+        "sentiment": [
+          "positive"
+        ]
+      }
+    },
+    {
+      "id": "negative-delivery-only",
+      "request": {
+        "state": "I am frustrated that my parcel arrived a week late.",
+        "questions": {
+          "delivery": {
+            "type": "choice",
+            "instructions": "Does the feedback discuss delivery?",
+            "criteria": {
+              "yes": "The feedback discusses shipping, delivery time, or receiving a parcel",
+              "no": "The feedback does not discuss delivery"
+            }
+          },
+          "product": {
+            "type": "choice",
+            "instructions": "Does the feedback discuss the product itself?",
+            "criteria": {
+              "yes": "The feedback discusses the product's features, condition, or performance",
+              "no": "The feedback does not discuss the product itself"
+            }
+          },
+          "sentiment": {
+            "type": "choice",
+            "instructions": "What overall sentiment does this feedback express?",
+            "criteria": {
+              "positive": "Satisfaction without dissatisfaction",
+              "negative": "Dissatisfaction without satisfaction",
+              "mixed": "Both satisfaction and dissatisfaction",
+              "neutral": "Neither satisfaction nor dissatisfaction"
+            }
+          }
+        }
+      },
+      "expected": {
+        "delivery": [
+          "yes"
+        ],
+        "product": [
+          "no"
+        ],
+        "sentiment": [
+          "negative"
+        ]
+      }
+    },
+    {
+      "id": "neutral-other-topic",
+      "request": {
+        "state": "My invoice reference is 412.",
+        "questions": {
+          "delivery": {
+            "type": "choice",
+            "instructions": "Does the feedback discuss delivery?",
+            "criteria": {
+              "yes": "The feedback discusses shipping, delivery time, or receiving a parcel",
+              "no": "The feedback does not discuss delivery"
+            }
+          },
+          "product": {
+            "type": "choice",
+            "instructions": "Does the feedback discuss the product itself?",
+            "criteria": {
+              "yes": "The feedback discusses the product's features, condition, or performance",
+              "no": "The feedback does not discuss the product itself"
+            }
+          },
+          "sentiment": {
+            "type": "choice",
+            "instructions": "What overall sentiment does this feedback express?",
+            "criteria": {
+              "positive": "Satisfaction without dissatisfaction",
+              "negative": "Dissatisfaction without satisfaction",
+              "mixed": "Both satisfaction and dissatisfaction",
+              "neutral": "Neither satisfaction nor dissatisfaction"
+            }
+          }
+        }
+      },
+      "expected": {
+        "delivery": [
+          "no"
+        ],
+        "product": [
+          "no"
+        ],
+        "sentiment": [
+          "neutral"
+        ]
+      }
+    },
+    {
+      "id": "delivery-without-sentiment",
+      "request": {
+        "state": "The parcel arrived on Thursday.",
+        "questions": {
+          "delivery": {
+            "type": "choice",
+            "instructions": "Does the feedback discuss delivery?",
+            "criteria": {
+              "yes": "The feedback discusses shipping, delivery time, or receiving a parcel",
+              "no": "The feedback does not discuss delivery"
+            }
+          },
+          "product": {
+            "type": "choice",
+            "instructions": "Does the feedback discuss the product itself?",
+            "criteria": {
+              "yes": "The feedback discusses the product's features, condition, or performance",
+              "no": "The feedback does not discuss the product itself"
+            }
+          },
+          "sentiment": {
+            "type": "choice",
+            "instructions": "What overall sentiment does this feedback express?",
+            "criteria": {
+              "positive": "Satisfaction without dissatisfaction",
+              "negative": "Dissatisfaction without satisfaction",
+              "mixed": "Both satisfaction and dissatisfaction",
+              "neutral": "Neither satisfaction nor dissatisfaction"
+            }
+          }
+        }
+      },
+      "expected": {
+        "delivery": [
+          "yes"
+        ],
+        "product": [
+          "no"
+        ],
+        "sentiment": [
+          "neutral"
+        ]
+      }
+    }
+  ]
+}

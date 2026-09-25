@@ -1,0 +1,12 @@
+include pixi.lock
+include CHANGELOG.md
+include AGENTS.md llms.txt
+include CONTRIBUTING.md
+include .github/PULL_REQUEST_TEMPLATE.md
+recursive-include examples *.py *.json *.jsonl *.md
+recursive-include .github/workflows *.yml
+recursive-include docs *.md
+recursive-include scripts *.py
+recursive-include benchmarks *.py *.json *.jsonl *.md *.xml
+recursive-include stubs *.pyi
+recursive-include tests *.py *.json

@@ -1,0 +1,120 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  HYPOTHESIS_PROFILE: ci
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Read the pinned compatibility baseline
+        id: baseline
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          from urllib.parse import urlsplit
+
+          baseline = json.loads(Path('tests/fixtures/api_v1/baseline.json').read_text())
+          url = baseline['wheel_url']
+          digest = baseline['wheel_sha256']
+          assert re.fullmatch('[0-9a-f]{64}', digest), 'baseline must pin the wheel SHA-256'
+          assert urlsplit(url).scheme == 'https' and urlsplit(url).netloc == 'files.pythonhosted.org'
+          requirement = f'kayak[test] @ {url}#sha256={digest}'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'requirement={requirement}\n')
+          PY
+      - name: Install independent baseline and current packages
+        env:
+          BASELINE_REQUIREMENT: ${{ steps.baseline.outputs.requirement }}
+        run: |
+          uv venv --python python "$RUNNER_TEMP/kayak-compat-baseline"
+          uv venv --python python "$RUNNER_TEMP/kayak-compat-current"
+          uv pip install --python "$RUNNER_TEMP/kayak-compat-baseline/bin/python" "$BASELINE_REQUIREMENT"
+          uv pip install --python "$RUNNER_TEMP/kayak-compat-current/bin/python" '.[test]'
+      - name: Check all four client and server pairings without model weights
+        run: |
+          python scripts/check_compatibility.py \
+            --baseline-python "$RUNNER_TEMP/kayak-compat-baseline/bin/python" \
+            --current-python "$RUNNER_TEMP/kayak-compat-current/bin/python" \
+            --output "$RUNNER_TEMP/kayak-compatibility"
+      - name: Retain compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-compatibility
+          path: ${{ runner.temp }}/kayak-compatibility
+          retention-days: 14
+
+  code:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Check surrounding code without inference dependencies
+        run: |
+          uv venv --python python
+          uv pip install -e '.[test]'
+          uv run --no-sync ruff check kayak tests scripts benchmarks examples stubs
+          uv run --no-sync ruff format --check kayak tests scripts benchmarks examples stubs
+          uv run --no-sync pytest -q -m 'not inference'
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        python: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Install CPU inference and test dependencies
+        run: |
+          uv venv --python python
+          uv pip install 'torch>=2.6,<3' --index-url https://download.pytorch.org/whl/cpu
+          uv pip install -e '.[local,test,bench]'
+      - name: Check and test
+        run: |
+          uv run --no-sync ruff check kayak tests scripts benchmarks examples stubs
+          uv run --no-sync ruff format --check kayak tests scripts benchmarks examples stubs
+          uv run --no-sync mypy
+          uv run --no-sync pytest -q
+      - name: Exercise typed benchmark interfaces
+        run: uv run --no-sync -m benchmarks.bench_overhead --debug-single-value --loops 1
+      - name: Check distributions
+        run: |
+          uv build
+          uv run --no-sync twine check --strict dist/*
+          uv venv --python python "$RUNNER_TEMP/kayak-wheel"
+          uv pip install --python "$RUNNER_TEMP/kayak-wheel/bin/python" dist/*.whl
+          "$RUNNER_TEMP/kayak-wheel/bin/python" -I scripts/check_wheel.py

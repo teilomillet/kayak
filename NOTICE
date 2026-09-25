@@ -1,0 +1,13 @@
+Kayak includes a modified CLM projection architecture in kayak/_heads.py and
+a functional validation reference in scripts/validate_model.py.
+Source: Contrastive-LM/CLM, src/clm/heads.py
+Revision: 7956937c58ed5839c06ddc4dc6b6b61c3a3e4094
+https://github.com/Contrastive-LM/CLM
+Upstream license: Apache License 2.0 (included in LICENSE).
+
+The research-only recipe compiler and decoder in benchmarks/typed_judgments.py
+adapt Noul/Score transformations from src/clm/schema.py at that same revision.
+They restrict inputs to Kayak's text/Choice contract and include separate probes.
+
+The pretrained CLM and Qwen3 weights are downloaded separately and are not
+included in this package. Their model repositories contain their licenses.

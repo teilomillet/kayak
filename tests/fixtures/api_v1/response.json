@@ -1,0 +1,22 @@
+{
+  "model": {
+    "id": "tests/contract-fixture",
+    "revision": "fixture-v1",
+    "fingerprint": "fixture",
+    "encoder": "none",
+    "encoder_revision": "none",
+    "input_recipe": "clm-choice-v1",
+    "device": "cpu",
+    "dtype": "float32"
+  },
+  "answers": {
+    "department": {
+      "type": "choice",
+      "choice": "billing",
+      "scores": {"billing": 0.0, "technical": 0.0},
+      "probabilities": {"billing": 0.5, "technical": 0.5}
+    }
+  },
+  "input_tokens": 4,
+  "calibration": "none"
+}

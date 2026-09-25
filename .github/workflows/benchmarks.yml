@@ -1,0 +1,33 @@
+name: Code benchmarks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Measure code without inference
+        run: |
+          uv venv --python python
+          uv pip install -e '.[bench]'
+          mkdir -p .benchmarks
+          uv run --no-sync -m benchmarks.bench_overhead --fast -o .benchmarks/timing.json
+          uv run --no-sync pyperf check .benchmarks/timing.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: code-benchmarks-${{ github.sha }}
+          path: .benchmarks/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

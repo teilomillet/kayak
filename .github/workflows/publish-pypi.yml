@@ -1,0 +1,79 @@
+name: Publish PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    if: github.event_name != 'push' || !github.event.deleted
+    uses: ./.github/workflows/test.yml
+
+  build:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Validate tag matches package version
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          if os.environ["GITHUB_EVENT_NAME"] == "push" and os.environ["GITHUB_REF_TYPE"] == "tag":
+              tag = os.environ["GITHUB_REF_NAME"]
+              if tag not in {version, f"v{version}"}:
+                  raise SystemExit(f"Tag {tag!r} does not match package version {version!r}")
+          PY
+
+      - name: Build and verify distributions
+        run: |
+          uv build --python python
+          uv tool run --python python twine check --strict dist/*
+          uv venv --python python "$RUNNER_TEMP/kayak-wheel"
+          uv pip install --python "$RUNNER_TEMP/kayak-wheel/bin/python" dist/*.whl
+          "$RUNNER_TEMP/kayak-wheel/bin/python" -I scripts/check_wheel.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kayak-release-distributions
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-pypi:
+    needs: build
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: pypi
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kayak-release-distributions
+          path: dist/release
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/release/

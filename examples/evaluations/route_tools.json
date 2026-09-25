@@ -1,0 +1,92 @@
+{
+  "name": "route-tools",
+  "kind": "ranking",
+  "examples": ["examples/route_tools.py"],
+  "k": 2,
+  "cases": [
+    {
+      "id": "inspect-duplicate-charge",
+      "request": {
+        "state": "The application has already filtered these tools to the user's permitted read tools. Request: Invoice 4411 appears twice on my statement. Inspect its payment history.",
+        "instructions": "Rank tools that can supply the requested facts. Use review only if no supplied tool can help. A selection does not execute a tool.",
+        "candidates": {
+          "search_help": "Search general billing and account help articles; cannot read individual payments.",
+          "lookup_invoice": "Read an invoice and its individual payment transactions by invoice number.",
+          "list_members": "Read workspace members and their roles.",
+          "review": "Ask a person to review a request that none of the available tools can address."
+        }
+      },
+      "relevant": ["lookup_invoice"]
+    },
+    {
+      "id": "find-password-instructions",
+      "request": {
+        "state": "The application has already filtered these tools to permitted read tools. Request: Where are the instructions for resetting a forgotten password? I only need the help article.",
+        "instructions": "Rank tools that can supply the requested facts. Use review only if no supplied tool can help. A selection does not execute a tool.",
+        "candidates": {
+          "search_account_help": "Search help articles, including the forgotten-password reset instructions.",
+          "lookup_invoice": "Read individual invoice payments.",
+          "read_status": "Read service outage reports.",
+          "review": "Ask a person to review a request that none of the available tools can address."
+        }
+      },
+      "relevant": ["search_account_help"]
+    },
+    {
+      "id": "identify-workspace-owners",
+      "request": {
+        "state": "The application has already filtered these tools to permitted read tools. Request: Which members of workspace Cedar currently have the owner role?",
+        "instructions": "Rank tools that can supply the requested facts. Use review only if no supplied tool can help. A selection does not execute a tool.",
+        "candidates": {
+          "search_roles_help": "Read general documentation explaining workspace roles, without membership data.",
+          "read_workspace_usage": "Read storage usage and monthly request totals.",
+          "list_workspace_members": "Read the current names and assigned roles of members in a workspace.",
+          "review": "Ask a person to review a request that none of the available tools can address."
+        }
+      },
+      "relevant": ["list_workspace_members"]
+    },
+    {
+      "id": "inspect-meeting-availability",
+      "request": {
+        "state": "The application has already filtered these tools to permitted read tools. Request: Show my free calendar slots tomorrow. Do not book anything.",
+        "instructions": "Rank tools that can supply the requested facts. Use review only if no supplied tool can help. A selection does not execute a tool.",
+        "candidates": {
+          "read_contacts": "Read names and email addresses in the user's address book.",
+          "review": "Ask a person to review a request that none of the available tools can address.",
+          "search_calendar_help": "Search calendar help articles; cannot inspect the user's calendar.",
+          "read_free_busy": "Read free and busy calendar intervals for the user on a requested date, without creating events."
+        }
+      },
+      "relevant": ["read_free_busy"]
+    },
+    {
+      "id": "two-help-searches-cover-export",
+      "request": {
+        "state": "The application has already filtered these tools to permitted read tools. Request: Find the documented steps to export workspace records to CSV. Either complete copy of those instructions is useful.",
+        "instructions": "Rank tools that can supply the requested facts. Use review only if no supplied tool can help. A selection does not execute a tool.",
+        "candidates": {
+          "lookup_payment": "Read an individual payment transaction.",
+          "search_workspace_help": "Search workspace help, including the complete CSV export instructions.",
+          "search_admin_manual": "Search the administrator manual, including the complete CSV export instructions.",
+          "read_members": "Read current workspace members and roles."
+        }
+      },
+      "relevant": ["search_workspace_help", "search_admin_manual"]
+    },
+    {
+      "id": "no-tool-has-shipment-data",
+      "request": {
+        "state": "The application has already filtered these tools to permitted read tools. Request: Where is parcel P-42 right now? The available account tools have no shipment data.",
+        "instructions": "Rank tools that can supply the requested facts. Use review only if no supplied tool can help. A selection does not execute a tool.",
+        "candidates": {
+          "search_account_help": "Search software account setup articles; contains no parcel or delivery information.",
+          "review": "Ask a person to review a request that none of the available tools can address.",
+          "read_members": "Read members of a software workspace; contains no parcel information.",
+          "lookup_subscription": "Read software subscription dates; contains no parcel information."
+        }
+      },
+      "relevant": ["review"]
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+[build-system]
+requires = ["setuptools>=81", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kayak"
+version = "0.5.0"
+description = "Typed decisions from Contrastive Language Models, locally or over HTTP"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+dependencies = ["httpx>=0.28,<1", "pydantic>=2.10,<3"]
+
+[project.urls]
+Documentation = "https://github.com/teilomillet/kayak/blob/main/docs/README.md"
+Source = "https://github.com/teilomillet/kayak/tree/main"
+Issues = "https://github.com/teilomillet/kayak/issues"
+Changelog = "https://github.com/teilomillet/kayak/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+local = ["torch>=2.6,<3", "transformers>=4.51,<5", "huggingface-hub>=0.30,<1"]
+serve = ["kayak[local]", "fastapi>=0.115,<1", "uvicorn>=0.30,<1"]
+test = [
+    "pytest>=8,<10",
+    "hypothesis>=6.130,<7",
+    "ruff>=0.11",
+    "mypy>=2.3,<3",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "build",
+    "twine",
+]
+bench = ["pyperf>=2.9,<3", "fastapi>=0.115,<1"]
+
+[project.scripts]
+kayak = "kayak.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["kayak", "kayak.*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+kayak = ["py.typed", "models/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--strict-markers"
+markers = ["inference: requires PyTorch or actual model artifacts"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "ANN", "B", "UP", "RET505", "RUF100"]
+
+[tool.mypy]
+files = ["kayak", "tests", "scripts", "benchmarks", "examples", "stubs"]
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "stubs"
+disallow_any_explicit = true
+disallow_any_unimported = true
+warn_unused_configs = true
+
+[tool.pydantic-mypy]
+init_typed = true
+init_forbid_extra = true
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64"]
+
+[tool.pixi.pypi-dependencies]
+kayak = { path = ".", editable = true }
+
+[tool.pixi.feature.test.pypi-dependencies]
+kayak = { path = ".", editable = true, extras = ["test"] }
+
+[tool.pixi.feature.test.tasks]
+test = "pytest"
+lint = "ruff check kayak tests scripts benchmarks examples stubs"
+format-check = "ruff format --check kayak tests scripts benchmarks examples stubs"
+test-code = "pytest -m 'not inference'"
+
+[tool.pixi.feature.bench.pypi-dependencies]
+kayak = { path = ".", editable = true, extras = ["bench"] }
+
+[tool.pixi.feature.bench.tasks]
+benchmark = "python benchmarks/bench_overhead.py"
+
+[tool.pixi.environments]
+test = { features = ["test"], solve-group = "default" }
+bench = { features = ["bench"], solve-group = "default" }

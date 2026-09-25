@@ -1,0 +1,57 @@
+# Kayak
+
+> Typed AI decisions for Python: Choice, Noul, Score, and ranking through a local
+> CLM, an HTTP service, or an optional provider adapter.
+
+These contracts describe the 0.5.0 development checkout on `main`. Run `uv sync`
+here or `uv add /path/to/kayak` in another project; 0.5.0 is not published yet.
+The previous 0.4.0 release remains on PyPI. The base package includes typed
+values, HTTP clients, and evaluation.
+Local CLM inference requires the full 8B encoder and optional dependencies.
+
+Supply retrieved text as `state` and ask named questions with `judge`. The
+application owns retrieval, text generation, and action execution. CLM shares
+are uncalibrated. Evaluation keeps observations and independent labels separate.
+
+## Start here
+
+- [First-run walkthrough](docs/getting-started.md): Model-free integration and evaluation, then real inference with explicit hardware and quality limits.
+- [Quickstart](README.md): Installation, local inference, and HTTP calls.
+- [Documentation index](docs/README.md): Integration, operation, evaluation, and contribution guides.
+- [Example catalog](examples/README.md): Runnable recipes organized by application task.
+- [Assistant integration guide](docs/using-with-agents.md): Calling patterns, ownership, and verification.
+- [Retrieved-context decisions](examples/rag_decisions.py): Supply query/source text as state; ask Choice/Noul/Score questions.
+- [Use-case evaluation map](examples/evaluations/README.md): Starter data and checks for application outcomes.
+
+## API and integration
+
+- [Python API](docs/api.md): Public types, methods, settings, results, limits, and errors.
+- [Typed judgments](docs/typed-judgments.md): Choice/Noul/Score compilation, decoding, and result interpretation.
+- [Provider adapters](docs/provider-adapters.md): Caller-owned Laya and Jev execution with provider-reported results.
+- [CLI](docs/cli.md): Validate and submit request files or stdin.
+- [Migration](docs/migrating.md): Map existing integrations to Kayak's contracts.
+- [RAG experiments](docs/rag-experiments.md): Sync/async callables, configuration, repeated runs, HTTP, JSON exchange, and quality gates.
+- [Standalone generation example](examples/rag_quickstart.py): Application-owned retrieval and Ollama generation, recorded and assessed with `RAGTrace`.
+
+## Evaluation and operation
+
+- [Python evaluation](docs/evaluation-python.md): Labeled suites, metrics, and comparisons.
+- [Support-routing pilot](docs/support-routing.md): Starter data, provisional acceptance criteria, and human-review fallback.
+- [RAG evaluation](docs/rag-evaluation.md): External rankers, late interaction, partial labels, stage traces, and diagnostic replay.
+- [Classification reports](docs/classification-benchmarks.md): Prediction exchange and benchmark reports.
+- [Provider comparison](examples/evaluate_provider.py): Main-checkout example; offline fixture or opt-in Laya/Jev calls on the same labeled suite, with raw evidence and partial results.
+- [Serving](docs/serving.md): Readiness, authentication, admission, timeouts, and shutdown.
+- [Diagnostics](docs/diagnostics.md): Request IDs and optional diagnostic events.
+- [Compatibility](docs/compatibility.md): Stable HTTP contracts and version checks.
+- [Hardware validation](docs/validation.md): Model requirements, procedures, and observed limits.
+- [Release readiness](docs/release.md): Candidate checks and outstanding model evidence.
+
+## Development
+
+- [Architecture](docs/architecture.md): Current components, data flow, and resource ownership.
+- [Contributing](CONTRIBUTING.md): Setup, checks, bug reports, and pull requests.
+- [Engineering conventions](docs/engineering.md): Readable typed Python, explicit effects, and proportional verification.
+- [Development and profiling](docs/development.md): Test environments and performance measurements.
+
+Links resolve within a checkout or source archive. Research and validation
+records are listed in the [record index](docs/records/README.md).
