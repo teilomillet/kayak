@@ -21,6 +21,7 @@ network, or service. It checks integration, not model accuracy.
 | Learn | Example | Requirement |
 | --- | --- | --- |
 | Exercise the client without a model | [Simulated integration](mock_integration.py) | Base package |
+| Classify your own file with editable categories | [File classifier](classify_file.py), [question](department.json), [input](tickets.jsonl) | Local Laya; validation needs only the base package |
 | Load once and ask several questions | [Local decisions](local_decisions.py) | Local CLM |
 | Ask Noul and Score questions | [Typed judgments](typed_judgments.py) | Kayak service |
 | Handle service and connection failures | [HTTP client](http_client.py) | Kayak service |

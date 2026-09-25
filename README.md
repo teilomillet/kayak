@@ -72,6 +72,24 @@ only the base package and do not download model weights.
 
 ### Use Laya or Jev
 
+To classify your own file locally, edit the categories in
+[department.json](examples/department.json) and supply JSONL records with `id`
+and `text` fields:
+
+```sh
+uv run -m examples.classify_file examples/tickets.jsonl \
+  --question examples/department.json --validate
+uv run --with 'laya==0.3.20' --with 'transformers<5' -m examples.classify_file \
+  examples/tickets.jsonl --question examples/department.json \
+  --model convaiinnovations/laya --output decisions.jsonl
+```
+
+Validation needs only Kayak. Inference runs on CPU and downloads Laya weights on
+first use; pass a local checkpoint directory to `--model` to reuse existing
+weights. The [file workflow](docs/getting-started.md#3-classify-your-own-file)
+saves each ID, selected category, and provider response, refuses existing output
+files, and preserves completed records if a later prediction fails.
+
 Already using either provider? Keep your model or SDK client and wrap it with
 `from kayak.adapters import Laya, Jev`. Both accept Kayak's `Choice`, `Noul`, and
 `Score` questions through `judge()`.

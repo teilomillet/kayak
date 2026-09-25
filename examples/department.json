@@ -1,0 +1,8 @@
+{
+  "type": "choice",
+  "instructions": "Which team should handle this request?",
+  "criteria": {
+    "billing": "Charges, invoices, and refunds",
+    "technical": "Bugs and service outages"
+  }
+}
