@@ -41,7 +41,7 @@ and code evidence from historical measurements and open model claims.
   one installable checkout. Resolve stale commands, links, and API descriptions.
 - Require successful Linux/macOS code checks, supported Python checks, and the
   client/server compatibility matrix for that commit. The test workflow runs
-  on `main` and release-branch pushes and pull requests; local results supplement it.
+  on `main` pushes and pull requests; local results supplement it.
 - Build the wheel and source distribution from that commit. Exercise the wheel
   in an isolated environment and confirm the source archive includes the guides,
   examples, tests, and validation tools.
@@ -111,7 +111,7 @@ checks, and an isolated wheel exercise. These jobs do not download the 8B model.
 The compatibility job also checks all four pairings of independently installed
 baseline/current clients and servers over loopback HTTP. It verifies package
 hashes and retains reports and logs on failure. See the [compatibility policy](compatibility.md)
-for the pinned development baseline, scope, and local reproduction commands.
+for the pinned published 0.4.0 baseline, scope, and local reproduction commands.
 
 The [publishing workflow](../.github/workflows/publish-pypi.yml) calls those checks
 from the same commit before building its release artifact. It then checks that

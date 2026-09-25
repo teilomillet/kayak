@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "name": "support-review-walkthrough",
+  "source_kind": "fictional",
+  "provenance": {
+    "source": "Eight fictional tickets for exercising the review workflow",
+    "collection_window": "Not collected from customers; authored 2026-09-26",
+    "permission": "Repository example data",
+    "deidentification": "No real customer information",
+    "split_policy": "Four development and four test fixtures, with distinct fictional groups; not representative evaluation data"
+  },
+  "tickets": [
+    {"id": "r001", "group_id": "g001", "split": "development", "text": "My card was charged twice for one purchase."},
+    {"id": "r002", "group_id": "g002", "split": "development", "text": "The tracking page has shown the same location for a week."},
+    {"id": "r003", "group_id": "g003", "split": "development", "text": "The link to reset my password has expired."},
+    {"id": "r004", "group_id": "g004", "split": "development", "text": "Please help me with this."},
+    {"id": "r005", "group_id": "g005", "split": "test", "text": "My refund was approved, but the money has not arrived."},
+    {"id": "r006", "group_id": "g006", "split": "test", "text": "The courier marked my parcel delivered and I cannot find it."},
+    {"id": "r007", "group_id": "g007", "split": "test", "text": "The verification code for signing in never arrives."},
+    {"id": "r008", "group_id": "g008", "split": "test", "text": "I was charged twice, and my password no longer works."}
+  ]
+}

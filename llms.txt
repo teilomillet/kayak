@@ -37,6 +37,8 @@ are uncalibrated. Evaluation keeps observations and independent labels separate.
 
 - [Python evaluation](docs/evaluation-python.md): Labeled suites, metrics, and comparisons.
 - [Support-routing pilot](docs/support-routing.md): Starter data, provisional acceptance criteria, and human-review fallback.
+- [Support review workflow](docs/support-review.md): Blind review sheets, adjudication, group/split/text audits, and verified suite import; no model required.
+- [Encoder comparison](docs/encoder-comparison.md): Frozen diagnostic inputs and saved-vector/score comparisons; actual encoder execution remains separate.
 - [RAG evaluation](docs/rag-evaluation.md): External rankers, late interaction, partial labels, stage traces, and diagnostic replay.
 - [Classification reports](docs/classification-benchmarks.md): Prediction exchange and benchmark reports.
 - [Provider comparison](examples/evaluate_provider.py): Main-checkout example; offline fixture or opt-in Laya/Jev calls on the same labeled suite, with raw evidence and partial results.

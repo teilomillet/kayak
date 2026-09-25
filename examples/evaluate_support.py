@@ -19,6 +19,8 @@ import httpx
 
 from examples.benchmark_classifiers import overlap_predictions
 from examples.evaluate_use_cases import simulated_response
+from examples.support_data import OUTCOMES as OUTCOMES
+from examples.support_data import audit_support, json_bytes, load_prepared
 from kayak import Client, KayakError
 from kayak.eval import (
     Metric,
@@ -32,8 +34,6 @@ from kayak.eval import (
     load_suite,
     write_benchmark,
 )
-
-OUTCOMES = ("billing", "shipping", "account", "review")
 
 
 class Gate(TypedDict):
@@ -86,6 +86,7 @@ def assess(output: Path) -> dict[str, object]:
     """Read verified observations and apply provisional targets, without inference."""
     report = load_report(output)
     validate_suite(report.suite)
+    data_audit = audit_support([report.suite])
     metrics = (
         *default_metrics(),
         Metric("minimum_recall", minimum_recall, "Lowest recall across all four outcomes."),
@@ -109,9 +110,12 @@ def assess(output: Path) -> dict[str, object]:
         "minimum_recall": (measured["minimum_recall"]["value"], 0.90),
         "review_recall": (measured["review_recall"]["value"], 1.0),
         "accuracy_gain_over_word_overlap": (gain, 0.05),
-        "distinct_tickets": (len(report.suite.examples), 200),
+        "distinct_tickets": (len({row.text for row in report.suite.examples}), 200),
         "minimum_tickets_per_outcome": (
-            min(sum(row.label == label for row in report.suite.examples) for label in OUTCOMES),
+            min(
+                len({row.text for row in report.suite.examples if row.label == label})
+                for label in OUTCOMES
+            ),
             40,
         ),
     }
@@ -146,7 +150,12 @@ def assess(output: Path) -> dict[str, object]:
         suite_sha256=report.suite_sha256,
         model=report.model.model_dump(mode="json") if report.model else None,
         gates=gates,
-        provisional_gates_passed=not simulated and all(gate["passed"] for gate in gates.values()),
+        dataset_checks=data_audit,
+        provisional_gates_passed=(
+            not simulated
+            and data_audit["status"] == "clear"
+            and all(gate["passed"] for gate in gates.values())
+        ),
         deployment_accepted=False,
         remaining_review=[
             "Independent labels and representative held-out data",
@@ -158,7 +167,10 @@ def assess(output: Path) -> dict[str, object]:
 
 
 class Arguments(argparse.Namespace):
-    suite: Path
+    suite: Path | None
+    prepared: Path | None
+    split: str | None
+    against: list[Path]
     output: Path | None
     validate: bool
     simulate: bool
@@ -166,7 +178,15 @@ class Arguments(argparse.Namespace):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", type=Path, default=Path("examples/suites/support_pilot.json"))
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--suite", type=Path)
+    source.add_argument(
+        "--prepared", type=Path, help="verified directory from prepare_support import"
+    )
+    parser.add_argument(
+        "--split", choices=("development", "test"), help="prepared split; default test"
+    )
+    parser.add_argument("--against", type=Path, nargs="+", default=[], help="other splits to audit")
     parser.add_argument("--output", type=Path, help="new directory for retained evidence")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--validate", action="store_true")
@@ -174,13 +194,41 @@ def main() -> int:
     args = parser.parse_args(namespace=Arguments())
     if not args.validate and args.output is None:
         parser.error("--output is required unless --validate is used")
+    if args.split is not None and args.prepared is None:
+        parser.error("--split requires --prepared")
+    if args.prepared is not None and args.against:
+        parser.error("--prepared already audits all splits; --against is for --suite")
     try:
-        suite = load_suite(args.suite)
-        validate_suite(suite)
+        if args.prepared is not None:
+            suites, audit = load_prepared(args.prepared)
+            selected = [item for item in suites if item.split == (args.split or "test")]
+            if not selected:
+                raise ValueError("requested split is absent from the reviewed dataset")
+            suite = selected[0]
+        else:
+            suite = load_suite(args.suite or Path("examples/suites/support_pilot.json"))
+            suites = [suite, *(load_suite(path) for path in args.against)]
+            audit = audit_support(suites)
+        for item in suites:
+            validate_suite(item)
         if args.validate:
-            print(json.dumps(dict(cases=len(suite.examples), suite_sha256=suite.sha256)))
-            return 0
+            print(
+                json.dumps(
+                    dict(
+                        cases=len(suite.examples), suite_sha256=suite.sha256, dataset_checks=audit
+                    ),
+                    allow_nan=False,
+                )
+            )
+            return 0 if audit["status"] == "clear" else 1
         assert args.output is not None
+        if audit["status"] != "clear":
+            args.output.mkdir(parents=True, exist_ok=False)
+            (args.output / "dataset-audit.json").write_bytes(json_bytes(audit))
+            print(
+                "Dataset needs review; findings retained, no inference attempted.", file=sys.stderr
+            )
+            return 1
         client = (
             Client(
                 base_url="http://example.test", transport=httpx.MockTransport(simulated_response)
@@ -197,8 +245,10 @@ def main() -> int:
                 client,
                 suite,
                 output=args.output,
-                config={"mode": "simulated" if args.simulate else "http"},
+                # The initial report retains the preflight even if a later call is interrupted.
+                config={"mode": "simulated" if args.simulate else "http", "dataset_audit": audit},
             )
+        (args.output / "dataset-audit.json").write_bytes(json_bytes(audit))
         assessment = assess(args.output)
         (args.output / "acceptance.json").write_text(
             json.dumps(assessment, indent=2, allow_nan=False) + "\n", encoding="utf-8"

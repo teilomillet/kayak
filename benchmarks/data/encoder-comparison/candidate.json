@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "synthetic_fixture",
+  "probe_sha256": "57158acd73dbec4c6ea990b7fb24220627f847b5418b76de7e421cf8cb159af0",
+  "model_fingerprint": "7f91c29132b908bcc169b4955d255804dd6dcb1b4464dc04aa4cf4d8602e666c",
+  "heads_implementation_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "score_scale": 1.0,
+  "input_mode": "token_ids",
+  "pooling": "last_non_padding_token",
+  "normalization": "fp32_l2_plus_1e-12",
+  "runtime": {
+    "name": "hand-authored-fixture",
+    "version": "1.0.0",
+    "collector_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+    "device": "none",
+    "dtype": "fictional-float",
+    "attention_implementation": "none",
+    "batch_size": 1,
+    "packages": {
+      "fixture": "1.0.0"
+    }
+  },
+  "embeddings": [
+    {
+      "id": "sequence-0001",
+      "token_ids": [
+        1
+      ],
+      "pooled": [
+        0.6,
+        0.8
+      ],
+      "normalized": [
+        0.6,
+        0.8
+      ]
+    },
+    {
+      "id": "sequence-0002",
+      "token_ids": [
+        2
+      ],
+      "pooled": [
+        1.0,
+        0.0
+      ],
+      "normalized": [
+        1.0,
+        0.0
+      ]
+    },
+    {
+      "id": "sequence-0003",
+      "token_ids": [
+        3
+      ],
+      "pooled": [
+        0.0,
+        1.0
+      ],
+      "normalized": [
+        0.0,
+        1.0
+      ]
+    },
+    {
+      "id": "sequence-0004",
+      "token_ids": [
+        4
+      ],
+      "pooled": [
+        0.0,
+        1.0
+      ],
+      "normalized": [
+        0.0,
+        1.0
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "case-a",
+      "scores": {
+        "left": 0.6,
+        "right": 0.8
+      }
+    },
+    {
+      "id": "case-b",
+      "scores": {
+        "left": 0.0,
+        "right": 1.0
+      }
+    }
+  ]
+}

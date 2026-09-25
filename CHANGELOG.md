@@ -2,6 +2,11 @@
 
 ## 0.5.0 — Unreleased
 
+- Offline support-ticket review sheets, explicit adjudication, verified suite
+  import, and duplicate/group/split checks before evaluation. Coverage counts
+  distinct exact texts and retains all observations in quality metrics.
+- Frozen encoder diagnostic specifications, saved-token binding, and offline
+  embedding/score/ranking comparison with explicit synthetic rehearsals.
 - Provider evaluations can declare their exact method; live example commands
   record SDK/model settings for recipe comparisons. Independent scikit-learn and
   SciPy fixtures check classification, probability, ranking, and paired statistics.

@@ -156,6 +156,22 @@ def test_failed_warmup_prevents_acceptance_even_when_all_tickets_match(tmp_path:
     assert not evaluate_support.assess(output)["provisional_gates_passed"]
 
 
+def test_repeated_text_with_unique_ids_cannot_inflate_coverage(tmp_path: Path) -> None:
+    suite = controlled_suite(200)
+    for index, example in enumerate(suite.examples):
+        example.text = f"Request number {index % 20}"
+    output = tmp_path / "duplicates"
+    with Client(base_url="http://test", transport=httpx.MockTransport(response)) as client:
+        evaluate(client, suite, output=output, warmups=0, config={"mode": "http"})
+    assessment = evaluate_support.assess(output)
+    decoded = json.loads(json.dumps(assessment))
+    assert load_report(output).summary["accuracy"] == 1.0
+    assert decoded["gates"]["distinct_tickets"]["observed"] == 20
+    assert decoded["gates"]["minimum_tickets_per_outcome"]["observed"] == 5
+    assert decoded["dataset_checks"]["status"] == "needs_review"
+    assert not decoded["provisional_gates_passed"]
+
+
 def test_invalid_suite_fails_before_inference_and_existing_evidence_is_preserved(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

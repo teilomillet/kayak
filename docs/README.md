@@ -30,6 +30,7 @@ the documentation and runnable examples in the source distribution.
 | Upgrade clients and servers | [Compatibility contract](compatibility.md) |
 | Select and validate hardware | [Hardware validation](validation.md) |
 | Understand model artifacts and input preparation | [Model contract](model-contract.md) |
+| Prepare an encoder diagnostic without inference | [Frozen probes and saved-output comparison](encoder-comparison.md) |
 | Review release requirements | [Release checklist](release.md) |
 
 ## Evaluate behavior
@@ -38,6 +39,7 @@ the documentation and runnable examples in the source distribution.
 | --- | --- |
 | Define success for an application | [Use-case evaluation map](../examples/evaluations/README.md) |
 | Evaluate support-ticket routing | [Support pilot and provisional acceptance criteria](support-routing.md) |
+| Prepare and review support tickets | [Review workflow and offline walkthrough](support-review.md) |
 | Evaluate labeled data in Python | [Evaluation API](evaluation-python.md) |
 | Run a classification benchmark | [Classification reports](classification-benchmarks.md) · [BANKING77](evaluation.md) |
 | Compare Laya and Jev on your cases | [Provider comparison](provider-adapters.md#compare-on-the-same-cases) (example on `main`) |

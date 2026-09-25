@@ -37,9 +37,12 @@ capacity under load; the service has one active inference slot and no queue.
 The 5-second client network timeout is a per-operation HTTP timeout, not an
 end-to-end deadline. A timeout leaves remote completion uncertain.
 
-The coverage gate counts suite rows; independently check for duplicate or
-near-duplicate tickets and related conversations. It cannot certify independence,
-label quality, or representativeness. Passing the numeric gates produces
+The coverage gate counts distinct exact ticket texts; all rows remain in quality
+metrics. The evaluator checks text overlap before inference and rejects datasets
+with unresolved findings. Use the [review workflow](support-review.md) to retain
+two annotations, adjudications, group/split checks, and verified compiled suites.
+These checks cannot certify independence,
+label quality, or representativeness. Passing the numeric gates with clear data checks produces
 `provisional_gates_passed=true`, while `deployment_accepted` remains false.
 The application owner must review the evidence and accept the targets, hardware,
 capacity, and recovery procedure before using the pilot with real traffic.
@@ -69,6 +72,10 @@ For the real evaluation:
    precision/device/settings, package versions, every prediction/failure, raw
    timings, and independent review. The reports contain ticket text; retain
    them in the application's approved storage.
+
+The [offline review walkthrough](support-review.md#complete-offline-walkthrough)
+exercises these file boundaries with fictional annotations. It prepares the
+workflow; reviewers still supply the actual application judgments.
 
 `review` is an ordinary model candidate. A high relative share does not certify
 correctness, and adding that candidate does not guarantee abstention. Human

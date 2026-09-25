@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "purpose": "encoder_diagnostic_not_quality",
+  "evidence_kind": "synthetic_fixture",
+  "model": {
+    "format_version": 1,
+    "family": "clm-qwen3",
+    "model_id": "fixtures/never-executed",
+    "revision": "synthetic-v1",
+    "checkpoint": "not-a-real-checkpoint.pt",
+    "checkpoint_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "encoder_id": "fixtures/two-dimensional",
+    "encoder_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "hidden_size": 2,
+    "max_length": 8,
+    "input_recipe": "clm-choice-v1"
+  },
+  "source_suite_sha256": "c136200f73f26c3a7aafde2fe0a51cf5a0a4a069a838d7b8bdd36e3b88d589b3",
+  "source_split": "development",
+  "selection": "First 2 cases in source suite order; no outcome-based tuning",
+  "pooling": "last_non_padding_token",
+  "normalization": "fp32_l2_plus_1e-12",
+  "tolerances": {
+    "embedding_atol": 0.001,
+    "score_atol": 0.001,
+    "normalization_atol": 1e-06
+  },
+  "sequences": [
+    {
+      "id": "sequence-0001",
+      "text": "Fictional input alpha.\n\nPick one fictional direction."
+    },
+    {
+      "id": "sequence-0002",
+      "text": "The left direction."
+    },
+    {
+      "id": "sequence-0003",
+      "text": "The right direction."
+    },
+    {
+      "id": "sequence-0004",
+      "text": "Fictional input beta.\n\nPick one fictional direction."
+    }
+  ],
+  "cases": [
+    {
+      "id": "case-a",
+      "state_id": "sequence-0001",
+      "candidates": {
+        "left": "sequence-0002",
+        "right": "sequence-0003"
+      },
+      "gold": "left"
+    },
+    {
+      "id": "case-b",
+      "state_id": "sequence-0004",
+      "candidates": {
+        "left": "sequence-0002",
+        "right": "sequence-0003"
+      },
+      "gold": "right"
+    }
+  ],
+  "token_capture": {
+    "schema_version": 1,
+    "text_spec_sha256": "b9345d5c7bb0991175d33e9044384f576a5740318e21d8d4d7d78aee3eac9bb8",
+    "tokenizer_id": "fixtures/two-dimensional",
+    "tokenizer_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tokenizer_files_sha256": {
+      "tokenizer.json": "1111111111111111111111111111111111111111111111111111111111111111",
+      "tokenizer_config.json": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "tokenizer_library": "fictional-tokenizer",
+    "tokenizer_library_version": "1.0.0",
+    "collector_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "add_special_tokens": true,
+    "chat_template": false,
+    "truncation": false,
+    "sequences": [
+      {
+        "id": "sequence-0001",
+        "text_sha256": "a5d352db76e1369ca3afd42c8336a76f87b2533a537b9b0531aaf107a50362d5",
+        "token_ids": [
+          1
+        ]
+      },
+      {
+        "id": "sequence-0002",
+        "text_sha256": "9aac72e549036dcf0a54ec2d35967b99717965af6cf45556b33e7b2024414a46",
+        "token_ids": [
+          2
+        ]
+      },
+      {
+        "id": "sequence-0003",
+        "text_sha256": "4816abb8a339b91742b09b924b013b6b560ff0b214af8118e730261fa94aa009",
+        "token_ids": [
+          3
+        ]
+      },
+      {
+        "id": "sequence-0004",
+        "text_sha256": "780fa1bf9bdc964fcf0cf7a34f64bca5144d99b431cdf6adfffb2dc329322992",
+        "token_ids": [
+          4
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "encoder-comparison-arithmetic-fixture",
+  "split": "development",
+  "question": {
+    "type": "choice",
+    "instructions": "Pick one fictional direction.",
+    "criteria": {"left": "The left direction.", "right": "The right direction."}
+  },
+  "examples": [
+    {"id": "case-a", "text": "Fictional input alpha.", "label": "left"},
+    {"id": "case-b", "text": "Fictional input beta.", "label": "right"}
+  ],
+  "provenance": {"source": "Hand-authored arithmetic fixtures; no encoder execution or quality evidence"}
+}

@@ -1,0 +1,13 @@
+{
+  "format_version": 1,
+  "family": "clm-qwen3",
+  "model_id": "fixtures/never-executed",
+  "revision": "synthetic-v1",
+  "checkpoint": "not-a-real-checkpoint.pt",
+  "checkpoint_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "encoder_id": "fixtures/two-dimensional",
+  "encoder_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "hidden_size": 2,
+  "max_length": 8,
+  "input_recipe": "clm-choice-v1"
+}

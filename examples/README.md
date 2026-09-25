@@ -51,6 +51,7 @@ and assesses a `RAGTrace`. Your application controls these effects.
 | --- | --- | --- |
 | Evaluate editable Choice and ranking cases | [Use-case evaluation](evaluate_use_cases.py), [three starter datasets](evaluations/README.md) | Answer agreement and shortlist relevance; validation/simulation need no model |
 | Evaluate support-routing suggestions | [Support pilot](evaluate_support.py), [starter suite](suites/support_pilot.json), [acceptance protocol](../docs/support-routing.md) | Provisional quality, review, failure, and latency gates; human confirmation remains required |
+| Prepare reviewed support data | [Review commands](prepare_support.py), [review bindings](support_data.py), [offline walkthrough](../docs/support-review.md) | Prediction-free sheets, explicit adjudication, duplicate/group/split checks, and verified suites; base package only |
 | Compare classifiers and add a custom metric | [Classifier benchmark](benchmark_classifiers.py), [support suite](suites/support.json) | Base-only classifier fixtures and checked reports |
 | Compare Laya or Jev with a simple baseline | [Provider evaluation](evaluate_provider.py), [setup](../docs/provider-adapters.md#compare-on-the-same-cases) | Offline by default; opt-in provider calls with retained raw responses |
 | Adapt an external token-level ranker | [Late interaction](evaluate_late_interaction.py) | MaxSim arithmetic on synthetic vectors, not learned-model quality |

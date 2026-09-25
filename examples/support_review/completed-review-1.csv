@@ -1,0 +1,9 @@
+packet_sha256,id,text_json,reviewer,label,notes
+d0f9bed95a5a1c91830a72af22b6824b8dbdbbca8b4651cd5048f21914c8dea5,r001,"""My card was charged twice for one purchase.""",fixture-a,billing,Fictional walkthrough annotation; not independent human review.
+d0f9bed95a5a1c91830a72af22b6824b8dbdbbca8b4651cd5048f21914c8dea5,r002,"""The tracking page has shown the same location for a week.""",fixture-a,shipping,Fictional walkthrough annotation; not independent human review.
+d0f9bed95a5a1c91830a72af22b6824b8dbdbbca8b4651cd5048f21914c8dea5,r003,"""The link to reset my password has expired.""",fixture-a,account,Fictional walkthrough annotation; not independent human review.
+d0f9bed95a5a1c91830a72af22b6824b8dbdbbca8b4651cd5048f21914c8dea5,r004,"""Please help me with this.""",fixture-a,review,Fictional walkthrough annotation; not independent human review.
+d0f9bed95a5a1c91830a72af22b6824b8dbdbbca8b4651cd5048f21914c8dea5,r005,"""My refund was approved, but the money has not arrived.""",fixture-a,billing,Fictional walkthrough annotation; not independent human review.
+d0f9bed95a5a1c91830a72af22b6824b8dbdbbca8b4651cd5048f21914c8dea5,r006,"""The courier marked my parcel delivered and I cannot find it.""",fixture-a,shipping,Fictional walkthrough annotation; not independent human review.
+d0f9bed95a5a1c91830a72af22b6824b8dbdbbca8b4651cd5048f21914c8dea5,r007,"""The verification code for signing in never arrives.""",fixture-a,account,Fictional walkthrough annotation; not independent human review.
+d0f9bed95a5a1c91830a72af22b6824b8dbdbbca8b4651cd5048f21914c8dea5,r008,"""I was charged twice, and my password no longer works.""",fixture-a,billing,Fixture disagreement: this annotation missed the account issue.

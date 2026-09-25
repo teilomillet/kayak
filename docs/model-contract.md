@@ -29,6 +29,9 @@ assumption to check against the independent reference.
 The [offline input-boundary investigation](records/input-recipe-investigation.md) checks
 the saved development inputs and identifies the bounded encoder-parity probe
 needed to narrow that uncertainty without another full evaluation run.
+The [saved-output comparison workflow](encoder-comparison.md) now provides a
+frozen probe format and offline analysis, with synthetic integrity tests.
+Actual encoder captures and equivalence evidence remain pending.
 
 ## Data path
 

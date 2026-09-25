@@ -9,6 +9,10 @@ commit IDs below identify historical experiments whose Git history was archived
 before that reset. Published 0.4.0 artifacts remain on PyPI. These records retain
 their original identities and limits; they are not fresh 0.5.0 measurements.
 
+- [Offline evaluation handoff — 2026-09-26](offline-workflow-20260926.md):
+  ticket review/import, dataset checks, saved-output encoder diagnostics, and
+  the model-free verification receipt.
+
 ## Model and provider evidence
 
 - [CLM development results](clm-development-results.md)
