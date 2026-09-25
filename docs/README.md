@@ -45,6 +45,7 @@ the documentation and runnable examples in the source distribution.
 | Run configured or repeated RAG experiments | [RAG experiments](rag-experiments.md) |
 | Measure actual model latency and memory | [Inference evaluation](inference-evals.md) |
 | Reproduce benchmark artifacts | [Benchmark protocol](benchmark-protocol.md) |
+| Check metric arithmetic and benchmark comparability | [Independent reference checks](evaluation-reference-checks.md) |
 
 Integration tests exercise contracts and failure handling. Model quality and
 performance require labeled workloads and measurements on the target hardware.

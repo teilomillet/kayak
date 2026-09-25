@@ -148,6 +148,10 @@ for paired evaluation. Run that system on this suite or import its predictions
 with matching provenance. Do not label this development subset as an official
 BANKING77 or MTEB result.
 
+See [independent reference checks](evaluation-reference-checks.md) for numerical
+agreement with scikit-learn/SciPy, recipe identity, and the conditions required
+for a comparable external benchmark.
+
 ## Extend metrics in Python
 
 A metric is a pure function over immutable `MetricInput` samples. Each sample has

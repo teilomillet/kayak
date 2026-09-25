@@ -2,6 +2,9 @@
 
 ## 0.5.0 — Unreleased
 
+- Provider evaluations can declare their exact method; live example commands
+  record SDK/model settings for recipe comparisons. Independent scikit-learn and
+  SciPy fixtures check classification, probability, ranking, and paired statistics.
 - Start `main` from a single initial commit while preserving the `/v1` API and
   pinned model recipe. Compatibility checks install the hash-pinned published
   0.4.0 wheel and no longer require earlier Git history.

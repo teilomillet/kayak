@@ -45,17 +45,22 @@ def run(
     output: Path,
     system: str,
     evidence_kind: Literal["simulation", "provider_execution"],
+    method: str | None = None,
     metadata: dict[str, str] | None = None,
 ) -> PredictionSet:
     """Borrow a configured adapter; retain partial results and re-raise failures.
 
     The caller owns model/client lifetime and SDK retry/timeout settings. Only
     case text and the Choice question reach inference. Expected labels stay in
-    the saved suite for scoring. Output must be a new directory.
+    the saved suite for scoring. Output must be a new directory. Declare changed
+    input/model settings in method: benchmark compares this field, not arbitrary
+    metadata. The default describes only this example's request construction.
     """
     predictions = PredictionSet(
         system=system,
-        method=f"{type(judge).__name__}.judge; original text and Choice; selected IDs only",
+        method=method
+        if method is not None
+        else f"{type(judge).__name__}.judge; original text and Choice; selected IDs only",
         suite=Suite.model_validate(suite.model_dump()),
         predictions=[],
         metadata={
@@ -113,11 +118,14 @@ def main() -> None:
     )
     parser.add_argument("--model", help="Laya model directory/ID or requested Jev model name")
     parser.add_argument("--device", default="cpu", help="Laya device (default: cpu)")
+    parser.add_argument("--method", help="explicit recipe, including any changed provider settings")
     args = parser.parse_args()
     if args.output.exists():
         parser.error("output already exists; choose a fresh directory")
     if args.provider != "mock" and not args.model:
         parser.error("live providers require an explicit --model")
+    if args.method is not None and not args.method.strip():
+        parser.error("--method must be nonblank")
     suite = load_suite(args.suite)
 
     if args.provider == "mock":
@@ -127,6 +135,7 @@ def main() -> None:
             output=args.output,
             system="SIMULATION: first candidate, no learned model",
             evidence_kind="simulation",
+            method=args.method,
         )
         print("SIMULATION: controlled responses; no model quality was measured.")
     elif args.provider == "laya":
@@ -138,6 +147,13 @@ def main() -> None:
                 output=args.output,
                 system=f"Laya: {args.model}",
                 evidence_kind="provider_execution",
+                method=args.method
+                if args.method is not None
+                else (
+                    "Laya.judge; original text and Choice; selected IDs only; "
+                    f"laya={importlib.metadata.version('laya')}; model={args.model}; "
+                    f"device={args.device}; config={json.dumps(agent.cfg, sort_keys=True)}"
+                ),
                 metadata={
                     "laya_version": importlib.metadata.version("laya"),
                     "requested_model": args.model,
@@ -158,6 +174,13 @@ def main() -> None:
                 output=args.output,
                 system=f"Jev: {args.model}",
                 evidence_kind="provider_execution",
+                method=args.method
+                if args.method is not None
+                else (
+                    "Jev.judge; original text and Choice; selected IDs only; "
+                    f"sdk={importlib.metadata.version('typesafe-sdk')}; model={args.model}; "
+                    "timeout=30; max_retries=0"
+                ),
                 metadata={
                     "typesafe_sdk_version": importlib.metadata.version("typesafe-sdk"),
                     "requested_model": args.model,

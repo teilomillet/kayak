@@ -206,8 +206,13 @@ Use `--suite your-suite.json` for reviewed labels in the
 sequential call per case. Only text and the question reach the provider; expected
 labels stay in evaluation. The caller retains model/client ownership. To use an
 already configured adapter (including an OpenRouter client), call the example's
-`run(judge, suite, output=..., system=..., evidence_kind="provider_execution")`
-inside its owner's context and supply identifying settings through `metadata`.
+`run(judge, suite, output=..., system=..., evidence_kind="provider_execution",
+method="Pinned checkpoint; max_len=512; head_max_len=384; original input")`
+inside its owner's context. Describe changed provider settings and input recipes
+in `method`; supply supporting provenance through `metadata`. The comparator
+checks `method`, not arbitrary metadata, when requiring an explicit recipe-change
+comparison. The live CLI records SDK/model/configuration settings by default;
+`--method` replaces that declaration with your complete recipe.
 
 Each new output directory contains the full suite, `responses.jsonl` with raw
 provider evidence, `predictions.json`, and `comparison/benchmark.md`. Raw responses

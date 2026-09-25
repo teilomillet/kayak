@@ -1,17 +1,20 @@
 """The provider workflow preserves evidence without leaking labels into inference."""
 
 import copy
+import importlib.metadata
 import json
 import subprocess
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from examples.evaluate_provider import run
+from examples.evaluate_provider import main, run
 from kayak.adapters import Jev, Laya
-from kayak.eval import PredictionSet, Suite, load_suite
+from kayak.eval import PredictionSet, Suite, benchmark, load_suite
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -128,6 +131,87 @@ def test_existing_output_is_rejected_before_inference(tmp_path: Path, suite: Sui
         run(Laya(provider), suite, output=tmp_path, system="fixture", evidence_kind="simulation")
     assert not provider.calls
     assert marker.read_text() == "previous evidence"
+
+
+def test_declared_provider_settings_control_recipe_comparisons(
+    tmp_path: Path, suite: Suite
+) -> None:
+    runs = {}
+    for head_budget in (192, 928):
+        method = f"Pinned Laya checkpoint; max_len=1024; head_max_len={head_budget}"
+        runs[str(head_budget)] = run(
+            Laya(Provider()),
+            suite,
+            output=tmp_path / str(head_budget),
+            system="same model",
+            evidence_kind="simulation",
+            method=method,
+        )
+        saved = PredictionSet.model_validate_json(
+            (tmp_path / str(head_budget) / "predictions.json").read_text()
+        )
+        assert saved.method == method
+    blocked = benchmark(runs)["comparisons"][0]
+    assert blocked["recipe_changed"] is True and blocked["eligible"] is False
+    allowed = benchmark(runs, allow_recipe_change=True)["comparisons"][0]
+    assert allowed["recipe_changed"] is True and allowed["eligible"] is True
+
+
+def test_blank_method_is_rejected_before_writing_or_calling(tmp_path: Path, suite: Suite) -> None:
+    provider = Provider()
+    with pytest.raises(ValueError, match="nonblank"):
+        run(
+            Laya(provider),
+            suite,
+            output=tmp_path / "unused",
+            system="fixture",
+            evidence_kind="simulation",
+            method=" ",
+        )
+    assert not provider.calls and not (tmp_path / "unused").exists()
+
+
+def test_laya_cli_records_loaded_configuration_without_model_downloads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ConfiguredProvider(Provider):
+        cfg = {"max_len": 512, "head_max_len": 384}
+
+    @contextmanager
+    def load(model: str, *, device: str) -> Iterator[ConfiguredProvider]:
+        assert model == "local-fixture" and device == "cpu"
+        yield ConfiguredProvider()
+
+    fake = ModuleType("laya")
+    monkeypatch.setattr(fake, "load", load, raising=False)
+    monkeypatch.setitem(sys.modules, "laya", fake)
+    original_version = importlib.metadata.version
+    monkeypatch.setattr(
+        importlib.metadata,
+        "version",
+        lambda name: "fixture-version" if name == "laya" else original_version(name),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "evaluate_provider",
+            "--provider",
+            "laya",
+            "--model",
+            "local-fixture",
+            "--suite",
+            str(ROOT / "examples/suites/support.json"),
+            "--output",
+            str(tmp_path / "live"),
+        ],
+    )
+    main()
+    predictions = PredictionSet.model_validate_json(
+        (tmp_path / "live/predictions.json").read_text()
+    )
+    assert "laya=fixture-version; model=local-fixture; device=cpu" in predictions.method
+    assert 'config={"head_max_len": 384, "max_len": 512}' in predictions.method
 
 
 def test_default_command_needs_no_sdk_model_or_credentials(tmp_path: Path) -> None:
