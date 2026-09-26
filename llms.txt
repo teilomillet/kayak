@@ -15,7 +15,7 @@ are uncalibrated. Evaluation keeps observations and independent labels separate.
 
 ## Start here
 
-- [First-run walkthrough](docs/getting-started.md): Model-free integration and evaluation, then real inference with explicit hardware and quality limits.
+- [First-run walkthrough](docs/getting-started.md): Editable categories, input validation, local Laya file classification, progress, readable results, and recovery steps.
 - [Quickstart](README.md): Installation, local inference, and HTTP calls.
 - [Documentation index](docs/README.md): Integration, operation, evaluation, and contribution guides.
 - [Example catalog](examples/README.md): Runnable recipes organized by application task.

@@ -2,6 +2,9 @@
 
 ## 0.5.0 — Unreleased
 
+- A direct first-run path for classifying JSONL files with local Laya and editable
+  categories, including input/setup fixes, loading and record progress, a bounded
+  result preview, and preservation of completed predictions on failure.
 - Offline support-ticket review sheets, explicit adjudication, verified suite
   import, and duplicate/group/split checks before evaluation. Coverage counts
   distinct exact texts and retains all observations in quality metrics.

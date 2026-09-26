@@ -54,21 +54,34 @@ cd kayak
 uv sync
 ```
 
-The previous [0.4.0 release](https://pypi.org/project/kayak/0.4.0/) remains
-installable with `uv add 'kayak==0.4.0'`; its source archive contains that release's
-guides and examples. Check the current client integration without a model,
-service, or accelerator:
+### Classify a file
+
+To classify your own file locally, edit the categories in
+[department.json](examples/department.json) and supply JSONL records with `id`
+and `text` fields:
 
 ```sh
-uv run -m examples.mock_integration
+uv run -m examples.classify_file examples/tickets.jsonl \
+  --question examples/department.json --validate
+uv run --with 'laya==0.3.20' --with 'transformers<5' -m examples.classify_file \
+  examples/tickets.jsonl --question examples/department.json \
+  --model convaiinnovations/laya --output decisions.jsonl
 ```
 
-This command uses a simulated HTTP response. To run actual inference, use a
-local model or connect to an existing Kayak service as shown below.
+Validation needs only Kayak. Inference runs on CPU and downloads Laya weights on
+first use; pass a local checkpoint directory to `--model` to reuse existing
+weights. The [file workflow](docs/getting-started.md#3-classify-your-own-file)
+saves each ID, selected category, and provider response, refuses existing output
+files, and preserves completed records if a later prediction fails. Loading and
+record progress appear in the terminal, followed by a preview of up to five
+predictions and the saved file's path.
 
-The [first-run walkthrough](docs/getting-started.md) takes you from this check to
-a readable evaluation report, then to real inference. Its first two steps need
-only the base package and do not download model weights.
+The [first-run walkthrough](docs/getting-started.md) shows how to supply your own
+data, change categories, fix input/setup errors, and evaluate the results.
+For a check without weights, run `uv run -m examples.mock_integration`; it uses
+a controlled response. The previous [0.4.0 release](https://pypi.org/project/kayak/0.4.0/)
+remains installable with `uv add 'kayak==0.4.0'` and includes its own guides and
+examples; this file-classification command is new in the development checkout.
 
 ### Use Laya or Jev
 
@@ -88,7 +101,7 @@ CLM-only `decide`, `rank`, or service contracts.
 
 ### Make a local decision
 
-The default model is [CLM-v0.1-8B](https://huggingface.co/Contrastive-LM/CLM-v0.1-8B).
+The native `kayak.load()` model is [CLM-v0.1-8B](https://huggingface.co/Contrastive-LM/CLM-v0.1-8B).
 The first load downloads approximately 16 GB of encoder weights and 76 MB of
 projection heads. Runtime memory exceeds the weight size; check the
 [hardware guide](docs/validation.md) before loading.

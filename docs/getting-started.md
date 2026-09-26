@@ -1,12 +1,10 @@
 # Classify and evaluate text with Kayak
 
-Kayak connects text and named questions to typed decisions. This walkthrough
-uses support routing to show the complete path: define candidate descriptions,
-call a backend, read its chosen ID, then compare predictions with separate labels.
-
-Start with two checks that need no model, service, API key, or accelerator. Then
-connect real inference when you have suitable hardware. Python 3.11+ and
-[uv](https://docs.astral.sh/uv/) are required.
+Choose categories, validate a file, classify it locally, and read the results.
+This walkthrough uses Laya on CPU through Kayak's provider adapter. You need
+Python 3.11+ and [uv](https://docs.astral.sh/uv/); no API key or hosted service
+is required. Validation needs no model. The classification step loads Laya
+and may download its weights on first use.
 
 ## Get the examples
 
@@ -21,115 +19,173 @@ To use its library in another project, run `uv add /path/to/kayak`.
 The previous [0.4.0 source distribution](https://pypi.org/project/kayak/0.4.0/#files)
 remains available with the guides and examples included in that release.
 
-## 1. Exercise the typed client
+## 1. Choose categories and input
+
+Use the [file classifier](../examples/classify_file.py) to assign categories to
+messages, support requests, or other short text. Copy
+[department.json](../examples/department.json) and edit its instructions and
+candidate descriptions for your task:
+
+```json
+{
+  "type": "choice",
+  "instructions": "Which team should handle this request?",
+  "criteria": {
+    "billing": "Charges, invoices, and refunds",
+    "technical": "Bugs and service outages"
+  }
+}
+```
+
+Each line of the input file contains only an ID and text, like
+[tickets.jsonl](../examples/tickets.jsonl):
+
+```json
+{"id":"ticket-001","text":"I was charged twice for my subscription."}
+{"id":"ticket-002","text":"Our entire team cannot log in and work has stopped."}
+```
+
+The commands below use those bundled files. To classify your own data, replace
+`examples/tickets.jsonl` with your input path and `examples/department.json`
+with your edited question file. Keep expected labels in a separate evaluation
+dataset; input records contain only `id` and `text`.
+
+## 2. Check the file
+
+Check the complete file before loading a model:
+
+```sh
+uv run -m examples.classify_file examples/tickets.jsonl \
+  --question examples/department.json --validate
+```
+
+Expected output: `Validated 2 records and the question. No model loaded.`
+
+This checks JSON structure, required fields, and Kayak's request limits. Invalid
+records identify the line and field to fix. Empty files are rejected. It does not
+check model availability, tokenizer limits, or whether the categories suit the task.
+
+## 3. Classify your own file
+
+Run the same input and question through Laya:
+
+```sh
+uv run --with 'laya==0.3.20' --with 'transformers<5' -m examples.classify_file \
+  examples/tickets.jsonl --question examples/department.json \
+  --model convaiinnovations/laya --output decisions.jsonl
+```
+
+The provider downloads its checkpoint on first use. If you already have weights,
+replace `convaiinnovations/laya` with their local directory. Inference is local
+and defaults to CPU. Loading status and the current record number appear on
+stderr before each operation, so you can see which step is running.
+The [provider guide](provider-adapters.md#laya) explains loading and pinning weights.
+Laya owns tokenization and truncation, so use short text and concise descriptions
+and check its settings when handling longer inputs.
+
+## 4. Read the results
+
+The terminal previews up to five saved predictions and prints the output path.
+For example, the display has this shape; the actual choices depend on the model:
+
+```text
+Preview (first 2 predictions):
+  "ticket-001" -> "billing"
+  "ticket-002" -> "technical"
+Classified 2 records -> decisions.jsonl
+```
+
+Each output line contains `id`, `choice`, and `result`, the full
+[`ProviderResult`](provider-adapters.md#what-stays-the-same-and-what-the-result-means).
+The preview shortens long IDs and escapes line breaks and terminal control
+characters. The saved JSONL retains the complete IDs and provider responses.
+
+The command validates all inputs before opening the output or loading the model.
+Missing dependencies produce a copyable setup/run command and leave no output file.
+It loads weights once, processes records in input order, and flushes each result.
+Choose a new output path for each run; existing files are never overwritten.
+If inference fails or you press Ctrl-C, it exits nonzero and keeps completed
+records. The output may be empty if loading failed. There is no retry, resume, or
+ID deduplication. Keep the input unchanged while the command runs. An abrupt
+termination or storage failure can leave the last line incomplete.
+
+Use `choice` as a suggestion for your application to review. The example does not
+move tickets or execute actions. Every request gets one of your candidates, even
+when none fits; provider confidence is not established correctness. Results
+include raw provider data, so treat output files like the original input data.
+
+To change the routing, edit your question's instructions or category descriptions,
+validate again, then choose a fresh output such as `decisions-v2.jsonl`.
+
+## Fix a failed run
+
+| Message | Next step |
+| --- | --- |
+| `path not found` | Check the named input/question path, or create the output's parent directory. |
+| `file.jsonl:2: invalid ticket: text: Field required` | Add the missing `text` string on line 2, then run `--validate` again. Each line must be its own JSON object. |
+| `invalid Choice: criteria.…` | Fix the named category in your question file. Each category needs a nonblank text description. |
+| `Cannot import Laya or its dependencies` | Copy the full command printed beneath the error; it includes the pinned dependencies and your arguments. |
+| `already exists` | Keep the existing results and choose a new `--output` path. |
+| `Stopped during model loading` | Check the checkpoint path/model ID and device. The new output may be empty. |
+| `Stopped during classification` | Inspect the last record shown in progress and the saved partial results. There is no automatic retry or resume. |
+
+Progress goes to stderr; the preview and final summary go to stdout. The JSONL
+file contains only predictions, so progress messages never need to be removed
+before another program reads it.
+
+## 5. Evaluate your actual categories
+
+Keep expected labels in a separate evaluation suite. The
+[provider evaluation example](provider-adapters.md#compare-on-the-same-cases)
+compares Laya with a word-overlap baseline and saves per-case results:
+
+```sh
+uv run --with 'laya==0.3.20' --with 'transformers<5' -m examples.evaluate_provider \
+  --provider laya --model /path/to/laya \
+  --suite examples/suites/support.json --output .benchmarks/laya-support
+```
+
+The bundled suite contains fictional requests and its own question. For your
+application, copy the [Suite format](evaluation-python.md), use the same
+instructions and candidates as your classifier, and add independently reviewed
+examples, including ambiguous and out-of-scope inputs. Freeze the question and
+candidates before evaluating held-out cases. Inspect per-case errors as well as
+accuracy; failed or missing predictions remain in the quality denominator.
+
+## Optional: check integration without weights
+
+These commands exercise the client and produce an example evaluation report
+using controlled responses and simple classifiers:
 
 ```sh
 uv run -m examples.mock_integration
-```
-
-Expected output:
-
-```text
-Simulated integration passed; no model was loaded.
-```
-
-Open [the example](../examples/mock_integration.py). The application defines
-`billing` and `technical`, submits a request through the real `kayak.Client`,
-and reads `result.answers["department"].choice`. An HTTP mock supplies a fixed
-answer. Response validation and the application assertion run; language
-understanding is not being tested.
-
-The selected ID belongs to your application. Map it to a queue or handler in
-your code; permissions and execution remain application decisions.
-
-## 2. Produce a report before loading a model
-
-The [support suite](../examples/suites/support.json) has eight fictional requests,
-three candidate departments, and separate expected labels. Compare a constant
-predictor with a classifier that counts words shared with candidate descriptions:
-
-```sh
 uv run -m examples.benchmark_classifiers \
   --suite examples/suites/support.json --output .benchmarks/first-report
 cat .benchmarks/first-report/benchmark.md
 ```
 
-Use a new output directory if you rerun it; reports are not overwritten.
-The folder contains a Markdown report, JSON, a metric CSV, and both classifiers'
-predictions. These simple baselines do not use CLM or any downloaded model.
-Inspect the per-case errors as well as aggregate accuracy. Eight constructed
-examples teach the workflow; they do not estimate real-world performance.
+Use a fresh output directory for each report. The eight fictional cases check
+the workflow; these commands do not establish learned-model quality.
 
-The [classifier source](../examples/benchmark_classifiers.py) shows where inputs
-become predictions. It does not read expected labels while choosing candidates.
-Labels enter only when the evaluator scores those predictions.
+## Optional: run native CLM as a service
 
-## 3. Connect a real model
-
-The default is `Contrastive-LM/CLM-v0.1-8B`. Initial loading downloads about 16 GB
-of encoder weights plus 76 MB of heads. Runtime memory exceeds the weight size.
-Read the [hardware guide](validation.md) before running this step.
-
-Start one service on your inference machine:
+Kayak also loads `Contrastive-LM/CLM-v0.1-8B`. Initial loading downloads about
+16 GB of encoder weights plus 76 MB of heads. Runtime memory exceeds the weight
+size. Read the [hardware guide](validation.md) before running:
 
 ```sh
 uv run --extra serve kayak serve --device auto
-```
-
-Automatic device selection chooses CUDA, then MPS, then CPU. It does not certify
-that the selected machine has sufficient memory. The recorded Mac smoke test
-used an M4 Pro with 24 GB unified memory, MPS and **BF16**, with limited headroom;
-it did not validate the default FP16 configuration. The hardware guide records
-the exact command, memory controls, timings, and limits for that run.
-
-In another terminal, from the checkout root, call the service:
-
-```sh
+# In another terminal:
 uv run -m examples.http_client
 ```
 
-For an existing service, set `KAYAK_BASE_URL` and, when needed, `KAYAK_API_KEY` in
-your environment. The [HTTP example](../examples/http_client.py) prints the
-chosen department and handles connection, authentication, and overload failures.
-Its output is a model prediction, not a guaranteed correct answer.
-
-To keep inference in your Python process instead, follow
-[local decisions](../examples/local_decisions.py). Reuse the model context across
-requests so the weights load once. For existing Laya or Jev objects, use the
-[provider adapters](provider-adapters.md).
-
-## 4. Evaluate your actual routing question
-
-With the service running, save the following as `evaluate_support.py` at the
-checkout root. It uses the same eight-case suite from step 2:
-
-```python
-import os
-
-from kayak import Client
-from kayak.eval import evaluate, load_suite
-
-suite = load_suite("examples/suites/support.json")
-with Client(
-    base_url=os.environ.get("KAYAK_BASE_URL", "http://127.0.0.1:8000"),
-    api_key=os.environ.get("KAYAK_API_KEY"),
-) as client:
-    report = evaluate(client, suite, output=".benchmarks/support-model")
-
-print(report.summary["accuracy"])
-```
-
-```sh
-uv run evaluate_support.py
-uv run -m examples.benchmark_classifiers \
-  --run .benchmarks/support-model --output .benchmarks/support-comparison
-```
-
-The comparison uses that run's exact inputs, candidate descriptions and labels.
-Failed or missing predictions remain in the quality denominator. Start with
-these fictional cases, then replace them with independently reviewed examples
-from your application, including ambiguous and out-of-scope inputs. Freeze the
-question and candidates before evaluating held-out cases.
+Automatic device selection chooses CUDA, then MPS, then CPU. It does not certify
+sufficient memory. The recorded Mac smoke test used MPS and BF16 on an M4 Pro
+with 24 GB memory and limited headroom; it did not validate default FP16.
+For an existing service, set `KAYAK_BASE_URL` and optionally `KAYAK_API_KEY`.
+For inference in your Python process, follow
+[local decisions](../examples/local_decisions.py). For a caller-owned Laya or Jev
+object, use the [provider adapters](provider-adapters.md).
 
 ## What the existing measurements say
 

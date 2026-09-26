@@ -10,7 +10,7 @@ the documentation and runnable examples in the source distribution.
 
 | Task | Guide |
 | --- | --- |
-| Try Kayak and produce your first evaluation report | [First-run walkthrough](getting-started.md) |
+| Classify your own file and inspect the results | [First-run walkthrough](getting-started.md) |
 | Find a runnable example | [Example catalog](../examples/README.md) |
 | Use local or HTTP inference | [Python API](api.md) |
 | Ask Choice, Noul, or Score questions | [Typed judgments](typed-judgments.md) |

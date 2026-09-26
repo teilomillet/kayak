@@ -18,7 +18,7 @@ from typing import TextIO
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import kayak
-from kayak import Choice, DecisionResult
+from kayak import Choice, DecisionResult, decisions
 
 
 class Ticket(BaseModel):
@@ -41,7 +41,11 @@ def read_tickets(stream: TextIO) -> Iterator[Ticket]:
         try:
             yield Ticket.model_validate_json(line)
         except ValidationError as exc:
-            raise ValueError(f"{stream.name}:{line_number}: invalid ticket") from exc
+            raise ValueError(
+                f"{stream.name}:{line_number}: invalid ticket: "
+                f"{decisions.validation_message(exc)}. "
+                "Use one JSON object with string id and text fields per line."
+            ) from exc
 
 
 def main() -> None:

@@ -8,19 +8,22 @@ the subject from email to groceries does not need another program.
 ## Start here
 
 New to Kayak? Follow the [first-run walkthrough](../docs/getting-started.md) to
-check the client, compare simple classifiers, and then connect a real model.
+edit categories, check your input file, classify locally, and read the results.
+Start by validating the included two-record file:
 
 ```sh
 uv sync
-uv run -m examples.mock_integration
+uv run -m examples.classify_file examples/tickets.jsonl \
+  --question examples/department.json --validate
 ```
 
-This exercises the real client with a simulated response and needs no model,
-network, or service. It checks integration, not model accuracy.
+Validation checks inputs with the base package and needs no model, network, or
+service. The walkthrough then runs local Laya with progress and a result preview.
 
 | Learn | Example | Requirement |
 | --- | --- | --- |
 | Exercise the client without a model | [Simulated integration](mock_integration.py) | Base package |
+| Classify your own file with editable categories | [File classifier](classify_file.py), [question](department.json), [input](tickets.jsonl) | Local Laya, progress and result preview; validation needs only the base package |
 | Load once and ask several questions | [Local decisions](local_decisions.py) | Local CLM |
 | Ask Noul and Score questions | [Typed judgments](typed_judgments.py) | Kayak service |
 | Handle service and connection failures | [HTTP client](http_client.py) | Kayak service |
