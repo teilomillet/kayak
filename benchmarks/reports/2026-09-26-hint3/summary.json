@@ -1,0 +1,356 @@
+{
+  "sofmattress": {
+    "word_overlap": {
+      "counts": {
+        "in_scope": 253,
+        "out_of_scope": 144,
+        "correct_routes": 61,
+        "wrong_routes": 180,
+        "false_rejections": 12,
+        "correct_rejections": 14,
+        "false_accepts": 130,
+        "in_scope_failures": 0,
+        "out_of_scope_failures": 0
+      },
+      "rates": {
+        "in_scope_accuracy": 0.24110671936758893,
+        "out_of_scope_recall": 0.09722222222222222,
+        "out_of_scope_precision": 0.5384615384615384,
+        "out_of_scope_false_accept_rate": 0.9027777777777778,
+        "in_scope_false_reject_rate": 0.04743083003952569,
+        "routing_precision": 0.16442048517520216,
+        "routing_coverage": 0.9345088161209067,
+        "failure_rate": 0.0
+      },
+      "accuracy": 0.1889168765743073,
+      "macro_f1": 0.22566670325733096,
+      "oos_f1": 0.16470588235294117,
+      "detection": {
+        "auroc": null,
+        "average_precision": null,
+        "fpr_at_95_recall": null,
+        "score_direction": "higher means out of scope; scores need not be calibrated",
+        "unavailable_reason": "no rejection scores supplied"
+      }
+    },
+    "always_reject": {
+      "counts": {
+        "in_scope": 253,
+        "out_of_scope": 144,
+        "correct_routes": 0,
+        "wrong_routes": 0,
+        "false_rejections": 253,
+        "correct_rejections": 144,
+        "false_accepts": 0,
+        "in_scope_failures": 0,
+        "out_of_scope_failures": 0
+      },
+      "rates": {
+        "in_scope_accuracy": 0.0,
+        "out_of_scope_recall": 1.0,
+        "out_of_scope_precision": 0.36272040302267,
+        "out_of_scope_false_accept_rate": 0.0,
+        "in_scope_false_reject_rate": 1.0,
+        "routing_precision": null,
+        "routing_coverage": 0.0,
+        "failure_rate": 0.0
+      },
+      "accuracy": 0.36272040302267,
+      "macro_f1": 0.024197613846412367,
+      "oos_f1": 0.532347504621072,
+      "detection": {
+        "auroc": null,
+        "average_precision": null,
+        "fpr_at_95_recall": null,
+        "score_direction": "higher means out of scope; scores need not be calibrated",
+        "unavailable_reason": "no rejection scores supplied"
+      }
+    },
+    "laya": {
+      "counts": {
+        "in_scope": 253,
+        "out_of_scope": 144,
+        "correct_routes": 88,
+        "wrong_routes": 53,
+        "false_rejections": 112,
+        "correct_rejections": 122,
+        "false_accepts": 22,
+        "in_scope_failures": 0,
+        "out_of_scope_failures": 0
+      },
+      "rates": {
+        "in_scope_accuracy": 0.34782608695652173,
+        "out_of_scope_recall": 0.8472222222222222,
+        "out_of_scope_precision": 0.5213675213675214,
+        "out_of_scope_false_accept_rate": 0.1527777777777778,
+        "in_scope_false_reject_rate": 0.4426877470355731,
+        "routing_precision": 0.5398773006134969,
+        "routing_coverage": 0.4105793450881612,
+        "failure_rate": 0.0
+      },
+      "accuracy": 0.5289672544080605,
+      "macro_f1": 0.3885137540339617,
+      "oos_f1": 0.6455026455026455,
+      "detection": {
+        "auroc": 0.8039635485287657,
+        "average_precision": 0.6976393338474347,
+        "fpr_at_95_recall": 0.7470355731225297,
+        "score_direction": "higher means out of scope; scores need not be calibrated",
+        "unavailable_reason": null
+      }
+    }
+  },
+  "curekart": {
+    "word_overlap": {
+      "counts": {
+        "in_scope": 459,
+        "out_of_scope": 532,
+        "correct_routes": 91,
+        "wrong_routes": 347,
+        "false_rejections": 21,
+        "correct_rejections": 51,
+        "false_accepts": 481,
+        "in_scope_failures": 0,
+        "out_of_scope_failures": 0
+      },
+      "rates": {
+        "in_scope_accuracy": 0.19825708061002179,
+        "out_of_scope_recall": 0.09586466165413533,
+        "out_of_scope_precision": 0.7083333333333334,
+        "out_of_scope_false_accept_rate": 0.9041353383458647,
+        "in_scope_false_reject_rate": 0.0457516339869281,
+        "routing_precision": 0.09902067464635474,
+        "routing_coverage": 0.9273461150353178,
+        "failure_rate": 0.0
+      },
+      "accuracy": 0.1432896064581231,
+      "macro_f1": 0.1558426426262104,
+      "oos_f1": 0.16887417218543047,
+      "detection": {
+        "auroc": null,
+        "average_precision": null,
+        "fpr_at_95_recall": null,
+        "score_direction": "higher means out of scope; scores need not be calibrated",
+        "unavailable_reason": "no rejection scores supplied"
+      }
+    },
+    "always_reject": {
+      "counts": {
+        "in_scope": 459,
+        "out_of_scope": 532,
+        "correct_routes": 0,
+        "wrong_routes": 0,
+        "false_rejections": 459,
+        "correct_rejections": 532,
+        "false_accepts": 0,
+        "in_scope_failures": 0,
+        "out_of_scope_failures": 0
+      },
+      "rates": {
+        "in_scope_accuracy": 0.0,
+        "out_of_scope_recall": 1.0,
+        "out_of_scope_precision": 0.5368314833501514,
+        "out_of_scope_false_accept_rate": 0.0,
+        "in_scope_false_reject_rate": 1.0,
+        "routing_precision": null,
+        "routing_coverage": 0.0,
+        "failure_rate": 0.0
+      },
+      "accuracy": 0.5368314833501514,
+      "macro_f1": 0.024090384223515292,
+      "oos_f1": 0.6986211424819435,
+      "detection": {
+        "auroc": null,
+        "average_precision": null,
+        "fpr_at_95_recall": null,
+        "score_direction": "higher means out of scope; scores need not be calibrated",
+        "unavailable_reason": "no rejection scores supplied"
+      }
+    },
+    "laya": {
+      "counts": {
+        "in_scope": 459,
+        "out_of_scope": 532,
+        "correct_routes": 113,
+        "wrong_routes": 39,
+        "false_rejections": 307,
+        "correct_rejections": 477,
+        "false_accepts": 55,
+        "in_scope_failures": 0,
+        "out_of_scope_failures": 0
+      },
+      "rates": {
+        "in_scope_accuracy": 0.24618736383442266,
+        "out_of_scope_recall": 0.8966165413533834,
+        "out_of_scope_precision": 0.6084183673469388,
+        "out_of_scope_false_accept_rate": 0.10338345864661654,
+        "in_scope_false_reject_rate": 0.6688453159041394,
+        "routing_precision": 0.5458937198067633,
+        "routing_coverage": 0.20887991927346114,
+        "failure_rate": 0.0
+      },
+      "accuracy": 0.5953582240161454,
+      "macro_f1": 0.22857737214586812,
+      "oos_f1": 0.7249240121580547,
+      "detection": {
+        "auroc": 0.7102376038134551,
+        "average_precision": 0.7070818938599823,
+        "fpr_at_95_recall": 0.7734204793028322,
+        "score_direction": "higher means out of scope; scores need not be calibrated",
+        "unavailable_reason": null
+      }
+    },
+    "laya_no_train_overlap": {
+      "counts": {
+        "in_scope": 451,
+        "out_of_scope": 532,
+        "correct_routes": 112,
+        "wrong_routes": 39,
+        "false_rejections": 300,
+        "correct_rejections": 477,
+        "false_accepts": 55,
+        "in_scope_failures": 0,
+        "out_of_scope_failures": 0
+      },
+      "rates": {
+        "in_scope_accuracy": 0.24833702882483372,
+        "out_of_scope_recall": 0.8966165413533834,
+        "out_of_scope_precision": 0.6138996138996139,
+        "out_of_scope_false_accept_rate": 0.10338345864661654,
+        "in_scope_false_reject_rate": 0.6651884700665188,
+        "routing_precision": 0.5436893203883495,
+        "routing_coverage": 0.20956256358087488,
+        "failure_rate": 0.0
+      },
+      "accuracy": 0.5991861648016277,
+      "macro_f1": 0.2261623223361177,
+      "oos_f1": 0.7288006111535523,
+      "detection": {
+        "auroc": 0.7140085524231865,
+        "average_precision": 0.715681226777691,
+        "fpr_at_95_recall": 0.7716186252771619,
+        "score_direction": "higher means out of scope; scores need not be calibrated",
+        "unavailable_reason": null
+      }
+    }
+  },
+  "score_field_note": "Frozen protocol used the shorthand probs; actual retained Laya wire key is probabilities. Scores read unchanged from raw answers.intent.probabilities[NO_NODES_DETECTED], checked against adapter values; no renormalization.",
+  "provenance": {
+    "dataset": "HINT3 corrected v2",
+    "dataset_revision": "99965c892ea9a6801a87083d3861b0b04c91a4e7",
+    "checkpoint_revision": "55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851",
+    "checkpoint_sha256": "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c",
+    "versions": {
+      "laya": "0.3.20",
+      "torch": "2.14.0",
+      "transformers": "4.57.6",
+      "numpy": "2.5.3",
+      "pydantic": "2.13.5"
+    },
+    "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+    "seed": 7,
+    "threads": 2,
+    "input_audit": {
+      "sofmattress": {
+        "suite_sha256": "5c1da4dbe5fc1824862bb85b4450e052697e52c77e85bf3acbcd47ba4c3710b5",
+        "train": 267,
+        "dev": 61,
+        "test": 397,
+        "candidate_count": 22,
+        "head_max_len": 250,
+        "max_len": 311,
+        "max_state_tokens": 57,
+        "all_inputs_exact_no_truncation": true,
+        "overlap_ids": []
+      },
+      "curekart": {
+        "suite_sha256": "4953d650cc8f5815792f26c2e69c7498e6777e3da4be4744e2658b25a1ae5e73",
+        "train": 488,
+        "dev": 111,
+        "test": 991,
+        "candidate_count": 29,
+        "head_max_len": 334,
+        "max_len": 405,
+        "max_state_tokens": 67,
+        "all_inputs_exact_no_truncation": true,
+        "overlap_ids": [
+          "curekart:test:115",
+          "curekart:test:173",
+          "curekart:test:317",
+          "curekart:test:344",
+          "curekart:test:394",
+          "curekart:test:508",
+          "curekart:test:720",
+          "curekart:test:800"
+        ]
+      },
+      "powerplay11": {
+        "suite_sha256": "1550b927c1ec38848e0d9a3591be254d65e827b00b70841759524f32aa74d7f6",
+        "train": 389,
+        "dev": 82,
+        "test": 983,
+        "candidate_count": 58,
+        "head_max_len": 734,
+        "max_len": 963,
+        "max_state_tokens": 225,
+        "all_inputs_exact_no_truncation": true,
+        "overlap_ids": []
+      }
+    },
+    "protocol_sha256": "b2a4909eed8aca4a05abb24f03d266aa55518e0d6cc8ece9af323c2b89fa34a2",
+    "runtime_seconds": 270.5307431670001,
+    "sampled_peak_process_rss_bytes": 2294284288,
+    "sampled_peak_machine_swap_bytes": 0,
+    "guard_limits": {
+      "elapsed_seconds": 600,
+      "process_rss_bytes": 6442450944,
+      "machine_swap_bytes": 4294967296,
+      "min_available_bytes": 1610612736
+    },
+    "guard_stop_reason": null,
+    "exit_code": 0,
+    "source_at_inference": {
+      "kayak/eval/__init__.py": "3e32ed8e4c95de774d85eb5e78bad344148dd07ed4b3a807a93747d6bf268b35",
+      "kayak/eval/__main__.py": "eecc69e0263f7eed5b11fb946c53dbdf3bc370f9b3e576caab2049d2a7f85498",
+      "kayak/eval/_banking77.py": "9a555f6204759247d022b3dfa344227d49c4e4139687a94cbd24aa6866e50fcb",
+      "kayak/eval/_benchmark.py": "49b7524b85d585994227511a961ea6db6badaf0e4fe42ea0f79e5e49596cfdcb",
+      "kayak/eval/_cases.py": "2ac79783bc418109247815419406cf284b71de3f07eaec50295e0ca5e73c924d",
+      "kayak/eval/_cli.py": "171ca147075a49d2274986ff8b2b9ec6600b81c30082bac7780b145277f9c976",
+      "kayak/eval/_compare.py": "8f60cf6270116109b620825cc993a8c1410e227428ca5047c7de3f0d3906b7a8",
+      "kayak/eval/_comparison_cases.py": "f3aba3b8a36b3b3b8cf9bb01d32858448f39610e9bc139aec9460bd4c3f183fd",
+      "kayak/eval/_hint3.py": "945262766ddf263a25b3c34711801dd8cfa2e13bacdfa527c0414b25af7a60c0",
+      "kayak/eval/_measurement.py": "5986669ed39e185e96586ab2c54e8a8cd0aa8b2f0efbb9d3d297b5532cc22232",
+      "kayak/eval/_metrics.py": "5946096d82b4d4bc5f36c66beb3b4ae6c260438dbb9063491c0dcfddeca5b477",
+      "kayak/eval/_predictions.py": "8aadaefd1b4f75f33ddf69ffffc384ee97a6a800e67e3dfd94ccba6ec60f0bed",
+      "kayak/eval/_rag.py": "36085539f6f1cd575b6a9b6ef3f085c3a2c57c4d3e01cfaf9b7ae51f75234ca1",
+      "kayak/eval/_rag_cli.py": "a3e57ae0ea425596bf8558704fd9acad23b9ebe32ed477701fbee469fdc41836",
+      "kayak/eval/_rag_experiment.py": "aabbf9fdd0803891372d1a2d9686128c75d6f4c9b4e39132618617ddbc7dbc02",
+      "kayak/eval/_rag_reports.py": "cf957b0546a0c6699681ecd27f3844e76218fd34f40eb48ad59876ce3ba54276",
+      "kayak/eval/_rag_runner.py": "02f2e025e6c951777d3cb13b09450f895f8a2a829f8ceded7fd3a04222ec2ca4",
+      "kayak/eval/_ranking.py": "9c020aece8e0f95506d4c0399fec8e45b3e5fcf1cd2f78e2a96b051493756ac4",
+      "kayak/eval/_report.py": "170ee17a61b86199f19fad14b9c2302e6316aee96565f61ee31bc5336f871fef",
+      "kayak/eval/_routing.py": "f258257965999d8de3f24ee517cad08159a454a600eb7351927714eade91e9a6",
+      "kayak/eval/_runner.py": "cbbbd2d0930732a2e4561f18042d080fde51d264532efb055b64d75927212290",
+      "kayak/eval/_schema.py": "1eacff373dba0c9da47dbda067e5e3401e68ac1d0fc9e9f8c59ec490594dcf31",
+      "kayak/eval/_scoring.py": "c90e731050153734d1df524f1e3173e29f5ab858f072d9388f10e26cbd177a4e",
+      "kayak/eval/_suite.py": "ef02bd38de56f1da71074dadef532fd0dc400bf43f6019600ab9b4a22001c81f",
+      "examples/evaluate_provider.py": "1e26c860ba7cb1c49459b4db9aa15886a8ed68b38bace1cf64dff2cb97ee4c75"
+    },
+    "limits": "One CPU run per domain; no training or threshold tuning. Powerplay11 token-audited, not model-evaluated. Public aggregates do not authenticate execution; raw responses and resource samples retained locally.",
+    "artifact_sha256": {
+      "protocol.json": "b2a4909eed8aca4a05abb24f03d266aa55518e0d6cc8ece9af323c2b89fa34a2",
+      "resource-receipt.json": "b80ff1d37e05f13d74db02a6b442d01c7d2806293331574786d2ec974f66f2ef",
+      "runtime.json": "9f31fcf961c1f195e5bf8fafb26e5cb0850700eebfd2a6ef67ed5fbe259d3a28",
+      "independent-real-check.json": "575ea5febec4f3d1a2c8bdd3bbbe4290708caac61b4ee9a4ea4d1d6201d1ab19",
+      "sofmattress/predictions.json": "e636005a09393e6e7e342eb246e72baf77bc85c24e1038864893ec683e40693e",
+      "sofmattress/responses.jsonl": "0f067daebc83d283bc0320754cc56669898af40dccfb432e1827f5ecf35736a4",
+      "sofmattress/laya-routing.json": "5150433c169b544450a1c8187f3cc2ed61416fa945ab48f1e32cbd1813dda870",
+      "sofmattress/rejection-scores.json": "30eb944bff2bede9997ab51a3b71fca09c21c593663808e957eb38f039d1b5a7",
+      "curekart/predictions.json": "35014d14c7543424ffa68f68b582d691003622f8a2e028bf1b86ec4e56ae8c61",
+      "curekart/responses.jsonl": "c899f46d7d83e38d1b29e8ee8bbffddc44433d3f23d96bb8a42114343b726c6c",
+      "curekart/laya-routing.json": "90d9f9ed74bd71bdfd95b6af7792eab00bee29a723d83deca86c9535dad6b5f3",
+      "curekart/rejection-scores.json": "a6f30905715b68188470cf8fadd3ff8d0cc6fec87d90e590b8597b1cdc0ce804"
+    },
+    "checkpoint_repository": "convaiinnovations/laya"
+  }
+}

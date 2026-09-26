@@ -5,6 +5,11 @@
 - A direct first-run path for classifying JSONL files with local Laya and editable
   categories, including input/setup fixes, loading and record progress, a bounded
   result preview, and preservation of completed predictions on failure.
+- Pinned HINT3 v2 customer-support suites with grouped development splits,
+  unchanged official tests, and explicit overlap sensitivity. Routing reports
+  distinguish rejection from failure and check OOS score metrics against
+  independent scikit-learn fixtures.
+
 - Offline support-ticket review sheets, explicit adjudication, verified suite
   import, and duplicate/group/split checks before evaluation. Coverage counts
   distinct exact texts and retains all observations in quality metrics.

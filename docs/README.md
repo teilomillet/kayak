@@ -38,6 +38,7 @@ the documentation and runnable examples in the source distribution.
 | Task | Guide |
 | --- | --- |
 | Define success for an application | [Use-case evaluation map](../examples/evaluations/README.md) |
+| Evaluate public customer-support intents and rejection | [HINT3 v2 workflow](hint3-evaluation.md) |
 | Evaluate support-ticket routing | [Support pilot and provisional acceptance criteria](support-routing.md) |
 | Prepare and review support tickets | [Review workflow and offline walkthrough](support-review.md) |
 | Evaluate labeled data in Python | [Evaluation API](evaluation-python.md) |

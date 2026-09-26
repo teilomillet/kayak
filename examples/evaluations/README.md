@@ -33,6 +33,10 @@ classification suites, use the [Python evaluation workflow](../../docs/evaluatio
 and [support suite](../suites/support.json). For native or external ranking,
 partial judgments, and RAG stages, use the [case and RAG guide](../../docs/rag-evaluation.md).
 
+For a public customer-support benchmark with explicit out-of-scope cases, use
+the [HINT3 v2 workflow](../../docs/hint3-evaluation.md). It supports all three
+domains and keeps official test rows separate from training-derived development.
+
 The [support-routing pilot](../../docs/support-routing.md) is the first application
 acceptance exercise. It uses a separate four-outcome suite, explicit provisional
 targets, and human review for every suggestion, including service failures.

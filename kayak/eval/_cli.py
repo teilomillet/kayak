@@ -19,16 +19,25 @@ from . import _rag_cli
 from ._banking77 import DEFAULT_CACHE, banking77, prepare_banking77
 from ._benchmark import benchmark, write_benchmark
 from ._compare import compare
+from ._hint3 import Domain, hint3, prepare_hint3
 from ._metrics import summarize
-from ._predictions import export_predictions
+from ._predictions import PredictionSet, export_predictions
 from ._report import render_report
+from ._routing import routing_summary
 from ._runner import evaluate, load_report
-from ._schema import Protocol
+from ._schema import Protocol, Suite
 from ._scoring import confidence_metrics, default_metrics, expected_calibration_error
+from ._suite import _unique_keys
 
 
 class Arguments(argparse.Namespace):
     command: str | None
+    dataset: str
+    domain: Domain | None
+    include_test: bool
+    exclude_train_overlap: bool
+    reject_label: str
+    scores: Path | None
     data_cache_dir: Path
     split: Literal["train", "dev", "test"]
     limit: int | None
@@ -64,15 +73,36 @@ def parser() -> argparse.ArgumentParser:
     commands = root.add_subparsers(dest="command")
     commands.add_parser("rag", help="validate, score, and inspect portable RAG experiments")
     prepare = commands.add_parser("prepare", help="download and verify pinned dataset files")
-    prepare.add_argument("dataset", choices=["banking77"])
+    prepare.add_argument("dataset", choices=["banking77", "hint3"])
     prepare.add_argument("--data-cache-dir", type=Path, default=DEFAULT_CACHE)
+    prepare.add_argument("--domain", choices=["sofmattress", "curekart", "powerplay11"])
+    prepare.add_argument("--include-test", action="store_true", help="HINT3: also fetch test data")
+    suite = commands.add_parser("suite", help="export an offline HINT3 suite for any classifier")
+    suite.add_argument("dataset", choices=["hint3"])
+    suite.add_argument("--data-cache-dir", type=Path, default=DEFAULT_CACHE)
+    suite.add_argument("--domain", choices=["sofmattress", "curekart", "powerplay11"])
+    suite.add_argument("--split", choices=["train", "dev", "test"], default="dev")
+    suite.add_argument("--limit", type=int, help="source-order prefix, not a full score")
+    suite.add_argument("--exclude-train-overlap", action="store_true")
+    suite.add_argument("--output", type=Path, required=True, help="new suite JSON file")
+    routing = commands.add_parser("routing", help="score routing and out-of-scope detection")
+    routing.add_argument("run_path", type=Path, help="model-neutral prediction JSON")
+    routing.add_argument("--reject-label", required=True)
+    routing.add_argument("--scores", type=Path, help="JSON mapping case IDs to OOS scores")
+    routing.add_argument("--output", type=Path, required=True, help="new report JSON file")
     run = commands.add_parser(
         "run", help="measure a model on a fixed dataset; defaults to the development split"
     )
-    run.add_argument("dataset", choices=["banking77"])
+    run.add_argument("dataset", choices=["banking77", "hint3"])
     run.add_argument("--data-cache-dir", type=Path, default=DEFAULT_CACHE)
+    run.add_argument("--domain", choices=["sofmattress", "curekart", "powerplay11"])
+    run.add_argument("--exclude-train-overlap", action="store_true")
     run.add_argument("--split", choices=["train", "dev", "test"], default="dev")
-    run.add_argument("--limit", type=int, help="deterministic balanced subset; not a full score")
+    run.add_argument(
+        "--limit",
+        type=int,
+        help="subset: balanced BANKING77 or source-order HINT3 prefix; not a full score",
+    )
     run.add_argument("--output", type=Path, required=True, help="new directory for raw results")
     target = run.add_mutually_exclusive_group()
     target.add_argument("--model", default=DEFAULT_MODEL, help="local model ID or bundle")
@@ -119,6 +149,41 @@ def parser() -> argparse.ArgumentParser:
     return root
 
 
+def _dataset(args: Arguments) -> Suite:
+    if args.dataset == "hint3":
+        return hint3(
+            domain=args.domain or "sofmattress",
+            split=args.split,
+            cache_dir=args.data_cache_dir,
+            limit=args.limit,
+            exclude_train_overlap=args.exclude_train_overlap,
+        )
+    if args.domain is not None or args.exclude_train_overlap:
+        raise ValueError("--domain and --exclude-train-overlap apply only to HINT3")
+    return banking77(split=args.split, cache_dir=args.data_cache_dir, limit=args.limit)
+
+
+def _routing(args: Arguments) -> None:
+    predictions = PredictionSet.model_validate(
+        json.loads(args.run_path.read_bytes(), object_pairs_hook=_unique_keys)
+    )
+    scores = None
+    if args.scores is not None:
+        payload: object = json.loads(args.scores.read_bytes(), object_pairs_hook=_unique_keys)
+        if not isinstance(payload, dict):
+            raise ValueError("scores must be a JSON object mapping case IDs to finite numbers")
+        scores = {}
+        for key, value in payload.items():
+            if not isinstance(key, str) or type(value) not in (int, float):
+                raise ValueError("scores must map case IDs to numbers, not booleans")
+            # Preserve integer ordering: float conversion can turn distinct scores into ties.
+            scores[key] = value
+    result = routing_summary(predictions, reject_label=args.reject_label, rejection_scores=scores)
+    with args.output.open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps(result, indent=2, allow_nan=False) + "\n")
+    print(args.output)
+
+
 def _run(args: Arguments) -> int:
     Protocol(warmups=args.warmups, repeats=args.repeats, seed=args.seed)
     if args.batch_size < 1 or not math.isfinite(args.timeout) or args.timeout <= 0:
@@ -140,7 +205,7 @@ def _run(args: Arguments) -> int:
         or args.max_memory_gib is not None
     ):
         raise ValueError("local model/memory options do not configure a remote HTTP service")
-    suite = banking77(split=args.split, cache_dir=args.data_cache_dir, limit=args.limit)
+    suite = _dataset(args)
     started = perf_counter()
     backend: Client | Model
     if args.base_url:
@@ -213,7 +278,25 @@ def main(argv: list[str] | None = None) -> int:
     args = cli.parse_args(arguments, namespace=Arguments())
     try:
         if args.command == "prepare":
-            print(prepare_banking77(args.data_cache_dir))
+            if args.dataset == "hint3":
+                print(
+                    prepare_hint3(
+                        args.data_cache_dir,
+                        domain=args.domain or "sofmattress",
+                        include_test=args.include_test,
+                    )
+                )
+            else:
+                if args.domain is not None or args.include_test:
+                    raise ValueError("--domain and --include-test apply only to HINT3")
+                print(prepare_banking77(args.data_cache_dir))
+        elif args.command == "suite":
+            suite = _dataset(args)
+            with args.output.open("x", encoding="utf-8") as stream:
+                stream.write(suite.model_dump_json(indent=2) + "\n")
+            print(args.output)
+        elif args.command == "routing":
+            _routing(args)
         elif args.command == "run":
             return _run(args)
         elif args.command == "compare":

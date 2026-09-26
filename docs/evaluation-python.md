@@ -103,6 +103,9 @@ remaining errors. It displays up to ten cases per group and shortens cells to
 `json.dumps(result, ensure_ascii=False, indent=2)` if you want a JSON artifact.
 These reports contain your input text; choose their storage and audience accordingly.
 
+For pinned customer-support data and rejection diagnostics, see
+[HINT3 v2 and routing metrics](hint3-evaluation.md).
+
 ## Compare another classifier or change a metric
 
 Pass caller-supplied `PredictionSet` values or saved run paths to `benchmark`.

@@ -15,6 +15,8 @@ their original identities and limits; they are not fresh 0.5.0 measurements.
 
 ## Model and provider evidence
 
+- [HINT3 v2 routing evaluation](hint3-20260926.md): frozen Laya results on 1,388 real support queries, rejection errors, and independent metric checks.
+
 - [CLM development results](clm-development-results.md)
 - [Input-recipe investigation](input-recipe-investigation.md)
 - [SDK validation](sdk-validation.md)

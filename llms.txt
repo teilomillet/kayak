@@ -36,6 +36,7 @@ are uncalibrated. Evaluation keeps observations and independent labels separate.
 ## Evaluation and operation
 
 - [Python evaluation](docs/evaluation-python.md): Labeled suites, metrics, and comparisons.
+- [HINT3 v2](docs/hint3-evaluation.md): Pinned customer-support data, duplicate-grouped development, failure-aware routing metrics, and independently checked OOS curves.
 - [Support-routing pilot](docs/support-routing.md): Starter data, provisional acceptance criteria, and human-review fallback.
 - [Support review workflow](docs/support-review.md): Blind review sheets, adjudication, group/split/text audits, and verified suite import; no model required.
 - [Encoder comparison](docs/encoder-comparison.md): Frozen diagnostic inputs and saved-vector/score comparisons; actual encoder execution remains separate.

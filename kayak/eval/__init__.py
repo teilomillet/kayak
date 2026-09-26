@@ -35,6 +35,7 @@ from ._cases import (
 from ._cases import summarize as summarize_cases
 from ._compare import Comparison, compare, render_comparison
 from ._comparison_cases import CaseComparison
+from ._hint3 import hint3, prepare_hint3
 from ._metrics import summarize
 from ._predictions import Prediction, PredictionSet, export_predictions, predictions_from_report
 from ._rag import (
@@ -68,6 +69,7 @@ from ._rag_experiment import (
 from ._rag_reports import load_rag_report, render_rag_report, save_rag_report, score_rag
 from ._rag_runner import aevaluate_rag, evaluate_rag
 from ._ranking import RankedOutput, RankingAssessment, assess_ranking, ranking_metrics
+from ._routing import routing_summary
 from ._runner import DecisionBackend, evaluate, load_report
 from ._schema import Example, Report, Suite
 from ._scoring import (
@@ -147,6 +149,7 @@ __all__ = [
     "evaluate_rag",
     "expected_calibration_error",
     "export_predictions",
+    "hint3",
     "load_rag_report",
     "load_report",
     "load_suite",
@@ -155,11 +158,13 @@ __all__ = [
     "parse_cases",
     "predictions_from_report",
     "prepare_banking77",
+    "prepare_hint3",
     "ranking_metrics",
     "reliability_bins",
     "render_benchmark",
     "render_comparison",
     "render_rag_report",
+    "routing_summary",
     "save_rag_report",
     "score_rag",
     "score_metrics",
