@@ -24,7 +24,7 @@ class Client:
     """A synchronous connection to a Kayak service, with validated typed results.
 
     Use a context manager to close connections. Construction loads no model;
-    model_info() and decide() perform explicit HTTP requests without retries.
+    Inference and model-info requests use one HTTP attempt without automatic retries.
     """
 
     def __init__(
